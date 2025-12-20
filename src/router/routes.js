@@ -1,8 +1,15 @@
 const routes = [
   {
-    path: '/',
+    path: '/test',
     component: () => import('layouts/MainLayout.vue'),
     children: [{ path: '', component: () => import('pages/IndexPage.vue') }],
+  }, {
+    path: '/login',
+    component: () => import('pages/Auth/LoginPage.vue'),
+  },
+  {
+    path: '/',
+    component: () => import('pages/Auth/SplashScreem.vue'),
   },
 
   // Always leave this as last one,

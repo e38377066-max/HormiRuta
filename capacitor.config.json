@@ -1,0 +1,12 @@
+{
+  "appId": "com.hormiruta.app",
+  "appName": "HormiRuta",
+  "webDir": "src-capacitor/www",
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "231353314709-ep7dpf70rd3vag92dk8niiscodv30v6q.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
+  }
+}
