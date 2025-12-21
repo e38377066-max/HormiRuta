@@ -13,8 +13,8 @@
       </div>
       
       <div class="map-controls">
-        <q-btn fab-mini color="dark" icon="layers" @click="toggleMapType" />
-        <q-btn fab-mini color="dark" icon="my_location" @click="centerOnLocation" class="q-mt-sm" />
+        <q-btn fab-mini icon="layers" @click="toggleMapType" class="map-control-btn" />
+        <q-btn fab-mini icon="my_location" @click="centerOnLocation" class="map-control-btn q-mt-sm" />
       </div>
     </div>
     
@@ -1304,9 +1304,14 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
   flex-direction: column;
 }
 
-.map-controls .q-btn {
-  background: rgba(30, 30, 30, 0.9) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+.map-control-btn {
+  background: rgba(30, 30, 30, 0.95) !important;
+  color: white !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.map-control-btn .q-icon {
+  color: white !important;
 }
 
 .bottom-panel {
