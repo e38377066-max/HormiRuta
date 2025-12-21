@@ -128,6 +128,19 @@ src/
 - Added navigation drawer with route links
 - Created RoutesPage, RouteDetailPage, HistoryPage
 
+### TripPlannerPage Rewrite (Dec 21, 2025)
+- Complete UI rewrite with Spoke/Circuit-inspired bottom-sheet design
+- Added PlannerLayout.vue for clean navigation
+- Stop priority enforcement (first/auto/last) during optimization
+- Savings banner showing distance/time saved after optimization
+- Navigation mode with stop completion tracking and undo
+- Voice search using Web Speech API
+- Map point selection for adding stops
+- Coordinate-based Google Maps URLs for reliable navigation
+- Drag-and-drop stop reordering with vuedraggable
+- Route sharing via Web Share API with clipboard fallback
+- Round trip toggle with return leg calculations
+
 ## App Mode: Cliente Normal (Planificador de Rutas)
 
 ### Funcionalidades Principales
