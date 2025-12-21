@@ -1277,14 +1277,16 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 
 .bottom-panel {
   flex: 1;
-  background: #ffffff;
+  background: linear-gradient(180deg, rgba(20, 24, 40, 0.95) 0%, rgba(15, 18, 30, 0.98) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-radius: 24px 24px 0 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   margin-top: -20px;
   z-index: 10;
-  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.3);
 }
 
 .panel-handle {
