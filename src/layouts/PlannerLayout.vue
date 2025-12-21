@@ -30,21 +30,41 @@
           <q-item-section>Planificar Ruta</q-item-section>
         </q-item>
 
-        <q-item clickable v-ripple to="/routes">
-          <q-item-section avatar><q-icon name="folder" /></q-item-section>
-          <q-item-section>Mis Rutas</q-item-section>
+        <q-item clickable v-ripple @click="showSavedRoutes">
+          <q-item-section avatar><q-icon name="bookmark" /></q-item-section>
+          <q-item-section>Mis Rutas Guardadas</q-item-section>
         </q-item>
 
-        <q-item clickable v-ripple to="/history">
-          <q-item-section avatar><q-icon name="history" /></q-item-section>
-          <q-item-section>Historial</q-item-section>
+        <q-separator spaced color="grey-8" />
+
+        <q-item clickable v-ripple @click="showConfig">
+          <q-item-section avatar><q-icon name="settings" /></q-item-section>
+          <q-item-section>Configuración</q-item-section>
+        </q-item>
+
+        <q-item clickable v-ripple @click="showHelp">
+          <q-item-section avatar><q-icon name="help_outline" /></q-item-section>
+          <q-item-section>Guía de ayuda</q-item-section>
+        </q-item>
+
+        <q-item clickable v-ripple @click="showLocalRoutes">
+          <q-item-section avatar><q-icon name="map" /></q-item-section>
+          <q-item-section>Ver rutas locales</q-item-section>
+        </q-item>
+
+        <q-item clickable v-ripple @click="toggleDarkMode">
+          <q-item-section avatar><q-icon name="dark_mode" /></q-item-section>
+          <q-item-section>Tema Oscuro</q-item-section>
+          <q-item-section side>
+            <q-toggle v-model="darkMode" color="primary" @click.stop />
+          </q-item-section>
         </q-item>
 
         <q-separator spaced color="grey-8" />
 
         <q-item clickable v-ripple @click="handleLogout" class="text-negative">
           <q-item-section avatar><q-icon name="logout" color="negative" /></q-item-section>
-          <q-item-section>Cerrar Sesion</q-item-section>
+          <q-item-section>Cerrar sesión</q-item-section>
         </q-item>
       </q-list>
     </q-drawer>
@@ -58,15 +78,43 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useQuasar } from 'quasar'
 import { useAuthStore } from 'src/stores/auth-store'
 
+const $q = useQuasar()
 const router = useRouter()
 const authStore = useAuthStore()
 const leftDrawerOpen = ref(false)
+const darkMode = ref($q.dark.isActive)
 
 const handleLogout = async () => {
   await authStore.logout()
   router.push('/auth/login')
+}
+
+const showSavedRoutes = () => {
+  leftDrawerOpen.value = false
+  $q.notify({ message: 'Mis Rutas Guardadas - Próximamente', position: 'top', icon: 'bookmark' })
+}
+
+const showConfig = () => {
+  leftDrawerOpen.value = false
+  $q.notify({ message: 'Configuración - Próximamente', position: 'top', icon: 'settings' })
+}
+
+const showHelp = () => {
+  leftDrawerOpen.value = false
+  $q.notify({ message: 'Guía de ayuda - Próximamente', position: 'top', icon: 'help_outline' })
+}
+
+const showLocalRoutes = () => {
+  leftDrawerOpen.value = false
+  $q.notify({ message: 'Ver rutas locales - Próximamente', position: 'top', icon: 'map' })
+}
+
+const toggleDarkMode = () => {
+  darkMode.value = !darkMode.value
+  $q.dark.set(darkMode.value)
 }
 </script>
 
