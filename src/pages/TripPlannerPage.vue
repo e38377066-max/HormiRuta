@@ -149,12 +149,40 @@
         </template>
         
         <template v-else-if="navigationMode">
+          <div v-if="nextPendingStop" class="next-stop-card q-mb-sm">
+            <div class="row items-center">
+              <div class="stop-badge-nav" :style="{ background: nextPendingStop.color || '#1976d2' }">
+                {{ nextPendingStop.id }}
+              </div>
+              <div class="col q-ml-sm">
+                <div class="text-caption text-grey-5">Próxima parada</div>
+                <div class="text-body1 text-white text-weight-medium" style="line-height: 1.2">
+                  {{ nextPendingStop.name || nextPendingStop.address }}
+                </div>
+                <div class="text-caption text-grey-5">
+                  {{ nextPendingStop.distance ? nextPendingStop.distance.toFixed(1) + ' km' : '' }}
+                  {{ nextPendingStop.duration ? ' · ' + Math.round(nextPendingStop.duration) + ' min' : '' }}
+                  {{ nextPendingStop.eta ? ' · Llegada ' + formatTime(nextPendingStop.eta) : '' }}
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="row q-gutter-sm">
-            <q-btn outline color="grey-5" class="col" @click="exitNavigation">Editar</q-btn>
-            <q-btn color="positive" class="col" @click="startGoogleMapsNav">
-              <q-icon name="navigation" class="q-mr-sm" />
-              Iniciar
+            <q-btn outline color="grey-5" class="col-3" @click="exitNavigation">
+              <q-icon name="edit" size="xs" />
             </q-btn>
+            <q-btn v-if="nextPendingStop" color="positive" class="col" @click="completeNextStop">
+              <q-icon name="check" class="q-mr-xs" />
+              Completar
+            </q-btn>
+            <q-btn v-if="nextPendingStop" outline color="warning" class="col-3" @click="skipNextStop">
+              <q-icon name="skip_next" size="xs" />
+            </q-btn>
+          </div>
+          <div v-if="!nextPendingStop" class="text-center q-mt-sm">
+            <q-icon name="celebration" size="md" color="positive" />
+            <div class="text-positive text-h6 q-mt-xs">Ruta completada</div>
+            <q-btn flat color="primary" label="Nueva ruta" @click="clearRoute" class="q-mt-sm" />
           </div>
         </template>
         
@@ -340,11 +368,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useQuasar } from 'quasar'
-import { Capacitor } from '@capacitor/core'
 import { Geolocation } from '@capacitor/geolocation'
-import { Browser } from '@capacitor/browser'
 import draggable from 'vuedraggable'
 
 const $q = useQuasar()
@@ -392,6 +418,14 @@ const mapSelectPriority = ref('auto')
 const editingStop = ref(null)
 const editingStopIndex = ref(-1)
 const lastAction = ref(null)
+
+const nextPendingStop = computed(() => {
+  return stops.value.find(s => !s.completed) || null
+})
+
+const nextPendingStopIndex = computed(() => {
+  return stops.value.findIndex(s => !s.completed)
+})
 
 let map = null
 let directionsService = null
@@ -805,38 +839,66 @@ const toggleStopComplete = (index) => {
     message: stop.completed ? `Parada ${stop.id} completada` : `Parada ${stop.id} desmarcada`,
     position: 'top'
   })
+  centerOnNextStop()
 }
 
-const startGoogleMapsNav = async () => {
-  if (!stops.value.length) return
-  const pending = stops.value.filter(s => !s.completed)
-  if (!pending.length) {
-    $q.notify({ type: 'info', message: 'Todas las paradas completadas', position: 'top' })
-    return
+const completeNextStop = () => {
+  const idx = nextPendingStopIndex.value
+  if (idx === -1) return
+  
+  const stop = stops.value[idx]
+  stop.completed = true
+  lastAction.value = { 
+    type: 'complete', 
+    index: idx, 
+    wasCompleted: false, 
+    message: `Parada ${stop.id} completada` 
   }
   
-  let originStr = ''
-  if (startLat.value && startLng.value) {
-    originStr = `${startLat.value},${startLng.value}`
-  }
-  
-  const lastStop = pending[pending.length - 1]
-  const destStr = lastStop.lat && lastStop.lng 
-    ? `${lastStop.lat},${lastStop.lng}` 
-    : encodeURIComponent(lastStop.address)
-  
-  const waypointCoords = pending.slice(0, -1).map(s => {
-    return s.lat && s.lng ? `${s.lat},${s.lng}` : encodeURIComponent(s.address)
-  }).join('|')
-  
-  let url = `https://www.google.com/maps/dir/?api=1&destination=${destStr}&travelmode=driving`
-  if (originStr) url += `&origin=${originStr}`
-  if (waypointCoords) url += `&waypoints=${waypointCoords}`
-  
-  if (Capacitor.isNativePlatform()) {
-    await Browser.open({ url })
+  const remaining = stops.value.filter(s => !s.completed).length
+  if (remaining > 0) {
+    $q.notify({ 
+      type: 'positive', 
+      message: `Parada ${stop.id} completada`, 
+      caption: `${remaining} paradas restantes`,
+      position: 'top'
+    })
+    centerOnNextStop()
   } else {
-    window.open(url, '_blank')
+    $q.notify({ 
+      type: 'positive', 
+      message: 'Ruta completada',
+      icon: 'celebration',
+      position: 'top'
+    })
+  }
+}
+
+const skipNextStop = () => {
+  const idx = nextPendingStopIndex.value
+  if (idx === -1) return
+  
+  const stop = stops.value[idx]
+  stop.completed = true
+  stop.skipped = true
+  lastAction.value = { 
+    type: 'skip', 
+    index: idx, 
+    message: `Parada ${stop.id} omitida` 
+  }
+  $q.notify({ 
+    type: 'warning', 
+    message: `Parada ${stop.id} omitida`,
+    position: 'top'
+  })
+  centerOnNextStop()
+}
+
+const centerOnNextStop = () => {
+  const next = nextPendingStop.value
+  if (next && next.lat && next.lng && map) {
+    map.panTo({ lat: next.lat, lng: next.lng })
+    map.setZoom(15)
   }
 }
 
@@ -1074,6 +1136,26 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
   color: white;
   font-weight: bold;
   font-size: 13px;
+}
+
+.stop-badge-nav {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.next-stop-card {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .stop-time {
