@@ -128,23 +128,27 @@ src/
 - Added navigation drawer with route links
 - Created RoutesPage, RouteDetailPage, HistoryPage
 
-## Circuit/Spoke Parity Status
+## App Mode: Cliente Normal (Planificador de Rutas)
 
-### Implemented
-- Automatic route optimization
-- Manual stop entry
-- CSV/text import
-- Time windows and priorities
-- Proof of delivery
-- Route history
-- GPS navigation integration
-- ETAs
+### Funcionalidades Principales
+- **TripPlannerPage**: Pagina simplificada para planificar rutas
+  - Punto de partida opcional (con GPS)
+  - Agregar paradas con autocompletado Google Places
+  - Optimizacion automatica de rutas
+  - Mapa integrado con visualizacion de ruta
+  - Compartir/copiar ruta
+  - Navegacion a Google Maps
 
-### Pending
-- Real-time traffic integration
-- Customer SMS notifications
-- Driver tracking
-- Multi-driver dispatch
-- Android Auto / CarPlay
-- Package finder tool enhancement
-- Dark/light theme switching
+### Caracteristicas Disponibles
+- Autocompletado de direcciones (Google Places)
+- Optimizacion de ruta (Google Directions API)
+- Visualizacion en mapa
+- Calculo de distancia y tiempo
+- Navegacion GPS integrada
+- Tema oscuro/claro
+- Compartir ruta por WhatsApp/email
+
+### Interfaz Simplificada
+- Sin funciones de repartidor (POD, paquetes)
+- Sin gestion empresarial (flotillas, suscripciones)
+- Enfocado en usuario final que planifica viajes

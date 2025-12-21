@@ -26,14 +26,14 @@
       <q-separator spaced />
 
       <q-list dense>
-        <q-item class="q-mb-md" clickable v-ripple to="/routes">
-          <q-item-section avatar><q-icon name="route" color="primary" /></q-item-section>
-          <q-item-section><b>Mis Rutas</b></q-item-section>
+        <q-item class="q-mb-md" clickable v-ripple to="/planner">
+          <q-item-section avatar><q-icon name="auto_fix_high" color="primary" /></q-item-section>
+          <q-item-section><b>Planificar Ruta</b></q-item-section>
         </q-item>
 
-        <q-item class="q-mb-md" clickable v-ripple to="/history">
-          <q-item-section avatar><q-icon name="history" color="info" /></q-item-section>
-          <q-item-section>Historial</q-item-section>
+        <q-item class="q-mb-md" clickable v-ripple to="/routes">
+          <q-item-section avatar><q-icon name="route" color="info" /></q-item-section>
+          <q-item-section>Mis Rutas Guardadas</q-item-section>
         </q-item>
 
         <q-separator spaced />
@@ -44,44 +44,8 @@
         </q-item>
 
         <q-item clickable v-ripple class="q-mb-md">
-          <q-item-section avatar>
-            <q-icon name="star" color="warning" />
-          </q-item-section>
-          <q-item-section>
-            <b>Suscripcion</b>
-          </q-item-section>
-
-          <q-item-section side>
-            <q-btn flat dense round icon="arrow_drop_down" v-ripple @click.stop="menu = !menu" />
-          </q-item-section>
-
-          <q-menu v-model="menu" auto-close>
-            <q-list>
-              <q-item clickable v-ripple @click="openPaypal('mensual')">
-                <q-item-section>Mensual</q-item-section>
-              </q-item>
-              <q-item clickable v-ripple @click="openPaypal('flotilla')">
-                <q-item-section>Flotilla</q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
-        </q-item>
-
-        <q-item clickable v-ripple class="q-mb-md">
-          <q-item-section avatar><q-icon name="local_shipping" /></q-item-section>
-          <q-item-section><b>Flotilla</b></q-item-section>
-        </q-item>
-
-        <q-separator spaced />
-
-        <q-item clickable v-ripple class="q-mb-md">
           <q-item-section avatar><q-icon name="help_outline" /></q-item-section>
           <q-item-section>Guia de ayuda</q-item-section>
-        </q-item>
-
-        <q-item clickable v-ripple class="q-mb-md" mailto="test@mail.com">
-          <q-item-section avatar><q-icon name="mail" /></q-item-section>
-          <q-item-section>Contactenos</q-item-section>
         </q-item>
 
         <q-item clickable v-ripple class="q-mb-md" @click="loadDialogRoutes(); showRoutesDialog = true">
@@ -90,6 +54,14 @@
           </q-item-section>
           <q-item-section>
             Ver rutas locales
+          </q-item-section>
+        </q-item>
+
+        <q-item class="q-mb-md">
+          <q-item-section avatar><q-icon :name="themeStore.isDark ? 'dark_mode' : 'light_mode'" /></q-item-section>
+          <q-item-section>Tema {{ themeStore.isDark ? 'Oscuro' : 'Claro' }}</q-item-section>
+          <q-item-section side>
+            <q-toggle v-model="themeStore.isDark" @update:model-value="themeStore.toggleTheme()" color="primary" />
           </q-item-section>
         </q-item>
 
@@ -272,11 +244,15 @@ import { Notify } from "quasar";
 import { Preferences } from "@capacitor/preferences";
 import { Browser } from '@capacitor/browser';
 import { useAuthStore } from "src/stores/auth-store";
+import { useThemeStore } from "src/stores/theme-store";
 
 import { NativeAudio } from '@capacitor-community/native-audio';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const themeStore = useThemeStore();
+
+themeStore.initTheme();
 
 NativeAudio.preload({
   assetId: 'sound1',
@@ -306,6 +282,7 @@ const menu = ref(false)
 
 
 
+// eslint-disable-next-line no-unused-vars
 const openPaypal = async (type) => {
   let url = ''
   if (type === 'mensual') {

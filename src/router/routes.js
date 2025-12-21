@@ -5,6 +5,11 @@ const routes = [
     children: [{ path: '', component: () => import('pages/IndexPage.vue') }],
   },
   {
+    path: '/planner',
+    component: () => import('pages/TripPlannerPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/routes',
     component: () => import('layouts/MainLayout.vue'),
     meta: { requiresAuth: true },

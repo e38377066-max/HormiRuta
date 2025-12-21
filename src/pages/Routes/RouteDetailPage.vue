@@ -48,6 +48,8 @@
           label="Iniciar ruta" @click="startRoute" class="col" />
         <q-btn v-if="route.status === 'in_progress'" color="info" icon="navigation" label="Navegar"
           @click="openNavigation" class="col" />
+        <q-btn v-if="route.stops?.length > 0" color="secondary" icon="inventory_2" label="Buscador"
+          @click="showPackageFinder = true" class="col" />
       </div>
 
       <div class="text-subtitle2 text-white q-mb-sm">
@@ -78,6 +80,10 @@
             <q-item-label v-if="stop.time_window_start" caption class="text-warning">
               <q-icon name="schedule" size="xs" />
               {{ stop.time_window_start }} - {{ stop.time_window_end }}
+            </q-item-label>
+            <q-item-label v-if="stop.package_location" caption class="text-info">
+              <q-icon name="inventory_2" size="xs" />
+              {{ stop.package_location }}
             </q-item-label>
           </q-item-section>
 
@@ -228,6 +234,62 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="showPackageFinder" maximized>
+      <q-card class="bg-dark">
+        <q-card-section class="modal-header text-white row items-center">
+          <q-icon name="inventory_2" size="sm" class="q-mr-sm" />
+          <div class="text-h6">Buscador de Paquetes</div>
+          <q-space />
+          <q-btn flat round icon="close" v-close-popup />
+        </q-card-section>
+
+        <q-card-section class="q-pa-sm">
+          <q-input v-model="packageSearch" outlined dense dark placeholder="Buscar por ubicacion, cliente o direccion...">
+            <template #prepend>
+              <q-icon name="search" />
+            </template>
+            <template #append>
+              <q-icon v-if="packageSearch" name="close" class="cursor-pointer" @click="packageSearch = ''" />
+            </template>
+          </q-input>
+        </q-card-section>
+
+        <q-card-section class="q-pa-none" style="max-height: calc(100vh - 180px); overflow-y: auto;">
+          <div v-if="packageLocations.length" class="q-pa-sm">
+            <div class="text-caption text-grey q-mb-sm">Ubicaciones ({{ packageLocations.length }})</div>
+            <q-list class="rounded-borders">
+              <template v-for="location in packageLocations" :key="location.name">
+                <div class="text-subtitle2 text-primary q-pa-sm bg-grey-9 rounded-borders q-mb-xs">
+                  <q-icon name="inventory_2" class="q-mr-xs" />
+                  {{ location.name || 'Sin ubicacion' }} ({{ location.stops.length }})
+                </div>
+                <q-item v-for="stop in location.stops" :key="stop.id" clickable 
+                  @click="navigateToStop(stop); showPackageFinder = false" class="q-ml-md">
+                  <q-item-section avatar>
+                    <div class="stop-number" :class="stop.status">{{ getStopIndex(stop) + 1 }}</div>
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label class="text-white">{{ stop.customer_name || stop.address }}</q-item-label>
+                    <q-item-label caption class="text-grey-5">{{ stop.address }}</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-chip :color="stop.status === 'completed' ? 'positive' : stop.status === 'failed' ? 'negative' : 'grey'" 
+                      text-color="white" size="sm" dense>
+                      {{ stop.status === 'completed' ? 'Entregado' : stop.status === 'failed' ? 'Fallido' : 'Pendiente' }}
+                    </q-chip>
+                  </q-item-section>
+                </q-item>
+              </template>
+            </q-list>
+          </div>
+          <div v-else class="text-center q-pa-xl text-grey">
+            <q-icon name="search_off" size="48px" class="q-mb-md" />
+            <div>No se encontraron resultados</div>
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -261,6 +323,8 @@ const showAddStopDialog = ref(false)
 const showImportDialog = ref(false)
 const showPODDialog = ref(false)
 const showFailDialog = ref(false)
+const showPackageFinder = ref(false)
+const packageSearch = ref('')
 const optimizing = ref(false)
 const savingStop = ref(false)
 const importing = ref(false)
