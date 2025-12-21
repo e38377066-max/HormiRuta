@@ -27,6 +27,7 @@
             <q-icon name="search" />
           </template>
           <template #append>
+            <q-btn flat round dense icon="import_export" size="sm" color="grey" @click="showImportDialog = true" />
             <q-btn v-if="voiceSupported" flat round dense icon="mic" size="sm"
               @click="startVoiceSearch" :color="isListening ? 'negative' : 'grey'" />
             <q-btn flat round dense icon="more_vert" size="sm" @click="showRouteMenu = true" />
@@ -312,6 +313,79 @@
       </q-card>
     </q-dialog>
     
+    <q-dialog v-model="showImportDialog" position="bottom">
+      <q-card class="bg-dark full-width" style="border-radius: 16px 16px 0 0;">
+        <q-list class="q-py-sm">
+          <q-item clickable v-close-popup @click="shareRoute">
+            <q-item-section avatar><q-icon name="share" color="primary" /></q-item-section>
+            <q-item-section>Compartir copia de ruta</q-item-section>
+          </q-item>
+          <q-item clickable v-close-popup>
+            <q-item-section avatar><q-icon name="swap_vert" color="primary" /></q-item-section>
+            <q-item-section>Transferir paradas</q-item-section>
+          </q-item>
+          <q-item clickable v-close-popup>
+            <q-item-section avatar><q-icon name="content_copy" color="primary" /></q-item-section>
+            <q-item-section>Copiar paradas...</q-item-section>
+          </q-item>
+          <q-item clickable v-close-popup @click="showBulkImportDialog = true">
+            <q-item-section avatar><q-icon name="grid_on" color="primary" /></q-item-section>
+            <q-item-section>Importar planilla</q-item-section>
+          </q-item>
+        </q-list>
+      </q-card>
+    </q-dialog>
+    
+    <q-dialog v-model="showImportTextDialog" position="bottom" full-width>
+      <q-card class="bg-white text-dark full-width" style="border-radius: 16px 16px 0 0; max-height: 80vh;">
+        <q-card-section class="row items-center q-pb-none">
+          <q-input v-model="searchQuery" placeholder="Pulsa para añadir" outlined dense 
+            class="col" style="background: #f5f5f5; border-radius: 8px;">
+            <template #prepend><q-icon name="search" color="grey-6" /></template>
+            <template #append>
+              <q-btn flat round dense icon="import_export" size="sm" color="grey-6" />
+              <q-btn flat round dense icon="mic" size="sm" color="grey-6" />
+              <q-btn flat round dense icon="close" size="sm" color="grey-6" v-close-popup />
+            </template>
+          </q-input>
+        </q-card-section>
+        
+        <q-card-section class="text-center q-py-xl">
+          <div class="voice-circle" :class="{ 'listening': isListening }">
+            <q-icon name="mic" size="48px" color="white" />
+          </div>
+          <div class="text-h5 text-weight-medium q-mt-lg">Pronunciar dirección</div>
+        </q-card-section>
+        
+        <q-card-section>
+          <q-select v-model="voiceLanguage" :options="voiceLanguages" outlined dense 
+            label="Idioma" emit-value map-options style="background: white;" />
+        </q-card-section>
+        
+        <q-card-section class="q-pt-none">
+          <q-item tag="label" class="q-pa-none">
+            <q-item-section>
+              <q-item-label class="text-primary">Añadir varias paradas</q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-checkbox v-model="addMultipleStops" color="primary" />
+            </q-item-section>
+          </q-item>
+        </q-card-section>
+        
+        <q-card-section class="q-pt-md">
+          <div class="row q-gutter-sm">
+            <q-btn class="col" outline color="primary" icon="map" label="Mapa" v-close-popup @click="addFromMap" />
+            <q-btn class="col" outline color="primary" icon="document_scanner" label="Escanear" />
+            <q-btn class="col" :color="isListening ? 'negative' : 'primary'" 
+              :icon="isListening ? 'stop' : 'mic'" 
+              :label="isListening ? 'Detener' : 'Voz'" 
+              @click="toggleVoiceSearch" />
+          </div>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+    
     <q-dialog v-model="showAddDialog" position="bottom">
       <q-card class="bg-dark full-width">
         <q-card-section>
@@ -375,10 +449,45 @@
       <span>{{ lastAction.message }}</span>
       <q-btn flat dense label="Deshacer" color="primary" @click="undoAction" />
     </div>
+    
+    <q-dialog v-model="showBulkImportDialog" position="bottom" full-width>
+      <q-card class="bg-white text-dark full-width" style="border-radius: 16px 16px 0 0; max-height: 80vh;">
+        <q-card-section class="row items-center q-pb-none">
+          <div class="text-h6 text-weight-bold">Importar direcciones</div>
+          <q-space />
+          <q-btn flat round dense icon="close" v-close-popup />
+        </q-card-section>
+        
+        <q-card-section>
+          <div class="text-caption text-grey-6 q-mb-sm">
+            Pega una dirección por línea. Se geocodificarán automáticamente.
+          </div>
+          <q-input 
+            v-model="importText" 
+            type="textarea" 
+            outlined 
+            placeholder="Av. Insurgentes Sur 1234, CDMX
+Calle 5 de Mayo 45, Centro
+..."
+            :rows="8"
+            class="q-mb-md"
+          />
+          <q-btn 
+            class="full-width" 
+            color="primary" 
+            label="Importar direcciones" 
+            icon="upload"
+            @click="importStopsFromText"
+            :disable="!importText.trim()"
+          />
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup>
+/* global google */
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useQuasar } from 'quasar'
 import { Geolocation } from '@capacitor/geolocation'
@@ -409,6 +518,17 @@ const searchQuery = ref('')
 const searchSuggestions = ref([])
 const showSearch = ref(false)
 const isListening = ref(false)
+const importText = ref('')
+const addMultipleStops = ref(false)
+const voiceLanguage = ref('es-ES')
+const voiceLanguages = [
+  { label: 'español (España)', value: 'es-ES' },
+  { label: 'español (México)', value: 'es-MX' },
+  { label: 'español (Estados Unidos)', value: 'es-US' },
+  { label: 'English (US)', value: 'en-US' },
+  { label: 'English (UK)', value: 'en-GB' },
+  { label: 'Português (Brasil)', value: 'pt-BR' }
+]
 const voiceSupported = ref(false)
 
 const mapType = ref('roadmap')
@@ -418,6 +538,9 @@ const showRouteNameDialog = ref(false)
 const showStopDialog = ref(false)
 const showAdjustMenu = ref(false)
 const showRouteMenu = ref(false)
+const showImportDialog = ref(false)
+const showImportTextDialog = ref(false)
+const showBulkImportDialog = ref(false)
 const showAddDialog = ref(false)
 const showOptimizing = ref(false)
 const showDepartureDialog = ref(false)
@@ -939,6 +1062,68 @@ const shareRoute = async () => {
   }
 }
 
+const importStopsFromText = async () => {
+  if (!importText.value.trim()) {
+    $q.notify({ type: 'warning', message: 'No hay direcciones para importar', position: 'top' })
+    return
+  }
+  
+  const lines = importText.value.split('\n').filter(l => l.trim())
+  if (lines.length === 0) return
+  
+  $q.loading.show({ message: `Importando ${lines.length} paradas...` })
+  
+  let imported = 0
+  let failed = 0
+  
+  for (const line of lines) {
+    const address = line.trim()
+    if (!address) continue
+    
+    try {
+      const geocoder = new google.maps.Geocoder()
+      const result = await new Promise((resolve, reject) => {
+        geocoder.geocode({ address }, (results, status) => {
+          if (status === 'OK' && results[0]) resolve(results[0])
+          else reject(new Error(status))
+        })
+      })
+      
+      const location = result.geometry.location
+      stops.value.push({
+        id: Date.now() + Math.random(),
+        address: result.formatted_address,
+        name: address.length > 50 ? address.substring(0, 50) + '...' : address,
+        lat: location.lat(),
+        lng: location.lng(),
+        priority: 'auto',
+        status: 'pending',
+        duration: 5,
+        notes: ''
+      })
+      imported++
+    } catch {
+      console.warn('No se pudo geocodificar:', address)
+      failed++
+    }
+  }
+  
+  $q.loading.hide()
+  importText.value = ''
+  showBulkImportDialog.value = false
+  
+  if (imported > 0) {
+    updateMapBounds()
+    $q.notify({ 
+      type: 'positive', 
+      message: `${imported} parada${imported > 1 ? 's' : ''} importada${imported > 1 ? 's' : ''}${failed > 0 ? ` (${failed} fallaron)` : ''}`,
+      position: 'top'
+    })
+  } else {
+    $q.notify({ type: 'negative', message: 'No se pudieron importar las direcciones', position: 'top' })
+  }
+}
+
 const clearRoute = () => {
   $q.dialog({ title: 'Borrar', message: '¿Borrar todas las paradas?', cancel: true }).onOk(() => {
     stops.value = []
@@ -974,16 +1159,46 @@ const undoAction = () => {
   lastAction.value = null
 }
 
+let speechRecognition = null
+
 const startVoiceSearch = () => {
   if (!voiceSupported.value) return
   const SR = window.webkitSpeechRecognition || window.SpeechRecognition
-  const rec = new SR()
-  rec.lang = 'es-MX'
-  rec.onstart = () => { isListening.value = true }
-  rec.onresult = (e) => { searchQuery.value = e.results[0][0].transcript; searchAddress(searchQuery.value); showSearch.value = true }
-  rec.onerror = () => { isListening.value = false }
-  rec.onend = () => { isListening.value = false }
-  rec.start()
+  speechRecognition = new SR()
+  speechRecognition.lang = voiceLanguage.value
+  speechRecognition.continuous = addMultipleStops.value
+  speechRecognition.onstart = () => { isListening.value = true }
+  speechRecognition.onresult = (e) => { 
+    const transcript = e.results[e.results.length - 1][0].transcript
+    searchQuery.value = transcript
+    searchAddress(transcript)
+    showSearch.value = true
+    if (!addMultipleStops.value) {
+      showImportTextDialog.value = false
+    }
+  }
+  speechRecognition.onerror = () => { isListening.value = false }
+  speechRecognition.onend = () => { 
+    isListening.value = false
+    speechRecognition = null
+  }
+  speechRecognition.start()
+}
+
+const stopVoiceSearch = () => {
+  if (speechRecognition) {
+    speechRecognition.stop()
+    speechRecognition = null
+  }
+  isListening.value = false
+}
+
+const toggleVoiceSearch = () => {
+  if (isListening.value) {
+    stopVoiceSearch()
+  } else {
+    startVoiceSearch()
+  }
 }
 
 const formatTime = (date) => {
@@ -1270,5 +1485,38 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 
 .drag-handle {
   cursor: grab;
+}
+
+.voice-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4285f4 0%, #1a73e8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  box-shadow: 0 4px 20px rgba(66, 133, 244, 0.4);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.voice-circle.listening {
+  animation: pulse-voice 1.5s infinite;
+  box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.7);
+}
+
+@keyframes pulse-voice {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.7);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 20px rgba(66, 133, 244, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(66, 133, 244, 0);
+  }
 }
 </style>
