@@ -306,6 +306,7 @@ const suggestions = ref([]);
 const showAddressForm = ref(false);
 const showRoutesDialog = ref(false);
 const routes = ref([]);
+const isEmergencyButtonVisible = ref(false);
 
 const toggleLeftDrawer = () => (leftDrawerOpen.value = !leftDrawerOpen.value);
 
