@@ -26,20 +26,31 @@
       <q-separator spaced />
 
       <q-list dense>
-        <q-item class="q-mb-lg" clickable v-ripple @click="showUserModal = true">
-          <q-item-section avatar><q-icon name="settings" /></q-item-section>
-          <q-item-section>Configuración</q-item-section>
+        <q-item class="q-mb-md" clickable v-ripple to="/routes">
+          <q-item-section avatar><q-icon name="route" color="primary" /></q-item-section>
+          <q-item-section><b>Mis Rutas</b></q-item-section>
         </q-item>
 
-        <q-item clickable v-ripple class="q-mb-lg">
+        <q-item class="q-mb-md" clickable v-ripple to="/history">
+          <q-item-section avatar><q-icon name="history" color="info" /></q-item-section>
+          <q-item-section>Historial</q-item-section>
+        </q-item>
+
+        <q-separator spaced />
+
+        <q-item class="q-mb-md" clickable v-ripple @click="showUserModal = true">
+          <q-item-section avatar><q-icon name="settings" /></q-item-section>
+          <q-item-section>Configuracion</q-item-section>
+        </q-item>
+
+        <q-item clickable v-ripple class="q-mb-md">
           <q-item-section avatar>
-            <q-icon name="star" />
+            <q-icon name="star" color="warning" />
           </q-item-section>
           <q-item-section>
-            <b>Suscripción</b>
+            <b>Suscripcion</b>
           </q-item-section>
 
-          <!-- Dropdown -->
           <q-item-section side>
             <q-btn flat dense round icon="arrow_drop_down" v-ripple @click.stop="menu = !menu" />
           </q-item-section>
@@ -56,30 +67,37 @@
           </q-menu>
         </q-item>
 
-        <q-item clickable v-ripple class="q-mb-lg">
+        <q-item clickable v-ripple class="q-mb-md">
           <q-item-section avatar><q-icon name="local_shipping" /></q-item-section>
           <q-item-section><b>Flotilla</b></q-item-section>
         </q-item>
 
         <q-separator spaced />
 
-        <q-item clickable v-ripple class="q-mb-lg">
+        <q-item clickable v-ripple class="q-mb-md">
           <q-item-section avatar><q-icon name="help_outline" /></q-item-section>
-          <q-item-section>Guía de ayuda</q-item-section>
+          <q-item-section>Guia de ayuda</q-item-section>
         </q-item>
 
-        <q-item clickable v-ripple class="q-mb-lg" mailto="test@mail.com">
+        <q-item clickable v-ripple class="q-mb-md" mailto="test@mail.com">
           <q-item-section avatar><q-icon name="mail" /></q-item-section>
-          <q-item-section>Contáctenos</q-item-section>
+          <q-item-section>Contactenos</q-item-section>
         </q-item>
 
-        <q-item clickable v-ripple @click="loadDialogRoutes(); showRoutesDialog = true">
+        <q-item clickable v-ripple class="q-mb-md" @click="loadDialogRoutes(); showRoutesDialog = true">
           <q-item-section avatar>
             <q-icon name="map" />
           </q-item-section>
           <q-item-section>
-            <b>Ver rutas guardadas</b>
+            Ver rutas locales
           </q-item-section>
+        </q-item>
+
+        <q-separator spaced />
+
+        <q-item clickable v-ripple class="q-mb-md text-negative" @click="handleLogout">
+          <q-item-section avatar><q-icon name="logout" color="negative" /></q-item-section>
+          <q-item-section>Cerrar sesion</q-item-section>
         </q-item>
 
       </q-list>
@@ -244,6 +262,7 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { GoogleMap } from "@capacitor/google-maps";
@@ -252,8 +271,12 @@ import { useQuasar } from "quasar";
 import { Notify } from "quasar";
 import { Preferences } from "@capacitor/preferences";
 import { Browser } from '@capacitor/browser';
+import { useAuthStore } from "src/stores/auth-store";
 
 import { NativeAudio } from '@capacitor-community/native-audio';
+
+const router = useRouter();
+const authStore = useAuthStore();
 
 NativeAudio.preload({
   assetId: 'sound1',
@@ -298,6 +321,20 @@ const openPaypal = async (type) => {
   }
 
   menu.value = false
+}
+
+const handleLogout = async () => {
+  try {
+    await authStore.logout()
+    router.push('/auth/login')
+  } catch (error) {
+    console.error('Error al cerrar sesion:', error)
+    router.push('/auth/login')
+  }
+}
+
+const goHome = () => {
+  router.push('/routes')
 }
 
 const showUserModal = ref(false);
@@ -811,7 +848,8 @@ const drawPolylineWeb = () => {
 };
 
 // === BOTONES ===
-const goHome = async () => {
+// eslint-disable-next-line no-unused-vars
+const optimizeLocalRoutes = async () => {
   const apiKey = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4";
 
   // 👇 CARGAR RUTAS CON NUEVO MÉTODO
