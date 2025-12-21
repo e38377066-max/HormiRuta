@@ -49,16 +49,15 @@
         </q-btn>
 
         <div class="divider q-my-md">
-          <!-- <span>O continúa con</span> -->
+          <span>O continúa con</span>
         </div>
 
-        <!-- Botón Google nativo -->
-        <!-- <q-btn class="google-btn full-width q-mt-md" color="white" label="Continuar con Google"
-          @click="loginWithGoogle">
+        <q-btn class="google-btn full-width q-mt-md" color="white" text-color="dark" label="Continuar con Google"
+          @click="loginWithGoogle" no-caps>
           <template v-slot:prepend>
-            <q-icon name="google" color="red" />
+            <img src="~assets/google.png" style="width: 20px; height: 20px;" />
           </template>
-        </q-btn> -->
+        </q-btn>
 
         <div class="text-center text-grey-3 q-mt-md">
           <span class="text-body2">¿No tienes cuenta?</span>
@@ -252,17 +251,16 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
-// import { Browser } from '@capacitor/browser'
+import { useAuthStore } from 'src/stores/auth-store'
 import { App } from '@capacitor/app'
+import { api } from 'src/boot/axios'
 
 const router = useRouter()
 const $q = useQuasar()
-
-// const GOOGLE_CLIENT_ID = '231353314709-kqvplul4mpimdtfup8kdvaro7nn5u3ef.apps.googleusercontent.com'
-// const REDIRECT_URI = 'com.hormiruta.app://oauth/callback'
+const authStore = useAuthStore()
 
 const form = ref({ email: '', password: '' })
 const loading = ref(false)
@@ -271,7 +269,24 @@ const rememberMe = ref(false)
 const showTerms = ref(false)
 const showPrivacy = ref(false)
 
-// reglas de inputs
+onMounted(() => {
+  const remembered = localStorage.getItem('rememberedEmail')
+  if (remembered) {
+    form.value.email = remembered
+    rememberMe.value = true
+  }
+  
+  const urlParams = new URLSearchParams(window.location.search)
+  if (urlParams.get('login') === 'success') {
+    authStore.fetchCurrentUser().then(user => {
+      if (user) {
+        $q.notify({ type: 'positive', message: `Bienvenido ${user.username}`, position: 'top' })
+        router.push('/test')
+      }
+    })
+  }
+})
+
 const emailRules = [
   val => !!val || 'El correo es requerido',
   val => /.+@.+\..+/.test(val) || 'Ingresa un correo válido'
@@ -281,16 +296,24 @@ const passwordRules = [
   val => val.length >= 6 || 'Mínimo 6 caracteres'
 ]
 
-// login normal
 async function onLogin() {
   loading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    router.push('/test')
-    if (rememberMe.value) localStorage.setItem('rememberedEmail', form.value.email)
-    $q.notify({ type: 'positive', message: 'Inicio de sesión exitoso', caption: 'Bienvenido de vuelta', position: 'top', timeout: 2000 })
+    const result = await authStore.login(form.value.email, form.value.password)
+    
+    if (result.success) {
+      if (rememberMe.value) {
+        localStorage.setItem('rememberedEmail', form.value.email)
+      } else {
+        localStorage.removeItem('rememberedEmail')
+      }
+      $q.notify({ type: 'positive', message: 'Inicio de sesión exitoso', caption: `Bienvenido ${result.user.username}`, position: 'top', timeout: 2000 })
+      router.push('/test')
+    } else {
+      $q.notify({ type: 'negative', message: 'Error al iniciar sesión', caption: result.error, position: 'top' })
+    }
   } catch {
-    $q.notify({ type: 'negative', message: 'Error al iniciar sesión', caption: 'Verifica tus credenciales', position: 'top' })
+    $q.notify({ type: 'negative', message: 'Error al iniciar sesión', caption: 'Verifica tu conexión', position: 'top' })
   } finally {
     loading.value = false
   }
@@ -299,47 +322,29 @@ async function onLogin() {
 function goForgotPassword() {
   $q.notify({ message: 'Recuperación de contraseña', caption: 'Te enviaremos un correo', color: 'info', position: 'top' })
 }
+
 function goRegister() {
-  $q.notify({ message: 'Ir al registro', color: 'info', position: 'top' })
+  router.push('/register')
 }
 
-// 🔹 Google OAuth Web
-// async function loginWithGoogle() {
-//   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=profile email`
-//   try {
-//     await Browser.open({ url: authUrl })
-//   } catch (err) {
-//     console.error('Google Web login error:', err)
-//     $q.notify({ type: 'negative', message: 'Error al iniciar sesión con Google' })
-//   }
-// }
+function loginWithGoogle() {
+  authStore.loginWithGoogle()
+}
 
-// 🔹 Capturar deep link
 App.addListener('appUrlOpen', async (data) => {
   if (!data.url.includes('oauth/callback')) return
 
-  const params = new URL(data.url).hash.substr(1) // ejemplo: #access_token=xxx
+  const params = new URL(data.url).hash.substr(1)
   const accessToken = new URLSearchParams(params).get('access_token')
 
   if (accessToken) {
-    console.log('Google Access Token:', accessToken)
-
     try {
-      const res = await fetch('http://localhost:8000/api/auth/google/mobile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: accessToken })
-      })
+      const res = await api.post('/api/auth/google/mobile', { token: accessToken })
 
-      const data = await res.json()
-
-      if (res.ok) {
-        localStorage.setItem('google_token', data.token) // token Laravel
-        localStorage.setItem('user', JSON.stringify(data.user))
-        $q.notify({ type: 'positive', message: `Bienvenido ${data.user.name}` })
-        router.push('/home')
-      } else {
-        throw new Error(data.error || 'Error en autenticación')
+      if (res.data.success) {
+        localStorage.setItem('user', JSON.stringify(res.data.user))
+        $q.notify({ type: 'positive', message: `Bienvenido ${res.data.user.username}` })
+        router.push('/test')
       }
     } catch (err) {
       console.error('Error al autenticar con backend:', err)

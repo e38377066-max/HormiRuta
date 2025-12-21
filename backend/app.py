@@ -20,7 +20,15 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 
 db.init_app(app)
 
-CORS(app, supports_credentials=True, origins=["*"])
+allowed_origins = [
+    f"https://{os.environ.get('REPLIT_DEV_DOMAIN', 'localhost')}",
+    f"https://{os.environ.get('REPLIT_DEV_DOMAIN', 'localhost')}:5000",
+    "http://localhost:5000",
+    "http://localhost:9000",
+    "capacitor://localhost",
+    "http://localhost"
+]
+CORS(app, supports_credentials=True, origins=allowed_origins)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
