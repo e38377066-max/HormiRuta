@@ -1,9 +1,15 @@
 <template>
   <q-layout view="hHh lpR fFf">
-    <q-header class="bg-dark">
-      <q-toolbar>
+    <q-header elevated id="planner-header" class="planner-header">
+      <q-toolbar class="q-py-sm transparent-toolbar">
         <q-btn flat dense round icon="menu" color="white" @click="leftDrawerOpen = !leftDrawerOpen" />
-        <q-toolbar-title class="text-white">HormiRuta</q-toolbar-title>
+        <q-avatar size="32px" class="q-ml-sm bg-white">
+          <q-img src="~assets/Hormiruta.png" />
+        </q-avatar>
+        <q-toolbar-title class="text-white text-weight-bold q-ml-sm" style="font-size: 18px;">
+          HormiRuta
+        </q-toolbar-title>
+        <q-btn flat round dense icon="person" color="white" />
       </q-toolbar>
     </q-header>
 
@@ -63,3 +69,15 @@ const handleLogout = async () => {
   router.push('/auth/login')
 }
 </script>
+
+<style scoped>
+:deep(#planner-header) {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4) !important;
+}
+
+:deep(#planner-header .q-toolbar) {
+  background: transparent !important;
+}
+</style>
+

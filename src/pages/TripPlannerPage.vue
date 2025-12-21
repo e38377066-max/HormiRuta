@@ -1005,7 +1005,7 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 .trip-planner-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - 56px);
   background: #0d1117;
 }
 
