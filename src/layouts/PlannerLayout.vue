@@ -127,5 +127,25 @@ const toggleDarkMode = () => {
 :deep(#planner-header .q-toolbar) {
   background: transparent !important;
 }
+
+:deep(.q-drawer) {
+  background: #1a1a2e !important;
+}
+
+:deep(.q-drawer .q-item) {
+  color: #ffffff !important;
+}
+
+:deep(.q-drawer .q-item__section--avatar .q-icon) {
+  color: #ffffff !important;
+}
+
+:deep(.q-drawer .q-item.text-negative) {
+  color: #ef5350 !important;
+}
+
+:deep(.q-drawer .q-item.text-negative .q-icon) {
+  color: #ef5350 !important;
+}
 </style>
 
