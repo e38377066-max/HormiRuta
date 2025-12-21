@@ -46,21 +46,32 @@
       </div>
       
       <div class="route-header">
-        <div class="route-stats text-grey-6">
-          {{ formatDuration(totalDuration) }} · {{ stops.length }} paradas · {{ totalDistance.toFixed(1) }} km
+        <div class="stats-chips">
+          <div class="stat-chip">
+            <q-icon name="schedule" size="14px" />
+            <span>{{ formatDuration(totalDuration) }}</span>
+          </div>
+          <div class="stat-chip">
+            <q-icon name="place" size="14px" />
+            <span>{{ stops.length }} paradas</span>
+          </div>
+          <div class="stat-chip">
+            <q-icon name="straighten" size="14px" />
+            <span>{{ totalDistance.toFixed(1) }} km</span>
+          </div>
         </div>
         <div class="route-title" @click="showRouteNameDialog = true">
-          <span class="text-h6 text-white">{{ routeName || 'Mi Ruta' }}</span>
-          <q-icon name="edit" size="xs" class="q-ml-xs text-grey" />
+          <span class="text-h5 text-white text-weight-bold">{{ routeName || 'Mi Ruta' }}</span>
+          <q-icon name="edit" size="xs" class="q-ml-sm text-grey-5" />
         </div>
       </div>
       
       <div class="action-row">
-        <q-btn outline color="primary" size="sm" class="col" @click="shareRoute">
+        <q-btn unelevated color="indigo-8" size="md" class="col action-btn" @click="shareRoute">
           <q-icon name="share" size="xs" class="q-mr-xs" />
           Compartir
         </q-btn>
-        <q-btn outline color="primary" size="sm" class="col" @click="roundTrip = !roundTrip">
+        <q-btn unelevated :color="roundTrip ? 'purple-8' : 'grey-8'" size="md" class="col action-btn" @click="roundTrip = !roundTrip">
           <q-icon name="replay" size="xs" class="q-mr-xs" />
           {{ roundTrip ? 'Ida y vuelta' : 'Solo ida' }}
         </q-btn>
@@ -1034,13 +1045,16 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 
 .bottom-panel {
   flex: 1;
-  background: #1a1f2e;
-  border-radius: 20px 20px 0 0;
+  background: linear-gradient(180deg, rgba(20, 24, 40, 0.95) 0%, rgba(15, 18, 30, 0.98) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 24px 24px 0 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  margin-top: -16px;
+  margin-top: -20px;
   z-index: 10;
+  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.3);
 }
 
 .panel-handle {
@@ -1050,10 +1064,10 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 }
 
 .handle-bar {
-  width: 36px;
-  height: 4px;
-  background: #444;
-  border-radius: 2px;
+  width: 40px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
 }
 
 .search-section {
@@ -1062,8 +1076,13 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 }
 
 .search-input {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.search-input :deep(.q-field__control) {
+  border-radius: 16px;
 }
 
 .suggestions-dropdown {
@@ -1080,11 +1099,25 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 }
 
 .route-header {
-  padding: 8px 16px;
+  padding: 12px 16px 8px;
 }
 
-.route-stats {
-  font-size: 13px;
+.stats-chips {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .route-title {
@@ -1095,8 +1128,14 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 
 .action-row {
   display: flex;
-  gap: 8px;
-  padding: 0 12px 8px;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.action-btn {
+  border-radius: 12px !important;
+  font-weight: 600;
+  text-transform: none;
 }
 
 .stops-section {
@@ -1106,9 +1145,10 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 }
 
 .origin-item {
-  background: rgba(76, 175, 80, 0.1);
-  margin: 0 8px 6px;
-  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(52, 211, 153, 0.08) 100%);
+  margin: 0 8px 8px;
+  border-radius: 14px;
+  border-left: 4px solid #10b981;
 }
 
 .stops-header {
@@ -1121,41 +1161,59 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 }
 
 .stop-item {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
-  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  margin-bottom: 8px;
+  border-left: 4px solid #6366f1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.stop-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(2px);
 }
 
 .stop-badge {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: bold;
-  font-size: 13px;
-}
-
-.stop-badge-nav {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: bold;
-  font-size: 18px;
+  font-weight: 700;
+  font-size: 14px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.4);
+}
+
+.stop-badge.completed {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+}
+
+.stop-badge-nav {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 20px;
   flex-shrink: 0;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
 }
 
 .next-stop-card {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.2);
 }
 
 .stop-time {
@@ -1166,13 +1224,33 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 
 .empty-state {
   text-align: center;
-  padding: 32px 16px;
+  padding: 40px 24px;
+}
+
+.empty-state .q-icon {
+  opacity: 0.5;
+}
+
+.time-big {
+  font-weight: 300;
+  letter-spacing: -1px;
 }
 
 .bottom-bar {
-  padding: 12px 16px 20px;
-  background: #1a1f2e;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px 16px 24px;
+  background: linear-gradient(180deg, rgba(20, 24, 40, 0.9) 0%, rgba(15, 18, 30, 1) 100%);
+  border-top: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.bottom-bar .q-btn {
+  border-radius: 14px;
+  font-weight: 600;
+  padding: 12px 20px;
+  font-size: 15px;
+}
+
+.bottom-bar .q-btn--outline {
+  border-width: 2px;
 }
 
 .undo-bar {

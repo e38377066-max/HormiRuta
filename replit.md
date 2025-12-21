@@ -135,11 +135,22 @@ src/
 - Savings banner showing distance/time saved after optimization
 - Navigation mode with stop completion tracking and undo
 - Voice search using Web Speech API
-- Map point selection for adding stops
-- Coordinate-based Google Maps URLs for reliable navigation
+- Map point selection for adding stops with confirmation dialog
 - Drag-and-drop stop reordering with vuedraggable
 - Route sharing via Web Share API with clipboard fallback
 - Round trip toggle with return leg calculations
+
+### Visual Design Update (Dec 21, 2025)
+- Glassmorphism panel with blur and gradient background
+- Metric chips (time, stops, km) with icons
+- Purple/indigo accent color palette matching Spoke/Circuit
+- Stop cards with left color bar and shadow
+- Gradient badges for stop numbers
+- Improved typography and spacing
+- Larger action buttons with rounded corners
+- Internal navigation mode (no Google Maps redirect)
+- Next stop card with prominent styling in navigation mode
+- Complete/skip buttons for stop progression
 
 ## App Mode: Cliente Normal (Planificador de Rutas)
 
