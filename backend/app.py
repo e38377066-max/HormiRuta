@@ -27,6 +27,7 @@ allowed_origins = [
     f"https://{os.environ.get('REPLIT_DEV_DOMAIN', 'localhost')}",
     f"https://{os.environ.get('REPLIT_DEV_DOMAIN', 'localhost')}:5000",
     "http://localhost:5000",
+    "http://127.0.0.1:5000",
     "http://localhost:9000",
     "capacitor://localhost",
     "http://localhost"
