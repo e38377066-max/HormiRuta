@@ -67,17 +67,7 @@
         </div>
       </div>
       
-      <div class="action-row">
-        <q-btn unelevated color="indigo-8" size="md" class="col action-btn" @click="shareRoute">
-          <q-icon name="share" size="xs" class="q-mr-xs" />
-          Compartir
-        </q-btn>
-        <q-btn unelevated :color="roundTrip ? 'purple-8' : 'grey-8'" size="md" class="col action-btn" @click="roundTrip = !roundTrip">
-          <q-icon name="replay" size="xs" class="q-mr-xs" />
-          {{ roundTrip ? 'Ida y vuelta' : 'Solo ida' }}
-        </q-btn>
-      </div>
-      
+            
       <div v-if="panelExpanded" class="stops-section">
         <q-item v-if="startAddress" dense class="origin-item">
           <q-item-section avatar>
@@ -136,8 +126,12 @@
         </q-item>
         
         <div v-if="!stops.length" class="empty-state">
-          <q-icon name="add_location_alt" size="48px" color="grey-7" />
-          <div class="text-grey-6 q-mt-sm">Agrega paradas para planificar tu ruta</div>
+          <div class="empty-icon-circle">
+            <q-icon name="add" size="32px" color="grey-5" />
+          </div>
+          <div class="text-body1 text-center q-mt-md q-px-xl" style="line-height: 1.4;">
+            Añade las primeras paradas para<br>empezar a crear la ruta
+          </div>
         </div>
       </div>
       
@@ -199,9 +193,12 @@
         </template>
         
         <template v-else>
-          <q-btn color="primary" class="full-width" @click="showAddOptions">
+          <q-btn color="primary" class="full-width add-stops-btn" size="lg" @click="focusSearch">
             <q-icon name="add" class="q-mr-sm" />
             Añadir paradas
+          </q-btn>
+          <q-btn v-if="!stops.length" outline class="full-width q-mt-sm" color="grey-7" @click="$q.notify({message: 'Próximamente', position: 'top'})">
+            Copiar paradas de una ruta anterior
           </q-btn>
         </template>
       </div>
@@ -295,16 +292,37 @@
     </q-dialog>
     
     <q-dialog v-model="showRouteMenu" position="bottom">
-      <q-card class="bg-dark full-width">
-        <q-list>
-          <q-item clickable v-close-popup @click="showRouteNameDialog = true">
-            <q-item-section avatar><q-icon name="edit" /></q-item-section>
-            <q-item-section>Editar nombre</q-item-section>
+      <q-card class="full-width" style="border-radius: 16px 16px 0 0;">
+        <q-list class="q-py-sm">
+          <q-item clickable v-close-popup @click="shareRoute">
+            <q-item-section avatar><q-icon name="share" color="primary" /></q-item-section>
+            <q-item-section>Compartir copia de ruta</q-item-section>
           </q-item>
+          <q-item clickable v-close-popup>
+            <q-item-section avatar><q-icon name="swap_vert" color="primary" /></q-item-section>
+            <q-item-section>Transferir paradas</q-item-section>
+          </q-item>
+          <q-item clickable v-close-popup>
+            <q-item-section avatar><q-icon name="content_copy" color="primary" /></q-item-section>
+            <q-item-section>Copiar paradas...</q-item-section>
+          </q-item>
+          <q-item clickable v-close-popup @click="showBulkImportDialog = true">
+            <q-item-section avatar><q-icon name="grid_on" color="primary" /></q-item-section>
+            <q-item-section>Importar planilla</q-item-section>
+          </q-item>
+          <q-separator class="q-my-sm" />
           <q-item clickable v-close-popup @click="roundTrip = !roundTrip">
-            <q-item-section avatar><q-icon name="replay" /></q-item-section>
-            <q-item-section>{{ roundTrip ? 'Desactivar' : 'Activar' }} ida y vuelta</q-item-section>
+            <q-item-section avatar><q-icon name="replay" color="primary" /></q-item-section>
+            <q-item-section>{{ roundTrip ? 'Solo ida' : 'Ida y vuelta' }}</q-item-section>
+            <q-item-section side>
+              <q-toggle v-model="roundTrip" color="primary" />
+            </q-item-section>
           </q-item>
+          <q-item clickable v-close-popup @click="showRouteNameDialog = true">
+            <q-item-section avatar><q-icon name="edit" color="primary" /></q-item-section>
+            <q-item-section>Editar nombre de ruta</q-item-section>
+          </q-item>
+          <q-separator class="q-my-sm" />
           <q-item clickable v-close-popup @click="clearRoute" class="text-negative">
             <q-item-section avatar><q-icon name="delete_sweep" color="negative" /></q-item-section>
             <q-item-section>Borrar todo</q-item-section>
@@ -1135,7 +1153,6 @@ const clearRoute = () => {
   })
 }
 
-const showAddOptions = () => { showAddDialog.value = true }
 
 const focusSearch = () => {
   panelExpanded.value = true
@@ -1260,16 +1277,14 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 
 .bottom-panel {
   flex: 1;
-  background: linear-gradient(180deg, rgba(20, 24, 40, 0.95) 0%, rgba(15, 18, 30, 0.98) 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: #ffffff;
   border-radius: 24px 24px 0 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   margin-top: -20px;
   z-index: 10;
-  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.15);
 }
 
 .panel-handle {
@@ -1442,8 +1457,23 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
   padding: 40px 24px;
 }
 
-.empty-state .q-icon {
-  opacity: 0.5;
+.empty-icon-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px dashed #bdbdbd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.add-stops-btn {
+  border-radius: 28px;
+  font-size: 16px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .time-big {
