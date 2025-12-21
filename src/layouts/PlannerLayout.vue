@@ -76,16 +76,22 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuasar } from 'quasar'
 import { useAuthStore } from 'src/stores/auth-store'
+import { useThemeStore } from 'src/stores/theme-store'
 
 const $q = useQuasar()
 const router = useRouter()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 const leftDrawerOpen = ref(false)
-const darkMode = ref($q.dark.isActive)
+
+const darkMode = computed({
+  get: () => themeStore.isDark,
+  set: (val) => themeStore.setDarkMode(val)
+})
 
 const handleLogout = async () => {
   await authStore.logout()
@@ -113,8 +119,7 @@ const showLocalRoutes = () => {
 }
 
 const toggleDarkMode = () => {
-  darkMode.value = !darkMode.value
-  $q.dark.set(darkMode.value)
+  themeStore.toggleTheme()
 }
 </script>
 
