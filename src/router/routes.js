@@ -6,8 +6,10 @@ const routes = [
   },
   {
     path: '/planner',
-    component: () => import('pages/TripPlannerPage.vue'),
-    meta: { requiresAuth: true }
+    component: () => import('layouts/PlannerLayout.vue'),
+    children: [
+      { path: '', component: () => import('pages/TripPlannerPage.vue') }
+    ]
   },
   {
     path: '/routes',
