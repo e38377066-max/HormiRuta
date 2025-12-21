@@ -152,6 +152,31 @@ src/
 - Next stop card with prominent styling in navigation mode
 - Complete/skip buttons for stop progression
 
+### Main Map Panel Redesign (Dec 21, 2025)
+- Exact replication of Spoke/Circuit main screen layout
+- Floating hamburger menu button (circular, dark) on map top-left
+- Map controls (layers, GPS) on right side with dark background
+- Hidden app header for full map immersion
+- Hybrid satellite map by default
+- Bottom panel with:
+  - Search bar: "Pulsa para añadir" placeholder
+  - Action icons: import, microphone, menu (3 dots)
+  - "PARADAS (0)" counter
+  - Empty state: dashed circle + icon with explanatory text
+  - Blue "+ Añadir paradas" button (full width, rounded)
+  - "Copiar paradas de una ruta anterior" link
+
+### Settings & Menu Pages (Dec 21, 2025)
+- SettingsPage: Complete settings matching Spoke
+  - Navigation app, stop side, stop duration, vehicle type
+  - Avoid tolls toggle, stop ID format, navigation bubble
+  - Theme selection (auto/light/dark)
+  - Licenses, Terms, Privacy Policy, App version
+- HelpPage: FAQ, tutorial, support contact, feedback
+- SavedRoutesPage: Cloud-synced routes management
+- LocalRoutesPage: Offline routes with sync capability
+- Menu drawer with user avatar, plan card, recent routes list
+
 ## App Mode: Cliente Normal (Planificador de Rutas)
 
 ### Funcionalidades Principales

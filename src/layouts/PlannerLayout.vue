@@ -1,6 +1,6 @@
 <template>
   <q-layout view="hHh lpR fFf">
-    <q-header elevated id="planner-header" class="planner-header">
+    <q-header v-if="showHeader" elevated id="planner-header" class="planner-header">
       <q-toolbar class="q-py-sm transparent-toolbar">
         <q-btn flat dense round icon="menu" color="white" @click="leftDrawerOpen = !leftDrawerOpen" />
         <q-avatar size="32px" class="q-ml-sm bg-white">
@@ -102,7 +102,7 @@
     </q-drawer>
 
     <q-page-container>
-      <router-view />
+      <router-view @toggle-drawer="leftDrawerOpen = !leftDrawerOpen" />
     </q-page-container>
   </q-layout>
 </template>
@@ -117,6 +117,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const leftDrawerOpen = ref(false)
 const recentRoutes = ref([])
+const showHeader = ref(false)
 
 const userName = computed(() => authStore.user?.name || authStore.user?.username || 'Usuario')
 const userEmail = computed(() => authStore.user?.email || '')

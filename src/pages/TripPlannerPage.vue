@@ -3,6 +3,9 @@
     <div class="map-section">
       <div id="trip-map" class="map-container"></div>
       
+      <!-- Menu button on map -->
+      <q-btn fab class="menu-fab" color="dark" icon="menu" @click="$emit('toggle-drawer')" />
+      
       <div v-if="savedDistance > 0" class="savings-banner">
         <q-icon name="check_circle" color="positive" size="sm" />
         <span>{{ savedDistance.toFixed(1) }} km, {{ Math.round(savedDuration) }} min ahorrados</span>
@@ -10,12 +13,12 @@
       </div>
       
       <div class="map-controls">
-        <q-btn fab-mini color="grey-8" icon="layers" @click="toggleMapType" />
-        <q-btn fab-mini color="grey-8" icon="my_location" @click="centerOnLocation" class="q-mt-sm" />
+        <q-btn fab-mini color="dark" icon="layers" @click="toggleMapType" />
+        <q-btn fab-mini color="dark" icon="my_location" @click="centerOnLocation" class="q-mt-sm" />
       </div>
     </div>
     
-    <div class="bottom-panel">
+    <div class="bottom-panel" :class="{ 'expanded': panelExpanded || stops.length > 0 }">
       <div class="panel-handle" @click="panelExpanded = !panelExpanded">
         <div class="handle-bar"></div>
       </div>
@@ -24,13 +27,13 @@
         <q-input v-model="searchQuery" placeholder="Pulsa para añadir" outlined dense dark
           class="search-input" @focus="showSearch = true" @update:model-value="searchAddress">
           <template #prepend>
-            <q-icon name="search" />
+            <q-icon name="search" color="grey-5" />
           </template>
           <template #append>
-            <q-btn flat round dense icon="import_export" size="sm" color="grey" @click="showImportDialog = true" />
+            <q-btn flat round dense icon="import_export" size="sm" color="grey-5" @click="showImportDialog = true" />
             <q-btn v-if="voiceSupported" flat round dense icon="mic" size="sm"
-              @click="startVoiceSearch" :color="isListening ? 'negative' : 'grey'" />
-            <q-btn flat round dense icon="more_vert" size="sm" @click="showRouteMenu = true" />
+              @click="startVoiceSearch" :color="isListening ? 'negative' : 'grey-5'" />
+            <q-btn flat round dense icon="more_vert" size="sm" color="grey-5" @click="showRouteMenu = true" />
           </template>
         </q-input>
         
@@ -46,7 +49,8 @@
         </q-list>
       </div>
       
-      <div class="route-header">
+      <!-- Show stats and title only when there are stops -->
+      <div v-if="stops.length > 0" class="route-header">
         <div class="stats-chips">
           <div class="stat-chip">
             <q-icon name="schedule" size="14px" />
@@ -125,22 +129,35 @@
           </q-item-section>
         </q-item>
         
+        <!-- Empty state - shown when no stops -->
         <div v-if="!stops.length" class="empty-state">
           <div class="empty-icon-circle">
             <q-icon name="add" size="32px" color="grey-5" />
           </div>
-          <div class="text-body1 text-center q-mt-md q-px-xl" style="line-height: 1.4;">
+          <div class="text-body2 text-grey-5 text-center q-mt-md q-px-lg" style="line-height: 1.5;">
             Añade las primeras paradas para<br>empezar a crear la ruta
           </div>
         </div>
       </div>
       
       <div class="bottom-bar">
-        <div class="time-big text-h5 text-white text-center q-mb-sm">
+        <!-- Show duration only when there are stops -->
+        <div v-if="stops.length > 0" class="time-big text-h5 text-white text-center q-mb-sm">
           {{ formatDuration(totalDuration) }}
         </div>
         
-        <template v-if="!isOptimized && stops.length >= 2">
+        <!-- Empty state buttons -->
+        <template v-if="stops.length === 0">
+          <q-btn color="primary" class="full-width add-stops-btn q-mb-sm" size="lg" @click="focusSearch">
+            <q-icon name="add" class="q-mr-sm" />
+            Añadir paradas
+          </q-btn>
+          <q-btn flat color="primary" class="full-width copy-route-btn" @click="showCopyFromRoute = true">
+            Copiar paradas de una ruta anterior
+          </q-btn>
+        </template>
+        
+        <template v-else-if="!isOptimized && stops.length >= 2">
           <q-btn color="primary" class="full-width" :loading="optimizing" @click="optimizeRoute">
             <q-icon name="auto_fix_high" class="q-mr-sm" />
             Optimizar la ruta
@@ -549,7 +566,7 @@ const voiceLanguages = [
 ]
 const voiceSupported = ref(false)
 
-const mapType = ref('roadmap')
+const mapType = ref('satellite')
 const selectingOnMap = ref(false)
 
 const showRouteNameDialog = ref(false)
@@ -563,6 +580,7 @@ const showAddDialog = ref(false)
 const showOptimizing = ref(false)
 const showDepartureDialog = ref(false)
 const showMapSelectDialog = ref(false)
+const showCopyFromRoute = ref(false)
 
 const mapSelectedLocation = ref({ lat: null, lng: null, address: '' })
 const mapSelectPriority = ref('auto')
@@ -617,9 +635,9 @@ const initMap = () => {
   map = new window.google.maps.Map(mapEl, {
     center: { lat: 23.6345, lng: -102.5528 },
     zoom: 5,
-    mapTypeId: 'roadmap',
+    mapTypeId: 'hybrid',
     disableDefaultUI: true,
-    zoomControl: true
+    zoomControl: false
   })
   
   directionsService = new window.google.maps.DirectionsService()
@@ -1237,7 +1255,7 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 .trip-planner-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 56px);
+  height: 100vh;
   background: #0d1117;
 }
 
@@ -1266,6 +1284,17 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
   font-size: 13px;
 }
 
+.menu-fab {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  width: 48px;
+  height: 48px;
+  background: rgba(30, 30, 30, 0.9) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 .map-controls {
   position: absolute;
   right: 12px;
@@ -1275,11 +1304,14 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
   flex-direction: column;
 }
 
+.map-controls .q-btn {
+  background: rgba(30, 30, 30, 0.9) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 .bottom-panel {
   flex: 1;
-  background: linear-gradient(180deg, rgba(20, 24, 40, 0.95) 0%, rgba(15, 18, 30, 0.98) 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: #121212;
   border-radius: 24px 24px 0 0;
   display: flex;
   flex-direction: column;
@@ -1287,6 +1319,10 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
   margin-top: -20px;
   z-index: 10;
   box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.3);
+}
+
+.bottom-panel.expanded {
+  flex: 1.5;
 }
 
 .panel-handle {
@@ -1308,14 +1344,22 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 }
 
 .search-input {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
 }
 
 .search-input :deep(.q-field__control) {
-  border-radius: 16px;
+  background: transparent;
 }
+
+.search-input :deep(.q-field__native) {
+  color: white;
+}
+
+.search-input :deep(.q-field__native::placeholder) {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 
 .suggestions-dropdown {
   position: absolute;
@@ -1471,11 +1515,18 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 }
 
 .add-stops-btn {
-  border-radius: 28px;
+  border-radius: 28px !important;
   font-size: 16px;
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
+  height: 52px;
+}
+
+.copy-route-btn {
+  text-transform: none;
+  font-size: 14px;
+  font-weight: 400;
 }
 
 .time-big {
@@ -1485,8 +1536,7 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
 
 .bottom-bar {
   padding: 16px 16px 24px;
-  background: linear-gradient(180deg, rgba(20, 24, 40, 0.9) 0%, rgba(15, 18, 30, 1) 100%);
-  border-top: 1px solid rgba(99, 102, 241, 0.2);
+  background: #121212;
 }
 
 .bottom-bar .q-btn {
