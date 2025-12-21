@@ -281,7 +281,7 @@ onMounted(() => {
     authStore.fetchCurrentUser().then(user => {
       if (user) {
         $q.notify({ type: 'positive', message: `Bienvenido ${user.username}`, position: 'top' })
-        router.push('/test')
+        router.push('/planner')
       }
     })
   }
@@ -308,7 +308,7 @@ async function onLogin() {
         localStorage.removeItem('rememberedEmail')
       }
       $q.notify({ type: 'positive', message: 'Inicio de sesión exitoso', caption: `Bienvenido ${result.user.username}`, position: 'top', timeout: 2000 })
-      router.push('/test')
+      router.push('/planner')
     } else {
       $q.notify({ type: 'negative', message: 'Error al iniciar sesión', caption: result.error, position: 'top' })
     }
@@ -344,7 +344,7 @@ App.addListener('appUrlOpen', async (data) => {
       if (res.data.success) {
         localStorage.setItem('user', JSON.stringify(res.data.user))
         $q.notify({ type: 'positive', message: `Bienvenido ${res.data.user.username}` })
-        router.push('/test')
+        router.push('/planner')
       }
     } catch (err) {
       console.error('Error al autenticar con backend:', err)
