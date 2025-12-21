@@ -301,6 +301,37 @@
       </q-card>
     </q-dialog>
     
+    <q-dialog v-model="showMapSelectDialog" position="bottom">
+      <q-card class="bg-dark full-width" style="border-radius: 16px 16px 0 0">
+        <q-card-section class="q-pb-none">
+          <div class="row items-center q-mb-sm">
+            <q-icon name="place" color="primary" size="md" class="q-mr-sm" />
+            <div class="col">
+              <div class="text-caption text-grey-5">Ubicación seleccionada</div>
+              <div class="text-body1 text-white">{{ mapSelectedLocation.address }}</div>
+            </div>
+            <q-btn flat round icon="close" v-close-popup size="sm" />
+          </div>
+        </q-card-section>
+        
+        <q-card-section>
+          <div class="text-caption text-grey-5 q-mb-xs">Orden en la ruta</div>
+          <q-btn-toggle v-model="mapSelectPriority" spread no-caps unelevated
+            toggle-color="primary" color="grey-9" text-color="white"
+            :options="[
+              { label: 'Primera', value: 'first' },
+              { label: 'Automático', value: 'auto' },
+              { label: 'Última', value: 'last' }
+            ]" class="full-width" />
+        </q-card-section>
+        
+        <q-card-actions class="q-px-md q-pb-md">
+          <q-btn outline color="grey-5" label="Cancelar" v-close-popup class="col" />
+          <q-btn color="primary" label="Agregar parada" @click="confirmMapSelection" class="col" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+    
     <div v-if="lastAction" class="undo-bar">
       <span>{{ lastAction.message }}</span>
       <q-btn flat dense label="Deshacer" color="primary" @click="undoAction" />
@@ -353,6 +384,10 @@ const showRouteMenu = ref(false)
 const showAddDialog = ref(false)
 const showOptimizing = ref(false)
 const showDepartureDialog = ref(false)
+const showMapSelectDialog = ref(false)
+
+const mapSelectedLocation = ref({ lat: null, lng: null, address: '' })
+const mapSelectPriority = ref('auto')
 
 const editingStop = ref(null)
 const editingStopIndex = ref(-1)
@@ -409,11 +444,50 @@ const initMap = () => {
   })
   
   map.addListener('click', (e) => {
-    if (selectingOnMap.value) {
-      addStopFromCoords(e.latLng.lat(), e.latLng.lng())
-      selectingOnMap.value = false
+    const lat = e.latLng.lat()
+    const lng = e.latLng.lng()
+    showMapLocationDialog(lat, lng)
+  })
+}
+
+const showMapLocationDialog = async (lat, lng) => {
+  mapSelectedLocation.value = { lat, lng, address: 'Obteniendo dirección...' }
+  mapSelectPriority.value = 'auto'
+  showMapSelectDialog.value = true
+  
+  const geocoder = new window.google.maps.Geocoder()
+  geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+    if (status === 'OK' && results[0]) {
+      mapSelectedLocation.value.address = results[0].formatted_address
+    } else {
+      mapSelectedLocation.value.address = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
     }
   })
+}
+
+const confirmMapSelection = () => {
+  const loc = mapSelectedLocation.value
+  stops.value.push({
+    id: stops.value.length + 1,
+    address: loc.address,
+    name: '',
+    lat: loc.lat,
+    lng: loc.lng,
+    distance: null,
+    duration: null,
+    eta: null,
+    color: '#1976d2',
+    priority: mapSelectPriority.value,
+    type: 'delivery',
+    packages: 1,
+    stopDuration: 1,
+    notes: '',
+    completed: false
+  })
+  showMapSelectDialog.value = false
+  isOptimized.value = false
+  updateMapBounds()
+  $q.notify({ type: 'positive', message: 'Parada agregada', position: 'top' })
 }
 
 const getCurrentLocation = async () => {
@@ -513,15 +587,6 @@ const addStop = (data) => {
   isOptimized.value = false
   updateMapBounds()
   $q.notify({ type: 'positive', message: 'Parada agregada', position: 'top' })
-}
-
-const addStopFromCoords = async (lat, lng) => {
-  const geocoder = new window.google.maps.Geocoder()
-  geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-    if (status === 'OK' && results[0]) {
-      addStop({ address: results[0].formatted_address, lat, lng })
-    }
-  })
 }
 
 const removeStop = (index) => {
