@@ -21,14 +21,14 @@ const routes = [
   },
   {
     path: '/settings',
-    component: () => import('layouts/PlannerLayout.vue'),
+    component: () => import('layouts/SettingsLayout.vue'),
     children: [
       { path: '', component: () => import('pages/Settings/SettingsPage.vue') }
     ]
   },
   {
     path: '/help',
-    component: () => import('layouts/PlannerLayout.vue'),
+    component: () => import('layouts/SettingsLayout.vue'),
     children: [
       { path: '', component: () => import('pages/Settings/HelpPage.vue') }
     ]

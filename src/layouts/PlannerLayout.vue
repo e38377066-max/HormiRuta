@@ -13,60 +13,92 @@
       </q-toolbar>
     </q-header>
 
-    <q-drawer v-model="leftDrawerOpen" bordered class="bg-dark text-white">
-      <div class="q-pa-md flex flex-center column">
-        <q-avatar size="80px" class="bg-white">
-          <q-img src="~assets/Hormiruta.png" style="width: 70px; height: 70px; object-fit: contain;" />
-        </q-avatar>
-        <div class="text-h6 text-center q-mt-sm">HormiRuta</div>
-        <div class="text-caption text-grey-5">Planificador de Rutas</div>
+    <q-drawer v-model="leftDrawerOpen" bordered class="drawer-dark">
+      <div class="drawer-header q-pa-md">
+        <div class="flex items-center justify-end q-mb-md">
+          <q-btn flat round dense icon="help_outline" color="grey-5" size="md" to="/help" @click="leftDrawerOpen = false" />
+          <q-btn flat round dense icon="settings" color="grey-5" size="md" to="/settings" @click="leftDrawerOpen = false" />
+        </div>
+        
+        <div class="flex items-center q-mb-md">
+          <q-avatar size="56px" color="primary" text-color="white" class="text-h5 text-weight-bold">
+            {{ userInitial }}
+          </q-avatar>
+          <div class="q-ml-md">
+            <div class="text-subtitle1 text-weight-medium text-white">{{ userName }}</div>
+            <div class="text-caption text-grey-5">{{ userEmail }}</div>
+          </div>
+        </div>
+
+        <div class="plan-card q-pa-md q-mb-md">
+          <div class="flex items-center">
+            <q-avatar size="36px" color="primary" text-color="white">
+              <q-icon name="person" size="20px" />
+            </q-avatar>
+            <div class="q-ml-md">
+              <div class="text-subtitle2 text-primary">Plan Gratuito</div>
+              <div class="text-caption text-grey-5">Uso personal</div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <q-separator spaced color="grey-8" />
+      <q-separator color="grey-9" />
 
-      <q-list dense>
-        <q-item clickable v-ripple to="/planner" active-class="bg-primary text-white">
-          <q-item-section avatar><q-icon name="auto_fix_high" /></q-item-section>
-          <q-item-section>Planificar Ruta</q-item-section>
-        </q-item>
+      <div class="routes-section q-pa-md">
+        <div class="text-overline text-grey-6 q-mb-sm">Hoy</div>
+        
+        <q-list dense class="routes-list">
+          <q-item 
+            v-for="route in recentRoutes" 
+            :key="route.id"
+            clickable 
+            v-ripple
+            class="route-item q-mb-xs"
+            @click="openRoute(route)"
+          >
+            <q-item-section side class="route-date text-grey-5">
+              {{ formatRouteDate(route.created_at) }}
+            </q-item-section>
+            <q-item-section :class="route.isActive ? 'text-primary' : 'text-white'">
+              {{ route.name }}
+            </q-item-section>
+            <q-item-section side>
+              <q-btn flat round dense icon="more_vert" size="sm" @click.stop>
+                <q-menu>
+                  <q-list style="min-width: 150px">
+                    <q-item clickable v-close-popup @click="openRoute(route)">
+                      <q-item-section>Abrir</q-item-section>
+                    </q-item>
+                    <q-item clickable v-close-popup @click="deleteRoute(route)">
+                      <q-item-section class="text-negative">Eliminar</q-item-section>
+                    </q-item>
+                  </q-list>
+                </q-menu>
+              </q-btn>
+            </q-item-section>
+          </q-item>
+        </q-list>
 
-        <q-item clickable v-ripple to="/saved-routes" @click="leftDrawerOpen = false">
-          <q-item-section avatar><q-icon name="bookmark" /></q-item-section>
-          <q-item-section>Mis Rutas Guardadas</q-item-section>
-        </q-item>
+        <div v-if="recentRoutes.length === 0" class="text-center text-grey-6 q-py-lg">
+          No hay rutas recientes
+        </div>
+      </div>
 
-        <q-separator spaced color="grey-8" />
+      <q-space />
 
-        <q-item clickable v-ripple to="/settings" @click="leftDrawerOpen = false">
-          <q-item-section avatar><q-icon name="settings" /></q-item-section>
-          <q-item-section>Configuración</q-item-section>
-        </q-item>
-
-        <q-item clickable v-ripple to="/help" @click="leftDrawerOpen = false">
-          <q-item-section avatar><q-icon name="help_outline" /></q-item-section>
-          <q-item-section>Guía de ayuda</q-item-section>
-        </q-item>
-
-        <q-item clickable v-ripple to="/local-routes" @click="leftDrawerOpen = false">
-          <q-item-section avatar><q-icon name="smartphone" /></q-item-section>
-          <q-item-section>Ver rutas locales</q-item-section>
-        </q-item>
-
-        <q-item clickable v-ripple @click="toggleDarkMode">
-          <q-item-section avatar><q-icon name="dark_mode" /></q-item-section>
-          <q-item-section>Tema Oscuro</q-item-section>
-          <q-item-section side>
-            <q-toggle v-model="darkMode" color="primary" @click.stop />
-          </q-item-section>
-        </q-item>
-
-        <q-separator spaced color="grey-8" />
-
-        <q-item clickable v-ripple @click="handleLogout" class="text-negative">
-          <q-item-section avatar><q-icon name="logout" color="negative" /></q-item-section>
-          <q-item-section>Cerrar sesión</q-item-section>
-        </q-item>
-      </q-list>
+      <div class="q-pa-md">
+        <q-btn 
+          color="primary" 
+          class="full-width create-route-btn"
+          size="lg"
+          unelevated
+          @click="createNewRoute"
+        >
+          <q-icon name="add" class="q-mr-sm" />
+          Crear ruta
+        </q-btn>
+      </div>
     </q-drawer>
 
     <q-page-container>
@@ -76,29 +108,57 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth-store'
-import { useThemeStore } from 'src/stores/theme-store'
+import { api } from 'src/boot/axios'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const themeStore = useThemeStore()
 const leftDrawerOpen = ref(false)
+const recentRoutes = ref([])
 
-const darkMode = computed({
-  get: () => themeStore.isDark,
-  set: (val) => themeStore.setDarkMode(val)
+const userName = computed(() => authStore.user?.name || authStore.user?.username || 'Usuario')
+const userEmail = computed(() => authStore.user?.email || '')
+const userInitial = computed(() => userName.value.charAt(0).toUpperCase())
+
+const fetchRecentRoutes = async () => {
+  try {
+    const response = await api.get('/api/routes')
+    recentRoutes.value = response.data.slice(0, 5)
+  } catch (error) {
+    console.error('Error fetching routes:', error)
+  }
+}
+
+const formatRouteDate = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '')
+}
+
+const openRoute = (route) => {
+  leftDrawerOpen.value = false
+  router.push(`/planner?routeId=${route.id}`)
+}
+
+const deleteRoute = async (route) => {
+  try {
+    await api.delete(`/api/routes/${route.id}`)
+    fetchRecentRoutes()
+  } catch (error) {
+    console.error('Error deleting route:', error)
+  }
+}
+
+const createNewRoute = () => {
+  leftDrawerOpen.value = false
+  router.push('/planner')
+}
+
+onMounted(() => {
+  fetchRecentRoutes()
 })
-
-const handleLogout = async () => {
-  await authStore.logout()
-  router.push('/auth/login')
-}
-
-const toggleDarkMode = () => {
-  themeStore.toggleTheme()
-}
 </script>
 
 <style scoped>
@@ -111,24 +171,43 @@ const toggleDarkMode = () => {
   background: transparent !important;
 }
 
-:deep(.q-drawer) {
-  background: #1a1a2e !important;
+.drawer-dark {
+  background: #121212 !important;
 }
 
-:deep(.q-drawer .q-item) {
-  color: #ffffff !important;
+.drawer-header {
+  background: #121212;
 }
 
-:deep(.q-drawer .q-item__section--avatar .q-icon) {
-  color: #ffffff !important;
+.plan-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-:deep(.q-drawer .q-item.text-negative) {
-  color: #ef5350 !important;
+.routes-section {
+  flex: 1;
+  overflow-y: auto;
 }
 
-:deep(.q-drawer .q-item.text-negative .q-icon) {
-  color: #ef5350 !important;
+.route-item {
+  border-radius: 8px;
+  min-height: 44px;
+}
+
+.route-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.route-date {
+  min-width: 50px;
+  font-size: 12px;
+}
+
+.create-route-btn {
+  border-radius: 12px;
+  font-weight: 600;
+  text-transform: none;
+  font-size: 16px;
 }
 </style>
-
