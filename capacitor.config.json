@@ -1,12 +1,24 @@
 {
   "appId": "com.hormiruta.app",
   "appName": "HormiRuta",
-  "webDir": "src-capacitor/www",
+  "webDir": "dist/spa",
   "plugins": {
     "GoogleAuth": {
       "scopes": ["profile", "email"],
       "serverClientId": "231353314709-ep7dpf70rd3vag92dk8niiscodv30v6q.apps.googleusercontent.com",
       "forceCodeForRefreshToken": true
+    },
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#121212",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "Dark",
+      "backgroundColor": "#121212"
     }
+  },
+  "android": {
+    "allowMixedContent": true
   }
 }
