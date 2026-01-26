@@ -26,7 +26,7 @@ app.use(cors({
     if (!origin || allowedOrigins.some(o => origin.startsWith(o.replace(':5000', '')))) {
       callback(null, true);
     } else {
-      callback(null, true);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true
@@ -34,8 +34,13 @@ app.use(cors({
 
 app.use(express.json());
 
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret && process.env.NODE_ENV === 'production') {
+  throw new Error('SESSION_SECRET is required in production');
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'dev-secret-key-change-in-production',
+  secret: sessionSecret || 'dev-secret-key-for-local-development',
   resave: false,
   saveUninitialized: false,
   cookie: {

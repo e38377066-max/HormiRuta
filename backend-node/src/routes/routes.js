@@ -41,7 +41,7 @@ router.post('/', requireAuth, async (req, res) => {
         phone: stopData.phone,
         customer_name: stopData.customer_name,
         priority: stopData.priority || 0,
-        wait_time: stopData.wait_time || 0,
+        duration: stopData.duration || 5,
         time_window_start: stopData.time_window_start,
         time_window_end: stopData.time_window_end
       });

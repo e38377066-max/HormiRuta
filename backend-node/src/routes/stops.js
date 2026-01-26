@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { Route, Stop } from '../models/index.js';
+import { Op } from 'sequelize';
+import { Route, Stop, sequelize } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
