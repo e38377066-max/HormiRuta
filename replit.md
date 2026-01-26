@@ -1,37 +1,54 @@
-# Flask Web Application
+# HormiRuta
 
 ## Overview
-A Flask web application with PostgreSQL database, using Flask-SQLAlchemy for ORM and configured for autoscale deployment.
+HormiRuta es una aplicación de planificación de rutas construida con Quasar Framework (Vue.js) con soporte para Capacitor (Android/iOS).
 
 ## Project Structure
 ```
-├── app.py           # Flask application initialization and database setup
-├── main.py          # Application entry point
-├── models.py        # Database models (User model with Flask-Login)
-├── routes.py        # Application routes
-├── templates/       # HTML templates
-│   └── index.html   # Main page template
-└── static/          # Static assets
-    └── css/
-        └── style.css
+├── src/
+│   ├── boot/           # Boot files (axios config)
+│   ├── components/     # Vue components
+│   ├── layouts/        # Layout components (Main, Planner, Settings)
+│   ├── pages/          # Page components
+│   │   ├── Auth/       # Login, Register, Splash
+│   │   ├── Routes/     # Routes management
+│   │   └── Settings/   # Settings pages
+│   ├── router/         # Vue Router configuration
+│   ├── stores/         # Pinia stores
+│   └── css/            # Stylesheets
+├── backend/            # Backend Python API
+├── android/            # Capacitor Android project
+├── public/             # Static assets
+├── quasar.config.js    # Quasar configuration
+└── package.json        # NPM dependencies
 ```
 
 ## Recent Changes
-- 2026-01-26: Initial migration from Replit Agent to Replit environment
-- Set up Flask with SQLAlchemy and PostgreSQL
-- Configured autoscale deployment with gunicorn
+- 2026-01-26: Migration from Replit Agent to Replit environment completed
+- Configured Quasar dev server on port 5000
+- Installed npm dependencies with --legacy-peer-deps
 
 ## Technology Stack
-- **Backend**: Flask with Python 3.11
-- **Database**: PostgreSQL with Flask-SQLAlchemy ORM
-- **Authentication**: Flask-Login (ready for implementation)
-- **WSGI Server**: Gunicorn
-- **Frontend**: Bootstrap 5
+- **Frontend**: Quasar Framework 2.x (Vue.js 3)
+- **State Management**: Pinia
+- **Routing**: Vue Router
+- **Mobile**: Capacitor for Android/iOS
+- **HTTP Client**: Axios
+- **Icons**: FontAwesome, Material Icons
 
 ## Development
-- Run workflow "Start application" to start the development server
-- Server runs on port 5000 with auto-reload enabled
+- Run workflow "Start application" to start the dev server
+- Server runs on port 5000
+- Access the app at /app route
+
+## Key Routes
+- `/` - Splash screen
+- `/app` - Main application
+- `/planner` - Trip planner
+- `/saved-routes` - Saved routes (requires auth)
+- `/settings` - Settings
+- `/auth/login` - Login
+- `/auth/register` - Register
 
 ## Deployment
-- Configured for autoscale deployment
-- Uses gunicorn as production WSGI server
+To be configured for production deployment.
