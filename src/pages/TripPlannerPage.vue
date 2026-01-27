@@ -180,8 +180,27 @@
                   {{ gpsActive ? 'GPS activo' : 'GPS inactivo' }}
                 </span>
                 <span v-if="gpsAccuracy" class="text-caption text-grey-5 q-ml-xs">(±{{ Math.round(gpsAccuracy) }}m)</span>
+                <q-chip v-if="isRerouting" color="info" text-color="white" size="sm" class="q-ml-sm">
+                  <q-spinner size="12px" class="q-mr-xs" />
+                  Recalculando...
+                </q-chip>
+                <q-chip v-else-if="isOffRoute" color="warning" text-color="white" size="sm" icon="warning" class="q-ml-sm">
+                  Fuera de ruta
+                </q-chip>
               </div>
               <q-toggle v-model="autoCompleteEnabled" size="sm" color="positive" label="Auto" class="text-caption" />
+            </div>
+            <div class="row items-center justify-between q-mt-xs">
+              <div class="row items-center text-caption text-grey-5">
+                <q-icon v-if="avoidTolls" name="money_off" size="xs" class="q-mr-xs" />
+                <q-icon v-if="avoidHighways" name="remove_road" size="xs" class="q-mr-xs" />
+                <q-icon v-if="avoidFerries" name="directions_boat" size="xs" class="q-mr-xs" />
+                <span v-if="avoidTolls || avoidHighways || avoidFerries">Evitando: </span>
+                <span v-if="avoidTolls">peajes{{ avoidHighways || avoidFerries ? ', ' : '' }}</span>
+                <span v-if="avoidHighways">autopistas{{ avoidFerries ? ', ' : '' }}</span>
+                <span v-if="avoidFerries">ferries</span>
+              </div>
+              <q-btn flat dense size="sm" icon="tune" color="grey-5" @click="showRoutePreferences = true" />
             </div>
           </div>
           
@@ -327,7 +346,83 @@
               <q-item-label>Volver a optimizar</q-item-label>
             </q-item-section>
           </q-item>
+          <q-item clickable v-close-popup @click="showRoutePreferences = true">
+            <q-item-section avatar><q-icon name="tune" /></q-item-section>
+            <q-item-section>
+              <q-item-label>Preferencias de ruta</q-item-label>
+              <q-item-label caption>Evitar peajes, autopistas, ferries</q-item-label>
+            </q-item-section>
+          </q-item>
         </q-list>
+      </q-card>
+    </q-dialog>
+    
+    <q-dialog v-model="showRoutePreferences" position="bottom">
+      <q-card class="bg-dark full-width" style="border-radius: 16px 16px 0 0;">
+        <q-card-section>
+          <div class="text-h6 text-white">Preferencias de ruta</div>
+          <div class="text-caption text-grey">Configura como calcular tu ruta</div>
+        </q-card-section>
+        <q-separator dark />
+        <q-card-section class="q-gutter-md">
+          <q-item tag="label" dark>
+            <q-item-section avatar>
+              <q-icon name="money_off" color="warning" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label>Evitar peajes</q-item-label>
+              <q-item-label caption>No pasar por casetas de cobro</q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-toggle v-model="avoidTolls" color="primary" />
+            </q-item-section>
+          </q-item>
+          
+          <q-item tag="label" dark>
+            <q-item-section avatar>
+              <q-icon name="remove_road" color="info" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label>Evitar autopistas</q-item-label>
+              <q-item-label caption>Usar calles y carreteras locales</q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-toggle v-model="avoidHighways" color="primary" />
+            </q-item-section>
+          </q-item>
+          
+          <q-item tag="label" dark>
+            <q-item-section avatar>
+              <q-icon name="directions_boat" color="cyan" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label>Evitar ferries</q-item-label>
+              <q-item-label caption>No usar transbordadores</q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-toggle v-model="avoidFerries" color="primary" />
+            </q-item-section>
+          </q-item>
+          
+          <q-separator dark class="q-my-md" />
+          
+          <q-item tag="label" dark>
+            <q-item-section avatar>
+              <q-icon name="refresh" color="positive" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label>Re-ruteo automatico</q-item-label>
+              <q-item-label caption>Recalcular si te desvias de la ruta</q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-toggle v-model="rerouteEnabled" color="positive" />
+            </q-item-section>
+          </q-item>
+        </q-card-section>
+        <q-card-actions align="right" class="q-pa-md">
+          <q-btn flat label="Cerrar" color="grey" v-close-popup />
+          <q-btn color="primary" label="Aplicar y reoptimizar" v-close-popup @click="reoptimize" />
+        </q-card-actions>
       </q-card>
     </q-dialog>
     
@@ -604,6 +699,11 @@ const showOptimizing = ref(false)
 const showDepartureDialog = ref(false)
 const showMapSelectDialog = ref(false)
 const showCopyFromRoute = ref(false)
+const showRoutePreferences = ref(false)
+
+const avoidTolls = ref(false)
+const avoidHighways = ref(false)
+const avoidFerries = ref(false)
 
 const mapSelectedLocation = ref({ lat: null, lng: null, address: '' })
 const mapSelectPriority = ref('auto')
@@ -628,10 +728,17 @@ const autoCompleteEnabled = ref(true)
 let gpsWatchId = null
 
 const ARRIVAL_THRESHOLD_METERS = 50
+const REROUTE_THRESHOLD_METERS = 200
+const rerouteEnabled = ref(true)
+const isRerouting = ref(false)
+let lastRerouteTime = 0
+let currentRoutePolyline = null
 
 const isNearNextStop = computed(() => {
   return distanceToNextStop.value !== null && distanceToNextStop.value <= ARRIVAL_THRESHOLD_METERS
 })
+
+const isOffRoute = ref(false)
 
 let map = null
 let directionsService = null
@@ -706,6 +813,13 @@ const startGpsTracking = async () => {
         if (navigationMode.value && autoCompleteEnabled.value && isNearNextStop.value && nextPendingStop.value) {
           autoCompleteStop()
         }
+        
+        if (navigationMode.value && rerouteEnabled.value) {
+          checkIfOffRoute()
+          if (isOffRoute.value) {
+            dynamicReroute()
+          }
+        }
       }
     )
     
@@ -760,6 +874,94 @@ const autoCompleteStop = () => {
       position: 'top',
       timeout: 5000
     })
+  }
+}
+
+const checkIfOffRoute = () => {
+  if (!currentPosition.value || !currentRoutePolyline || currentRoutePolyline.length < 2) {
+    isOffRoute.value = false
+    return
+  }
+  
+  if (gpsAccuracy.value && gpsAccuracy.value > 100) {
+    return
+  }
+  
+  let minDistance = Infinity
+  for (const point of currentRoutePolyline) {
+    const dist = calculateDistanceMeters(
+      currentPosition.value.lat,
+      currentPosition.value.lng,
+      point.lat,
+      point.lng
+    )
+    if (dist < minDistance) minDistance = dist
+  }
+  
+  isOffRoute.value = minDistance > REROUTE_THRESHOLD_METERS
+}
+
+const dynamicReroute = async () => {
+  const now = Date.now()
+  if (now - lastRerouteTime < 15000) return
+  if (isRerouting.value) return
+  
+  lastRerouteTime = now
+  isRerouting.value = true
+  
+  try {
+    const pendingStops = stops.value.filter(s => !s.completed)
+    if (pendingStops.length === 0 || !currentPosition.value) {
+      isRerouting.value = false
+      return
+    }
+    
+    const origin = { lat: currentPosition.value.lat, lng: currentPosition.value.lng }
+    const waypoints = pendingStops.slice(0, -1).map(s => ({
+      location: { lat: s.lat, lng: s.lng },
+      stopover: true
+    }))
+    const destination = pendingStops.length > 0 
+      ? { lat: pendingStops[pendingStops.length - 1].lat, lng: pendingStops[pendingStops.length - 1].lng }
+      : origin
+    
+    directionsService.route({
+      origin,
+      destination,
+      waypoints,
+      optimizeWaypoints: false,
+      travelMode: window.google.maps.TravelMode.DRIVING,
+      avoidTolls: avoidTolls.value,
+      avoidHighways: avoidHighways.value,
+      avoidFerries: avoidFerries.value
+    }, (result, status) => {
+      isRerouting.value = false
+      
+      if (status === 'OK') {
+        directionsRenderer.setDirections(result)
+        
+        currentRoutePolyline = []
+        result.routes[0].legs.forEach(leg => {
+          leg.steps.forEach(step => {
+            currentRoutePolyline.push({ lat: step.start_location.lat(), lng: step.start_location.lng() })
+            currentRoutePolyline.push({ lat: step.end_location.lat(), lng: step.end_location.lng() })
+          })
+        })
+        
+        isOffRoute.value = false
+        
+        $q.notify({
+          type: 'info',
+          message: 'Ruta recalculada',
+          icon: 'refresh',
+          position: 'top',
+          timeout: 2000
+        })
+      }
+    })
+  } catch (err) {
+    console.error('Reroute error:', err)
+    isRerouting.value = false
   }
 }
 
@@ -1028,13 +1230,24 @@ const optimizeRoute = async () => {
     
     directionsService.route({
       origin, destination: dest, waypoints, optimizeWaypoints: waypoints.length > 1,
-      travelMode: window.google.maps.TravelMode.DRIVING
+      travelMode: window.google.maps.TravelMode.DRIVING,
+      avoidTolls: avoidTolls.value,
+      avoidHighways: avoidHighways.value,
+      avoidFerries: avoidFerries.value
     }, (result, status) => {
       showOptimizing.value = false
       optimizing.value = false
       
       if (status === 'OK') {
         directionsRenderer.setDirections(result)
+        
+        currentRoutePolyline = []
+        result.routes[0].legs.forEach(leg => {
+          leg.steps.forEach(step => {
+            currentRoutePolyline.push({ lat: step.start_location.lat(), lng: step.start_location.lng() })
+            currentRoutePolyline.push({ lat: step.end_location.lat(), lng: step.end_location.lng() })
+          })
+        })
         
         const order = result.routes[0].waypoint_order || []
         const legs = result.routes[0].legs

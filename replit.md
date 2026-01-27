@@ -30,6 +30,12 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 ```
 
 ## Recent Changes
+- 2026-01-27: Added route preferences and dynamic rerouting
+  - Avoid tolls, highways, ferries options in route optimization
+  - Dynamic rerouting when driver deviates from route (200m threshold)
+  - Reroute cooldown of 15 seconds to prevent excessive API calls
+  - Route polyline tracking for deviation detection
+  - UI indicators for rerouting status and active preferences
 - 2026-01-27: Added GPS-based automatic stop confirmation for hands-free delivery
   - Real-time GPS tracking using Capacitor Geolocation watchPosition
   - Automatic arrival detection (50-meter threshold)
