@@ -31,6 +31,14 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 ```
 
 ## Recent Changes
+- 2026-01-27: Added polling mode for Respond.io (no webhook required)
+  - Polling service to fetch new messages periodically (configurable interval)
+  - List contacts with open conversations from Respond.io API
+  - Fetch messages per contact for processing
+  - Auto-detect addresses in incoming messages
+  - Create orders automatically when address is detected
+  - UI controls to start/stop polling and sync manually
+  - Works without premium Respond.io webhook subscription
 - 2026-01-27: Added Respond.io messaging integration module
   - Separate messaging module from route optimizer
   - Orders from chat (WhatsApp, Instagram, web) converted to deliveries
