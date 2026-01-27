@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.js';
 import routesRoutes from './routes/routes.js';
 import stopsRoutes from './routes/stops.js';
 import historyRoutes from './routes/history.js';
+import messagingRoutes from './routes/messaging.js';
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -58,6 +59,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/routes', routesRoutes);
 app.use('/api/stops', stopsRoutes);
 app.use('/api/history', historyRoutes);
+app.use('/api/messaging', messagingRoutes);
 
 async function startServer() {
   try {

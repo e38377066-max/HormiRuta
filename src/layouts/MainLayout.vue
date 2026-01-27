@@ -36,6 +36,11 @@
           <q-item-section>Mis Rutas Guardadas</q-item-section>
         </q-item>
 
+        <q-item class="q-mb-md" clickable v-ripple to="/messaging">
+          <q-item-section avatar><q-icon name="fas fa-comments" color="positive" /></q-item-section>
+          <q-item-section>Centro de Mensajeria</q-item-section>
+        </q-item>
+
         <q-separator spaced />
 
         <q-item class="q-mb-md" clickable v-ripple @click="showUserModal = true">

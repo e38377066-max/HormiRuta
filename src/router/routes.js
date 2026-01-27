@@ -58,6 +58,17 @@ const routes = [
     ],
   },
   {
+    path: '/messaging',
+    component: () => import('layouts/MainLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      { path: '', component: () => import('pages/Messaging/MessagingDashboard.vue') },
+      { path: 'orders/:id', component: () => import('pages/Messaging/OrderDetailPage.vue') },
+      { path: 'coverage', component: () => import('pages/Messaging/CoverageZonesPage.vue') },
+      { path: 'settings', component: () => import('pages/Messaging/MessagingSettingsPage.vue') }
+    ],
+  },
+  {
     path: '/auth/login',
     component: () => import('pages/Auth/LoginPage.vue'),
   },

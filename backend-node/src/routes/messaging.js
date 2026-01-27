@@ -1,0 +1,650 @@
+import express from 'express';
+import { Op } from 'sequelize';
+import { 
+  MessagingOrder, 
+  CoverageZone, 
+  MessageLog, 
+  MessagingSettings,
+  User
+} from '../models/index.js';
+import { requireAuth } from '../middleware/auth.js';
+import RespondioService from '../services/respondio.js';
+import AddressValidationService from '../services/addressValidation.js';
+
+const router = express.Router();
+
+router.get('/settings', requireAuth, async (req, res) => {
+  try {
+    let settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings) {
+      settings = await MessagingSettings.create({
+        user_id: req.session.userId
+      });
+    }
+
+    res.json(settings.toDict());
+  } catch (error) {
+    console.error('Get messaging settings error:', error);
+    res.status(500).json({ error: 'Error al obtener configuracion' });
+  }
+});
+
+router.put('/settings', requireAuth, async (req, res) => {
+  try {
+    let settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings) {
+      settings = await MessagingSettings.create({
+        user_id: req.session.userId
+      });
+    }
+
+    const allowedFields = [
+      'respond_api_token', 'is_active', 'auto_validate_addresses',
+      'auto_respond_coverage', 'auto_respond_no_coverage',
+      'no_coverage_message', 'coverage_message', 'order_confirmed_message',
+      'driver_assigned_message', 'order_completed_message',
+      'default_channel_id', 'attention_mode', 'webhook_secret'
+    ];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        settings[field] = req.body[field];
+      }
+    }
+
+    await settings.save();
+    res.json(settings.toDict());
+  } catch (error) {
+    console.error('Update messaging settings error:', error);
+    res.status(500).json({ error: 'Error al actualizar configuracion' });
+  }
+});
+
+router.post('/settings/test-connection', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay API token configurado' });
+    }
+
+    const service = new RespondioService(settings.respond_api_token);
+    const result = await service.testConnection();
+
+    res.json(result);
+  } catch (error) {
+    console.error('Test connection error:', error);
+    res.status(500).json({ error: 'Error al probar conexion' });
+  }
+});
+
+router.get('/orders', requireAuth, async (req, res) => {
+  try {
+    const { status, limit = 50, offset = 0 } = req.query;
+    
+    const where = { user_id: req.session.userId };
+    if (status) where.status = status;
+
+    const orders = await MessagingOrder.findAll({
+      where,
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    const count = await MessagingOrder.count({ where });
+
+    res.json({
+      orders: orders.map(o => o.toDict()),
+      total: count
+    });
+  } catch (error) {
+    console.error('Get messaging orders error:', error);
+    res.status(500).json({ error: 'Error al obtener ordenes' });
+  }
+});
+
+router.get('/orders/:id', requireAuth, async (req, res) => {
+  try {
+    const order = await MessagingOrder.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada' });
+    }
+
+    const messages = await MessageLog.findAll({
+      where: { order_id: order.id },
+      order: [['created_at', 'ASC']]
+    });
+
+    res.json({
+      ...order.toDict(),
+      messages: messages.map(m => m.toDict())
+    });
+  } catch (error) {
+    console.error('Get messaging order error:', error);
+    res.status(500).json({ error: 'Error al obtener orden' });
+  }
+});
+
+router.post('/orders', requireAuth, async (req, res) => {
+  try {
+    const {
+      customer_name, customer_phone, customer_email,
+      address, notes, scheduled_date,
+      respond_contact_id, respond_conversation_id,
+      channel_id, channel_type
+    } = req.body;
+
+    const validationService = new AddressValidationService(req.session.userId);
+    const validation = await validationService.validateAddress(address || '');
+
+    const order = await MessagingOrder.create({
+      user_id: req.session.userId,
+      customer_name,
+      customer_phone,
+      customer_email,
+      address,
+      address_lat: req.body.address_lat,
+      address_lng: req.body.address_lng,
+      zip_code: validation.zipCode,
+      address_type: validation.addressType,
+      notes,
+      scheduled_date,
+      respond_contact_id,
+      respond_conversation_id,
+      channel_id,
+      channel_type,
+      status: 'pending',
+      validation_status: validation.hasCoverage ? 'valid' : 'no_coverage',
+      validation_message: validation.validationMessage
+    });
+
+    res.status(201).json(order.toDict());
+  } catch (error) {
+    console.error('Create messaging order error:', error);
+    res.status(500).json({ error: 'Error al crear orden' });
+  }
+});
+
+router.put('/orders/:id', requireAuth, async (req, res) => {
+  try {
+    const order = await MessagingOrder.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada' });
+    }
+
+    const allowedFields = [
+      'customer_name', 'customer_phone', 'customer_email',
+      'address', 'address_lat', 'address_lng', 'notes',
+      'status', 'scheduled_date', 'scheduled_time_start', 'scheduled_time_end',
+      'assigned_driver_id', 'agent_name'
+    ];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        order[field] = req.body[field];
+      }
+    }
+
+    if (req.body.address && req.body.address !== order.address) {
+      const validationService = new AddressValidationService(req.session.userId);
+      const validation = await validationService.validateAddress(req.body.address);
+      order.zip_code = validation.zipCode;
+      order.address_type = validation.addressType;
+      order.validation_status = validation.hasCoverage ? 'valid' : 'no_coverage';
+      order.validation_message = validation.validationMessage;
+    }
+
+    await order.save();
+    res.json(order.toDict());
+  } catch (error) {
+    console.error('Update messaging order error:', error);
+    res.status(500).json({ error: 'Error al actualizar orden' });
+  }
+});
+
+router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
+  try {
+    const order = await MessagingOrder.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada' });
+    }
+
+    order.status = 'confirmed';
+    await order.save();
+
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (settings?.respond_api_token && order.respond_contact_id) {
+      const service = new RespondioService(settings.respond_api_token);
+      const result = await service.sendMessage(
+        order.respond_contact_id,
+        settings.order_confirmed_message,
+        order.channel_id
+      );
+
+      if (result.success) {
+        await MessageLog.create({
+          user_id: req.session.userId,
+          order_id: order.id,
+          respond_contact_id: order.respond_contact_id,
+          respond_message_id: result.messageId,
+          direction: 'outbound',
+          content: settings.order_confirmed_message,
+          channel_type: order.channel_type,
+          status: 'sent',
+          is_automated: true,
+          automation_type: 'order_confirmed'
+        });
+      }
+    }
+
+    res.json(order.toDict());
+  } catch (error) {
+    console.error('Confirm order error:', error);
+    res.status(500).json({ error: 'Error al confirmar orden' });
+  }
+});
+
+router.post('/orders/:id/cancel', requireAuth, async (req, res) => {
+  try {
+    const order = await MessagingOrder.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada' });
+    }
+
+    order.status = 'cancelled';
+    order.cancelled_at = new Date();
+    order.cancel_reason = req.body.reason;
+    await order.save();
+
+    res.json(order.toDict());
+  } catch (error) {
+    console.error('Cancel order error:', error);
+    res.status(500).json({ error: 'Error al cancelar orden' });
+  }
+});
+
+router.post('/orders/:id/complete', requireAuth, async (req, res) => {
+  try {
+    const order = await MessagingOrder.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada' });
+    }
+
+    order.status = 'completed';
+    order.completed_at = new Date();
+    await order.save();
+
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (settings?.respond_api_token && order.respond_contact_id) {
+      const service = new RespondioService(settings.respond_api_token);
+      const result = await service.sendMessage(
+        order.respond_contact_id,
+        settings.order_completed_message,
+        order.channel_id
+      );
+
+      if (result.success) {
+        await MessageLog.create({
+          user_id: req.session.userId,
+          order_id: order.id,
+          respond_contact_id: order.respond_contact_id,
+          respond_message_id: result.messageId,
+          direction: 'outbound',
+          content: settings.order_completed_message,
+          channel_type: order.channel_type,
+          status: 'sent',
+          is_automated: true,
+          automation_type: 'order_completed'
+        });
+      }
+    }
+
+    res.json(order.toDict());
+  } catch (error) {
+    console.error('Complete order error:', error);
+    res.status(500).json({ error: 'Error al completar orden' });
+  }
+});
+
+router.delete('/orders/:id', requireAuth, async (req, res) => {
+  try {
+    const order = await MessagingOrder.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada' });
+    }
+
+    await order.destroy();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete order error:', error);
+    res.status(500).json({ error: 'Error al eliminar orden' });
+  }
+});
+
+router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
+  try {
+    const order = await MessagingOrder.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Orden no encontrada' });
+    }
+
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay API token configurado' });
+    }
+
+    if (!order.respond_contact_id) {
+      return res.status(400).json({ error: 'Esta orden no tiene contacto de Respond.io' });
+    }
+
+    const service = new RespondioService(settings.respond_api_token);
+    const result = await service.sendMessage(
+      order.respond_contact_id,
+      req.body.message,
+      order.channel_id
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    const log = await MessageLog.create({
+      user_id: req.session.userId,
+      order_id: order.id,
+      respond_contact_id: order.respond_contact_id,
+      respond_message_id: result.messageId,
+      direction: 'outbound',
+      content: req.body.message,
+      channel_type: order.channel_type,
+      status: 'sent',
+      is_automated: false
+    });
+
+    res.json({
+      success: true,
+      message: log.toDict()
+    });
+  } catch (error) {
+    console.error('Send message error:', error);
+    res.status(500).json({ error: 'Error al enviar mensaje' });
+  }
+});
+
+router.get('/coverage-zones', requireAuth, async (req, res) => {
+  try {
+    const zones = await CoverageZone.findAll({
+      where: { user_id: req.session.userId },
+      order: [['zip_code', 'ASC']]
+    });
+
+    res.json(zones.map(z => z.toDict()));
+  } catch (error) {
+    console.error('Get coverage zones error:', error);
+    res.status(500).json({ error: 'Error al obtener zonas' });
+  }
+});
+
+router.post('/coverage-zones', requireAuth, async (req, res) => {
+  try {
+    const { zip_code, zone_name, city, state, country, is_active,
+            delivery_fee, min_order_amount, estimated_delivery_time, notes } = req.body;
+
+    const existing = await CoverageZone.findOne({
+      where: {
+        user_id: req.session.userId,
+        zip_code
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: 'Ya existe una zona con este codigo postal' });
+    }
+
+    const zone = await CoverageZone.create({
+      user_id: req.session.userId,
+      zip_code,
+      zone_name,
+      city,
+      state,
+      country: country || 'US',
+      is_active: is_active !== false,
+      delivery_fee,
+      min_order_amount,
+      estimated_delivery_time,
+      notes
+    });
+
+    res.status(201).json(zone.toDict());
+  } catch (error) {
+    console.error('Create coverage zone error:', error);
+    res.status(500).json({ error: 'Error al crear zona' });
+  }
+});
+
+router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
+  try {
+    const { zip_codes, zone_name, city, state } = req.body;
+    
+    if (!zip_codes || !Array.isArray(zip_codes)) {
+      return res.status(400).json({ error: 'Se requiere una lista de codigos postales' });
+    }
+
+    const created = [];
+    const skipped = [];
+
+    for (const zip_code of zip_codes) {
+      const existing = await CoverageZone.findOne({
+        where: {
+          user_id: req.session.userId,
+          zip_code: zip_code.trim()
+        }
+      });
+
+      if (existing) {
+        skipped.push(zip_code);
+        continue;
+      }
+
+      const zone = await CoverageZone.create({
+        user_id: req.session.userId,
+        zip_code: zip_code.trim(),
+        zone_name,
+        city,
+        state,
+        is_active: true
+      });
+      created.push(zone.toDict());
+    }
+
+    res.status(201).json({
+      created: created.length,
+      skipped: skipped.length,
+      zones: created
+    });
+  } catch (error) {
+    console.error('Bulk create coverage zones error:', error);
+    res.status(500).json({ error: 'Error al crear zonas' });
+  }
+});
+
+router.put('/coverage-zones/:id', requireAuth, async (req, res) => {
+  try {
+    const zone = await CoverageZone.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!zone) {
+      return res.status(404).json({ error: 'Zona no encontrada' });
+    }
+
+    const allowedFields = [
+      'zone_name', 'city', 'state', 'country', 'is_active',
+      'delivery_fee', 'min_order_amount', 'estimated_delivery_time', 'notes'
+    ];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        zone[field] = req.body[field];
+      }
+    }
+
+    await zone.save();
+    res.json(zone.toDict());
+  } catch (error) {
+    console.error('Update coverage zone error:', error);
+    res.status(500).json({ error: 'Error al actualizar zona' });
+  }
+});
+
+router.delete('/coverage-zones/:id', requireAuth, async (req, res) => {
+  try {
+    const zone = await CoverageZone.findOne({
+      where: { 
+        id: req.params.id,
+        user_id: req.session.userId 
+      }
+    });
+
+    if (!zone) {
+      return res.status(404).json({ error: 'Zona no encontrada' });
+    }
+
+    await zone.destroy();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete coverage zone error:', error);
+    res.status(500).json({ error: 'Error al eliminar zona' });
+  }
+});
+
+router.post('/validate-address', requireAuth, async (req, res) => {
+  try {
+    const { address } = req.body;
+    
+    if (!address) {
+      return res.status(400).json({ error: 'Se requiere una direccion' });
+    }
+
+    const validationService = new AddressValidationService(req.session.userId);
+    const result = await validationService.validateAddress(address);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Validate address error:', error);
+    res.status(500).json({ error: 'Error al validar direccion' });
+  }
+});
+
+router.post('/webhook', async (req, res) => {
+  try {
+    const event = req.body;
+    console.log('Received webhook from Respond.io:', JSON.stringify(event, null, 2));
+
+    res.status(200).json({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).json({ error: 'Error processing webhook' });
+  }
+});
+
+router.get('/stats', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [total, pending, confirmed, completed, todayOrders] = await Promise.all([
+      MessagingOrder.count({ where: { user_id: userId } }),
+      MessagingOrder.count({ where: { user_id: userId, status: 'pending' } }),
+      MessagingOrder.count({ where: { user_id: userId, status: 'confirmed' } }),
+      MessagingOrder.count({ where: { user_id: userId, status: 'completed' } }),
+      MessagingOrder.count({ 
+        where: { 
+          user_id: userId,
+          created_at: { [Op.gte]: today }
+        } 
+      })
+    ]);
+
+    const coverageZones = await CoverageZone.count({
+      where: { user_id: userId, is_active: true }
+    });
+
+    res.json({
+      total,
+      pending,
+      confirmed,
+      completed,
+      todayOrders,
+      coverageZones
+    });
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({ error: 'Error al obtener estadisticas' });
+  }
+});
+
+export default router;

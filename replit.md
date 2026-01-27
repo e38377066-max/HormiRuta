@@ -12,6 +12,7 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 │   ├── pages/                 # Page components
 │   │   ├── Auth/              # Login, Register, Splash
 │   │   ├── Routes/            # Routes management
+│   │   ├── Messaging/         # Respond.io messaging module
 │   │   └── Settings/          # Settings pages
 │   ├── router/                # Vue Router configuration
 │   └── stores/                # Pinia stores (auth, routes, theme)
@@ -20,8 +21,8 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 │   │   ├── config/            # Database configuration
 │   │   ├── middleware/        # Auth middleware
 │   │   ├── models/            # Sequelize ORM models
-│   │   ├── routes/            # API routes (auth, routes, stops, history)
-│   │   ├── services/          # Optimization service
+│   │   ├── routes/            # API routes (auth, routes, stops, history, messaging)
+│   │   ├── services/          # Optimization, Respond.io, address validation services
 │   │   └── index.js           # Main Express app
 │   └── package.json           # Node dependencies
 ├── android/                   # Capacitor Android project
@@ -30,6 +31,15 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 ```
 
 ## Recent Changes
+- 2026-01-27: Added Respond.io messaging integration module
+  - Separate messaging module from route optimizer
+  - Orders from chat (WhatsApp, Instagram, web) converted to deliveries
+  - Automatic address validation and ZIP code coverage checking
+  - Coverage zone management with bulk ZIP code import
+  - Automated responses for coverage/no-coverage scenarios
+  - Three attention modes: automatic, assisted, manual
+  - Message logging and conversation tracking
+  - New database tables: messaging_orders, coverage_zones, message_logs, messaging_settings
 - 2026-01-27: Added route preferences and dynamic rerouting
   - Avoid tolls, highways, ferries options in route optimization
   - Dynamic rerouting when driver deviates from route (200m threshold)
@@ -110,9 +120,31 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 - `GET /api/history` - Get route history
 - `GET /api/history/:id` - Get history detail
 
+### Messaging (Respond.io Integration)
+- `GET /api/messaging/settings` - Get messaging settings
+- `PUT /api/messaging/settings` - Update messaging settings
+- `POST /api/messaging/settings/test-connection` - Test Respond.io API connection
+- `GET /api/messaging/orders` - Get messaging orders
+- `POST /api/messaging/orders` - Create order manually
+- `GET /api/messaging/orders/:id` - Get order detail with messages
+- `PUT /api/messaging/orders/:id` - Update order
+- `POST /api/messaging/orders/:id/confirm` - Confirm order
+- `POST /api/messaging/orders/:id/cancel` - Cancel order
+- `POST /api/messaging/orders/:id/complete` - Complete order
+- `POST /api/messaging/orders/:id/send-message` - Send message to customer
+- `GET /api/messaging/coverage-zones` - Get coverage zones
+- `POST /api/messaging/coverage-zones` - Create coverage zone
+- `POST /api/messaging/coverage-zones/bulk` - Bulk create zones
+- `PUT /api/messaging/coverage-zones/:id` - Update zone
+- `DELETE /api/messaging/coverage-zones/:id` - Delete zone
+- `POST /api/messaging/validate-address` - Validate address coverage
+- `POST /api/messaging/webhook` - Webhook endpoint for Respond.io
+- `GET /api/messaging/stats` - Get messaging statistics
+
 ## Environment Variables
 - `DATABASE_URL` - PostgreSQL connection string
 - `SESSION_SECRET` - Express session secret (required in production)
+- `RESPOND_IO_API_TOKEN` - Respond.io API token (stored per user in database)
 
 ## Development
 1. Frontend runs on port 5000 with hot reload

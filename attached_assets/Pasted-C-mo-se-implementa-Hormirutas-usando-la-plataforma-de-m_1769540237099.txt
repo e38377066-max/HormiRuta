@@ -1,0 +1,139 @@
+Cómo se implementa Hormirutas usando la plataforma de mensajería
+
+Hormirutas se integra con la plataforma de mensajería para que *cada conversación de chat se convierta en una orden gestionable*, sin cambiar la forma en que el equipo ya atiende a los clientes.
+
+La plataforma de mensajería se usa como *punto único de entrada y salida de información, mientras que Hormirutas se encarga de **toda la lógica operativa*.
+
+---
+
+## 1. Uso del chat como punto de inicio del pedido
+
+Cada vez que un cliente escribe por cualquier canal (WhatsApp, Instagram, web, etc.), la conversación queda centralizada en un solo chat.
+
+Desde ese chat:
+
+* Se recibe la dirección del cliente
+* Se identifica automáticamente al cliente
+* Se mantiene todo el historial de la conversación
+
+El agente no tiene que cambiar de herramienta.
+
+---
+
+## 2. Envío de la información del chat a Hormirutas
+
+La plataforma de mensajería permite que *Hormirutas consulte las conversaciones* y obtenga:
+
+* El texto enviado por el cliente
+* El identificador del contacto
+* El estado de la conversación
+
+Hormirutas toma esa información y la procesa internamente, sin que el agente tenga que intervenir.
+
+---
+
+## 3. Validación automática desde Hormirutas
+
+Con la información del chat, Hormirutas:
+
+* Analiza la dirección enviada
+* Verifica si pertenece a un ZIP Code habilitado
+* Determina si es casa o apartamento
+
+Según el resultado:
+
+* Si no hay cobertura, el sistema genera la respuesta correspondiente
+* Si hay cobertura, la orden sigue su flujo normal
+
+El agente solo ve el resultado en el chat.
+
+---
+
+## 4. Respuesta directa al cliente desde el mismo chat
+
+Una vez Hormirutas toma la decisión, *la respuesta se envía automáticamente al mismo chat*.
+
+Para el cliente:
+
+* No hay diferencia entre un mensaje automático o uno manual
+* Todo ocurre dentro de la misma conversación
+
+Para el agente:
+
+* No tiene que copiar información
+* No tiene que validar direcciones manualmente
+
+---
+
+## 5. Relación entre el chat y la persona que atiende
+
+Cada conversación puede estar:
+
+* Asignada a un agente específico
+* O en cola automática
+
+Hormirutas utiliza esa asignación para:
+
+* Saber quién está atendiendo el pedido
+* Registrar quién gestionó la orden
+* Mantener trazabilidad
+
+Si el agente cambia, la conversación y la orden permanecen vinculadas.
+
+---
+
+## 6. De chat a orden operativa
+
+Una vez validado el pedido:
+
+* La conversación queda marcada como “pedido confirmado”
+* La orden queda disponible en Hormirutas
+* El agente puede seguir chateando normalmente
+
+No se rompe la atención al cliente.
+
+---
+
+## 7. Integración con repartidores
+
+Cuando la orden se asigna a un repartidor:
+
+* El sistema sabe qué órdenes vienen de qué chats
+* Cada orden mantiene su vínculo con el cliente
+
+Esto permite:
+
+* Informar al cliente sobre el estado del envío
+* Resolver incidencias directamente desde el mismo chat
+
+---
+
+## 8. Diferenciación por tipo de atención
+
+Hormirutas puede trabajar de tres formas dentro del chat:
+
+### Atención automática
+
+* Validación y respuesta sin intervención humana
+
+### Atención asistida
+
+* El sistema valida y el agente confirma
+
+### Atención manual
+
+* El agente controla todo, pero con información precargada
+
+El cliente no nota el cambio.
+
+---
+
+## 9. Control y seguimiento desde mensajería
+
+Desde la plataforma de mensajería:
+
+* Se puede ver el estado del pedido
+* Se puede ver si ya fue asignado
+* Se puede continuar la conversación sin salir del chat
+
+Hormirutas se encarga de la parte operativa en segundo plano.

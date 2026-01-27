@@ -3,6 +3,10 @@ import User from './User.js';
 import Route from './Route.js';
 import Stop from './Stop.js';
 import RouteHistory from './RouteHistory.js';
+import MessagingOrder from './MessagingOrder.js';
+import CoverageZone from './CoverageZone.js';
+import MessageLog from './MessageLog.js';
+import MessagingSettings from './MessagingSettings.js';
 
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
 Route.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -12,6 +16,25 @@ Stop.belongsTo(Route, { foreignKey: 'route_id', as: 'route' });
 
 User.hasMany(RouteHistory, { foreignKey: 'user_id', as: 'history', onDelete: 'CASCADE' });
 RouteHistory.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+User.hasMany(MessagingOrder, { foreignKey: 'user_id', as: 'messagingOrders', onDelete: 'CASCADE' });
+MessagingOrder.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+User.hasMany(CoverageZone, { foreignKey: 'user_id', as: 'coverageZones', onDelete: 'CASCADE' });
+CoverageZone.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+User.hasMany(MessageLog, { foreignKey: 'user_id', as: 'messageLogs', onDelete: 'CASCADE' });
+MessageLog.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+User.hasOne(MessagingSettings, { foreignKey: 'user_id', as: 'messagingSettings', onDelete: 'CASCADE' });
+MessagingSettings.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+MessagingOrder.hasMany(MessageLog, { foreignKey: 'order_id', as: 'messages', onDelete: 'SET NULL' });
+MessageLog.belongsTo(MessagingOrder, { foreignKey: 'order_id', as: 'order' });
+
+MessagingOrder.belongsTo(Route, { foreignKey: 'route_id', as: 'route' });
+MessagingOrder.belongsTo(Stop, { foreignKey: 'stop_id', as: 'stop' });
+MessagingOrder.belongsTo(User, { foreignKey: 'assigned_driver_id', as: 'driver' });
 
 Route.prototype.toDict = async function() {
   const stops = await Stop.findAll({
@@ -47,4 +70,14 @@ Route.prototype.toDict = async function() {
   };
 };
 
-export { sequelize, User, Route, Stop, RouteHistory };
+export { 
+  sequelize, 
+  User, 
+  Route, 
+  Stop, 
+  RouteHistory,
+  MessagingOrder,
+  CoverageZone,
+  MessageLog,
+  MessagingSettings
+};
