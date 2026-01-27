@@ -30,6 +30,13 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 ```
 
 ## Recent Changes
+- 2026-01-27: Added GPS-based automatic stop confirmation for hands-free delivery
+  - Real-time GPS tracking using Capacitor Geolocation watchPosition
+  - Automatic arrival detection (50-meter threshold)
+  - Auto-complete toggle for enabling/disabling automatic confirmation
+  - Live distance display to next stop
+  - 5-second cooldown between auto-completions
+  - Vibration feedback on arrival
 - 2026-01-26: Backend migrated from Python/Flask to Node.js/Express
 - Frontend Quasar running on port 5000
 - Backend Node.js API running on port 8000

@@ -172,10 +172,24 @@
         </template>
         
         <template v-else-if="navigationMode">
+          <div class="gps-status-bar q-mb-sm">
+            <div class="row items-center justify-between">
+              <div class="row items-center">
+                <q-icon :name="gpsActive ? 'gps_fixed' : 'gps_off'" :color="gpsActive ? 'positive' : 'negative'" size="sm" />
+                <span class="text-caption q-ml-xs" :class="gpsActive ? 'text-positive' : 'text-negative'">
+                  {{ gpsActive ? 'GPS activo' : 'GPS inactivo' }}
+                </span>
+                <span v-if="gpsAccuracy" class="text-caption text-grey-5 q-ml-xs">(±{{ Math.round(gpsAccuracy) }}m)</span>
+              </div>
+              <q-toggle v-model="autoCompleteEnabled" size="sm" color="positive" label="Auto" class="text-caption" />
+            </div>
+          </div>
+          
           <div v-if="nextPendingStop" class="next-stop-card q-mb-sm">
             <div class="row items-center">
-              <div class="stop-badge-nav" :style="{ background: nextPendingStop.color || '#1976d2' }">
-                {{ nextPendingStop.id }}
+              <div class="stop-badge-nav" :style="{ background: isNearNextStop ? '#4caf50' : (nextPendingStop.color || '#1976d2') }">
+                <q-icon v-if="isNearNextStop" name="check" size="xs" />
+                <span v-else>{{ nextPendingStop.id }}</span>
               </div>
               <div class="col q-ml-sm">
                 <div class="text-caption text-grey-5">Próxima parada</div>
@@ -188,6 +202,15 @@
                   {{ nextPendingStop.eta ? ' · Llegada ' + formatTime(nextPendingStop.eta) : '' }}
                 </div>
               </div>
+            </div>
+            <div v-if="distanceToNextStop !== null" class="distance-live q-mt-sm text-center">
+              <div class="text-h5" :class="isNearNextStop ? 'text-positive' : 'text-white'">
+                {{ distanceToNextStop < 1000 ? Math.round(distanceToNextStop) + ' m' : (distanceToNextStop / 1000).toFixed(1) + ' km' }}
+              </div>
+              <div class="text-caption text-grey-5">distancia actual</div>
+              <q-chip v-if="isNearNextStop" color="positive" text-color="white" icon="check_circle" size="sm" class="q-mt-xs">
+                Llegaste - Se confirmara automaticamente
+              </q-chip>
             </div>
           </div>
           <div class="row q-gutter-sm">
@@ -523,7 +546,7 @@ Calle 5 de Mayo 45, Centro
 
 <script setup>
 /* global google */
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useQuasar } from 'quasar'
 import { Geolocation } from '@capacitor/geolocation'
 import draggable from 'vuedraggable'
@@ -597,6 +620,19 @@ const nextPendingStopIndex = computed(() => {
   return stops.value.findIndex(s => !s.completed)
 })
 
+const currentPosition = ref(null)
+const gpsActive = ref(false)
+const gpsAccuracy = ref(null)
+const distanceToNextStop = ref(null)
+const autoCompleteEnabled = ref(true)
+let gpsWatchId = null
+
+const ARRIVAL_THRESHOLD_METERS = 50
+
+const isNearNextStop = computed(() => {
+  return distanceToNextStop.value !== null && distanceToNextStop.value <= ARRIVAL_THRESHOLD_METERS
+})
+
 let map = null
 let directionsService = null
 let directionsRenderer = null
@@ -609,6 +645,123 @@ onMounted(() => {
   checkVoiceSupport()
   getCurrentLocation()
 })
+
+onUnmounted(() => {
+  stopGpsTracking()
+})
+
+const calculateDistanceMeters = (lat1, lng1, lat2, lng2) => {
+  const R = 6371000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+const updateDistanceToNextStop = () => {
+  if (!currentPosition.value || !nextPendingStop.value) {
+    distanceToNextStop.value = null
+    return
+  }
+  
+  const stop = nextPendingStop.value
+  if (!stop.lat || !stop.lng) {
+    distanceToNextStop.value = null
+    return
+  }
+  
+  distanceToNextStop.value = calculateDistanceMeters(
+    currentPosition.value.lat,
+    currentPosition.value.lng,
+    stop.lat,
+    stop.lng
+  )
+}
+
+const startGpsTracking = async () => {
+  if (gpsWatchId !== null) return
+  
+  try {
+    gpsWatchId = await Geolocation.watchPosition(
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 },
+      (position, err) => {
+        if (err) {
+          console.error('GPS error:', err)
+          gpsActive.value = false
+          return
+        }
+        
+        gpsActive.value = true
+        gpsAccuracy.value = position.coords.accuracy
+        currentPosition.value = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        }
+        
+        updateDistanceToNextStop()
+        
+        if (navigationMode.value && autoCompleteEnabled.value && isNearNextStop.value && nextPendingStop.value) {
+          autoCompleteStop()
+        }
+      }
+    )
+    
+    $q.notify({ type: 'positive', message: 'GPS activado', position: 'top', timeout: 2000 })
+  } catch (err) {
+    console.error('Failed to start GPS tracking:', err)
+    $q.notify({ type: 'warning', message: 'No se pudo activar el GPS', position: 'top' })
+  }
+}
+
+const stopGpsTracking = async () => {
+  if (gpsWatchId !== null) {
+    await Geolocation.clearWatch({ id: gpsWatchId })
+    gpsWatchId = null
+    gpsActive.value = false
+  }
+}
+
+let lastAutoCompleteTime = 0
+
+const autoCompleteStop = () => {
+  const now = Date.now()
+  if (now - lastAutoCompleteTime < 5000) return
+  lastAutoCompleteTime = now
+  
+  const idx = nextPendingStopIndex.value
+  if (idx === -1) return
+  
+  const stop = stops.value[idx]
+  stop.completed = true
+  stop.autoCompleted = true
+  
+  navigator.vibrate?.([200, 100, 200])
+  
+  $q.notify({
+    type: 'positive',
+    message: `Parada ${stop.id} completada automaticamente`,
+    caption: 'Llegaste al destino',
+    icon: 'check_circle',
+    position: 'top',
+    timeout: 4000
+  })
+  
+  const remaining = stops.value.filter(s => !s.completed).length
+  if (remaining > 0) {
+    centerOnNextStop()
+  } else {
+    $q.notify({
+      type: 'positive',
+      message: 'Ruta completada',
+      icon: 'celebration',
+      position: 'top',
+      timeout: 5000
+    })
+  }
+}
 
 const checkVoiceSupport = () => {
   voiceSupported.value = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
@@ -985,13 +1138,15 @@ const reoptimize = () => {
   optimizeRoute()
 }
 
-const confirmRoute = () => {
+const confirmRoute = async () => {
   navigationMode.value = true
-  $q.notify({ type: 'positive', message: 'Ruta confirmada', position: 'top' })
+  await startGpsTracking()
+  $q.notify({ type: 'positive', message: 'Ruta confirmada - GPS activo', position: 'top' })
 }
 
-const exitNavigation = () => {
+const exitNavigation = async () => {
   navigationMode.value = false
+  await stopGpsTracking()
 }
 
 const toggleStopComplete = (index) => {
@@ -1341,6 +1496,18 @@ watch(stops, () => { if (stops.value.length && !map) loadGoogleMaps() }, { deep:
   height: 5px;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 3px;
+}
+
+.gps-status-bar {
+  background: rgba(0, 0, 0, 0.5);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.distance-live {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px;
+  border-radius: 8px;
 }
 
 .search-section {
