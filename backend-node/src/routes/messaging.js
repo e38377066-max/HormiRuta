@@ -10,6 +10,7 @@ import {
 import { requireAuth } from '../middleware/auth.js';
 import RespondioService from '../services/respondio.js';
 import AddressValidationService from '../services/addressValidation.js';
+import pollingService from '../services/pollingService.js';
 
 const router = express.Router();
 
@@ -644,6 +645,134 @@ router.get('/stats', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ error: 'Error al obtener estadisticas' });
+  }
+});
+
+router.get('/polling/status', requireAuth, async (req, res) => {
+  try {
+    const status = pollingService.getPollingStatus(req.session.userId);
+    res.json(status);
+  } catch (error) {
+    console.error('Get polling status error:', error);
+    res.status(500).json({ error: 'Error al obtener estado de polling' });
+  }
+});
+
+router.post('/polling/start', requireAuth, async (req, res) => {
+  try {
+    const intervalSeconds = req.body.interval || 30;
+    const result = await pollingService.startPolling(req.session.userId, intervalSeconds);
+    
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Start polling error:', error);
+    res.status(500).json({ error: 'Error al iniciar polling' });
+  }
+});
+
+router.post('/polling/stop', requireAuth, async (req, res) => {
+  try {
+    const result = pollingService.stopPolling(req.session.userId);
+    
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Stop polling error:', error);
+    res.status(500).json({ error: 'Error al detener polling' });
+  }
+});
+
+router.post('/polling/sync', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay API token configurado' });
+    }
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const contactsResult = await respondio.listContacts({ status: 'open', limit: 50 });
+
+    if (!contactsResult.success) {
+      return res.status(500).json({ error: contactsResult.error });
+    }
+
+    res.json({
+      success: true,
+      contacts: contactsResult.items.length,
+      message: `Se encontraron ${contactsResult.items.length} conversaciones abiertas`
+    });
+  } catch (error) {
+    console.error('Manual sync error:', error);
+    res.status(500).json({ error: 'Error al sincronizar' });
+  }
+});
+
+router.get('/contacts', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay API token configurado' });
+    }
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const result = await respondio.listContacts({
+      status: req.query.status || null,
+      limit: parseInt(req.query.limit) || 50
+    });
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    res.json({
+      contacts: result.items,
+      pagination: result.pagination
+    });
+  } catch (error) {
+    console.error('Get contacts error:', error);
+    res.status(500).json({ error: 'Error al obtener contactos' });
+  }
+});
+
+router.get('/contacts/:contactId/messages', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay API token configurado' });
+    }
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const result = await respondio.listMessages(req.params.contactId, {
+      limit: parseInt(req.query.limit) || 50
+    });
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    res.json({
+      messages: result.items,
+      pagination: result.pagination
+    });
+  } catch (error) {
+    console.error('Get contact messages error:', error);
+    res.status(500).json({ error: 'Error al obtener mensajes' });
   }
 });
 

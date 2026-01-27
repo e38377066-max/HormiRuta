@@ -8,6 +8,8 @@ export const useMessagingStore = defineStore('messaging', {
     coverageZones: [],
     settings: null,
     stats: null,
+    pollingStatus: { active: false },
+    contacts: [],
     loading: false,
     error: null
   }),
@@ -238,6 +240,71 @@ export const useMessagingStore = defineStore('messaging', {
         return this.stats
       } catch (error) {
         console.error('Error fetching stats:', error)
+        throw error
+      }
+    },
+
+    async getPollingStatus() {
+      try {
+        const response = await api.get('/messaging/polling/status')
+        this.pollingStatus = response.data
+        return this.pollingStatus
+      } catch (error) {
+        console.error('Error getting polling status:', error)
+        throw error
+      }
+    },
+
+    async startPolling(interval = 30) {
+      try {
+        const response = await api.post('/messaging/polling/start', { interval })
+        this.pollingStatus = { active: true, ...response.data }
+        return response.data
+      } catch (error) {
+        console.error('Error starting polling:', error)
+        throw error
+      }
+    },
+
+    async stopPolling() {
+      try {
+        const response = await api.post('/messaging/polling/stop')
+        this.pollingStatus = { active: false }
+        return response.data
+      } catch (error) {
+        console.error('Error stopping polling:', error)
+        throw error
+      }
+    },
+
+    async syncContacts() {
+      try {
+        const response = await api.post('/messaging/polling/sync')
+        return response.data
+      } catch (error) {
+        console.error('Error syncing contacts:', error)
+        throw error
+      }
+    },
+
+    async fetchContacts(status = null) {
+      try {
+        const params = status ? { status } : {}
+        const response = await api.get('/messaging/contacts', { params })
+        this.contacts = response.data.contacts
+        return this.contacts
+      } catch (error) {
+        console.error('Error fetching contacts:', error)
+        throw error
+      }
+    },
+
+    async fetchContactMessages(contactId) {
+      try {
+        const response = await api.get(`/messaging/contacts/${contactId}/messages`)
+        return response.data.messages
+      } catch (error) {
+        console.error('Error fetching contact messages:', error)
         throw error
       }
     }

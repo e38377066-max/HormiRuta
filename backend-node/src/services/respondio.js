@@ -9,15 +9,19 @@ class RespondioService {
       baseURL: RESPOND_API_BASE,
       headers: {
         'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
     });
   }
 
-  async sendMessage(contactId, text, channelId = null) {
+  async sendMessage(contactIdentifier, text, channelId = null) {
     try {
+      const identifier = typeof contactIdentifier === 'number' 
+        ? `id:${contactIdentifier}` 
+        : contactIdentifier;
+      
       const payload = {
-        contactId,
         message: {
           type: 'text',
           text
@@ -28,10 +32,10 @@ class RespondioService {
         payload.channelId = channelId;
       }
 
-      const response = await this.client.post('/message', payload);
+      const response = await this.client.post(`/contact/${identifier}/message`, payload);
       return {
         success: true,
-        messageId: response.data?.id,
+        messageId: response.data?.messageId,
         data: response.data
       };
     } catch (error) {
@@ -43,45 +47,51 @@ class RespondioService {
     }
   }
 
-  async getMessage(messageId) {
+  async listContacts(options = {}) {
     try {
-      const response = await this.client.get(`/message/${messageId}`);
-      return {
-        success: true,
-        data: response.data
-      };
-    } catch (error) {
-      console.error('Respond.io get message error:', error.response?.data || error.message);
-      return {
-        success: false,
-        error: error.response?.data?.message || error.message
-      };
-    }
-  }
-
-  async getContacts(limit = 100, cursorId = null, filter = null) {
-    try {
-      const params = { limit };
+      const { limit = 50, cursorId = null, status = null, search = '' } = options;
+      
+      const params = {};
+      if (limit) params.limit = Math.min(limit, 99);
       if (cursorId) params.cursorId = cursorId;
-      if (filter) params.filter = JSON.stringify(filter);
 
-      const response = await this.client.get('/contact', { params });
+      const body = {
+        search: search || '',
+        filter: { $and: [] },
+        timezone: 'America/Mexico_City'
+      };
+
+      if (status) {
+        body.filter.$and.push({
+          field: 'status',
+          operator: 'isEqualTo',
+          value: status
+        });
+      }
+
+      const response = await this.client.post('/contact/list', body, { params });
       return {
         success: true,
-        data: response.data
+        items: response.data?.items || [],
+        pagination: response.data?.pagination || null
       };
     } catch (error) {
-      console.error('Respond.io get contacts error:', error.response?.data || error.message);
+      console.error('Respond.io list contacts error:', error.response?.data || error.message);
       return {
         success: false,
+        items: [],
         error: error.response?.data?.message || error.message
       };
     }
   }
 
-  async getContact(contactId) {
+  async getContact(contactIdentifier) {
     try {
-      const response = await this.client.get(`/contact/${contactId}`);
+      const identifier = typeof contactIdentifier === 'number' 
+        ? `id:${contactIdentifier}` 
+        : contactIdentifier;
+
+      const response = await this.client.get(`/contact/${identifier}`);
       return {
         success: true,
         data: response.data
@@ -95,70 +105,65 @@ class RespondioService {
     }
   }
 
-  async createContact(contactData) {
+  async listMessages(contactIdentifier, options = {}) {
     try {
-      const response = await this.client.post('/contact', contactData);
+      const identifier = typeof contactIdentifier === 'number' 
+        ? `id:${contactIdentifier}` 
+        : contactIdentifier;
+      
+      const { limit = 50, cursorId = null } = options;
+      
+      const params = {};
+      if (limit) params.limit = Math.min(limit, 50);
+      if (cursorId) params.cursorId = cursorId;
+
+      const response = await this.client.get(`/contact/${identifier}/message/list`, { params });
       return {
         success: true,
-        data: response.data
+        items: response.data?.items || [],
+        pagination: response.data?.pagination || null
       };
     } catch (error) {
-      console.error('Respond.io create contact error:', error.response?.data || error.message);
+      console.error('Respond.io list messages error:', error.response?.data || error.message);
       return {
         success: false,
+        items: [],
         error: error.response?.data?.message || error.message
       };
     }
   }
 
-  async updateContact(contactId, contactData) {
+  async getMessage(contactIdentifier, messageId) {
     try {
-      const response = await this.client.put(`/contact/${contactId}`, contactData);
+      const identifier = typeof contactIdentifier === 'number' 
+        ? `id:${contactIdentifier}` 
+        : contactIdentifier;
+
+      const response = await this.client.get(`/contact/${identifier}/message/${messageId}`);
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
-      console.error('Respond.io update contact error:', error.response?.data || error.message);
+      console.error('Respond.io get message error:', error.response?.data || error.message);
       return {
         success: false,
         error: error.response?.data?.message || error.message
-      };
-    }
-  }
-
-  async findContactByPhone(phone) {
-    try {
-      const filter = {
-        field: 'phone',
-        operator: 'isEqualTo',
-        value: phone
-      };
-      const result = await this.getContacts(1, null, filter);
-      if (result.success && result.data?.data?.length > 0) {
-        return {
-          success: true,
-          data: result.data.data[0]
-        };
-      }
-      return {
-        success: true,
-        data: null
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
       };
     }
   }
 
   async testConnection() {
     try {
-      const response = await this.client.get('/contact', { params: { limit: 1 } });
+      const response = await this.client.post('/contact/list', {
+        search: '',
+        filter: { $and: [] },
+        timezone: 'America/Mexico_City'
+      }, { params: { limit: 1 } });
+      
       return {
         success: true,
-        message: 'Conexion exitosa con Respond.io'
+        message: 'Conexión exitosa con Respond.io'
       };
     } catch (error) {
       console.error('Respond.io connection test error:', error.response?.data || error.message);

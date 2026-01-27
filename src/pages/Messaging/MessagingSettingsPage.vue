@@ -69,6 +69,65 @@
 
         <q-card class="q-mt-md">
           <q-card-section>
+            <div class="text-h6 q-mb-md">Sincronizacion de Mensajes</div>
+            <p class="text-caption text-grey q-mb-md">
+              El sistema consulta Respond.io periodicamente para obtener mensajes nuevos.
+            </p>
+            
+            <div class="row items-center q-mb-md">
+              <q-chip
+                :color="pollingStatus.active ? 'positive' : 'grey'"
+                text-color="white"
+                icon="sync"
+              >
+                {{ pollingStatus.active ? 'Sincronizando' : 'Detenido' }}
+              </q-chip>
+              <span v-if="pollingStatus.lastPoll" class="text-caption q-ml-md">
+                Ultima sincronizacion: {{ formatDate(pollingStatus.lastPoll) }}
+              </span>
+            </div>
+
+            <div class="row q-gutter-sm q-mb-md">
+              <q-select
+                v-model="pollingInterval"
+                :options="pollingIntervals"
+                label="Intervalo"
+                outlined
+                dense
+                style="width: 150px"
+                :disable="pollingStatus.active"
+              />
+              <q-btn
+                v-if="!pollingStatus.active"
+                color="positive"
+                label="Iniciar"
+                icon="play_arrow"
+                @click="startPolling"
+                :loading="pollingLoading"
+                :disable="!form.is_active"
+              />
+              <q-btn
+                v-else
+                color="negative"
+                label="Detener"
+                icon="stop"
+                @click="stopPolling"
+                :loading="pollingLoading"
+              />
+              <q-btn
+                color="secondary"
+                label="Sincronizar Ahora"
+                icon="refresh"
+                @click="syncNow"
+                :loading="syncing"
+                :disable="!form.is_active"
+              />
+            </div>
+          </q-card-section>
+        </q-card>
+
+        <q-card class="q-mt-md">
+          <q-card-section>
             <div class="text-h6 q-mb-md">Automatizacion</div>
             
             <q-toggle
@@ -159,7 +218,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useMessagingStore } from 'src/stores/messaging-store'
 import { useQuasar } from 'quasar'
 
@@ -170,6 +229,18 @@ const saving = ref(false)
 const testing = ref(false)
 const showToken = ref(false)
 const connectionStatus = ref(null)
+const pollingLoading = ref(false)
+const syncing = ref(false)
+const pollingInterval = ref({ label: '30 segundos', value: 30 })
+const pollingStatus = reactive({ active: false, lastPoll: null })
+
+const pollingIntervals = [
+  { label: '15 segundos', value: 15 },
+  { label: '30 segundos', value: 30 },
+  { label: '1 minuto', value: 60 },
+  { label: '2 minutos', value: 120 },
+  { label: '5 minutos', value: 300 }
+]
 
 const form = ref({
   respond_api_token: '',
@@ -190,6 +261,61 @@ const attentionModes = [
   { label: 'Asistido - El sistema valida y el agente confirma', value: 'assisted' },
   { label: 'Manual - El agente controla todo', value: 'manual' }
 ]
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+}
+
+const startPolling = async () => {
+  pollingLoading.value = true
+  try {
+    await messagingStore.startPolling(pollingInterval.value.value)
+    pollingStatus.active = true
+    $q.notify({ type: 'positive', message: 'Sincronizacion iniciada' })
+  } catch {
+    $q.notify({ type: 'negative', message: 'Error al iniciar sincronizacion' })
+  } finally {
+    pollingLoading.value = false
+  }
+}
+
+const stopPolling = async () => {
+  pollingLoading.value = true
+  try {
+    await messagingStore.stopPolling()
+    pollingStatus.active = false
+    $q.notify({ type: 'positive', message: 'Sincronizacion detenida' })
+  } catch {
+    $q.notify({ type: 'negative', message: 'Error al detener sincronizacion' })
+  } finally {
+    pollingLoading.value = false
+  }
+}
+
+const syncNow = async () => {
+  syncing.value = true
+  try {
+    const result = await messagingStore.syncContacts()
+    $q.notify({ type: 'positive', message: result.message || 'Sincronizacion completada' })
+    pollingStatus.lastPoll = new Date().toISOString()
+  } catch {
+    $q.notify({ type: 'negative', message: 'Error al sincronizar' })
+  } finally {
+    syncing.value = false
+  }
+}
+
+const loadPollingStatus = async () => {
+  try {
+    const status = await messagingStore.getPollingStatus()
+    pollingStatus.active = status.active
+    pollingStatus.lastPoll = status.lastPoll
+  } catch {
+    console.error('Error loading polling status')
+  }
+}
 
 const testConnection = async () => {
   testing.value = true
@@ -241,6 +367,7 @@ onMounted(async () => {
         order_completed_message: settings.order_completed_message || ''
       }
     }
+    await loadPollingStatus()
   } catch (err) {
     console.error('Error loading settings:', err)
   }
