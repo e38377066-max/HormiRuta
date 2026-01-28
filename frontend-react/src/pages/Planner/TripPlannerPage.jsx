@@ -32,10 +32,59 @@ export default function TripPlannerPage() {
   const [showRouteNameDialog, setShowRouteNameDialog] = useState(false)
   const [mapType, setMapType] = useState('roadmap')
   const [currentRouteId, setCurrentRouteId] = useState(null)
+  const [panelHeight, setPanelHeight] = useState(45)
+  const isDragging = useRef(false)
+  const startY = useRef(0)
+  const startHeight = useRef(0)
 
   useEffect(() => {
     initMap()
   }, [])
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isDragging.current) return
+      const deltaY = startY.current - e.clientY
+      const deltaPercent = (deltaY / window.innerHeight) * 100
+      const newHeight = Math.min(85, Math.max(20, startHeight.current + deltaPercent))
+      setPanelHeight(newHeight)
+    }
+
+    const handleMouseUp = () => {
+      isDragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    const handleTouchMove = (e) => {
+      if (!isDragging.current) return
+      const touch = e.touches[0]
+      const deltaY = startY.current - touch.clientY
+      const deltaPercent = (deltaY / window.innerHeight) * 100
+      const newHeight = Math.min(85, Math.max(20, startHeight.current + deltaPercent))
+      setPanelHeight(newHeight)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.addEventListener('touchmove', handleTouchMove)
+    document.addEventListener('touchend', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleMouseUp)
+    }
+  }, [])
+
+  const handlePanelDragStart = (e) => {
+    isDragging.current = true
+    startY.current = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY
+    startHeight.current = panelHeight
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
+  }
 
   const initMap = async () => {
     const loader = new Loader({
@@ -346,8 +395,12 @@ export default function TripPlannerPage() {
         </div>
       </div>
       
-      <div className={`bottom-panel ${panelExpanded || stops.length > 0 ? 'expanded' : ''}`}>
-        <div className="panel-handle" onClick={() => setPanelExpanded(!panelExpanded)}>
+      <div className="bottom-panel" style={{ height: `${panelHeight}vh` }}>
+        <div 
+          className="panel-handle" 
+          onMouseDown={handlePanelDragStart}
+          onTouchStart={handlePanelDragStart}
+        >
           <div className="handle-bar"></div>
         </div>
         

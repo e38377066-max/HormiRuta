@@ -84,28 +84,35 @@
 .bottom-panel {
   background: #1a1a2e;
   border-radius: 24px 24px 0 0;
-  padding: 8px 16px 16px;
-  max-height: 45vh;
-  overflow-y: auto;
-  transition: max-height 0.3s ease;
-}
-
-.bottom-panel.expanded {
-  max-height: 60vh;
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .panel-handle {
   display: flex;
   justify-content: center;
-  padding: 8px 0;
-  cursor: pointer;
+  padding: 12px 0;
+  cursor: ns-resize;
+  flex-shrink: 0;
+}
+
+.panel-handle:hover .handle-bar {
+  background: #06b6d4;
 }
 
 .handle-bar {
-  width: 40px;
-  height: 4px;
-  background: #444;
-  border-radius: 2px;
+  width: 48px;
+  height: 5px;
+  background: #555;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .search-section {
