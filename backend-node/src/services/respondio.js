@@ -49,14 +49,15 @@ class RespondioService {
 
   async listContacts(options = {}) {
     try {
-      const { limit = 50, cursorId = null, status = null, search = '' } = options;
+      const { limit = 50, cursorId = null, status = null, search = '', timezone = 'America/Mexico_City' } = options;
       
       const params = {};
       if (limit) params.limit = Math.min(limit, 99);
       if (cursorId) params.cursorId = cursorId;
 
       const body = {
-        search: search || ''
+        search: search || '',
+        timezone: timezone
       };
 
       if (status) {
