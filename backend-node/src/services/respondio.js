@@ -63,6 +63,7 @@ class RespondioService {
       if (status) {
         body.filter = {
           $and: [{
+            category: 'contactField',
             field: 'status',
             operator: 'isEqualTo',
             value: status
