@@ -37,6 +37,10 @@ export default function TripPlannerPage() {
   const [startTime, setStartTime] = useState(null)
   const [stopDuration, setStopDuration] = useState(5)
   const [breakTime, setBreakTime] = useState(null)
+  const [travelMode, setTravelMode] = useState('DRIVING')
+  const [avoidHighways, setAvoidHighways] = useState(false)
+  const [avoidTolls, setAvoidTolls] = useState(false)
+  const [trafficModel, setTrafficModel] = useState('best_guess')
   const [showRouteMenu, setShowRouteMenu] = useState(false)
   const [showConfigModal, setShowConfigModal] = useState(null)
   const [showRouteNameDialog, setShowRouteNameDialog] = useState(false)
@@ -458,7 +462,13 @@ export default function TripPlannerPage() {
         destination,
         waypoints,
         optimizeWaypoints: true,
-        travelMode: window.google.maps.TravelMode.DRIVING
+        travelMode: window.google.maps.TravelMode[travelMode],
+        avoidHighways,
+        avoidTolls,
+        drivingOptions: travelMode === 'DRIVING' ? {
+          departureTime: startTime ? new Date(startTime) : new Date(),
+          trafficModel: window.google.maps.TrafficModel.BEST_GUESS
+        } : undefined
       })
 
       if (result.routes[0].waypoint_order) {
@@ -767,6 +777,45 @@ export default function TripPlannerPage() {
               </div>
               <span className="material-icons config-icon" style={{ color: '#666' }}>timer</span>
             </div>
+            
+            <div className="config-item" onClick={() => setShowConfigModal('vehicle')}>
+              <div className="config-item-left">
+                <span className="config-time">•</span>
+                <div className="config-content">
+                  <div className="config-title">{travelMode === 'DRIVING' ? 'Carro/Moto' : travelMode === 'BICYCLING' ? 'Bicicleta' : 'A pie'}</div>
+                  <div className="config-subtitle">Tipo de vehículo para la ruta</div>
+                </div>
+              </div>
+              <span className="material-icons config-icon" style={{ color: '#666' }}>
+                {travelMode === 'DRIVING' ? 'directions_car' : travelMode === 'BICYCLING' ? 'pedal_bike' : 'directions_walk'}
+              </span>
+            </div>
+            
+            <div className="config-item" onClick={() => setAvoidTolls(!avoidTolls)}>
+              <div className="config-item-left">
+                <span className="config-time">•</span>
+                <div className="config-content">
+                  <div className="config-title">Evitar peajes</div>
+                  <div className="config-subtitle">{avoidTolls ? 'Activado' : 'Desactivado'}</div>
+                </div>
+              </div>
+              <span className="material-icons config-icon" style={{ color: avoidTolls ? '#22c55e' : '#666' }}>
+                {avoidTolls ? 'check_box' : 'check_box_outline_blank'}
+              </span>
+            </div>
+            
+            <div className="config-item" onClick={() => setAvoidHighways(!avoidHighways)}>
+              <div className="config-item-left">
+                <span className="config-time">•</span>
+                <div className="config-content">
+                  <div className="config-title">Evitar autopistas</div>
+                  <div className="config-subtitle">{avoidHighways ? 'Activado' : 'Desactivado'}</div>
+                </div>
+              </div>
+              <span className="material-icons config-icon" style={{ color: avoidHighways ? '#22c55e' : '#666' }}>
+                {avoidHighways ? 'check_box' : 'check_box_outline_blank'}
+              </span>
+            </div>
           </div>
           
           {stops.length > 0 && (
@@ -926,6 +975,41 @@ export default function TripPlannerPage() {
                   {min} min
                 </button>
               ))}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={() => setShowConfigModal(null)}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showConfigModal === 'vehicle' && (
+        <div className="modal-overlay" onClick={() => setShowConfigModal(null)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3>Tipo de vehículo</h3>
+            <p style={{ color: '#999', marginBottom: 16 }}>Selecciona cómo te desplazas</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button 
+                className={`vehicle-option ${travelMode === 'DRIVING' ? 'active' : ''}`}
+                onClick={() => setTravelMode('DRIVING')}
+              >
+                <span className="material-icons">directions_car</span>
+                <span>Carro / Moto</span>
+              </button>
+              <button 
+                className={`vehicle-option ${travelMode === 'BICYCLING' ? 'active' : ''}`}
+                onClick={() => setTravelMode('BICYCLING')}
+              >
+                <span className="material-icons">pedal_bike</span>
+                <span>Bicicleta</span>
+              </button>
+              <button 
+                className={`vehicle-option ${travelMode === 'WALKING' ? 'active' : ''}`}
+                onClick={() => setTravelMode('WALKING')}
+              >
+                <span className="material-icons">directions_walk</span>
+                <span>A pie</span>
+              </button>
             </div>
             <div className="modal-actions">
               <button className="btn-primary" onClick={() => setShowConfigModal(null)}>Guardar</button>

@@ -604,3 +604,31 @@
   border-color: #5b8def;
   color: white;
 }
+
+.vehicle-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  color: #ccc;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.vehicle-option:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.vehicle-option.active {
+  background: #5b8def;
+  border-color: #5b8def;
+  color: white;
+}
+
+.vehicle-option .material-icons {
+  font-size: 24px;
+}
