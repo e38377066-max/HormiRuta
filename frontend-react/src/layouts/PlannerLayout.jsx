@@ -10,7 +10,7 @@ export function usePlanner() {
 }
 
 export default function PlannerLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
@@ -24,10 +24,7 @@ export default function PlannerLayout() {
 
   const menuItems = [
     { icon: 'route', label: 'Planificador', path: '/planner' },
-    { icon: 'dashboard', label: 'Dashboard', path: '/messaging' },
-    { icon: 'forum', label: 'Mensajeria', path: '/messaging' },
-    { icon: 'map', label: 'Zonas', path: '/messaging/coverage' },
-    { icon: 'settings', label: 'Configuracion', path: '/messaging/settings' }
+    { icon: 'admin_panel_settings', label: 'Panel Admin', path: '/messaging', adminOnly: true }
   ]
 
   const contextValue = {
@@ -58,7 +55,9 @@ export default function PlannerLayout() {
           </div>
           
           <nav className="drawer-nav">
-            {menuItems.map(item => (
+            {menuItems
+              .filter(item => !item.adminOnly || isAdmin)
+              .map(item => (
               <button 
                 key={item.path + item.label} 
                 className="drawer-item"
