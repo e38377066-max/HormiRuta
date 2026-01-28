@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { usePlanner } from '../../layouts/PlannerLayout'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 export default function TripPlannerPage() {
@@ -154,30 +155,33 @@ export default function TripPlannerPage() {
     startLocationTracking()
   }
 
-  const startLocationTracking = () => {
-    if (!navigator.geolocation) return
+  const startLocationTracking = async () => {
+    if (isNative) {
+      setupStatusBar()
+    }
+    
+    try {
+      const pos = await getCurrentPosition()
+      const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      setUserLocation(loc)
+      mapInstanceRef.current?.setCenter(loc)
+      reverseGeocode(loc)
+      updateUserLocationMarker(loc)
+    } catch (err) {
+      console.error('Geolocation error:', err)
+    }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        setUserLocation(loc)
-        mapInstanceRef.current?.setCenter(loc)
-        reverseGeocode(loc)
-        updateUserLocationMarker(loc)
-      },
-      (err) => console.error('Geolocation error:', err),
-      { enableHighAccuracy: true }
-    )
-
-    watchIdRef.current = navigator.geolocation.watchPosition(
+    const clearWatch = watchPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setUserLocation(loc)
         updateUserLocationMarker(loc, pos.coords.accuracy)
       },
       (err) => console.error('Watch position error:', err),
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+      { maximumAge: 3000 }
     )
+    
+    watchIdRef.current = clearWatch
   }
 
   const updateUserLocationMarker = (location, accuracy = 30) => {
@@ -286,8 +290,8 @@ export default function TripPlannerPage() {
 
   useEffect(() => {
     return () => {
-      if (watchIdRef.current) {
-        navigator.geolocation.clearWatch(watchIdRef.current)
+      if (watchIdRef.current && typeof watchIdRef.current === 'function') {
+        watchIdRef.current()
       }
     }
   }, [])
@@ -339,6 +343,8 @@ export default function TripPlannerPage() {
   }
 
   const addStop = async (stopData) => {
+    vibrate('medium')
+    
     const newStop = {
       id: stops.length + 1,
       address: stopData.address,
@@ -634,18 +640,23 @@ export default function TripPlannerPage() {
     mapInstanceRef.current?.setMapTypeId(newType)
   }
 
-  const centerOnLocation = () => {
+  const centerOnLocation = async () => {
     if (userLocation) {
       mapInstanceRef.current?.setCenter(userLocation)
       mapInstanceRef.current?.setZoom(16)
-    } else if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(pos => {
+      vibrate('light')
+    } else {
+      try {
+        const pos = await getCurrentPosition()
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setUserLocation(loc)
         mapInstanceRef.current?.setCenter(loc)
         mapInstanceRef.current?.setZoom(16)
         updateUserLocationMarker(loc)
-      })
+        vibrate('light')
+      } catch (err) {
+        console.error('Could not get location:', err)
+      }
     }
   }
 

@@ -36,6 +36,8 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-01-28: Added Capacitor 6 for hybrid mobile app (iOS/Android)
+- 2026-01-28: Added route optimization options (vehicle type, avoid tolls/highways, traffic)
 - 2026-01-28: Unified design across all dashboard pages with clean white/light theme
 - 2026-01-28: Added semantic CSS classes (page-container, stat-card, content-card, modal-backdrop)
 - 2026-01-28: Fixed Respond.io API filters - Added required category: 'contactField' parameter
@@ -49,6 +51,7 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 - Routing: React Router 6
 - HTTP Client: Axios
 - Maps: Google Maps JavaScript API
+- Mobile: Capacitor 6 (iOS/Android)
 
 ### Backend
 - Runtime: Node.js
@@ -110,3 +113,37 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 1. Frontend runs on port 5000 with hot reload
 2. Backend runs on port 8000
 3. Database tables are auto-created on startup via Sequelize sync
+
+## Mobile App (Capacitor)
+### Configuration
+- App ID: com.hormiruta.app
+- App Name: HormiRuta
+- Web Dir: dist
+
+### Native Plugins
+- @capacitor/geolocation - GPS location tracking
+- @capacitor/haptics - Vibration feedback
+- @capacitor/status-bar - Native status bar styling
+- @capacitor/splash-screen - Native splash screen
+
+### Build Commands
+```bash
+cd frontend-react
+
+# Build for mobile
+npm run build:mobile
+
+# Add platforms (requires local development)
+npm run cap:add:android
+npm run cap:add:ios
+
+# Open in IDE
+npm run cap:android  # Opens Android Studio
+npm run cap:ios      # Opens Xcode
+```
+
+### Platform-Specific Setup
+The app uses a helper utility (src/utils/capacitor.js) that:
+- Detects if running on native or web
+- Uses native plugins when available (better GPS, haptics)
+- Falls back to web APIs when on browser
