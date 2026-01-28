@@ -53,7 +53,7 @@ export default function RegisterPage() {
       <div className="login-card">
         <div className="text-center q-mb-lg">
           <div className="logo-avatar">
-            <img src="/hormiruta-icon.svg" alt="HormiRuta" />
+            <img src="/Hormiruta.png" alt="HormiRuta" />
           </div>
           <h1 className="brand-title">HormiRuta</h1>
           <p className="brand-subtitle">Crea tu cuenta para empezar</p>
@@ -65,7 +65,7 @@ export default function RegisterPage() {
           )}
 
           <div className="input-group">
-            <span className="input-icon">👤</span>
+            <span className="material-icons input-icon">person</span>
             <input
               type="text"
               name="name"
@@ -78,7 +78,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="input-group">
-            <span className="input-icon">📧</span>
+            <span className="material-icons input-icon">email</span>
             <input
               type="email"
               name="email"
@@ -91,7 +91,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="input-group">
-            <span className="input-icon">🔒</span>
+            <span className="material-icons input-icon">lock</span>
             <input
               type={showPassword ? 'text' : 'password'}
               name="password"
@@ -106,12 +106,12 @@ export default function RegisterPage() {
               className="toggle-password"
               onClick={() => setShowPassword(!showPassword)}
             >
-              {showPassword ? '🙈' : '👁️'}
+              <span className="material-icons">{showPassword ? 'visibility_off' : 'visibility'}</span>
             </button>
           </div>
 
           <div className="input-group">
-            <span className="input-icon">🔒</span>
+            <span className="material-icons input-icon">lock</span>
             <input
               type={showPassword ? 'text' : 'password'}
               name="confirmPassword"
@@ -132,7 +132,7 @@ export default function RegisterPage() {
           </div>
 
           <button type="button" className="google-btn">
-            <span className="google-icon">G</span>
+            <img src="/google.png" alt="Google" className="google-icon-img" />
             Continuar con Google
           </button>
 

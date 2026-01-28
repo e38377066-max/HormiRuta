@@ -84,8 +84,9 @@
 }
 
 .logo-avatar img {
-  width: 50px;
-  height: 50px;
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
 }
 
 .brand-title {
@@ -116,7 +117,12 @@
   left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 16px;
+  font-size: 20px;
+  color: #9ca3af;
+}
+
+.toggle-password .material-icons {
+  font-size: 20px;
 }
 
 .input-pro {
@@ -252,6 +258,11 @@
 .google-icon {
   font-weight: 700;
   font-size: 18px;
+}
+
+.google-icon-img {
+  width: 20px;
+  height: 20px;
 }
 
 .register-link {

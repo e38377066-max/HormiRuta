@@ -33,7 +33,7 @@ export default function LoginPage() {
       <div className="login-card">
         <div className="text-center q-mb-lg">
           <div className="logo-avatar">
-            <img src="/hormiruta-icon.svg" alt="HormiRuta" />
+            <img src="/Hormiruta.png" alt="HormiRuta" />
           </div>
           <h1 className="brand-title">HormiRuta</h1>
           <p className="brand-subtitle">Accede a tu cuenta para continuar</p>
@@ -43,7 +43,7 @@ export default function LoginPage() {
           {error && <div className="alert alert-error">{error}</div>}
 
           <div className="input-group">
-            <span className="input-icon">📧</span>
+            <span className="material-icons input-icon">email</span>
             <input
               type="email"
               value={email}
@@ -55,7 +55,7 @@ export default function LoginPage() {
           </div>
 
           <div className="input-group">
-            <span className="input-icon">🔒</span>
+            <span className="material-icons input-icon">lock</span>
             <input
               type={showPassword ? 'text' : 'password'}
               value={password}
@@ -69,7 +69,7 @@ export default function LoginPage() {
               className="toggle-password"
               onClick={() => setShowPassword(!showPassword)}
             >
-              {showPassword ? '🙈' : '👁️'}
+              <span className="material-icons">{showPassword ? 'visibility_off' : 'visibility'}</span>
             </button>
           </div>
 
@@ -96,7 +96,7 @@ export default function LoginPage() {
           </div>
 
           <button type="button" className="google-btn">
-            <span className="google-icon">G</span>
+            <img src="/google.png" alt="Google" className="google-icon-img" />
             Continuar con Google
           </button>
 

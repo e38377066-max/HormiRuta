@@ -147,9 +147,13 @@
 
 .q-item-icon {
   margin-right: 16px;
-  font-size: 18px;
+  font-size: 24px;
   width: 24px;
   text-align: center;
+}
+
+.q-btn-icon .material-icons {
+  font-size: 24px;
 }
 
 .q-item.logout {
