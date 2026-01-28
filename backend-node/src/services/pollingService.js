@@ -85,20 +85,33 @@ class PollingService {
   async pollForNewMessages(userId, apiToken, poller) {
     const respondio = new RespondioService(apiToken);
     
-    const contactsResult = await respondio.listContacts({ 
-      status: 'open',
+    const pendingContacts = await respondio.listContactsByLifecycle({ 
+      lifecycleStage: 'Pending',
       limit: 50 
     });
 
-    if (!contactsResult.success) {
-      console.error('Failed to fetch contacts:', contactsResult.error);
+    const newLeadContacts = await respondio.listContactsByLifecycle({ 
+      lifecycleStage: 'New Lead',
+      limit: 50 
+    });
+
+    if (!pendingContacts.success && !newLeadContacts.success) {
+      console.error('Failed to fetch contacts:', pendingContacts.error || newLeadContacts.error);
       return;
     }
 
-    const openContacts = contactsResult.items || [];
-    console.log(`Found ${openContacts.length} open conversations`);
+    const allContacts = [
+      ...(pendingContacts.items || []),
+      ...(newLeadContacts.items || [])
+    ];
+    
+    const uniqueContacts = allContacts.filter((contact, index, self) =>
+      index === self.findIndex(c => c.id === contact.id)
+    );
 
-    for (const contact of openContacts) {
+    console.log(`Found ${uniqueContacts.length} pending/new contacts (Pending: ${pendingContacts.items?.length || 0}, New Lead: ${newLeadContacts.items?.length || 0})`);
+
+    for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio);
     }
   }

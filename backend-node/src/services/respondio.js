@@ -87,6 +87,43 @@ class RespondioService {
     }
   }
 
+  async listContactsByLifecycle(options = {}) {
+    try {
+      const { lifecycleStage = 'Pending', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
+      
+      const params = {};
+      if (limit) params.limit = Math.min(limit, 99);
+      if (cursorId) params.cursorId = cursorId;
+
+      const body = {
+        search: '',
+        timezone: timezone,
+        filter: {
+          $and: [{
+            category: 'contactField',
+            field: 'lifecycleStage',
+            operator: 'isEqualTo',
+            value: lifecycleStage
+          }]
+        }
+      };
+
+      const response = await this.client.post('/contact/list', body, { params });
+      return {
+        success: true,
+        items: response.data?.items || [],
+        pagination: response.data?.pagination || null
+      };
+    } catch (error) {
+      console.error(`Respond.io list contacts by lifecycle (${lifecycleStage}) error:`, error.response?.data || error.message);
+      return {
+        success: false,
+        items: [],
+        error: error.response?.data?.message || error.message
+      };
+    }
+  }
+
   async getContact(contactIdentifier) {
     try {
       const identifier = typeof contactIdentifier === 'number' 
