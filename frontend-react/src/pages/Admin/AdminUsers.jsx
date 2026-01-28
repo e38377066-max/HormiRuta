@@ -73,18 +73,19 @@ export default function AdminUsers() {
     }
   }
 
-  const getRoleBadge = (role) => {
-    const colors = {
-      admin: 'bg-secondary',
-      driver: 'bg-positive',
-      client: 'bg-info'
+  const getRoleLabel = (role) => {
+    const labels = { admin: 'Admin', driver: 'Repartidor', client: 'Cliente' }
+    return labels[role] || role
+  }
+
+  const getInitials = (name, email) => {
+    if (name) {
+      const parts = name.split(' ')
+      return parts.length > 1 
+        ? (parts[0][0] + parts[1][0]).toUpperCase()
+        : name.substring(0, 2).toUpperCase()
     }
-    const labels = {
-      admin: 'Admin',
-      driver: 'Repartidor',
-      client: 'Cliente'
-    }
-    return <span className={`q-chip ${colors[role] || 'bg-info'}`}>{labels[role] || role}</span>
+    return email ? email.substring(0, 2).toUpperCase() : 'U'
   }
 
   const formatDate = (dateStr) => {
@@ -94,151 +95,166 @@ export default function AdminUsers() {
 
   if (loading) {
     return (
-      <div className="q-page q-pa-md">
-        <div className="loading-state"><div className="spinner"></div></div>
+      <div className="admin-page">
+        <div className="admin-container">
+          <div className="loading-container"><div className="spinner"></div></div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="q-page q-pa-md">
-      <div className="page-title-row">
-        <button className="q-btn-icon" onClick={() => navigate(-1)}>
-          <span className="material-icons">arrow_back</span>
-        </button>
-        <div className="page-title">
-          <span className="material-icons">people</span>
-          {roleFilter ? `Usuarios (${roleFilter})` : 'Todos los Usuarios'}
+    <div className="admin-page">
+      <div className="admin-container">
+        <div className="page-header">
+          <button className="back-btn" onClick={() => navigate(-1)}>
+            <span className="material-icons">arrow_back</span>
+          </button>
+          <h1 className="page-title">
+            <span className="material-icons">people</span>
+            {roleFilter ? `Usuarios (${getRoleLabel(roleFilter)})` : 'Todos los Usuarios'}
+          </h1>
         </div>
-      </div>
 
-      <div className="row-gutter q-mb-md">
-        <div className="col-search">
-          <div className="search-input-wrapper">
+        <div className="search-bar">
+          <div className="search-input-container">
             <span className="material-icons">search</span>
             <input
               type="text"
-              className="q-input"
+              className="search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar por nombre o email..."
             />
           </div>
+          <span className="user-count">{filteredUsers.length} usuarios</span>
         </div>
-        <div className="col-actions">
-          <span className="hint-text">{filteredUsers.length} usuarios</span>
-        </div>
-      </div>
 
-      <div className="q-card">
-        <table className="q-table">
-          <thead>
-            <tr>
-              <th>Usuario</th>
-              <th>Email</th>
-              <th>Rol</th>
-              <th>Estado</th>
-              <th>Registro</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredUsers.map(user => (
-              <tr key={user.id}>
-                <td>
-                  <div className="user-cell">
-                    <div className="user-avatar-small">
-                      <span className="material-icons">person</span>
-                    </div>
-                    <span>{user.name || 'Sin nombre'}</span>
-                  </div>
-                </td>
-                <td>{user.email}</td>
-                <td>{getRoleBadge(user.role)}</td>
-                <td>
-                  <span className={`q-chip ${user.isActive !== false ? 'positive' : 'negative'}`}>
-                    {user.isActive !== false ? 'Activo' : 'Inactivo'}
-                  </span>
-                </td>
-                <td>{formatDate(user.createdAt)}</td>
-                <td>
-                  <button className="q-btn-icon" onClick={() => openEditDialog(user)}>
-                    <span className="material-icons">edit</span>
-                  </button>
-                  <button 
-                    className={`q-btn-icon ${user.isActive !== false ? 'text-negative' : 'text-positive'}`}
-                    onClick={() => handleToggleActive(user)}
-                  >
-                    <span className="material-icons">{user.isActive !== false ? 'block' : 'check_circle'}</span>
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filteredUsers.length === 0 && (
+        <div className="users-table-card">
+          <table className="users-table">
+            <thead>
               <tr>
-                <td colSpan="6" className="empty-state">No hay usuarios</td>
+                <th>Usuario</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Registro</th>
+                <th>Acciones</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredUsers.map(user => (
+                <tr key={user.id}>
+                  <td>
+                    <div className="user-cell">
+                      <div className="user-avatar">
+                        {getInitials(user.name, user.email)}
+                      </div>
+                      <span className="user-name">{user.name || 'Sin nombre'}</span>
+                    </div>
+                  </td>
+                  <td>{user.email}</td>
+                  <td>
+                    <span className={`role-badge ${user.role}`}>
+                      {getRoleLabel(user.role)}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`status-badge ${user.isActive !== false ? 'active' : 'inactive'}`}>
+                      <span className="status-dot"></span>
+                      {user.isActive !== false ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td>{formatDate(user.createdAt)}</td>
+                  <td>
+                    <button className="action-btn" onClick={() => openEditDialog(user)} title="Editar">
+                      <span className="material-icons">edit</span>
+                    </button>
+                    <button 
+                      className={`action-btn ${user.isActive !== false ? 'danger' : 'success'}`}
+                      onClick={() => handleToggleActive(user)}
+                      title={user.isActive !== false ? 'Desactivar' : 'Activar'}
+                    >
+                      <span className="material-icons">{user.isActive !== false ? 'block' : 'check_circle'}</span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan="6">
+                    <div className="empty-state">
+                      <span className="material-icons">people_outline</span>
+                      <p>No hay usuarios</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      {showEditDialog && editingUser && (
-        <div className="modal-overlay" onClick={() => setShowEditDialog(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Editar Usuario</h3>
-            <div className="modal-form">
-              <div className="form-group">
-                <label>Nombre</label>
-                <input
-                  type="text"
-                  className="q-input"
-                  value={editingUser.name || ''}
-                  onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                />
+        {showEditDialog && editingUser && (
+          <div className="modal-overlay" onClick={() => setShowEditDialog(false)}>
+            <div className="modal-card" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Editar Usuario</h3>
               </div>
-              <div className="form-group">
-                <label>Email</label>
-                <input
-                  type="text"
-                  className="q-input"
-                  value={editingUser.email || ''}
-                  disabled
-                />
-              </div>
-              <div className="form-group">
-                <label>Rol</label>
-                <select
-                  className="q-input"
-                  value={editingUser.role}
-                  onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
-                >
-                  <option value="client">Cliente</option>
-                  <option value="driver">Repartidor</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div className="toggle-row">
-                <label className="toggle-label">
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Nombre</label>
                   <input
-                    type="checkbox"
-                    checked={editingUser.isActive !== false}
-                    onChange={(e) => setEditingUser({ ...editingUser, isActive: e.target.checked })}
+                    type="text"
+                    className="form-input"
+                    value={editingUser.name || ''}
+                    onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
                   />
-                  <span className="toggle-slider"></span>
-                  Usuario activo
-                </label>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editingUser.email || ''}
+                    disabled
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Rol</label>
+                  <select
+                    className="form-select"
+                    value={editingUser.role}
+                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                  >
+                    <option value="client">Cliente</option>
+                    <option value="driver">Repartidor</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <div className="toggle-container">
+                    <label className="toggle-switch">
+                      <input
+                        type="checkbox"
+                        checked={editingUser.isActive !== false}
+                        onChange={(e) => setEditingUser({ ...editingUser, isActive: e.target.checked })}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                    <span className="toggle-text">Usuario activo</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="modal-actions">
-              <button className="q-btn flat" onClick={() => setShowEditDialog(false)}>Cancelar</button>
-              <button className="q-btn primary" onClick={handleSaveUser} disabled={saving}>
-                {saving ? 'Guardando...' : 'Guardar'}
-              </button>
+              <div className="modal-footer">
+                <button className="btn btn-cancel" onClick={() => setShowEditDialog(false)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={handleSaveUser} disabled={saving}>
+                  {saving ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

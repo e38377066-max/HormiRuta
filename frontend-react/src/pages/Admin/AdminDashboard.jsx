@@ -25,113 +25,125 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="q-page q-pa-md">
-        <div className="loading-state"><div className="spinner"></div></div>
+      <div className="admin-page">
+        <div className="admin-container">
+          <div className="loading-container"><div className="spinner"></div></div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="q-page q-pa-md">
-      <div className="page-title-row">
-        <button className="q-btn-icon" onClick={() => navigate(-1)}>
-          <span className="material-icons">arrow_back</span>
-        </button>
-        <div className="page-title">
-          <span className="material-icons">admin_panel_settings</span>
-          Panel de Administracion
+    <div className="admin-page">
+      <div className="admin-container">
+        <div className="page-header">
+          <button className="back-btn" onClick={() => navigate(-1)}>
+            <span className="material-icons">arrow_back</span>
+          </button>
+          <h1 className="page-title">
+            <span className="material-icons">admin_panel_settings</span>
+            Panel de Administracion
+          </h1>
         </div>
-      </div>
 
-      <div className="stats-row q-mb-lg">
-        <div className="stat-card bg-primary">
-          <div className="stat-value">{stats.users?.total || 0}</div>
-          <div className="stat-label">Usuarios Totales</div>
+        <div className="stats-grid">
+          <div className="stat-card primary">
+            <div className="stat-icon primary">
+              <span className="material-icons">groups</span>
+            </div>
+            <div className="stat-value">{stats.users?.total || 0}</div>
+            <div className="stat-label">Usuarios Totales</div>
+          </div>
+          <div className="stat-card success">
+            <div className="stat-icon success">
+              <span className="material-icons">local_shipping</span>
+            </div>
+            <div className="stat-value">{stats.users?.drivers || 0}</div>
+            <div className="stat-label">Repartidores</div>
+          </div>
+          <div className="stat-card info">
+            <div className="stat-icon info">
+              <span className="material-icons">person</span>
+            </div>
+            <div className="stat-value">{stats.users?.clients || 0}</div>
+            <div className="stat-label">Clientes</div>
+          </div>
+          <div className="stat-card warning">
+            <div className="stat-icon warning">
+              <span className="material-icons">inventory_2</span>
+            </div>
+            <div className="stat-value">{stats.orders || 0}</div>
+            <div className="stat-label">Ordenes</div>
+          </div>
         </div>
-        <div className="stat-card bg-positive">
-          <div className="stat-value">{stats.users?.drivers || 0}</div>
-          <div className="stat-label">Repartidores</div>
-        </div>
-        <div className="stat-card bg-info">
-          <div className="stat-value">{stats.users?.clients || 0}</div>
-          <div className="stat-label">Clientes</div>
-        </div>
-        <div className="stat-card bg-warning">
-          <div className="stat-value">{stats.orders || 0}</div>
-          <div className="stat-label">Ordenes</div>
-        </div>
-      </div>
 
-      <div className="admin-grid">
-        <div className="q-card">
-          <div className="card-section">
-            <h4>
+        <div className="admin-grid">
+          <div className="admin-card">
+            <div className="card-header">
               <span className="material-icons">people</span>
-              Gestion de Usuarios
-            </h4>
+              <h3>Gestion de Usuarios</h3>
+            </div>
+            <div className="card-body">
+              <Link to="/admin/users" className="menu-item">
+                <div className="menu-icon primary">
+                  <span className="material-icons">manage_accounts</span>
+                </div>
+                <div className="menu-content">
+                  <div className="menu-title">Ver todos los usuarios</div>
+                  <div className="menu-subtitle">Administrar roles y permisos</div>
+                </div>
+                <span className="material-icons menu-arrow">chevron_right</span>
+              </Link>
+              <Link to="/admin/users?role=driver" className="menu-item">
+                <div className="menu-icon success">
+                  <span className="material-icons">local_shipping</span>
+                </div>
+                <div className="menu-content">
+                  <div className="menu-title">Repartidores</div>
+                  <div className="menu-subtitle">{stats.users?.drivers || 0} activos</div>
+                </div>
+                <span className="material-icons menu-arrow">chevron_right</span>
+              </Link>
+              <Link to="/admin/users?role=client" className="menu-item">
+                <div className="menu-icon info">
+                  <span className="material-icons">person</span>
+                </div>
+                <div className="menu-content">
+                  <div className="menu-title">Clientes</div>
+                  <div className="menu-subtitle">{stats.users?.clients || 0} registrados</div>
+                </div>
+                <span className="material-icons menu-arrow">chevron_right</span>
+              </Link>
+            </div>
           </div>
-          <div className="card-section">
-            <Link to="/admin/users" className="list-item">
-              <div className="list-item-icon bg-primary">
-                <span className="material-icons">manage_accounts</span>
-              </div>
-              <div className="list-item-content">
-                <div className="list-item-title">Ver todos los usuarios</div>
-                <div className="list-item-caption">Administrar roles y permisos</div>
-              </div>
-              <span className="material-icons list-item-arrow">chevron_right</span>
-            </Link>
-            <Link to="/admin/users?role=driver" className="list-item">
-              <div className="list-item-icon bg-positive">
-                <span className="material-icons">local_shipping</span>
-              </div>
-              <div className="list-item-content">
-                <div className="list-item-title">Repartidores</div>
-                <div className="list-item-caption">{stats.users?.drivers || 0} activos</div>
-              </div>
-              <span className="material-icons list-item-arrow">chevron_right</span>
-            </Link>
-            <Link to="/admin/users?role=client" className="list-item">
-              <div className="list-item-icon bg-info">
-                <span className="material-icons">person</span>
-              </div>
-              <div className="list-item-content">
-                <div className="list-item-title">Clientes</div>
-                <div className="list-item-caption">{stats.users?.clients || 0} registrados</div>
-              </div>
-              <span className="material-icons list-item-arrow">chevron_right</span>
-            </Link>
-          </div>
-        </div>
 
-        <div className="q-card">
-          <div className="card-section">
-            <h4>
+          <div className="admin-card">
+            <div className="card-header">
               <span className="material-icons">settings</span>
-              Configuracion
-            </h4>
-          </div>
-          <div className="card-section">
-            <Link to="/messaging/coverage" className="list-item">
-              <div className="list-item-icon bg-secondary">
-                <span className="material-icons">map</span>
-              </div>
-              <div className="list-item-content">
-                <div className="list-item-title">Zonas de Cobertura</div>
-                <div className="list-item-caption">Administrar codigos postales</div>
-              </div>
-              <span className="material-icons list-item-arrow">chevron_right</span>
-            </Link>
-            <Link to="/messaging/settings" className="list-item">
-              <div className="list-item-icon bg-positive">
-                <span className="material-icons">message</span>
-              </div>
-              <div className="list-item-content">
-                <div className="list-item-title">Integracion Respond.io</div>
-                <div className="list-item-caption">Configurar mensajeria</div>
-              </div>
-              <span className="material-icons list-item-arrow">chevron_right</span>
-            </Link>
+              <h3>Configuracion</h3>
+            </div>
+            <div className="card-body">
+              <Link to="/messaging/coverage" className="menu-item">
+                <div className="menu-icon purple">
+                  <span className="material-icons">map</span>
+                </div>
+                <div className="menu-content">
+                  <div className="menu-title">Zonas de Cobertura</div>
+                  <div className="menu-subtitle">Administrar codigos postales</div>
+                </div>
+                <span className="material-icons menu-arrow">chevron_right</span>
+              </Link>
+              <Link to="/messaging/settings" className="menu-item">
+                <div className="menu-icon success">
+                  <span className="material-icons">message</span>
+                </div>
+                <div className="menu-content">
+                  <div className="menu-title">Integracion Respond.io</div>
+                  <div className="menu-subtitle">Configurar mensajeria</div>
+                </div>
+                <span className="material-icons menu-arrow">chevron_right</span>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
