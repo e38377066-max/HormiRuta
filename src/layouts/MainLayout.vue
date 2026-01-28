@@ -380,8 +380,9 @@ let map;
 let routePoints = ref([]);
 
 onMounted(async () => {
+  await authStore.fetchCurrentUser();
   await initMap();
-  await loadUserData(); // 👈 Ahora es async
+  await loadUserData();
   const available = await SpeechRecognition.available();
   if (available) {
     await SpeechRecognition.requestPermission();
