@@ -33,7 +33,12 @@ export default function TripPlannerPage() {
   const [savedDuration, setSavedDuration] = useState(0)
   const [startAddress, setStartAddress] = useState('')
   const [roundTrip, setRoundTrip] = useState(false)
+  const [useCurrentLocation, setUseCurrentLocation] = useState(true)
+  const [startTime, setStartTime] = useState(null)
+  const [stopDuration, setStopDuration] = useState(5)
+  const [breakTime, setBreakTime] = useState(null)
   const [showRouteMenu, setShowRouteMenu] = useState(false)
+  const [showConfigModal, setShowConfigModal] = useState(null)
   const [showRouteNameDialog, setShowRouteNameDialog] = useState(false)
   const [mapType, setMapType] = useState('roadmap')
   const [currentRouteId, setCurrentRouteId] = useState(null)
@@ -713,15 +718,17 @@ export default function TripPlannerPage() {
           <div className="config-section">
             <div className="config-label">Configuración de ruta</div>
             
-            <div className="config-item">
+            <div className="config-item" onClick={() => setUseCurrentLocation(!useCurrentLocation)}>
               <div className="config-item-left">
-                <span className="config-time">{formatDuration(totalDuration).split(' ')[0]}</span>
+                <span className="config-time">{startTime ? new Date(startTime).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : 'Ahora'}</span>
                 <div className="config-content">
-                  <div className="config-title">Empezar desde la ubicación actual</div>
-                  <div className="config-subtitle">Utiliza la posición del GPS al optimizar</div>
+                  <div className="config-title">{useCurrentLocation ? 'Empezar desde la ubicación actual' : 'Empezar desde primera parada'}</div>
+                  <div className="config-subtitle">{useCurrentLocation ? 'Utiliza la posición del GPS al optimizar' : 'Inicia desde la primera parada de la lista'}</div>
                 </div>
               </div>
-              <span className="material-icons config-icon">home</span>
+              <span className="material-icons config-icon" style={{ color: useCurrentLocation ? '#5b8def' : '#666' }}>
+                {useCurrentLocation ? 'gps_fixed' : 'location_off'}
+              </span>
             </div>
             
             <div className="config-item" onClick={() => setRoundTrip(!roundTrip)}>
@@ -729,21 +736,36 @@ export default function TripPlannerPage() {
                 <span className="config-time">•</span>
                 <div className="config-content">
                   <div className="config-title">Viaje de ida y vuelta</div>
-                  <div className="config-subtitle">{roundTrip ? 'Regresa al punto de inicio' : 'Volver al punto de partida'}</div>
+                  <div className="config-subtitle">{roundTrip ? 'Regresa al punto de inicio' : 'Termina en la última parada'}</div>
                 </div>
               </div>
-              <span className="material-icons config-icon">{roundTrip ? 'check_box' : 'flag'}</span>
+              <span className="material-icons config-icon" style={{ color: roundTrip ? '#22c55e' : '#666' }}>
+                {roundTrip ? 'check_box' : 'check_box_outline_blank'}
+              </span>
             </div>
             
-            <div className="config-item">
+            <div className="config-item" onClick={() => setShowConfigModal('break')}>
               <div className="config-item-left">
                 <span className="config-time">•</span>
                 <div className="config-content">
-                  <div className="config-title">Sin descanso</div>
-                  <div className="config-subtitle">Pulsa para planificar un descanso</div>
+                  <div className="config-title">{breakTime ? `Descanso a las ${breakTime}` : 'Sin descanso'}</div>
+                  <div className="config-subtitle">{breakTime ? 'Pulsa para editar' : 'Pulsa para planificar un descanso'}</div>
                 </div>
               </div>
-              <span className="material-icons config-icon">free_breakfast</span>
+              <span className="material-icons config-icon" style={{ color: breakTime ? '#f59e0b' : '#666' }}>
+                {breakTime ? 'coffee' : 'free_breakfast'}
+              </span>
+            </div>
+            
+            <div className="config-item" onClick={() => setShowConfigModal('duration')}>
+              <div className="config-item-left">
+                <span className="config-time">•</span>
+                <div className="config-content">
+                  <div className="config-title">{stopDuration} min por parada</div>
+                  <div className="config-subtitle">Tiempo estimado en cada entrega</div>
+                </div>
+              </div>
+              <span className="material-icons config-icon" style={{ color: '#666' }}>timer</span>
             </div>
           </div>
           
@@ -861,6 +883,52 @@ export default function TripPlannerPage() {
             <div className="modal-actions">
               <button className="btn-flat" onClick={() => setShowRouteNameDialog(false)}>Cancelar</button>
               <button className="btn-primary" onClick={() => setShowRouteNameDialog(false)}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showConfigModal === 'break' && (
+        <div className="modal-overlay" onClick={() => setShowConfigModal(null)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3>Programar descanso</h3>
+            <p style={{ color: '#999', marginBottom: 16 }}>Selecciona la hora para tu descanso</p>
+            <input
+              type="time"
+              className="q-input"
+              value={breakTime || ''}
+              onChange={(e) => setBreakTime(e.target.value)}
+            />
+            <div className="modal-actions">
+              {breakTime && (
+                <button className="btn-flat text-negative" onClick={() => { setBreakTime(null); setShowConfigModal(null); }}>
+                  Quitar descanso
+                </button>
+              )}
+              <button className="btn-primary" onClick={() => setShowConfigModal(null)}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showConfigModal === 'duration' && (
+        <div className="modal-overlay" onClick={() => setShowConfigModal(null)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3>Tiempo por parada</h3>
+            <p style={{ color: '#999', marginBottom: 16 }}>Minutos estimados en cada entrega</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[2, 3, 5, 10, 15, 20].map(min => (
+                <button 
+                  key={min}
+                  className={`duration-option ${stopDuration === min ? 'active' : ''}`}
+                  onClick={() => setStopDuration(min)}
+                >
+                  {min} min
+                </button>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={() => setShowConfigModal(null)}>Guardar</button>
             </div>
           </div>
         </div>
