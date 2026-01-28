@@ -33,9 +33,11 @@ export default function TripPlannerPage() {
   const [mapType, setMapType] = useState('roadmap')
   const [currentRouteId, setCurrentRouteId] = useState(null)
   const [panelHeight, setPanelHeight] = useState(45)
+  const [panelSnap, setPanelSnap] = useState('mid')
   const isDragging = useRef(false)
   const startY = useRef(0)
   const startHeight = useRef(0)
+  const SNAP_POINTS = { min: 15, mid: 45, max: 80 }
 
   useEffect(() => {
     initMap()
@@ -46,11 +48,33 @@ export default function TripPlannerPage() {
       if (!isDragging.current) return
       const deltaY = startY.current - e.clientY
       const deltaPercent = (deltaY / window.innerHeight) * 100
-      const newHeight = Math.min(85, Math.max(20, startHeight.current + deltaPercent))
+      const newHeight = Math.min(90, Math.max(10, startHeight.current + deltaPercent))
       setPanelHeight(newHeight)
     }
 
+    const snapToNearest = (height) => {
+      const snapValues = Object.values(SNAP_POINTS)
+      let closest = snapValues[0]
+      let minDist = Math.abs(height - closest)
+      
+      for (const snap of snapValues) {
+        const dist = Math.abs(height - snap)
+        if (dist < minDist) {
+          minDist = dist
+          closest = snap
+        }
+      }
+      
+      setPanelHeight(closest)
+      if (closest === SNAP_POINTS.min) setPanelSnap('min')
+      else if (closest === SNAP_POINTS.max) setPanelSnap('max')
+      else setPanelSnap('mid')
+    }
+
     const handleMouseUp = () => {
+      if (isDragging.current) {
+        snapToNearest(panelHeight)
+      }
       isDragging.current = false
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
@@ -61,7 +85,7 @@ export default function TripPlannerPage() {
       const touch = e.touches[0]
       const deltaY = startY.current - touch.clientY
       const deltaPercent = (deltaY / window.innerHeight) * 100
-      const newHeight = Math.min(85, Math.max(20, startHeight.current + deltaPercent))
+      const newHeight = Math.min(90, Math.max(10, startHeight.current + deltaPercent))
       setPanelHeight(newHeight)
     }
 
@@ -76,7 +100,7 @@ export default function TripPlannerPage() {
       document.removeEventListener('touchmove', handleTouchMove)
       document.removeEventListener('touchend', handleMouseUp)
     }
-  }, [])
+  }, [panelHeight])
 
   const handlePanelDragStart = (e) => {
     isDragging.current = true
@@ -395,7 +419,7 @@ export default function TripPlannerPage() {
         </div>
       </div>
       
-      <div className="bottom-panel" style={{ height: `${panelHeight}vh` }}>
+      <div className={`bottom-panel ${isDragging.current ? 'dragging' : ''}`} style={{ height: `${panelHeight}vh` }}>
         <div 
           className="panel-handle" 
           onMouseDown={handlePanelDragStart}
@@ -404,59 +428,59 @@ export default function TripPlannerPage() {
           <div className="handle-bar"></div>
         </div>
         
-        <div className="search-section">
-          <div className="search-input-wrapper">
-            <span className="material-icons search-icon">search</span>
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="search-input"
-              value={searchQuery}
-              onChange={(e) => searchAddress(e.target.value)}
-              onFocus={() => setShowSearch(true)}
-              placeholder="Pulsa para añadir"
-            />
-            <button className="input-action" onClick={() => setShowRouteMenu(true)}>
-              <span className="material-icons">more_vert</span>
-            </button>
+        <div className="panel-scrollable">
+          <div className="search-section">
+            <div className="search-input-wrapper">
+              <span className="material-icons search-icon">search</span>
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="search-input"
+                value={searchQuery}
+                onChange={(e) => searchAddress(e.target.value)}
+                onFocus={() => setShowSearch(true)}
+                placeholder="Pulsa para añadir"
+              />
+              <button className="input-action" onClick={() => setShowRouteMenu(true)}>
+                <span className="material-icons">more_vert</span>
+              </button>
+            </div>
+            
+            {showSearch && searchSuggestions.length > 0 && (
+              <div className="suggestions-dropdown">
+                {searchSuggestions.map((sug, i) => (
+                  <div key={i} className="suggestion-item" onClick={() => selectSearchSuggestion(sug)}>
+                    <span className="material-icons">place</span>
+                    <span>{sug.description}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           
-          {showSearch && searchSuggestions.length > 0 && (
-            <div className="suggestions-dropdown">
-              {searchSuggestions.map((sug, i) => (
-                <div key={i} className="suggestion-item" onClick={() => selectSearchSuggestion(sug)}>
-                  <span className="material-icons">place</span>
-                  <span>{sug.description}</span>
+          {stops.length > 0 && (
+            <div className="route-header">
+              <div className="stats-chips">
+                <div className="stat-chip">
+                  <span className="material-icons">schedule</span>
+                  <span>{formatDuration(totalDuration)}</span>
                 </div>
-              ))}
+                <div className="stat-chip">
+                  <span className="material-icons">place</span>
+                  <span>{stops.length} paradas</span>
+                </div>
+                <div className="stat-chip">
+                  <span className="material-icons">straighten</span>
+                  <span>{totalDistance.toFixed(1)} km</span>
+                </div>
+              </div>
+              <div className="route-title" onClick={() => setShowRouteNameDialog(true)}>
+                <span className="title-text">{routeName}</span>
+                <span className="material-icons edit-icon">edit</span>
+              </div>
             </div>
           )}
-        </div>
-        
-        {stops.length > 0 && (
-          <div className="route-header">
-            <div className="stats-chips">
-              <div className="stat-chip">
-                <span className="material-icons">schedule</span>
-                <span>{formatDuration(totalDuration)}</span>
-              </div>
-              <div className="stat-chip">
-                <span className="material-icons">place</span>
-                <span>{stops.length} paradas</span>
-              </div>
-              <div className="stat-chip">
-                <span className="material-icons">straighten</span>
-                <span>{totalDistance.toFixed(1)} km</span>
-              </div>
-            </div>
-            <div className="route-title" onClick={() => setShowRouteNameDialog(true)}>
-              <span className="title-text">{routeName}</span>
-              <span className="material-icons edit-icon">edit</span>
-            </div>
-          </div>
-        )}
-        
-        {panelExpanded && (
+          
           <div className="stops-section">
             {startAddress && (
               <div className="origin-item">
@@ -524,9 +548,9 @@ export default function TripPlannerPage() {
               </div>
             )}
           </div>
-        )}
+        </div>
         
-        <div className="bottom-bar">
+        <div className="panel-footer">
           {stops.length > 0 && (
             <div className="time-big">{formatDuration(totalDuration)}</div>
           )}
