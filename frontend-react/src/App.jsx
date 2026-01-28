@@ -7,12 +7,11 @@ import PlannerLayout from './layouts/PlannerLayout'
 import LoginPage from './pages/Auth/LoginPage'
 import RegisterPage from './pages/Auth/RegisterPage'
 
-import DashboardPage from './pages/Dashboard/DashboardPage'
+import OrdersPage from './pages/Messaging/OrdersPage'
 
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import AdminUsers from './pages/Admin/AdminUsers'
 
-import OrdersPage from './pages/Messaging/OrdersPage'
 import CoveragePage from './pages/Messaging/CoveragePage'
 import SettingsPage from './pages/Messaging/SettingsPage'
 
@@ -49,10 +48,8 @@ export default function App() {
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       
       <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        
-        <Route path="messaging/orders" element={<OrdersPage />} />
+        <Route index element={<Navigate to="/messaging" replace />} />
+        <Route path="messaging" element={<OrdersPage />} />
         <Route path="messaging/coverage" element={<CoveragePage />} />
         <Route path="messaging/settings" element={<SettingsPage />} />
         
@@ -64,7 +61,7 @@ export default function App() {
         <Route index element={<TripPlannerPage />} />
       </Route>
       
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/messaging" replace />} />
     </Routes>
   )
 }

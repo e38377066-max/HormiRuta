@@ -10,6 +10,7 @@ export default function RegisterPage() {
     password: '',
     confirmPassword: ''
   })
+  const [showPassword, setShowPassword] = useState(false)
   const [formError, setFormError] = useState('')
   const { register, loading, error } = useAuth()
   const navigate = useNavigate()
@@ -23,12 +24,12 @@ export default function RegisterPage() {
     e.preventDefault()
     
     if (formData.password !== formData.confirmPassword) {
-      setFormError('Las contrasenas no coinciden')
+      setFormError('Las contraseñas no coinciden')
       return
     }
 
     if (formData.password.length < 6) {
-      setFormError('La contrasena debe tener al menos 6 caracteres')
+      setFormError('La contraseña debe tener al menos 6 caracteres')
       return
     }
 
@@ -39,83 +40,105 @@ export default function RegisterPage() {
     })
 
     if (result.success) {
-      navigate('/dashboard')
+      navigate('/planner')
     }
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-container">
-        <div className="auth-logo">
-          <img src="/hormiruta-icon.svg" alt="HormiRuta" />
-          <h1>HormiRuta</h1>
+    <div className="bg-page">
+      <div className="circle circle1"></div>
+      <div className="circle circle2"></div>
+      <div className="circle circle3"></div>
+
+      <div className="login-card">
+        <div className="text-center q-mb-lg">
+          <div className="logo-avatar">
+            <img src="/hormiruta-icon.svg" alt="HormiRuta" />
+          </div>
+          <h1 className="brand-title">HormiRuta</h1>
+          <p className="brand-subtitle">Crea tu cuenta para empezar</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="auth-form">
-          <h2>Crear Cuenta</h2>
-
+        <form onSubmit={handleSubmit} className="login-form">
           {(error || formError) && (
             <div className="alert alert-error">{error || formError}</div>
           )}
 
-          <div className="form-group">
-            <label>Nombre completo</label>
+          <div className="input-group">
+            <span className="input-icon">👤</span>
             <input
               type="text"
               name="name"
-              className="input"
               value={formData.name}
               onChange={handleChange}
-              placeholder="Tu nombre"
+              placeholder="Nombre completo"
               required
+              className="input-pro"
             />
           </div>
 
-          <div className="form-group">
-            <label>Correo electronico</label>
+          <div className="input-group">
+            <span className="input-icon">📧</span>
             <input
               type="email"
               name="email"
-              className="input"
               value={formData.email}
               onChange={handleChange}
-              placeholder="tu@email.com"
+              placeholder="Correo electrónico"
               required
+              className="input-pro"
             />
           </div>
 
-          <div className="form-group">
-            <label>Contrasena</label>
+          <div className="input-group">
+            <span className="input-icon">🔒</span>
             <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               name="password"
-              className="input"
               value={formData.password}
               onChange={handleChange}
-              placeholder="Minimo 6 caracteres"
+              placeholder="Contraseña (mínimo 6 caracteres)"
               required
+              className="input-pro"
             />
+            <button
+              type="button"
+              className="toggle-password"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? '🙈' : '👁️'}
+            </button>
           </div>
 
-          <div className="form-group">
-            <label>Confirmar contrasena</label>
+          <div className="input-group">
+            <span className="input-icon">🔒</span>
             <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               name="confirmPassword"
-              className="input"
               value={formData.confirmPassword}
               onChange={handleChange}
-              placeholder="Repite tu contrasena"
+              placeholder="Confirmar contraseña"
               required
+              className="input-pro"
             />
           </div>
 
-          <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-            {loading ? 'Registrando...' : 'Registrarse'}
+          <button type="submit" className="login-btn" disabled={loading}>
+            {loading ? 'Registrando...' : 'Crear cuenta'}
           </button>
 
-          <p className="auth-link">
-            Ya tienes cuenta? <Link to="/login">Inicia sesion</Link>
+          <div className="divider">
+            <span>O continúa con</span>
+          </div>
+
+          <button type="button" className="google-btn">
+            <span className="google-icon">G</span>
+            Continuar con Google
+          </button>
+
+          <p className="register-link">
+            ¿Ya tienes cuenta?{' '}
+            <Link to="/login">Inicia sesión</Link>
           </p>
         </form>
       </div>
