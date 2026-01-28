@@ -37,6 +37,7 @@ export default function SettingsPage() {
     driver_assigned_message: '',
     order_completed_message: ''
   })
+  const [hasExistingToken, setHasExistingToken] = useState(false)
 
   const attentionModes = [
     { label: 'Automatico - Validacion y respuesta sin intervencion', value: 'automatic' },
@@ -53,6 +54,7 @@ export default function SettingsPage() {
     try {
       const settings = await fetchSettings()
       if (settings) {
+        setHasExistingToken(settings.has_api_token || false)
         setForm({
           respond_api_token: '',
           is_active: settings.is_active || false,
@@ -102,7 +104,14 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await updateSettings(form)
+      const dataToSave = { ...form }
+      if (!dataToSave.respond_api_token) {
+        delete dataToSave.respond_api_token
+      } else {
+        setHasExistingToken(true)
+      }
+      await updateSettings(dataToSave)
+      setForm(prev => ({ ...prev, respond_api_token: '' }))
       alert('Configuracion guardada')
     } catch (err) {
       alert('Error al guardar')
@@ -172,11 +181,14 @@ export default function SettingsPage() {
                   type={showToken ? 'text' : 'password'}
                   value={form.respond_api_token}
                   onChange={(e) => handleInputChange('respond_api_token', e.target.value)}
-                  placeholder="Ingresa tu token"
+                  placeholder={hasExistingToken ? '••••••••••••••••• (token guardado)' : 'Ingresa tu token'}
                 />
                 <button className="icon-button" onClick={() => setShowToken(!showToken)}>
                   <span className="material-icons">{showToken ? 'visibility_off' : 'visibility'}</span>
                 </button>
+                {hasExistingToken && !form.respond_api_token && (
+                  <span className="token-saved-indicator">Token guardado</span>
+                )}
               </div>
             </div>
 
@@ -184,7 +196,7 @@ export default function SettingsPage() {
               <button
                 className="btn-secondary"
                 onClick={handleTestConnection}
-                disabled={testing || !form.respond_api_token}
+                disabled={testing || (!form.respond_api_token && !hasExistingToken)}
               >
                 {testing ? 'Probando...' : 'Probar Conexion'}
               </button>
