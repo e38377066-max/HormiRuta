@@ -163,43 +163,50 @@ export default function TripPlannerPage() {
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setUserLocation(loc)
-        updateUserLocationMarker(loc)
+        updateUserLocationMarker(loc, pos.coords.accuracy)
       },
       (err) => console.error('Watch position error:', err),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
     )
   }
 
-  const updateUserLocationMarker = (location) => {
+  const updateUserLocationMarker = (location, accuracy = 30) => {
     if (!mapInstanceRef.current) return
 
     if (userLocationMarkerRef.current) {
-      userLocationMarkerRef.current.setPosition(location)
+      userLocationMarkerRef.current.marker.setPosition(location)
+      userLocationMarkerRef.current.accuracyCircle.setCenter(location)
+      userLocationMarkerRef.current.accuracyCircle.setRadius(accuracy)
     } else {
-      userLocationMarkerRef.current = new window.google.maps.Marker({
-        position: location,
-        map: mapInstanceRef.current,
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: '#4285F4',
-          fillOpacity: 1,
-          strokeWeight: 3,
-          strokeColor: 'white'
-        },
-        zIndex: 999
-      })
-
-      new window.google.maps.Circle({
+      const accuracyCircle = new window.google.maps.Circle({
         map: mapInstanceRef.current,
         center: location,
-        radius: 30,
+        radius: accuracy,
         fillColor: '#4285F4',
         fillOpacity: 0.15,
         strokeColor: '#4285F4',
-        strokeOpacity: 0.3,
-        strokeWeight: 1
+        strokeOpacity: 0.4,
+        strokeWeight: 1,
+        clickable: false
       })
+
+      const marker = new window.google.maps.Marker({
+        position: location,
+        map: mapInstanceRef.current,
+        icon: {
+          url: 'data:image/svg+xml,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="8" fill="#4285F4" stroke="white" stroke-width="3"/>
+            </svg>
+          `),
+          anchor: new window.google.maps.Point(12, 12),
+          scaledSize: new window.google.maps.Size(24, 24)
+        },
+        zIndex: 999,
+        clickable: false
+      })
+
+      userLocationMarkerRef.current = { marker, accuracyCircle }
     }
   }
 
@@ -364,17 +371,28 @@ export default function TripPlannerPage() {
 
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
+        const isCompleted = stop.completed
+        const color = isCompleted ? '#22c55e' : '#EA4335'
+        
         const marker = new window.google.maps.Marker({
           position: { lat: stop.latitude, lng: stop.longitude },
           map: mapInstanceRef.current,
-          label: { text: String(index + 1), color: 'white' },
+          label: {
+            text: String(index + 1),
+            color: 'white',
+            fontSize: '12px',
+            fontWeight: 'bold'
+          },
           icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor: stop.completed ? '#4caf50' : (stop.color || '#1976d2'),
-            fillOpacity: 1,
-            strokeWeight: 2,
-            strokeColor: 'white'
+            url: 'data:image/svg+xml,' + encodeURIComponent(`
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
+                <path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24c0-8.837-7.163-16-16-16z" fill="${color}"/>
+                <circle cx="16" cy="14" r="6" fill="white" opacity="0.3"/>
+              </svg>
+            `),
+            anchor: new window.google.maps.Point(16, 40),
+            scaledSize: new window.google.maps.Size(32, 40),
+            labelOrigin: new window.google.maps.Point(16, 14)
           }
         })
         markersRef.current.push(marker)
@@ -388,7 +406,10 @@ export default function TripPlannerPage() {
           bounds.extend({ lat: stop.latitude, lng: stop.longitude })
         }
       })
-      mapInstanceRef.current.fitBounds(bounds, 50)
+      if (userLocation) {
+        bounds.extend(userLocation)
+      }
+      mapInstanceRef.current.fitBounds(bounds, 60)
     }
   }
 
