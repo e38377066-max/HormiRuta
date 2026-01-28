@@ -1,0 +1,13 @@
+{
+  "appId": "com.hormiruta.app",
+  "appName": "HormiRuta",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Geolocation": {
+      "requestBrowserPermission": true
+    }
+  }
+}
