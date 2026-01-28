@@ -53,6 +53,11 @@ const User = sequelize.define('User', {
   subscription_expires: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  role: {
+    type: DataTypes.ENUM('admin', 'client', 'driver'),
+    defaultValue: 'client',
+    allowNull: false
   }
 }, {
   tableName: 'users',
@@ -81,6 +86,8 @@ User.prototype.toDict = function() {
     profile_picture: this.profile_picture,
     subscription_type: this.subscription_type,
     subscription_expires: this.subscription_expires,
+    role: this.role,
+    active: this.active,
     created_at: this.created_at
   };
 };

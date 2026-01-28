@@ -41,6 +41,11 @@
           <q-item-section>Centro de Mensajeria</q-item-section>
         </q-item>
 
+        <q-item v-if="authStore.isAdmin" class="q-mb-md" clickable v-ripple to="/admin">
+          <q-item-section avatar><q-icon name="admin_panel_settings" color="deep-purple" /></q-item-section>
+          <q-item-section>Panel de Admin</q-item-section>
+        </q-item>
+
         <q-separator spaced />
 
         <q-item class="q-mb-md" clickable v-ripple @click="showUserModal = true">
