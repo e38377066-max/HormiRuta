@@ -13,7 +13,7 @@ export default function SettingsPage() {
   const [connectionStatus, setConnectionStatus] = useState(null)
   const [pollingLoading, setPollingLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [pollingInterval, setPollingInterval] = useState({ label: '30 segundos', value: 30 })
+  const [pollingInterval, setPollingInterval] = useState(30)
   const [pollingStatus, setPollingStatus] = useState({ active: false, lastPoll: null })
 
   const pollingIntervals = [
@@ -99,13 +99,25 @@ export default function SettingsPage() {
     }
   }
 
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await updateSettings(form)
+      alert('Configuracion guardada')
+    } catch (err) {
+      alert('Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleStartPolling = async () => {
     setPollingLoading(true)
     try {
-      await startPolling(pollingInterval.value)
-      setPollingStatus({ ...pollingStatus, active: true })
+      await startPolling(pollingInterval)
+      await loadPollingStatus()
     } catch (err) {
-      alert('Error al iniciar sincronizacion')
+      console.error(err)
     } finally {
       setPollingLoading(false)
     }
@@ -115,9 +127,9 @@ export default function SettingsPage() {
     setPollingLoading(true)
     try {
       await stopPolling()
-      setPollingStatus({ ...pollingStatus, active: false })
+      await loadPollingStatus()
     } catch (err) {
-      alert('Error al detener sincronizacion')
+      console.error(err)
     } finally {
       setPollingLoading(false)
     }
@@ -127,271 +139,220 @@ export default function SettingsPage() {
     setSyncing(true)
     try {
       await syncContacts()
-      setPollingStatus({ ...pollingStatus, lastPoll: new Date().toISOString() })
+      await loadPollingStatus()
     } catch (err) {
-      alert('Error al sincronizar')
+      console.error(err)
     } finally {
       setSyncing(false)
     }
   }
 
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      await updateSettings(form)
-      alert('Configuracion guardada exitosamente')
-    } catch (err) {
-      alert('Error al guardar configuracion')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const formatTime = (dateStr) => {
-    if (!dateStr) return ''
-    return new Date(dateStr).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+  const handleInputChange = (field, value) => {
+    setForm(prev => ({ ...prev, [field]: value }))
   }
 
   return (
-    <div className="q-page q-pa-md">
-      <div className="page-title-row">
-        <button className="q-btn-icon" onClick={() => navigate(-1)}>
+    <div className="settings-page">
+      <div className="settings-header">
+        <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <div className="page-title">
-          <span className="material-icons">settings</span>
-          Configuracion de Mensajeria
-        </div>
+        <h1>Configuracion de Mensajeria</h1>
       </div>
 
-      <div className="settings-grid">
-        <div className="settings-column">
-          <div className="q-card q-mb-md">
-            <div className="card-section">
-              <h4>Conexion con Respond.io</h4>
-              
-              <div className="form-group">
-                <label>API Token de Respond.io</label>
-                <div className="input-with-icon">
-                  <input
-                    type={showToken ? 'text' : 'password'}
-                    className="q-input"
-                    value={form.respond_api_token}
-                    onChange={(e) => setForm({ ...form, respond_api_token: e.target.value })}
-                    placeholder="Ingresa tu token"
-                  />
-                  <button className="q-btn-icon" onClick={() => setShowToken(!showToken)}>
-                    <span className="material-icons">{showToken ? 'visibility_off' : 'visibility'}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="row-buttons q-mt-md">
-                <button
-                  className="q-btn secondary"
-                  onClick={handleTestConnection}
-                  disabled={testing || !form.respond_api_token}
-                >
-                  {testing ? 'Probando...' : 'Probar Conexion'}
+      <div className="settings-content">
+        <div className="settings-left">
+          <div className="settings-card">
+            <h3>Conexion con Respond.io</h3>
+            
+            <div className="field-group">
+              <label>API Token de Respond.io</label>
+              <div className="input-row">
+                <input
+                  type={showToken ? 'text' : 'password'}
+                  value={form.respond_api_token}
+                  onChange={(e) => handleInputChange('respond_api_token', e.target.value)}
+                  placeholder="Ingresa tu token"
+                />
+                <button className="icon-button" onClick={() => setShowToken(!showToken)}>
+                  <span className="material-icons">{showToken ? 'visibility_off' : 'visibility'}</span>
                 </button>
-                {connectionStatus !== null && (
-                  <span className={`q-chip ${connectionStatus ? 'positive' : 'negative'}`}>
-                    {connectionStatus ? 'Conectado' : 'Error de conexion'}
-                  </span>
-                )}
-              </div>
-
-              <div className="toggle-row q-mt-md">
-                <label className="toggle-label">
-                  <input
-                    type="checkbox"
-                    checked={form.is_active}
-                    onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                  Activar integracion con Respond.io
-                </label>
               </div>
             </div>
-          </div>
 
-          <div className="q-card q-mb-md">
-            <div className="card-section">
-              <h4>Modo de Atencion</h4>
-              
-              <div className="radio-group">
-                {attentionModes.map(mode => (
-                  <label key={mode.value} className="radio-option">
-                    <input
-                      type="radio"
-                      name="attention_mode"
-                      value={mode.value}
-                      checked={form.attention_mode === mode.value}
-                      onChange={(e) => setForm({ ...form, attention_mode: e.target.value })}
-                    />
-                    <span>{mode.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="q-card q-mb-md">
-            <div className="card-section">
-              <h4>Sincronizacion de Mensajes</h4>
-              <p className="hint-text">El sistema consulta Respond.io periodicamente para obtener mensajes nuevos.</p>
-              
-              <div className="row-buttons q-mt-md">
-                <span className={`q-chip ${pollingStatus.active ? 'positive' : ''}`}>
-                  <span className="material-icons">sync</span>
-                  {pollingStatus.active ? 'Sincronizando' : 'Detenido'}
+            <div className="button-row">
+              <button
+                className="btn-secondary"
+                onClick={handleTestConnection}
+                disabled={testing || !form.respond_api_token}
+              >
+                {testing ? 'Probando...' : 'Probar Conexion'}
+              </button>
+              {connectionStatus !== null && (
+                <span className={`status-badge ${connectionStatus ? 'success' : 'error'}`}>
+                  {connectionStatus ? 'Conectado' : 'Error'}
                 </span>
-                {pollingStatus.lastPoll && (
-                  <span className="hint-text">Ultima: {formatTime(pollingStatus.lastPoll)}</span>
-                )}
-              </div>
+              )}
+            </div>
 
-              <div className="row-buttons q-mt-md">
-                <select
-                  className="q-input"
-                  value={pollingInterval.value}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value)
-                    const opt = pollingIntervals.find(p => p.value === val)
-                    setPollingInterval(opt || pollingIntervals[1])
-                  }}
-                  disabled={pollingStatus.active}
-                  style={{ width: 150 }}
-                >
-                  {pollingIntervals.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                
-                {!pollingStatus.active ? (
-                  <button className="q-btn positive" onClick={handleStartPolling} disabled={pollingLoading || !form.is_active}>
-                    <span className="material-icons">play_arrow</span>
-                    Iniciar
-                  </button>
-                ) : (
-                  <button className="q-btn negative" onClick={handleStopPolling} disabled={pollingLoading}>
-                    <span className="material-icons">stop</span>
-                    Detener
-                  </button>
-                )}
-                
-                <button className="q-btn secondary" onClick={handleSyncNow} disabled={syncing || !form.is_active}>
-                  <span className="material-icons">refresh</span>
-                  {syncing ? 'Sincronizando...' : 'Sincronizar Ahora'}
-                </button>
-              </div>
+            <div className="checkbox-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.is_active}
+                  onChange={(e) => handleInputChange('is_active', e.target.checked)}
+                />
+                <span>Activar integracion con Respond.io</span>
+              </label>
             </div>
           </div>
 
-          <div className="q-card q-mb-md">
-            <div className="card-section">
-              <h4>Automatizacion</h4>
-              
-              <div className="toggle-row">
-                <label className="toggle-label">
+          <div className="settings-card">
+            <h3>Modo de Atencion</h3>
+            <div className="radio-list">
+              {attentionModes.map(mode => (
+                <label key={mode.value} className="radio-item">
                   <input
-                    type="checkbox"
-                    checked={form.auto_validate_addresses}
-                    onChange={(e) => setForm({ ...form, auto_validate_addresses: e.target.checked })}
+                    type="radio"
+                    name="attention_mode"
+                    value={mode.value}
+                    checked={form.attention_mode === mode.value}
+                    onChange={(e) => handleInputChange('attention_mode', e.target.value)}
                   />
-                  <span className="toggle-slider"></span>
-                  Validar direcciones automaticamente
+                  <span>{mode.label}</span>
                 </label>
-              </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="settings-card">
+            <h3>Sincronizacion de Mensajes</h3>
+            <p className="description">El sistema consulta Respond.io periodicamente para obtener mensajes nuevos.</p>
+            
+            <div className="sync-status">
+              <span className={`status-indicator ${pollingStatus.active ? 'active' : ''}`}></span>
+              <span>{pollingStatus.active ? 'Sincronizando' : 'Detenido'}</span>
+            </div>
+
+            <div className="button-row">
+              <select
+                value={pollingInterval}
+                onChange={(e) => setPollingInterval(parseInt(e.target.value))}
+                disabled={pollingStatus.active}
+              >
+                {pollingIntervals.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
               
-              <div className="toggle-row">
-                <label className="toggle-label">
-                  <input
-                    type="checkbox"
-                    checked={form.auto_respond_coverage}
-                    onChange={(e) => setForm({ ...form, auto_respond_coverage: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                  Responder automaticamente si hay cobertura
-                </label>
-              </div>
+              {!pollingStatus.active ? (
+                <button className="btn-success" onClick={handleStartPolling} disabled={pollingLoading || !form.is_active}>
+                  Iniciar
+                </button>
+              ) : (
+                <button className="btn-danger" onClick={handleStopPolling} disabled={pollingLoading}>
+                  Detener
+                </button>
+              )}
               
-              <div className="toggle-row">
-                <label className="toggle-label">
-                  <input
-                    type="checkbox"
-                    checked={form.auto_respond_no_coverage}
-                    onChange={(e) => setForm({ ...form, auto_respond_no_coverage: e.target.checked })}
-                  />
-                  <span className="toggle-slider"></span>
-                  Responder automaticamente si NO hay cobertura
-                </label>
-              </div>
+              <button className="btn-secondary" onClick={handleSyncNow} disabled={syncing || !form.is_active}>
+                {syncing ? 'Sincronizando...' : 'Sincronizar Ahora'}
+              </button>
+            </div>
+          </div>
+
+          <div className="settings-card">
+            <h3>Automatizacion</h3>
+            
+            <div className="checkbox-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.auto_validate_addresses}
+                  onChange={(e) => handleInputChange('auto_validate_addresses', e.target.checked)}
+                />
+                <span>Validar direcciones automaticamente</span>
+              </label>
+            </div>
+            
+            <div className="checkbox-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.auto_respond_coverage}
+                  onChange={(e) => handleInputChange('auto_respond_coverage', e.target.checked)}
+                />
+                <span>Responder automaticamente si hay cobertura</span>
+              </label>
+            </div>
+            
+            <div className="checkbox-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.auto_respond_no_coverage}
+                  onChange={(e) => handleInputChange('auto_respond_no_coverage', e.target.checked)}
+                />
+                <span>Responder automaticamente si NO hay cobertura</span>
+              </label>
             </div>
           </div>
         </div>
 
-        <div className="settings-column">
-          <div className="q-card">
-            <div className="card-section">
-              <h4>Mensajes Automaticos</h4>
-              
-              <div className="form-group">
-                <label>Mensaje de cobertura confirmada</label>
-                <textarea
-                  className="q-input"
-                  rows={3}
-                  value={form.coverage_message}
-                  onChange={(e) => setForm({ ...form, coverage_message: e.target.value })}
-                />
-              </div>
+        <div className="settings-right">
+          <div className="settings-card">
+            <h3>Mensajes Automaticos</h3>
+            
+            <div className="field-group">
+              <label>Mensaje de cobertura confirmada</label>
+              <textarea
+                rows={3}
+                value={form.coverage_message}
+                onChange={(e) => handleInputChange('coverage_message', e.target.value)}
+              />
+            </div>
 
-              <div className="form-group">
-                <label>Mensaje sin cobertura</label>
-                <textarea
-                  className="q-input"
-                  rows={3}
-                  value={form.no_coverage_message}
-                  onChange={(e) => setForm({ ...form, no_coverage_message: e.target.value })}
-                />
-              </div>
+            <div className="field-group">
+              <label>Mensaje sin cobertura</label>
+              <textarea
+                rows={3}
+                value={form.no_coverage_message}
+                onChange={(e) => handleInputChange('no_coverage_message', e.target.value)}
+              />
+            </div>
 
-              <div className="form-group">
-                <label>Mensaje de orden confirmada</label>
-                <textarea
-                  className="q-input"
-                  rows={3}
-                  value={form.order_confirmed_message}
-                  onChange={(e) => setForm({ ...form, order_confirmed_message: e.target.value })}
-                />
-              </div>
+            <div className="field-group">
+              <label>Mensaje de orden confirmada</label>
+              <textarea
+                rows={3}
+                value={form.order_confirmed_message}
+                onChange={(e) => handleInputChange('order_confirmed_message', e.target.value)}
+              />
+            </div>
 
-              <div className="form-group">
-                <label>Mensaje de repartidor asignado</label>
-                <textarea
-                  className="q-input"
-                  rows={3}
-                  value={form.driver_assigned_message}
-                  onChange={(e) => setForm({ ...form, driver_assigned_message: e.target.value })}
-                />
-              </div>
+            <div className="field-group">
+              <label>Mensaje de repartidor asignado</label>
+              <textarea
+                rows={3}
+                value={form.driver_assigned_message}
+                onChange={(e) => handleInputChange('driver_assigned_message', e.target.value)}
+              />
+            </div>
 
-              <div className="form-group">
-                <label>Mensaje de orden completada</label>
-                <textarea
-                  className="q-input"
-                  rows={3}
-                  value={form.order_completed_message}
-                  onChange={(e) => setForm({ ...form, order_completed_message: e.target.value })}
-                />
-              </div>
+            <div className="field-group">
+              <label>Mensaje de orden completada</label>
+              <textarea
+                rows={3}
+                value={form.order_completed_message}
+                onChange={(e) => handleInputChange('order_completed_message', e.target.value)}
+              />
             </div>
           </div>
         </div>
       </div>
 
-      <div className="q-mt-md">
-        <button className="q-btn primary btn-large" onClick={handleSave} disabled={saving}>
+      <div className="settings-footer">
+        <button className="btn-primary btn-large" onClick={handleSave} disabled={saving}>
           <span className="material-icons">save</span>
           {saving ? 'Guardando...' : 'Guardar Configuracion'}
         </button>
