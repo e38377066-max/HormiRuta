@@ -23,7 +23,6 @@ export default function PlannerLayout() {
   const closeDrawer = () => setDrawerOpen(false)
 
   const menuItems = [
-    { icon: 'route', label: 'Planificador', path: '/planner' },
     { icon: 'admin_panel_settings', label: 'Panel Admin', path: '/messaging', adminOnly: true }
   ]
 
