@@ -3,6 +3,18 @@
   margin: 0 auto;
 }
 
+.q-pa-md {
+  padding: 16px;
+}
+
+.q-mb-md {
+  margin-bottom: 16px;
+}
+
+.q-mt-md {
+  margin-top: 16px;
+}
+
 .page-title {
   font-size: 1.25rem;
   font-weight: 500;
@@ -12,7 +24,14 @@
   gap: 8px;
 }
 
-.title-icon {
+.page-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page-title .material-icons {
   font-size: 1.5rem;
 }
 
@@ -58,10 +77,12 @@
   background: #fff3e0;
   border-left: 4px solid #ff9800;
   margin-bottom: 16px;
+  border-radius: 4px;
 }
 
 .warning-icon {
   font-size: 24px;
+  color: #ff9800;
 }
 
 .warning-content {
@@ -94,6 +115,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   padding: 10px 16px;
   border: none;
   border-radius: 4px;
@@ -103,6 +125,10 @@
   text-decoration: none;
   text-transform: uppercase;
   transition: all 0.2s;
+}
+
+.q-btn .material-icons {
+  font-size: 18px;
 }
 
 .q-btn.primary { background: #1976d2; color: white; }
@@ -116,6 +142,37 @@
 .q-btn:hover {
   opacity: 0.9;
   transform: translateY(-1px);
+}
+
+.q-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.q-btn-icon {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.q-btn-icon:hover {
+  background: rgba(0,0,0,0.1);
+}
+
+.q-btn-icon.text-negative {
+  color: #f44336;
+}
+
+.btn-large {
+  padding: 14px 24px;
+  font-size: 16px;
 }
 
 .q-card {
@@ -136,6 +193,15 @@
   margin: 0;
   font-size: 1rem;
   font-weight: 500;
+}
+
+.card-section {
+  padding: 16px;
+}
+
+.card-section h4 {
+  margin: 0 0 16px;
+  font-size: 1rem;
 }
 
 .filter-select {
@@ -209,6 +275,16 @@
   flex-shrink: 0;
 }
 
+.order-avatar.bg-warning { background: #ff9800; }
+.order-avatar.bg-info { background: #2196f3; }
+.order-avatar.bg-primary { background: #1976d2; }
+.order-avatar.bg-positive { background: #4caf50; }
+.order-avatar.bg-negative { background: #f44336; }
+
+.order-avatar .material-icons {
+  font-size: 20px;
+}
+
 .order-content {
   flex: 1;
   min-width: 0;
@@ -233,15 +309,26 @@
 }
 
 .q-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 11px;
   font-weight: 500;
 }
 
+.q-chip .material-icons {
+  font-size: 14px;
+}
+
 .q-chip.positive { background: #4caf50; color: white; }
 .q-chip.negative { background: #f44336; color: white; }
+.q-chip.bg-warning { background: #ff9800; color: white; }
+.q-chip.bg-info { background: #2196f3; color: white; }
+.q-chip.bg-primary { background: #1976d2; color: white; }
+.q-chip.bg-positive { background: #4caf50; color: white; }
+.q-chip.bg-negative { background: #f44336; color: white; }
 .q-chip.outline { background: transparent; border: 1px solid #999; color: #666; }
 
 .order-side {
@@ -275,6 +362,10 @@
   color: white;
 }
 
+.action-btn .material-icons {
+  font-size: 16px;
+}
+
 .action-btn.positive { background: #4caf50; }
 .action-btn.negative { background: #f44336; }
 .action-btn.primary { background: #1976d2; }
@@ -301,6 +392,10 @@
   box-shadow: 0 11px 15px -7px rgba(0,0,0,0.2);
 }
 
+.modal-card.modal-wide {
+  max-width: 500px;
+}
+
 .modal-card h3 {
   margin: 0;
   padding: 16px;
@@ -321,6 +416,7 @@
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
+  font-family: inherit;
 }
 
 .q-input:focus {
@@ -335,83 +431,160 @@
   gap: 8px;
 }
 
-.zones-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
-  font-size: 14px;
-  color: #666;
-}
-
-.zones-grid {
+.row-gutter {
   display: flex;
+  gap: 16px;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 16px;
 }
 
-.zone-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #e3f2fd;
-  padding: 6px 12px;
-  border-radius: 16px;
-}
-
-.zone-zip {
-  font-weight: 500;
-  color: #1976d2;
-}
-
-.zone-delete {
-  background: none;
-  border: none;
-  color: #999;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 0;
-  line-height: 1;
-}
-
-.zone-delete:hover {
-  color: #f44336;
-}
-
-.add-zone-form {
+.col-actions {
   display: flex;
-  gap: 12px;
-  padding: 16px;
-  border-bottom: 1px solid #eee;
+  gap: 8px;
 }
 
-.add-zone-form .q-input {
+.col-search {
   flex: 1;
-  max-width: 300px;
+  min-width: 200px;
 }
 
-.settings-section {
-  padding: 16px;
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0 12px;
+}
+
+.search-input-wrapper .material-icons {
+  color: #999;
+  font-size: 20px;
+}
+
+.search-input-wrapper .q-input {
+  border: none;
+  padding: 10px 8px;
+}
+
+.search-input-wrapper .q-input:focus {
+  outline: none;
+}
+
+.q-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.q-table th,
+.q-table td {
+  padding: 12px 16px;
+  text-align: left;
   border-bottom: 1px solid #eee;
 }
 
-.settings-section h4 {
-  margin: 0 0 12px;
-  font-size: 1rem;
+.q-table th {
+  font-weight: 500;
+  color: #666;
+  font-size: 12px;
+  text-transform: uppercase;
 }
 
-.settings-section .form-row {
+.q-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.hint-text {
+  font-size: 12px;
+  color: #999;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
   margin-bottom: 12px;
 }
 
-.settings-section label {
+.form-group label {
   display: block;
   margin-bottom: 4px;
   font-size: 13px;
   color: #666;
 }
 
-.test-btn-row {
+.input-with-icon {
+  display: flex;
+  align-items: center;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.input-with-icon .q-input {
+  border: none;
+  flex: 1;
+}
+
+.input-with-icon .q-btn-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.row-buttons {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.toggle-row {
+  padding: 8px 0;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.toggle-label input {
+  width: 18px;
+  height: 18px;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.radio-option:hover {
+  background: #f5f5f5;
+}
+
+.radio-option input {
+  margin-top: 2px;
 }

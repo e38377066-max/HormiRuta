@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMessaging } from '../../contexts/MessagingContext'
 import './MessagingPages.css'
 
 export default function OrdersPage() {
+  const navigate = useNavigate()
   const { orders, stats, settings, fetchOrders, fetchStats, fetchSettings, confirmOrder, cancelOrder, completeOrder, createOrder, loading } = useMessaging()
   const [filter, setFilter] = useState('')
   const [showNewOrder, setShowNewOrder] = useState(false)
@@ -25,13 +27,13 @@ export default function OrdersPage() {
   ]
 
   const getStatusColor = (status) => {
-    const colors = { pending: '#ff9800', confirmed: '#2196f3', in_transit: '#1976d2', completed: '#4caf50', cancelled: '#f44336' }
-    return colors[status] || '#9e9e9e'
+    const colors = { pending: 'warning', confirmed: 'info', in_transit: 'primary', completed: 'positive', cancelled: 'negative' }
+    return colors[status] || 'grey'
   }
 
   const getStatusIcon = (status) => {
-    const icons = { pending: '⏰', confirmed: '✓', in_transit: '🚚', completed: '✓✓', cancelled: '✗' }
-    return icons[status] || '?'
+    const icons = { pending: 'schedule', confirmed: 'check_circle', in_transit: 'local_shipping', completed: 'done_all', cancelled: 'cancel' }
+    return icons[status] || 'help'
   }
 
   const getStatusLabel = (status) => {
@@ -59,11 +61,11 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="q-page">
-      <h2 className="page-title">
-        <span className="title-icon">💬</span>
+    <div className="q-page q-pa-md">
+      <div className="page-title">
+        <span className="material-icons">forum</span>
         Centro de Mensajeria
-      </h2>
+      </div>
 
       <div className="stats-row">
         <div className="stat-card bg-primary">
@@ -86,25 +88,28 @@ export default function OrdersPage() {
 
       {!settings?.has_api_token && (
         <div className="warning-card">
-          <span className="warning-icon">⚠️</span>
+          <span className="material-icons warning-icon">warning</span>
           <div className="warning-content">
             <div className="warning-title">Configuracion Requerida</div>
             <div className="warning-text">Necesitas configurar tu API token de Respond.io para empezar a recibir ordenes.</div>
           </div>
-          <a href="/messaging/settings" className="q-btn primary">Configurar</a>
+          <button className="q-btn primary" onClick={() => navigate('/messaging/settings')}>Configurar</button>
         </div>
       )}
 
       <div className="action-buttons">
         <button className="q-btn primary" onClick={() => setShowNewOrder(true)}>
-          ➕ Nueva Orden
+          <span className="material-icons">add</span>
+          Nueva Orden
         </button>
-        <a href="/messaging/coverage" className="q-btn secondary">
-          🗺️ Zonas de Cobertura
-        </a>
-        <a href="/messaging/settings" className="q-btn accent">
-          ⚙️ Configuracion
-        </a>
+        <button className="q-btn secondary" onClick={() => navigate('/messaging/coverage')}>
+          <span className="material-icons">map</span>
+          Zonas de Cobertura
+        </button>
+        <button className="q-btn accent" onClick={() => navigate('/messaging/settings')}>
+          <span className="material-icons">settings</span>
+          Configuracion
+        </button>
       </div>
 
       <div className="q-card">
@@ -123,7 +128,7 @@ export default function OrdersPage() {
           </div>
         ) : orders.length === 0 ? (
           <div className="empty-state">
-            <span className="empty-icon">📥</span>
+            <span className="material-icons empty-icon">inbox</span>
             <div>No hay ordenes aun</div>
             <div className="empty-caption">Las ordenes apareceran aqui cuando lleguen desde Respond.io</div>
           </div>
@@ -131,8 +136,8 @@ export default function OrdersPage() {
           <div className="orders-list">
             {orders.map(order => (
               <div key={order.id} className="order-item">
-                <div className="order-avatar" style={{ background: getStatusColor(order.status) }}>
-                  {getStatusIcon(order.status)}
+                <div className={`order-avatar bg-${getStatusColor(order.status)}`}>
+                  <span className="material-icons">{getStatusIcon(order.status)}</span>
                 </div>
                 <div className="order-content">
                   <div className="order-name">{order.customerName || order.customer_name || 'Sin nombre'}</div>
@@ -146,18 +151,24 @@ export default function OrdersPage() {
                 </div>
                 <div className="order-side">
                   <div className="order-date">{formatDate(order.createdAt || order.created_at)}</div>
-                  <span className="q-chip" style={{ background: getStatusColor(order.status), color: 'white' }}>
+                  <span className={`q-chip bg-${getStatusColor(order.status)}`}>
                     {getStatusLabel(order.status)}
                   </span>
                   <div className="order-actions">
                     {order.status === 'pending' && (
                       <>
-                        <button className="action-btn positive" onClick={() => confirmOrder(order.id)}>✓</button>
-                        <button className="action-btn negative" onClick={() => cancelOrder(order.id)}>✗</button>
+                        <button className="action-btn positive" onClick={() => confirmOrder(order.id)}>
+                          <span className="material-icons">check</span>
+                        </button>
+                        <button className="action-btn negative" onClick={() => cancelOrder(order.id)}>
+                          <span className="material-icons">close</span>
+                        </button>
                       </>
                     )}
                     {order.status === 'confirmed' && (
-                      <button className="action-btn primary" onClick={() => completeOrder(order.id)}>✓✓</button>
+                      <button className="action-btn primary" onClick={() => completeOrder(order.id)}>
+                        <span className="material-icons">done_all</span>
+                      </button>
                     )}
                   </div>
                 </div>

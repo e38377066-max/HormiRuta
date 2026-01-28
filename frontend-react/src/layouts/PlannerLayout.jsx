@@ -1,31 +1,87 @@
+import { useState, createContext, useContext } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import './PlannerLayout.css'
 
+const PlannerContext = createContext(null)
+
+export function usePlanner() {
+  return useContext(PlannerContext)
+}
+
 export default function PlannerLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const handleLogout = async () => {
     await logout()
     navigate('/login')
   }
 
+  const toggleDrawer = () => setDrawerOpen(!drawerOpen)
+  const closeDrawer = () => setDrawerOpen(false)
+
+  const menuItems = [
+    { icon: 'route', label: 'Planificador', path: '/planner' },
+    { icon: 'dashboard', label: 'Dashboard', path: '/messaging' },
+    { icon: 'forum', label: 'Mensajeria', path: '/messaging' },
+    { icon: 'map', label: 'Zonas', path: '/messaging/coverage' },
+    { icon: 'settings', label: 'Configuracion', path: '/messaging/settings' }
+  ]
+
+  const contextValue = {
+    toggleDrawer,
+    closeDrawer,
+    drawerOpen
+  }
+
   return (
-    <div className="planner-layout">
-      <header className="planner-header">
-        <button className="back-btn" onClick={() => navigate('/dashboard')}>
-          ← Dashboard
-        </button>
-        <h1 className="planner-title">HormiRuta</h1>
-        <div className="header-actions">
-          <span className="user-email">{user?.email}</span>
-          <button className="logout-btn-small" onClick={handleLogout}>🚪</button>
-        </div>
-      </header>
-      <main className="planner-content">
-        <Outlet />
-      </main>
-    </div>
+    <PlannerContext.Provider value={contextValue}>
+      <div className="planner-layout">
+        <div className={`drawer-overlay ${drawerOpen ? 'open' : ''}`} onClick={closeDrawer}></div>
+        
+        <aside className={`planner-drawer ${drawerOpen ? 'open' : ''}`}>
+          <div className="drawer-header">
+            <img src="/Hormiruta.png" alt="HormiRuta" className="drawer-logo" />
+            <div className="drawer-brand">HormiRuta</div>
+          </div>
+          
+          <div className="drawer-user">
+            <div className="user-avatar">
+              <span className="material-icons">person</span>
+            </div>
+            <div className="user-info">
+              <div className="user-name">{user?.name || 'Usuario'}</div>
+              <div className="user-email">{user?.email}</div>
+            </div>
+          </div>
+          
+          <nav className="drawer-nav">
+            {menuItems.map(item => (
+              <button 
+                key={item.path + item.label} 
+                className="drawer-item"
+                onClick={() => { navigate(item.path); closeDrawer() }}
+              >
+                <span className="material-icons">{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+          
+          <div className="drawer-footer">
+            <button className="drawer-item text-negative" onClick={handleLogout}>
+              <span className="material-icons">logout</span>
+              <span>Cerrar sesion</span>
+            </button>
+          </div>
+        </aside>
+        
+        <main className="planner-content">
+          <Outlet />
+        </main>
+      </div>
+    </PlannerContext.Provider>
   )
 }
