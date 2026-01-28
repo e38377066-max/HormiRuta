@@ -102,11 +102,12 @@
   left: 0;
   bottom: 0;
   width: 280px;
-  background: #fafafa;
+  background: #ffffff;
   transform: translateX(-100%);
   transition: transform 0.3s;
   overflow-y: auto;
   padding-top: 56px;
+  border-right: 1px solid #e0e0e0;
 }
 
 .q-drawer.open .q-drawer-content {
@@ -115,10 +116,11 @@
 
 .q-item-label {
   padding: 16px 16px 8px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #616161;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1976d2;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .q-item {
@@ -126,7 +128,7 @@
   align-items: center;
   padding: 12px 16px;
   text-decoration: none;
-  color: #212121;
+  color: #333333;
   border: none;
   background: none;
   width: 100%;
@@ -134,22 +136,28 @@
   cursor: pointer;
   transition: background 0.2s;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .q-item:hover {
-  background: rgba(0,0,0,0.04);
+  background: #f0f4f8;
 }
 
 .q-item.active {
-  background: rgba(25, 118, 210, 0.12);
-  color: #1976d2;
+  background: #e3f2fd;
+  color: #1565c0;
 }
 
 .q-item-icon {
   margin-right: 16px;
-  font-size: 24px;
+  font-size: 22px;
   width: 24px;
   text-align: center;
+  color: #555555;
+}
+
+.q-item.active .q-item-icon {
+  color: #1565c0;
 }
 
 .q-btn-icon .material-icons {
@@ -157,7 +165,11 @@
 }
 
 .q-item.logout {
-  color: #f44336;
+  color: #d32f2f;
+}
+
+.q-item.logout .q-item-icon {
+  color: #d32f2f;
 }
 
 .q-separator {
@@ -184,7 +196,6 @@
   
   .q-drawer-content {
     transform: translateX(0);
-    border-right: 1px solid #e0e0e0;
   }
   
   .q-page-container {
