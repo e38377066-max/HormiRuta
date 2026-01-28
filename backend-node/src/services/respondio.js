@@ -56,17 +56,17 @@ class RespondioService {
       if (cursorId) params.cursorId = cursorId;
 
       const body = {
-        search: search || '',
-        filter: { $and: [] },
-        timezone: 'America/Mexico_City'
+        search: search || ''
       };
 
       if (status) {
-        body.filter.$and.push({
-          field: 'status',
-          operator: 'isEqualTo',
-          value: status
-        });
+        body.filter = {
+          $and: [{
+            field: 'status',
+            operator: 'isEqualTo',
+            value: status
+          }]
+        };
       }
 
       const response = await this.client.post('/contact/list', body, { params });
