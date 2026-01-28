@@ -1,6 +1,7 @@
 .q-page {
   max-width: 1200px;
   margin: 0 auto;
+  overflow-anchor: none;
 }
 
 .q-pa-md {
@@ -506,6 +507,13 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  overflow-anchor: none;
+}
+
+.settings-grid textarea,
+.settings-grid input {
+  scroll-margin: 0;
+  -webkit-overflow-scrolling: auto;
 }
 
 @media (max-width: 900px) {
