@@ -1,7 +1,9 @@
 .q-layout {
   min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .q-header {
@@ -183,6 +185,10 @@
   margin-top: 56px;
   padding: 16px;
   background: #f5f5f5;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 @media (min-width: 1024px) {
