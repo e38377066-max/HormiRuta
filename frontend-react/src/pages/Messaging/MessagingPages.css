@@ -653,9 +653,41 @@
 }
 
 .input-label {
-  color: #222;
+  color: #000;
   font-weight: 500;
   font-size: 13px;
   margin-bottom: 6px;
   display: block;
+}
+
+.q-card,
+.q-card * {
+  color: #000;
+}
+
+.q-card .q-chip,
+.q-card .q-chip * {
+  color: white;
+}
+
+.q-card .q-btn,
+.q-card .q-btn * {
+  color: white;
+}
+
+.q-card .q-btn.flat,
+.q-card .q-btn.flat * {
+  color: #000;
+}
+
+.q-card .q-input {
+  color: #000;
+}
+
+.q-card h3,
+.q-card h4,
+.q-card label,
+.q-card span,
+.q-card p {
+  color: #000 !important;
 }
