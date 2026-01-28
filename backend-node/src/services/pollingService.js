@@ -85,31 +85,28 @@ class PollingService {
   async pollForNewMessages(userId, apiToken, poller) {
     const respondio = new RespondioService(apiToken);
     
-    const pendingContacts = await respondio.listContactsByLifecycle({ 
-      lifecycleStage: 'Pending',
-      limit: 50 
-    });
+    const [pendingContacts, newLeadContacts, approvedContacts] = await Promise.all([
+      respondio.listContactsByLifecycle({ lifecycleStage: 'Pending', limit: 50 }),
+      respondio.listContactsByLifecycle({ lifecycleStage: 'New Lead', limit: 50 }),
+      respondio.listContactsByLifecycle({ lifecycleStage: 'Approved', limit: 50 })
+    ]);
 
-    const newLeadContacts = await respondio.listContactsByLifecycle({ 
-      lifecycleStage: 'New Lead',
-      limit: 50 
-    });
-
-    if (!pendingContacts.success && !newLeadContacts.success) {
-      console.error('Failed to fetch contacts:', pendingContacts.error || newLeadContacts.error);
+    if (!pendingContacts.success && !newLeadContacts.success && !approvedContacts.success) {
+      console.error('Failed to fetch contacts:', pendingContacts.error || newLeadContacts.error || approvedContacts.error);
       return;
     }
 
     const allContacts = [
       ...(pendingContacts.items || []),
-      ...(newLeadContacts.items || [])
+      ...(newLeadContacts.items || []),
+      ...(approvedContacts.items || [])
     ];
     
     const uniqueContacts = allContacts.filter((contact, index, self) =>
       index === self.findIndex(c => c.id === contact.id)
     );
 
-    console.log(`Found ${uniqueContacts.length} pending/new contacts (Pending: ${pendingContacts.items?.length || 0}, New Lead: ${newLeadContacts.items?.length || 0})`);
+    console.log(`Found ${uniqueContacts.length} contacts (Pending: ${pendingContacts.items?.length || 0}, New Lead: ${newLeadContacts.items?.length || 0}, Approved: ${approvedContacts.items?.length || 0})`);
 
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio);
