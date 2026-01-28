@@ -14,8 +14,9 @@ export default function TripPlannerPage() {
   const searchInputRef = useRef(null)
   const userLocationMarkerRef = useRef(null)
   const watchIdRef = useRef(null)
+  const selectedMarkerRef = useRef(null)
   const [userLocation, setUserLocation] = useState(null)
-  const [addingStopMode, setAddingStopMode] = useState(false)
+  const [selectedPoint, setSelectedPoint] = useState(null)
   
   const [stops, setStops] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -214,25 +215,64 @@ export default function TripPlannerPage() {
     const lat = e.latLng.lat()
     const lng = e.latLng.lng()
     
-    addStop({
-      address: `Ubicación ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-      latitude: lat,
-      longitude: lng
+    if (selectedMarkerRef.current) {
+      selectedMarkerRef.current.setMap(null)
+    }
+
+    selectedMarkerRef.current = new window.google.maps.Marker({
+      position: { lat, lng },
+      map: mapInstanceRef.current,
+      icon: {
+        url: 'data:image/svg+xml,' + encodeURIComponent(`
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50">
+            <path d="M20 0C8.954 0 0 8.954 0 20c0 15 20 30 20 30s20-15 20-30c0-11.046-8.954-20-20-20z" fill="#5b8def" stroke="white" stroke-width="2"/>
+            <circle cx="20" cy="18" r="8" fill="white"/>
+          </svg>
+        `),
+        anchor: new window.google.maps.Point(20, 50),
+        scaledSize: new window.google.maps.Size(40, 50)
+      },
+      animation: window.google.maps.Animation.DROP,
+      zIndex: 1000
     })
 
+    let address = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+    
     const geocoder = new window.google.maps.Geocoder()
     try {
       const result = await geocoder.geocode({ location: { lat, lng } })
       if (result.results && result.results[0]) {
-        setStops(prev => prev.map(stop => 
-          stop.latitude === lat && stop.longitude === lng
-            ? { ...stop, address: result.results[0].formatted_address }
-            : stop
-        ))
+        address = result.results[0].formatted_address
       }
     } catch (err) {
-      console.log('Geocode not available, using coordinates')
+      console.log('Using coordinates as address')
     }
+
+    setSelectedPoint({ lat, lng, address })
+  }
+
+  const addSelectedPoint = () => {
+    if (!selectedPoint) return
+
+    addStop({
+      address: selectedPoint.address,
+      latitude: selectedPoint.lat,
+      longitude: selectedPoint.lng
+    })
+
+    if (selectedMarkerRef.current) {
+      selectedMarkerRef.current.setMap(null)
+      selectedMarkerRef.current = null
+    }
+    setSelectedPoint(null)
+  }
+
+  const cancelSelectedPoint = () => {
+    if (selectedMarkerRef.current) {
+      selectedMarkerRef.current.setMap(null)
+      selectedMarkerRef.current = null
+    }
+    setSelectedPoint(null)
   }
 
   useEffect(() => {
@@ -637,14 +677,32 @@ export default function TripPlannerPage() {
         </div>
         
         <div className="panel-footer">
-          <button 
-            className="btn-optimize" 
-            onClick={stops.length >= 2 ? optimizeRoute : focusSearch} 
-            disabled={optimizing}
-          >
-            <span className="material-icons">{stops.length >= 2 ? 'autorenew' : 'add'}</span>
-            {optimizing ? 'Optimizando...' : stops.length >= 2 ? 'Optimizar la ruta' : 'Añadir paradas'}
-          </button>
+          {selectedPoint ? (
+            <div className="selected-point-footer">
+              <div className="selected-point-info">
+                <span className="material-icons" style={{ color: '#5b8def' }}>place</span>
+                <span className="selected-address">{selectedPoint.address?.split(',')[0] || 'Ubicación seleccionada'}</span>
+              </div>
+              <div className="selected-point-actions">
+                <button className="btn-cancel" onClick={cancelSelectedPoint}>
+                  Cancelar
+                </button>
+                <button className="btn-add-stop" onClick={addSelectedPoint}>
+                  <span className="material-icons">add</span>
+                  Parada {stops.length + 1}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button 
+              className="btn-optimize" 
+              onClick={stops.length >= 2 ? optimizeRoute : focusSearch} 
+              disabled={optimizing}
+            >
+              <span className="material-icons">{stops.length >= 2 ? 'autorenew' : 'add'}</span>
+              {optimizing ? 'Optimizando...' : stops.length >= 2 ? 'Optimizar la ruta' : 'Añadir paradas'}
+            </button>
+          )}
         </div>
       </div>
       
