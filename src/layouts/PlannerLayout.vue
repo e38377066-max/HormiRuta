@@ -89,6 +89,18 @@
 
       <div class="q-pa-md">
         <q-btn 
+          v-if="authStore.isAdmin"
+          color="deep-purple" 
+          class="full-width q-mb-sm"
+          size="md"
+          unelevated
+          to="/admin"
+          @click="leftDrawerOpen = false"
+        >
+          <q-icon name="admin_panel_settings" class="q-mr-sm" />
+          Panel de Admin
+        </q-btn>
+        <q-btn 
           color="primary" 
           class="full-width create-route-btn"
           size="lg"
@@ -157,7 +169,8 @@ const createNewRoute = () => {
   router.push('/planner')
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await authStore.fetchCurrentUser()
   fetchRecentRoutes()
 })
 </script>
