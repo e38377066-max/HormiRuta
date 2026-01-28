@@ -250,7 +250,7 @@ const toggleActive = async (user) => {
       message: user.active ? 'Usuario desactivado' : 'Usuario activado' 
     })
     fetchUsers()
-  } catch (err) {
+  } catch {
     $q.notify({ type: 'negative', message: 'Error al cambiar estado' })
   }
 }
