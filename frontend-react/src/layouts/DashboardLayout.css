@@ -191,20 +191,3 @@
   overscroll-behavior: contain;
 }
 
-@media (min-width: 1024px) {
-  .q-drawer {
-    pointer-events: auto;
-  }
-  
-  .q-drawer-backdrop {
-    display: none;
-  }
-  
-  .q-drawer-content {
-    transform: translateX(0);
-  }
-  
-  .q-page-container {
-    margin-left: 280px;
-  }
-}
