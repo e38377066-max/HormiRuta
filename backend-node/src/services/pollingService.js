@@ -152,7 +152,10 @@ class PollingService {
       const addressValidation = new AddressValidationService(userId);
       const validation = await addressValidation.validateAddress(messageText);
 
+      console.log(`Message from ${contact.firstName}: "${messageText.substring(0, 50)}..." - isAddress: ${validation.isAddress}`);
+
       if (validation.isAddress) {
+        console.log(`Creating/updating order for address: ${messageText.substring(0, 50)}...`);
         let order = await MessagingOrder.findOne({
           where: {
             user_id: userId,

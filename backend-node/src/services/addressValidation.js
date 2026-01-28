@@ -61,15 +61,38 @@ class AddressValidationService {
     };
   }
 
+  isLikelyAddress(text) {
+    if (!text || text.length < 10) return false;
+    
+    const lowerText = text.toLowerCase();
+    
+    const addressIndicators = [
+      'street', 'st', 'avenue', 'ave', 'road', 'rd', 'drive', 'dr',
+      'lane', 'ln', 'boulevard', 'blvd', 'way', 'court', 'ct',
+      'place', 'pl', 'circle', 'cir', 'highway', 'hwy',
+      'calle', 'avenida', 'carretera', 'camino',
+      'apt', 'apartment', 'suite', 'unit', '#',
+      'floor', 'building', 'bldg'
+    ];
+    
+    const hasAddressWord = addressIndicators.some(ind => lowerText.includes(ind));
+    const hasNumber = /\d+/.test(text);
+    const hasZipCode = this.extractZipCode(text) !== null;
+    
+    return hasZipCode || (hasAddressWord && hasNumber);
+  }
+
   async validateAddress(address) {
     const zipCode = this.extractZipCode(address);
     const addressType = this.detectAddressType(address);
     const coverageResult = await this.checkCoverage(zipCode);
+    const isAddress = this.isLikelyAddress(address);
 
     return {
       address,
       zipCode,
       addressType,
+      isAddress,
       hasCoverage: coverageResult.hasCoverage,
       zone: coverageResult.zone,
       validationMessage: coverageResult.hasCoverage
