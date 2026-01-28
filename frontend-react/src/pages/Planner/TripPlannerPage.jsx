@@ -373,35 +373,129 @@ export default function TripPlannerPage() {
     setOptimizing(true)
 
     try {
-      if (!currentRouteId) {
-        const response = await api.post('/api/routes', { name: routeName })
-        setCurrentRouteId(response.data.id)
+      const oldDistance = totalDistance
+      
+      // Intentar usar el backend primero
+      try {
+        let routeId = currentRouteId
         
-        for (const stop of stops) {
-          await api.post(`/api/routes/${response.data.id}/stops`, {
-            address: stop.address,
-            latitude: stop.latitude,
-            longitude: stop.longitude
-          })
+        if (!routeId) {
+          const response = await api.post('/api/routes', { name: routeName })
+          routeId = response.data.route?.id || response.data.id
+          setCurrentRouteId(routeId)
+          
+          for (const stop of stops) {
+            await api.post(`/api/routes/${routeId}/stops`, {
+              address: stop.address,
+              lat: stop.latitude,
+              lng: stop.longitude
+            })
+          }
         }
         
-        const optimized = await api.post(`/api/routes/${response.data.id}/optimize`)
-        if (optimized.data.stops) {
-          const oldDistance = totalDistance
-          setStops(optimized.data.stops.map((s, i) => ({ ...s, id: i + 1 })))
-          await calculateRoute(optimized.data.stops)
-          setSavedDistance(oldDistance - totalDistance)
+        const startLoc = userLocation || (stops[0] ? { lat: stops[0].latitude, lng: stops[0].longitude } : null)
+        
+        const optimized = await api.post(`/api/routes/${routeId}/optimize`, {
+          start_lat: startLoc?.lat,
+          start_lng: startLoc?.lng,
+          return_to_start: roundTrip
+        })
+        
+        if (optimized.data.route?.stops) {
+          const backendStops = optimized.data.route.stops.map((s, i) => ({
+            id: i + 1,
+            address: s.address,
+            latitude: s.lat,
+            longitude: s.lng,
+            completed: false,
+            color: '#EA4335'
+          }))
+          setStops(backendStops)
+          updateMapMarkers(backendStops)
+          await calculateRoute(backendStops)
+          
+          if (optimized.data.total_distance_km) {
+            setTotalDistance(optimized.data.total_distance_km)
+            setTotalDuration(optimized.data.total_duration_min)
+          }
         }
-      } else {
-        const optimized = await api.post(`/api/routes/${currentRouteId}/optimize`)
-        if (optimized.data.stops) {
-          setStops(optimized.data.stops.map((s, i) => ({ ...s, id: i + 1 })))
-          await calculateRoute(optimized.data.stops)
+        
+        setIsOptimized(true)
+        setOptimizing(false)
+        return
+      } catch (backendErr) {
+        console.log('Backend not available, using Google Maps optimization')
+      }
+
+      // Fallback: usar Google Maps directamente
+      if (stops.length === 2) {
+        await calculateRoute(stops)
+        setIsOptimized(true)
+        setOptimizing(false)
+        return
+      }
+
+      const directionsService = new window.google.maps.DirectionsService()
+      
+      const origin = { lat: stops[0].latitude, lng: stops[0].longitude }
+      const destination = roundTrip 
+        ? origin 
+        : { lat: stops[stops.length - 1].latitude, lng: stops[stops.length - 1].longitude }
+      
+      const waypointStops = roundTrip ? stops : stops.slice(1, -1)
+      const waypoints = waypointStops.map(stop => ({
+        location: { lat: stop.latitude, lng: stop.longitude },
+        stopover: true
+      }))
+
+      const result = await directionsService.route({
+        origin,
+        destination,
+        waypoints,
+        optimizeWaypoints: true,
+        travelMode: window.google.maps.TravelMode.DRIVING
+      })
+
+      if (result.routes[0].waypoint_order) {
+        const waypointOrder = result.routes[0].waypoint_order
+        let optimizedStops
+        
+        if (roundTrip) {
+          optimizedStops = [stops[0], ...waypointOrder.map(i => stops[i])]
+        } else {
+          const middleStops = stops.slice(1, -1)
+          const optimizedMiddle = waypointOrder.map(i => middleStops[i])
+          optimizedStops = [stops[0], ...optimizedMiddle, stops[stops.length - 1]]
+        }
+        
+        const reorderedStops = optimizedStops.map((stop, i) => ({
+          ...stop,
+          id: i + 1
+        }))
+        
+        setStops(reorderedStops)
+        updateMapMarkers(reorderedStops)
+        
+        directionsRendererRef.current.setDirections(result)
+        
+        let distance = 0, duration = 0
+        result.routes[0].legs.forEach(leg => {
+          distance += leg.distance.value
+          duration += leg.duration.value
+        })
+        setTotalDistance(distance / 1000)
+        setTotalDuration(duration / 60)
+        
+        if (oldDistance > 0) {
+          setSavedDistance(oldDistance - (distance / 1000))
         }
       }
+      
       setIsOptimized(true)
     } catch (err) {
       console.error('Error optimizing:', err)
+      await calculateRoute(stops)
+      setIsOptimized(true)
     } finally {
       setOptimizing(false)
     }
