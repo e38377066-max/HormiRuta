@@ -31,6 +31,12 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 ```
 
 ## Recent Changes
+- 2026-01-28: Added role-based access control and admin panel
+  - User roles: admin, client, driver
+  - Admin dashboard with user statistics
+  - User management: list, edit, activate/deactivate, change roles
+  - Admin-only menu item in sidebar
+  - Role-based middleware for protected routes
 - 2026-01-27: Added polling mode for Respond.io (no webhook required)
   - Polling service to fetch new messages periodically (configurable interval)
   - List contacts with open conversations from Respond.io API
