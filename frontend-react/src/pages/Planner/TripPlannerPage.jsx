@@ -52,12 +52,7 @@ export default function TripPlannerPage() {
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      zoomControl: false,
-      styles: [
-        { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-        { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] }
-      ]
+      zoomControl: false
     })
 
     directionsRendererRef.current = new google.maps.DirectionsRenderer({
