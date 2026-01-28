@@ -95,43 +95,39 @@ export default function AdminUsers() {
 
   if (loading) {
     return (
-      <div className="admin-page">
-        <div className="admin-container">
-          <div className="loading-container"><div className="spinner"></div></div>
+      <div className="page-container">
+        <div className="loading-container">
+          <div className="spinner"></div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="admin-page">
-      <div className="admin-container">
-        <div className="page-header">
-          <button className="back-btn" onClick={() => navigate(-1)}>
-            <span className="material-icons">arrow_back</span>
-          </button>
-          <h1 className="page-title">
-            <span className="material-icons">people</span>
-            {roleFilter ? `Usuarios (${getRoleLabel(roleFilter)})` : 'Todos los Usuarios'}
-          </h1>
-        </div>
+    <div className="page-container">
+      <div className="page-header">
+        <button className="back-button" onClick={() => navigate(-1)}>
+          <span className="material-icons">arrow_back</span>
+        </button>
+        <h1>{roleFilter ? `Usuarios (${getRoleLabel(roleFilter)})` : 'Todos los Usuarios'}</h1>
+      </div>
 
-        <div className="search-bar">
-          <div className="search-input-container">
-            <span className="material-icons">search</span>
-            <input
-              type="text"
-              className="search-input"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por nombre o email..."
-            />
-          </div>
-          <span className="user-count">{filteredUsers.length} usuarios</span>
+      <div className="action-bar">
+        <div className="search-box">
+          <span className="material-icons">search</span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar por nombre o email..."
+          />
         </div>
+        <span className="counter">{filteredUsers.length} usuarios</span>
+      </div>
 
-        <div className="users-table-card">
-          <table className="users-table">
+      <div className="content-card">
+        <div className="table-container">
+          <table className="data-table">
             <thead>
               <tr>
                 <th>Usuario</th>
@@ -147,31 +143,29 @@ export default function AdminUsers() {
                 <tr key={user.id}>
                   <td>
                     <div className="user-cell">
-                      <div className="user-avatar">
-                        {getInitials(user.name, user.email)}
-                      </div>
-                      <span className="user-name">{user.name || 'Sin nombre'}</span>
+                      <div className="avatar">{getInitials(user.name, user.email)}</div>
+                      <span>{user.name || 'Sin nombre'}</span>
                     </div>
                   </td>
                   <td>{user.email}</td>
                   <td>
-                    <span className={`role-badge ${user.role}`}>
+                    <span className={`role-tag ${user.role}`}>
                       {getRoleLabel(user.role)}
                     </span>
                   </td>
                   <td>
-                    <span className={`status-badge ${user.isActive !== false ? 'active' : 'inactive'}`}>
+                    <span className={`status-tag ${user.isActive !== false ? 'active' : 'inactive'}`}>
                       <span className="status-dot"></span>
                       {user.isActive !== false ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
                   <td>{formatDate(user.createdAt)}</td>
                   <td>
-                    <button className="action-btn" onClick={() => openEditDialog(user)} title="Editar">
+                    <button className="icon-btn" onClick={() => openEditDialog(user)} title="Editar">
                       <span className="material-icons">edit</span>
                     </button>
                     <button 
-                      className={`action-btn ${user.isActive !== false ? 'danger' : 'success'}`}
+                      className={`icon-btn ${user.isActive !== false ? 'danger' : 'success'}`}
                       onClick={() => handleToggleActive(user)}
                       title={user.isActive !== false ? 'Desactivar' : 'Activar'}
                     >
@@ -183,7 +177,7 @@ export default function AdminUsers() {
               {filteredUsers.length === 0 && (
                 <tr>
                   <td colSpan="6">
-                    <div className="empty-state">
+                    <div className="empty-state small">
                       <span className="material-icons">people_outline</span>
                       <p>No hay usuarios</p>
                     </div>
@@ -193,68 +187,65 @@ export default function AdminUsers() {
             </tbody>
           </table>
         </div>
+      </div>
 
-        {showEditDialog && editingUser && (
-          <div className="modal-overlay" onClick={() => setShowEditDialog(false)}>
-            <div className="modal-card" onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
-                <h3>Editar Usuario</h3>
+      {showEditDialog && editingUser && (
+        <div className="modal-backdrop" onClick={() => setShowEditDialog(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Editar Usuario</h3>
+              <button className="modal-close" onClick={() => setShowEditDialog(false)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="field-group">
+                <label>Nombre</label>
+                <input
+                  type="text"
+                  value={editingUser.name || ''}
+                  onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
+                />
               </div>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label className="form-label">Nombre</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={editingUser.name || ''}
-                    onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Email</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={editingUser.email || ''}
-                    disabled
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Rol</label>
-                  <select
-                    className="form-select"
-                    value={editingUser.role}
-                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
-                  >
-                    <option value="client">Cliente</option>
-                    <option value="driver">Repartidor</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <div className="toggle-container">
-                    <label className="toggle-switch">
-                      <input
-                        type="checkbox"
-                        checked={editingUser.isActive !== false}
-                        onChange={(e) => setEditingUser({ ...editingUser, isActive: e.target.checked })}
-                      />
-                      <span className="toggle-slider"></span>
-                    </label>
-                    <span className="toggle-text">Usuario activo</span>
-                  </div>
-                </div>
+              <div className="field-group">
+                <label>Email</label>
+                <input
+                  type="text"
+                  value={editingUser.email || ''}
+                  disabled
+                />
               </div>
-              <div className="modal-footer">
-                <button className="btn btn-cancel" onClick={() => setShowEditDialog(false)}>Cancelar</button>
-                <button className="btn btn-primary" onClick={handleSaveUser} disabled={saving}>
-                  {saving ? 'Guardando...' : 'Guardar'}
-                </button>
+              <div className="field-group">
+                <label>Rol</label>
+                <select
+                  value={editingUser.role}
+                  onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                >
+                  <option value="client">Cliente</option>
+                  <option value="driver">Repartidor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={editingUser.isActive !== false}
+                    onChange={(e) => setEditingUser({ ...editingUser, isActive: e.target.checked })}
+                  />
+                  <span>Usuario activo</span>
+                </label>
               </div>
             </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setShowEditDialog(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={handleSaveUser} disabled={saving}>
+                {saving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

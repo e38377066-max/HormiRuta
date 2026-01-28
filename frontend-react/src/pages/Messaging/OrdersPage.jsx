@@ -27,7 +27,7 @@ export default function OrdersPage() {
   ]
 
   const getStatusColor = (status) => {
-    const colors = { pending: 'warning', confirmed: 'info', in_transit: 'primary', completed: 'positive', cancelled: 'negative' }
+    const colors = { pending: 'warning', confirmed: 'info', in_transit: 'primary', completed: 'success', cancelled: 'danger' }
     return colors[status] || 'grey'
   }
 
@@ -61,61 +61,60 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="q-page q-pa-md">
-      <div className="page-title">
-        <span className="material-icons">forum</span>
-        Centro de Mensajeria
+    <div className="page-container">
+      <div className="page-header">
+        <h1>Centro de Mensajeria</h1>
       </div>
 
-      <div className="stats-row">
-        <div className="stat-card bg-primary">
+      <div className="stats-grid">
+        <div className="stat-card blue">
           <div className="stat-value">{stats?.todayOrders || 0}</div>
           <div className="stat-label">Ordenes Hoy</div>
         </div>
-        <div className="stat-card bg-warning">
+        <div className="stat-card orange">
           <div className="stat-value">{stats?.pending || 0}</div>
           <div className="stat-label">Pendientes</div>
         </div>
-        <div className="stat-card bg-info">
+        <div className="stat-card cyan">
           <div className="stat-value">{stats?.confirmed || 0}</div>
           <div className="stat-label">Confirmadas</div>
         </div>
-        <div className="stat-card bg-positive">
+        <div className="stat-card green">
           <div className="stat-value">{stats?.completed || 0}</div>
           <div className="stat-label">Completadas</div>
         </div>
       </div>
 
       {!settings?.has_api_token && (
-        <div className="warning-card">
-          <span className="material-icons warning-icon">warning</span>
-          <div className="warning-content">
-            <div className="warning-title">Configuracion Requerida</div>
-            <div className="warning-text">Necesitas configurar tu API token de Respond.io para empezar a recibir ordenes.</div>
+        <div className="alert-card warning">
+          <span className="material-icons">warning</span>
+          <div className="alert-content">
+            <strong>Configuracion Requerida</strong>
+            <p>Necesitas configurar tu API token de Respond.io para empezar a recibir ordenes.</p>
           </div>
-          <button className="q-btn primary" onClick={() => navigate('/messaging/settings')}>Configurar</button>
+          <button className="btn-primary" onClick={() => navigate('/messaging/settings')}>Configurar</button>
         </div>
       )}
 
-      <div className="action-buttons">
-        <button className="q-btn primary" onClick={() => setShowNewOrder(true)}>
+      <div className="action-bar">
+        <button className="btn-primary" onClick={() => setShowNewOrder(true)}>
           <span className="material-icons">add</span>
           Nueva Orden
         </button>
-        <button className="q-btn secondary" onClick={() => navigate('/messaging/coverage')}>
+        <button className="btn-secondary" onClick={() => navigate('/messaging/coverage')}>
           <span className="material-icons">map</span>
           Zonas de Cobertura
         </button>
-        <button className="q-btn accent" onClick={() => navigate('/messaging/settings')}>
+        <button className="btn-accent" onClick={() => navigate('/messaging/settings')}>
           <span className="material-icons">settings</span>
           Configuracion
         </button>
       </div>
 
-      <div className="q-card">
-        <div className="card-header">
+      <div className="content-card">
+        <div className="card-toolbar">
           <h3>Ordenes Recientes</h3>
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className="filter-select">
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
             {statusOptions.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
@@ -123,50 +122,50 @@ export default function OrdersPage() {
         </div>
 
         {loading ? (
-          <div className="loading-state">
+          <div className="loading-container">
             <div className="spinner"></div>
           </div>
         ) : orders.length === 0 ? (
           <div className="empty-state">
-            <span className="material-icons empty-icon">inbox</span>
-            <div>No hay ordenes aun</div>
-            <div className="empty-caption">Las ordenes apareceran aqui cuando lleguen desde Respond.io</div>
+            <span className="material-icons">inbox</span>
+            <p>No hay ordenes aun</p>
+            <span className="empty-hint">Las ordenes apareceran aqui cuando lleguen desde Respond.io</span>
           </div>
         ) : (
           <div className="orders-list">
             {orders.map(order => (
-              <div key={order.id} className="order-item">
-                <div className={`order-avatar bg-${getStatusColor(order.status)}`}>
+              <div key={order.id} className="order-card">
+                <div className={`order-icon ${getStatusColor(order.status)}`}>
                   <span className="material-icons">{getStatusIcon(order.status)}</span>
                 </div>
-                <div className="order-content">
+                <div className="order-info">
                   <div className="order-name">{order.customerName || order.customer_name || 'Sin nombre'}</div>
                   <div className="order-address">{order.address || 'Sin direccion'}</div>
-                  <div className="order-chips">
-                    <span className={`q-chip ${order.validation_status === 'valid' || order.hasCoverage ? 'positive' : 'negative'}`}>
+                  <div className="order-tags">
+                    <span className={`tag ${order.validation_status === 'valid' || order.hasCoverage ? 'success' : 'danger'}`}>
                       {order.validation_status === 'valid' || order.hasCoverage ? 'Cobertura OK' : 'Sin cobertura'}
                     </span>
-                    {order.channel_type && <span className="q-chip outline">{order.channel_type}</span>}
+                    {order.channel_type && <span className="tag outline">{order.channel_type}</span>}
                   </div>
                 </div>
-                <div className="order-side">
+                <div className="order-meta">
                   <div className="order-date">{formatDate(order.createdAt || order.created_at)}</div>
-                  <span className={`q-chip bg-${getStatusColor(order.status)}`}>
+                  <span className={`tag ${getStatusColor(order.status)}`}>
                     {getStatusLabel(order.status)}
                   </span>
                   <div className="order-actions">
                     {order.status === 'pending' && (
                       <>
-                        <button className="action-btn positive" onClick={() => confirmOrder(order.id)}>
+                        <button className="icon-btn success" onClick={() => confirmOrder(order.id)} title="Confirmar">
                           <span className="material-icons">check</span>
                         </button>
-                        <button className="action-btn negative" onClick={() => cancelOrder(order.id)}>
+                        <button className="icon-btn danger" onClick={() => cancelOrder(order.id)} title="Cancelar">
                           <span className="material-icons">close</span>
                         </button>
                       </>
                     )}
                     {order.status === 'confirmed' && (
-                      <button className="action-btn primary" onClick={() => completeOrder(order.id)}>
+                      <button className="icon-btn primary" onClick={() => completeOrder(order.id)} title="Completar">
                         <span className="material-icons">done_all</span>
                       </button>
                     )}
@@ -179,42 +178,51 @@ export default function OrdersPage() {
       </div>
 
       {showNewOrder && (
-        <div className="modal-overlay" onClick={() => setShowNewOrder(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Nueva Orden Manual</h3>
-            <div className="modal-form">
-              <input
-                type="text"
-                placeholder="Nombre del cliente"
-                value={newOrder.customer_name}
-                onChange={(e) => setNewOrder({ ...newOrder, customer_name: e.target.value })}
-                className="q-input"
-              />
-              <input
-                type="text"
-                placeholder="Telefono"
-                value={newOrder.customer_phone}
-                onChange={(e) => setNewOrder({ ...newOrder, customer_phone: e.target.value })}
-                className="q-input"
-              />
-              <textarea
-                placeholder="Direccion de entrega"
-                value={newOrder.address}
-                onChange={(e) => setNewOrder({ ...newOrder, address: e.target.value })}
-                className="q-input"
-                rows={2}
-              />
-              <textarea
-                placeholder="Notas adicionales"
-                value={newOrder.notes}
-                onChange={(e) => setNewOrder({ ...newOrder, notes: e.target.value })}
-                className="q-input"
-                rows={2}
-              />
+        <div className="modal-backdrop" onClick={() => setShowNewOrder(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Nueva Orden Manual</h3>
+              <button className="modal-close" onClick={() => setShowNewOrder(false)}>
+                <span className="material-icons">close</span>
+              </button>
             </div>
-            <div className="modal-actions">
-              <button className="q-btn flat" onClick={() => setShowNewOrder(false)}>Cancelar</button>
-              <button className="q-btn primary" onClick={handleCreateOrder} disabled={creating}>
+            <div className="modal-body">
+              <div className="field-group">
+                <label>Nombre del cliente</label>
+                <input
+                  type="text"
+                  value={newOrder.customer_name}
+                  onChange={(e) => setNewOrder({ ...newOrder, customer_name: e.target.value })}
+                />
+              </div>
+              <div className="field-group">
+                <label>Telefono</label>
+                <input
+                  type="text"
+                  value={newOrder.customer_phone}
+                  onChange={(e) => setNewOrder({ ...newOrder, customer_phone: e.target.value })}
+                />
+              </div>
+              <div className="field-group">
+                <label>Direccion de entrega</label>
+                <textarea
+                  rows={2}
+                  value={newOrder.address}
+                  onChange={(e) => setNewOrder({ ...newOrder, address: e.target.value })}
+                />
+              </div>
+              <div className="field-group">
+                <label>Notas adicionales</label>
+                <textarea
+                  rows={2}
+                  value={newOrder.notes}
+                  onChange={(e) => setNewOrder({ ...newOrder, notes: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setShowNewOrder(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={handleCreateOrder} disabled={creating}>
                 {creating ? 'Creando...' : 'Crear Orden'}
               </button>
             </div>

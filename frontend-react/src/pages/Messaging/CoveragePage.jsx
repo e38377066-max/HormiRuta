@@ -137,154 +137,167 @@ export default function CoveragePage() {
   }
 
   return (
-    <div className="q-page q-pa-md">
-      <div className="page-title-row">
-        <button className="q-btn-icon" onClick={() => navigate(-1)}>
+    <div className="page-container">
+      <div className="page-header">
+        <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <div className="page-title">
-          <span className="material-icons">location_on</span>
-          Zonas de Cobertura
+        <h1>Zonas de Cobertura</h1>
+      </div>
+
+      <div className="action-bar">
+        <button className="btn-primary" onClick={() => { resetForm(); setShowAddDialog(true) }}>
+          <span className="material-icons">add</span>
+          Agregar ZIP Code
+        </button>
+        <button className="btn-secondary" onClick={() => setShowBulkDialog(true)}>
+          <span className="material-icons">playlist_add</span>
+          Agregar Multiples
+        </button>
+        <div className="search-box">
+          <span className="material-icons">search</span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar por ZIP code..."
+          />
         </div>
       </div>
 
-      <div className="row-gutter q-mb-md">
-        <div className="col-actions">
-          <button className="q-btn primary" onClick={() => { resetForm(); setShowAddDialog(true) }}>
-            <span className="material-icons">add</span>
-            Agregar ZIP Code
-          </button>
-          <button className="q-btn secondary" onClick={() => setShowBulkDialog(true)}>
-            <span className="material-icons">playlist_add</span>
-            Agregar Multiples
-          </button>
-        </div>
-        <div className="col-search">
-          <div className="search-input-wrapper">
-            <span className="material-icons">search</span>
-            <input
-              type="text"
-              className="q-input"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por ZIP code..."
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="q-card">
+      <div className="content-card">
         {loading ? (
-          <div className="loading-state">
+          <div className="loading-container">
             <div className="spinner"></div>
           </div>
         ) : (
-          <table className="q-table">
-            <thead>
-              <tr>
-                <th>ZIP Code</th>
-                <th>Zona</th>
-                <th>Ciudad</th>
-                <th>Estado</th>
-                <th>Costo</th>
-                <th>Activo</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredZones.map(zone => (
-                <tr key={zone.id}>
-                  <td>{zone.zip_code || zone.zipCode}</td>
-                  <td>{zone.zone_name || '-'}</td>
-                  <td>{zone.city || '-'}</td>
-                  <td>{zone.state || '-'}</td>
-                  <td>{zone.delivery_fee ? `$${zone.delivery_fee}` : '-'}</td>
-                  <td>
-                    <span className={`q-chip ${zone.is_active !== false ? 'positive' : 'negative'}`}>
-                      {zone.is_active !== false ? 'Si' : 'No'}
-                    </span>
-                  </td>
-                  <td>
-                    <button className="q-btn-icon" onClick={() => editZone(zone)}>
-                      <span className="material-icons">edit</span>
-                    </button>
-                    <button className="q-btn-icon text-negative" onClick={() => handleDelete(zone)}>
-                      <span className="material-icons">delete</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filteredZones.length === 0 && (
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <td colSpan="7" className="empty-state">
-                    No hay zonas de cobertura
-                  </td>
+                  <th>ZIP Code</th>
+                  <th>Zona</th>
+                  <th>Ciudad</th>
+                  <th>Estado</th>
+                  <th>Costo</th>
+                  <th>Activo</th>
+                  <th>Acciones</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredZones.map(zone => (
+                  <tr key={zone.id}>
+                    <td><strong>{zone.zip_code || zone.zipCode}</strong></td>
+                    <td>{zone.zone_name || '-'}</td>
+                    <td>{zone.city || '-'}</td>
+                    <td>{zone.state || '-'}</td>
+                    <td>{zone.delivery_fee ? `$${zone.delivery_fee}` : '-'}</td>
+                    <td>
+                      <span className={`tag ${zone.is_active !== false ? 'success' : 'danger'}`}>
+                        {zone.is_active !== false ? 'Si' : 'No'}
+                      </span>
+                    </td>
+                    <td>
+                      <button className="icon-btn" onClick={() => editZone(zone)} title="Editar">
+                        <span className="material-icons">edit</span>
+                      </button>
+                      <button className="icon-btn danger" onClick={() => handleDelete(zone)} title="Eliminar">
+                        <span className="material-icons">delete</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredZones.length === 0 && (
+                  <tr>
+                    <td colSpan="7">
+                      <div className="empty-state small">
+                        <span className="material-icons">location_off</span>
+                        <p>No hay zonas de cobertura</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {showAddDialog && (
-        <div className="modal-overlay" onClick={() => setShowAddDialog(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>{editingZone ? 'Editar Zona' : 'Nueva Zona de Cobertura'}</h3>
-            <div className="modal-form">
-              <input
-                type="text"
-                placeholder="Codigo Postal (ZIP)"
-                value={zoneForm.zip_code}
-                onChange={(e) => setZoneForm({ ...zoneForm, zip_code: e.target.value })}
-                className="q-input"
-                disabled={!!editingZone}
-              />
-              <input
-                type="text"
-                placeholder="Nombre de la zona"
-                value={zoneForm.zone_name}
-                onChange={(e) => setZoneForm({ ...zoneForm, zone_name: e.target.value })}
-                className="q-input"
-              />
-              <input
-                type="text"
-                placeholder="Ciudad"
-                value={zoneForm.city}
-                onChange={(e) => setZoneForm({ ...zoneForm, city: e.target.value })}
-                className="q-input"
-              />
-              <input
-                type="text"
-                placeholder="Estado"
-                value={zoneForm.state}
-                onChange={(e) => setZoneForm({ ...zoneForm, state: e.target.value })}
-                className="q-input"
-              />
-              <input
-                type="number"
-                placeholder="Costo de envio"
-                value={zoneForm.delivery_fee}
-                onChange={(e) => setZoneForm({ ...zoneForm, delivery_fee: e.target.value })}
-                className="q-input"
-              />
-              <input
-                type="number"
-                placeholder="Tiempo estimado (minutos)"
-                value={zoneForm.estimated_delivery_time}
-                onChange={(e) => setZoneForm({ ...zoneForm, estimated_delivery_time: e.target.value })}
-                className="q-input"
-              />
-              <textarea
-                placeholder="Notas"
-                value={zoneForm.notes}
-                onChange={(e) => setZoneForm({ ...zoneForm, notes: e.target.value })}
-                className="q-input"
-                rows={2}
-              />
+        <div className="modal-backdrop" onClick={() => setShowAddDialog(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{editingZone ? 'Editar Zona' : 'Nueva Zona de Cobertura'}</h3>
+              <button className="modal-close" onClick={() => { setShowAddDialog(false); resetForm() }}>
+                <span className="material-icons">close</span>
+              </button>
             </div>
-            <div className="modal-actions">
-              <button className="q-btn flat" onClick={() => { setShowAddDialog(false); resetForm() }}>Cancelar</button>
-              <button className="q-btn primary" onClick={saveZone} disabled={saving}>
+            <div className="modal-body">
+              <div className="field-group">
+                <label>Codigo Postal (ZIP)</label>
+                <input
+                  type="text"
+                  value={zoneForm.zip_code}
+                  onChange={(e) => setZoneForm({ ...zoneForm, zip_code: e.target.value })}
+                  disabled={!!editingZone}
+                />
+              </div>
+              <div className="field-group">
+                <label>Nombre de la zona</label>
+                <input
+                  type="text"
+                  value={zoneForm.zone_name}
+                  onChange={(e) => setZoneForm({ ...zoneForm, zone_name: e.target.value })}
+                />
+              </div>
+              <div className="field-row">
+                <div className="field-group">
+                  <label>Ciudad</label>
+                  <input
+                    type="text"
+                    value={zoneForm.city}
+                    onChange={(e) => setZoneForm({ ...zoneForm, city: e.target.value })}
+                  />
+                </div>
+                <div className="field-group">
+                  <label>Estado</label>
+                  <input
+                    type="text"
+                    value={zoneForm.state}
+                    onChange={(e) => setZoneForm({ ...zoneForm, state: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field-group">
+                  <label>Costo de envio</label>
+                  <input
+                    type="number"
+                    value={zoneForm.delivery_fee}
+                    onChange={(e) => setZoneForm({ ...zoneForm, delivery_fee: e.target.value })}
+                  />
+                </div>
+                <div className="field-group">
+                  <label>Tiempo estimado (min)</label>
+                  <input
+                    type="number"
+                    value={zoneForm.estimated_delivery_time}
+                    onChange={(e) => setZoneForm({ ...zoneForm, estimated_delivery_time: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="field-group">
+                <label>Notas</label>
+                <textarea
+                  rows={2}
+                  value={zoneForm.notes}
+                  onChange={(e) => setZoneForm({ ...zoneForm, notes: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => { setShowAddDialog(false); resetForm() }}>Cancelar</button>
+              <button className="btn-primary" onClick={saveZone} disabled={saving}>
                 {saving ? 'Guardando...' : editingZone ? 'Guardar' : 'Crear'}
               </button>
             </div>
@@ -293,29 +306,36 @@ export default function CoveragePage() {
       )}
 
       {showBulkDialog && (
-        <div className="modal-overlay" onClick={() => setShowBulkDialog(false)}>
-          <div className="modal-card modal-wide" onClick={e => e.stopPropagation()}>
-            <h3>Agregar Multiples ZIP Codes</h3>
-            <div className="modal-form">
-              <textarea
-                placeholder="ZIP Codes (uno por linea o separados por coma)"
-                value={bulkZipCodes}
-                onChange={(e) => setBulkZipCodes(e.target.value)}
-                className="q-input"
-                rows={6}
-              />
-              <small className="hint-text">Ejemplo: 33101, 33102, 33103</small>
-              <input
-                type="text"
-                placeholder="Nombre de la zona (opcional)"
-                value={bulkZoneName}
-                onChange={(e) => setBulkZoneName(e.target.value)}
-                className="q-input"
-              />
+        <div className="modal-backdrop" onClick={() => setShowBulkDialog(false)}>
+          <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Agregar Multiples ZIP Codes</h3>
+              <button className="modal-close" onClick={() => setShowBulkDialog(false)}>
+                <span className="material-icons">close</span>
+              </button>
             </div>
-            <div className="modal-actions">
-              <button className="q-btn flat" onClick={() => setShowBulkDialog(false)}>Cancelar</button>
-              <button className="q-btn primary" onClick={addBulkZones} disabled={saving}>
+            <div className="modal-body">
+              <div className="field-group">
+                <label>ZIP Codes (uno por linea o separados por coma)</label>
+                <textarea
+                  rows={6}
+                  value={bulkZipCodes}
+                  onChange={(e) => setBulkZipCodes(e.target.value)}
+                  placeholder="33101, 33102, 33103..."
+                />
+              </div>
+              <div className="field-group">
+                <label>Nombre de la zona (opcional)</label>
+                <input
+                  type="text"
+                  value={bulkZoneName}
+                  onChange={(e) => setBulkZoneName(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setShowBulkDialog(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={addBulkZones} disabled={saving}>
                 {saving ? 'Agregando...' : 'Agregar'}
               </button>
             </div>
