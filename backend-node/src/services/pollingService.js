@@ -159,32 +159,38 @@ class PollingService {
         let order = await MessagingOrder.findOne({
           where: {
             user_id: userId,
-            contact_id: contact.id.toString(),
+            respond_contact_id: contact.id.toString(),
             status: ['pending', 'confirmed']
           }
         });
 
+        const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+
         if (!order) {
           order = await MessagingOrder.create({
             user_id: userId,
-            contact_id: contact.id.toString(),
-            contact_name: `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre',
-            contact_phone: contact.phone || null,
-            channel: 'respond.io',
+            respond_contact_id: contact.id.toString(),
+            customer_name: customerName,
+            customer_phone: contact.phone || null,
+            channel_type: 'respond.io',
             address: messageText,
             zip_code: validation.zipCode,
-            has_coverage: validation.hasCoverage,
+            address_type: validation.addressType,
             status: 'pending',
-            source_message_id: message.messageId?.toString(),
-            notes: validation.validationMessage
+            validation_status: validation.hasCoverage ? 'covered' : 'no_coverage',
+            validation_message: validation.validationMessage,
+            notes: validation.needsApartmentNumber ? 'Pendiente: Solicitar numero de apartamento' : null
           });
+          console.log(`Created new order #${order.id} for ${customerName}`);
         } else {
           await order.update({
             address: messageText,
             zip_code: validation.zipCode,
-            has_coverage: validation.hasCoverage,
-            notes: validation.validationMessage
+            address_type: validation.addressType,
+            validation_status: validation.hasCoverage ? 'covered' : 'no_coverage',
+            validation_message: validation.validationMessage
           });
+          console.log(`Updated order #${order.id} with new address`);
         }
 
         if (settings.attention_mode === 'automatic') {
