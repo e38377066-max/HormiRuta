@@ -7,6 +7,7 @@ import MessagingOrder from './MessagingOrder.js';
 import CoverageZone from './CoverageZone.js';
 import MessageLog from './MessageLog.js';
 import MessagingSettings from './MessagingSettings.js';
+import ConversationState from './ConversationState.js';
 
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
 Route.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -35,6 +36,9 @@ MessageLog.belongsTo(MessagingOrder, { foreignKey: 'order_id', as: 'order' });
 MessagingOrder.belongsTo(Route, { foreignKey: 'route_id', as: 'route' });
 MessagingOrder.belongsTo(Stop, { foreignKey: 'stop_id', as: 'stop' });
 MessagingOrder.belongsTo(User, { foreignKey: 'assigned_driver_id', as: 'driver' });
+
+User.hasMany(ConversationState, { foreignKey: 'user_id', as: 'conversationStates', onDelete: 'CASCADE' });
+ConversationState.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 Route.prototype.toDict = async function() {
   const stops = await Stop.findAll({
@@ -79,5 +83,6 @@ export {
   MessagingOrder,
   CoverageZone,
   MessageLog,
-  MessagingSettings
+  MessagingSettings,
+  ConversationState
 };

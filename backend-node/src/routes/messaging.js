@@ -5,11 +5,13 @@ import {
   CoverageZone, 
   MessageLog, 
   MessagingSettings,
+  ConversationState,
   User
 } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import RespondioService from '../services/respondio.js';
 import AddressValidationService from '../services/addressValidation.js';
+import ChatbotService from '../services/chatbotService.js';
 import pollingService from '../services/pollingService.js';
 
 const router = express.Router();
@@ -50,7 +52,13 @@ router.put('/settings', requireAuth, async (req, res) => {
       'auto_respond_coverage', 'auto_respond_no_coverage',
       'no_coverage_message', 'coverage_message', 'order_confirmed_message',
       'driver_assigned_message', 'order_completed_message',
-      'default_channel_id', 'attention_mode', 'webhook_secret'
+      'default_channel_id', 'attention_mode', 'webhook_secret',
+      'business_hours_enabled', 'business_hours_start', 'business_hours_end',
+      'business_days', 'timezone', 'out_of_hours_message',
+      'default_agent_id', 'default_agent_name',
+      'welcome_existing_customer', 'welcome_new_customer',
+      'has_info_response', 'request_zip_message', 'remind_zip_message',
+      'product_menu_message', 'excluded_tags', 'products'
     ];
 
     for (const field of allowedFields) {
@@ -773,6 +781,104 @@ router.get('/contacts/:contactId/messages', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Get contact messages error:', error);
     res.status(500).json({ error: 'Error al obtener mensajes' });
+  }
+});
+
+router.get('/chatbot/states', requireAuth, async (req, res) => {
+  try {
+    const states = await ConversationState.findAll({
+      where: { user_id: req.session.userId },
+      order: [['last_interaction', 'DESC']],
+      limit: parseInt(req.query.limit) || 50
+    });
+
+    res.json({ states: states.map(s => s.toDict()) });
+  } catch (error) {
+    console.error('Get conversation states error:', error);
+    res.status(500).json({ error: 'Error al obtener estados de conversacion' });
+  }
+});
+
+router.get('/chatbot/state/:contactId', requireAuth, async (req, res) => {
+  try {
+    const state = await ConversationState.findOne({
+      where: {
+        user_id: req.session.userId,
+        contact_id: req.params.contactId
+      }
+    });
+
+    if (!state) {
+      return res.json({ state: null });
+    }
+
+    res.json({ state: state.toDict() });
+  } catch (error) {
+    console.error('Get conversation state error:', error);
+    res.status(500).json({ error: 'Error al obtener estado de conversacion' });
+  }
+});
+
+router.post('/chatbot/pause/:contactId', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
+    }
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const chatbot = new ChatbotService(req.session.userId, settings, respondio);
+    const result = await chatbot.pauseBot(req.params.contactId);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Pause chatbot error:', error);
+    res.status(500).json({ error: 'Error al pausar chatbot' });
+  }
+});
+
+router.post('/chatbot/resume/:contactId', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
+    }
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const chatbot = new ChatbotService(req.session.userId, settings, respondio);
+    const result = await chatbot.resumeBot(req.params.contactId);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Resume chatbot error:', error);
+    res.status(500).json({ error: 'Error al reanudar chatbot' });
+  }
+});
+
+router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
+    }
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const chatbot = new ChatbotService(req.session.userId, settings, respondio);
+    const result = await chatbot.resetConversation(req.params.contactId);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Reset conversation error:', error);
+    res.status(500).json({ error: 'Error al reiniciar conversacion' });
   }
 });
 
