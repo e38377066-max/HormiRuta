@@ -1,65 +1,15 @@
 const routes = [
   {
-    path: '/app',
-    component: () => import('layouts/MainLayout.vue'),
-    children: [{ path: '', component: () => import('pages/IndexPage.vue') }],
-  },
-  {
     path: '/planner',
     component: () => import('layouts/PlannerLayout.vue'),
+    meta: { requiresAuth: true },
     children: [
       { path: '', component: () => import('pages/TripPlannerPage.vue') }
     ]
   },
   {
-    path: '/saved-routes',
-    component: () => import('layouts/PlannerLayout.vue'),
-    meta: { requiresAuth: true },
-    children: [
-      { path: '', component: () => import('pages/Settings/SavedRoutesPage.vue') }
-    ]
-  },
-  {
-    path: '/settings',
-    component: () => import('layouts/SettingsLayout.vue'),
-    children: [
-      { path: '', component: () => import('pages/Settings/SettingsPage.vue') }
-    ]
-  },
-  {
-    path: '/help',
-    component: () => import('layouts/SettingsLayout.vue'),
-    children: [
-      { path: '', component: () => import('pages/Settings/HelpPage.vue') }
-    ]
-  },
-  {
-    path: '/local-routes',
-    component: () => import('layouts/PlannerLayout.vue'),
-    children: [
-      { path: '', component: () => import('pages/Settings/LocalRoutesPage.vue') }
-    ]
-  },
-  {
-    path: '/routes',
-    component: () => import('layouts/MainLayout.vue'),
-    meta: { requiresAuth: true },
-    children: [
-      { path: '', component: () => import('pages/Routes/RoutesPage.vue') },
-      { path: ':id', component: () => import('pages/Routes/RouteDetailPage.vue') }
-    ],
-  },
-  {
-    path: '/history',
-    component: () => import('layouts/MainLayout.vue'),
-    meta: { requiresAuth: true },
-    children: [
-      { path: '', component: () => import('pages/Routes/HistoryPage.vue') }
-    ],
-  },
-  {
     path: '/messaging',
-    component: () => import('layouts/MainLayout.vue'),
+    component: () => import('layouts/DashboardLayout.vue'),
     meta: { requiresAuth: true },
     children: [
       { path: '', component: () => import('pages/Messaging/MessagingDashboard.vue') },
@@ -70,7 +20,7 @@ const routes = [
   },
   {
     path: '/admin',
-    component: () => import('layouts/MainLayout.vue'),
+    component: () => import('layouts/DashboardLayout.vue'),
     meta: { requiresAuth: true, requiresAdmin: true },
     children: [
       { path: '', component: () => import('pages/Admin/AdminDashboardPage.vue') },

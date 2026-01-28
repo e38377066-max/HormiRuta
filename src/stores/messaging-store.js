@@ -17,7 +17,7 @@ export const useMessagingStore = defineStore('messaging', {
   actions: {
     async fetchSettings() {
       try {
-        const response = await api.get('/messaging/settings')
+        const response = await api.get('/api/messaging/settings')
         this.settings = response.data
         return this.settings
       } catch (error) {
@@ -28,7 +28,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async updateSettings(data) {
       try {
-        const response = await api.put('/messaging/settings', data)
+        const response = await api.put('/api/messaging/settings', data)
         this.settings = response.data
         return this.settings
       } catch (error) {
@@ -39,7 +39,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async testConnection() {
       try {
-        const response = await api.post('/messaging/settings/test-connection')
+        const response = await api.post('/api/messaging/settings/test-connection')
         return response.data
       } catch (error) {
         console.error('Error testing connection:', error)
@@ -51,7 +51,7 @@ export const useMessagingStore = defineStore('messaging', {
       this.loading = true
       try {
         const params = status ? { status } : {}
-        const response = await api.get('/messaging/orders', { params })
+        const response = await api.get('/api/messaging/orders', { params })
         this.orders = response.data.orders
         return this.orders
       } catch (error) {
@@ -65,7 +65,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async fetchOrder(id) {
       try {
-        const response = await api.get(`/messaging/orders/${id}`)
+        const response = await api.get(`/api/messaging/orders/${id}`)
         this.currentOrder = response.data
         return this.currentOrder
       } catch (error) {
@@ -76,7 +76,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async createOrder(data) {
       try {
-        const response = await api.post('/messaging/orders', data)
+        const response = await api.post('/api/messaging/orders', data)
         this.orders.unshift(response.data)
         return response.data
       } catch (error) {
@@ -87,7 +87,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async updateOrder(id, data) {
       try {
-        const response = await api.put(`/messaging/orders/${id}`, data)
+        const response = await api.put(`/api/messaging/orders/${id}`, data)
         const index = this.orders.findIndex(o => o.id === id)
         if (index !== -1) {
           this.orders[index] = response.data
@@ -146,7 +146,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async deleteOrder(id) {
       try {
-        await api.delete(`/messaging/orders/${id}`)
+        await api.delete(`/api/messaging/orders/${id}`)
         this.orders = this.orders.filter(o => o.id !== id)
       } catch (error) {
         console.error('Error deleting order:', error)
@@ -166,7 +166,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async fetchCoverageZones() {
       try {
-        const response = await api.get('/messaging/coverage-zones')
+        const response = await api.get('/api/messaging/coverage-zones')
         this.coverageZones = response.data
         return this.coverageZones
       } catch (error) {
@@ -177,7 +177,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async createCoverageZone(data) {
       try {
-        const response = await api.post('/messaging/coverage-zones', data)
+        const response = await api.post('/api/messaging/coverage-zones', data)
         this.coverageZones.push(response.data)
         return response.data
       } catch (error) {
@@ -188,7 +188,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async createCoverageZonesBulk(data) {
       try {
-        const response = await api.post('/messaging/coverage-zones/bulk', data)
+        const response = await api.post('/api/messaging/coverage-zones/bulk', data)
         if (response.data.zones) {
           this.coverageZones.push(...response.data.zones)
         }
@@ -201,7 +201,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async updateCoverageZone(id, data) {
       try {
-        const response = await api.put(`/messaging/coverage-zones/${id}`, data)
+        const response = await api.put(`/api/messaging/coverage-zones/${id}`, data)
         const index = this.coverageZones.findIndex(z => z.id === id)
         if (index !== -1) {
           this.coverageZones[index] = response.data
@@ -215,7 +215,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async deleteCoverageZone(id) {
       try {
-        await api.delete(`/messaging/coverage-zones/${id}`)
+        await api.delete(`/api/messaging/coverage-zones/${id}`)
         this.coverageZones = this.coverageZones.filter(z => z.id !== id)
       } catch (error) {
         console.error('Error deleting coverage zone:', error)
@@ -225,7 +225,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async validateAddress(address) {
       try {
-        const response = await api.post('/messaging/validate-address', { address })
+        const response = await api.post('/api/messaging/validate-address', { address })
         return response.data
       } catch (error) {
         console.error('Error validating address:', error)
@@ -235,7 +235,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async fetchStats() {
       try {
-        const response = await api.get('/messaging/stats')
+        const response = await api.get('/api/messaging/stats')
         this.stats = response.data
         return this.stats
       } catch (error) {
@@ -246,7 +246,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async getPollingStatus() {
       try {
-        const response = await api.get('/messaging/polling/status')
+        const response = await api.get('/api/messaging/polling/status')
         this.pollingStatus = response.data
         return this.pollingStatus
       } catch (error) {
@@ -257,7 +257,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async startPolling(interval = 30) {
       try {
-        const response = await api.post('/messaging/polling/start', { interval })
+        const response = await api.post('/api/messaging/polling/start', { interval })
         this.pollingStatus = { active: true, ...response.data }
         return response.data
       } catch (error) {
@@ -268,7 +268,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async stopPolling() {
       try {
-        const response = await api.post('/messaging/polling/stop')
+        const response = await api.post('/api/messaging/polling/stop')
         this.pollingStatus = { active: false }
         return response.data
       } catch (error) {
@@ -279,7 +279,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async syncContacts() {
       try {
-        const response = await api.post('/messaging/polling/sync')
+        const response = await api.post('/api/messaging/polling/sync')
         return response.data
       } catch (error) {
         console.error('Error syncing contacts:', error)
@@ -290,7 +290,7 @@ export const useMessagingStore = defineStore('messaging', {
     async fetchContacts(status = null) {
       try {
         const params = status ? { status } : {}
-        const response = await api.get('/messaging/contacts', { params })
+        const response = await api.get('/api/messaging/contacts', { params })
         this.contacts = response.data.contacts
         return this.contacts
       } catch (error) {
@@ -301,7 +301,7 @@ export const useMessagingStore = defineStore('messaging', {
 
     async fetchContactMessages(contactId) {
       try {
-        const response = await api.get(`/messaging/contacts/${contactId}/messages`)
+        const response = await api.get(`/api/messaging/contacts/${contactId}/messages`)
         return response.data.messages
       } catch (error) {
         console.error('Error fetching contact messages:', error)

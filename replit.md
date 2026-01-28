@@ -9,20 +9,21 @@ HormiRuta es una aplicación de planificación y optimización de rutas de entre
 │   ├── boot/                  # Boot files (axios config)
 │   ├── components/            # Vue components
 │   ├── layouts/               # Layout components
+│   │   ├── DashboardLayout.vue   # Web dashboard (admin, messaging)
+│   │   └── PlannerLayout.vue     # Route planner (mobile-optimized)
 │   ├── pages/                 # Page components
 │   │   ├── Auth/              # Login, Register, Splash
-│   │   ├── Routes/            # Routes management
-│   │   ├── Messaging/         # Respond.io messaging module
-│   │   └── Settings/          # Settings pages
+│   │   ├── Admin/             # Admin panel (users, stats)
+│   │   └── Messaging/         # Respond.io messaging module
 │   ├── router/                # Vue Router configuration
-│   └── stores/                # Pinia stores (auth, routes, theme)
+│   └── stores/                # Pinia stores (auth, messaging, theme)
 ├── backend-node/              # Backend Node.js/Express API
 │   ├── src/
 │   │   ├── config/            # Database configuration
-│   │   ├── middleware/        # Auth middleware
+│   │   ├── middleware/        # Auth + role middleware
 │   │   ├── models/            # Sequelize ORM models
-│   │   ├── routes/            # API routes (auth, routes, stops, history, messaging)
-│   │   ├── services/          # Optimization, Respond.io, address validation services
+│   │   ├── routes/            # API routes (auth, admin, messaging)
+│   │   ├── services/          # Respond.io, polling, address validation
 │   │   └── index.js           # Main Express app
 │   └── package.json           # Node dependencies
 ├── android/                   # Capacitor Android project
