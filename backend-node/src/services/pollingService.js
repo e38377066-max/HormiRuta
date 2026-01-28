@@ -160,6 +160,38 @@ class PollingService {
       });
 
       const addressValidation = new AddressValidationService(userId);
+      
+      const isZipMessage = addressValidation.isZipCodeMessage(messageText);
+      const isCityMessage = addressValidation.isCityMessage(messageText);
+      
+      if (isZipMessage || isCityMessage) {
+        const zipValidation = await addressValidation.validateZipOrCity(messageText);
+        console.log(`ZIP/City validation for ${contact.firstName}: "${messageText}" - valid: ${zipValidation.valid}, type: ${zipValidation.type}`);
+        
+        if (settings.attention_mode === 'automatic') {
+          if (zipValidation.valid && settings.auto_respond_coverage && settings.coverage_message) {
+            const coverageMsg = settings.coverage_message
+              .replace('{{zip_code}}', zipValidation.value)
+              .replace('{{city}}', zipValidation.zone?.city || '')
+              .replace('{{zone}}', zipValidation.zone?.zone_name || '');
+            await respondio.sendMessage(contact.id, coverageMsg);
+            await this.logOutgoingMessage(userId, contact, coverageMsg, 'auto_zip_valid');
+          } else if (!zipValidation.valid && settings.auto_respond_no_coverage && settings.no_coverage_message) {
+            const noCoverageMsg = settings.no_coverage_message
+              .replace('{{zip_code}}', zipValidation.value)
+              .replace('{{city}}', zipValidation.value);
+            await respondio.sendMessage(contact.id, noCoverageMsg);
+            await this.logOutgoingMessage(userId, contact, noCoverageMsg, 'auto_zip_invalid');
+          }
+        }
+        
+        await MessageLog.update(
+          { processed: true },
+          { where: { respond_message_id: message.messageId?.toString(), user_id: userId } }
+        );
+        return;
+      }
+      
       const validation = await addressValidation.validateAddress(messageText);
 
       console.log(`Message from ${contact.firstName}: "${messageText.substring(0, 50)}..." - isAddress: ${validation.isAddress}`);

@@ -1,0 +1,114 @@
+Sistema de Chatbot y Respuesta Automática
+
+PRIMER PASO: Verificación de Horario de Atención
+Descripción:
+Antes de iniciar cualquier flujo de conversación, el sistema debe verificar si la consulta del cliente se realiza dentro del horario de atención establecido. Esta validación es el primer paso crítico del proceso.
+
+
+
+PRIMER PASO: Verificación de Horario de Atención
+Descripción:
+Antes de iniciar cualquier flujo de conversación, el sistema debe verificar si la consulta del cliente se realiza dentro del horario de atención establecido. Esta validación es el primer paso crítico del proceso.
+Lógica de funcionamiento:
+Si está ABIERTO (horario hábil): El sistema continúa con el flujo normal de conversación (procede a la sección 2. Canales de Entrada de Clientes).
+Si está CERRADO (fuera de horario): El sistema envía automáticamente el mensaje de fuera de horario y finaliza la interacción de el bot, permitiendo al cliente dejar su mensaje para ser atendido posteriormente. 
+En este paso el cliente puede seguir escribiendo mensajes sin que el sistema siga contestando y dejando abierta la conversacion asignada de forma automatica a Felipe Delgado
+Mensaje automático para horario cerrado:
+🌙 ¡Hola hola! 😊
+ Gracias por comunicarte con nosotros 😊
+Ahorita estamos fuera de horario 🕒
+pero puedes dejar tu mensaje sin problema 💬
+Escríbenos lo que necesitas 🙌
+y en cuanto estemos de regreso en horario laboral lo leemos y te respondemos lo más pronto posible 💛📲
+
+Validacion de informacion:
+
+Verificar si ya se le dio informacion o precios al cliente  via market place, haciendo la pregunta directa ya que no tenemos como saber ese dato.
+
+Si ya tiene informacion se asigna a un agente directo para la toma de datos de su orden (diseno)
+
+Si no tiene información previa, el sistema procede con el flujo de validación geográfica (código postal o ciudad)
+
+
+1. Introducción
+Este documento describe el desarrollo e implementación de un sistema de chatbot y respuesta automática diseñado para gestionar las interacciones con clientes a través de múltiples canales de comunicación digital. El sistema está diseñado para identificar automáticamente el tipo de cliente, dirigir las conversaciones de manera apropiada y proporcionar información relevante sobre productos y servicios.
+2. Canales de Entrada de Clientes
+El sistema integra tres canales principales de comunicación para atender las consultas de los clientes:
+2.1 WhatsApp
+WhatsApp es el canal principal de comunicación. Los clientes pueden pertenecer a las siguientes categorías:
+Familia o personales
+IprintPOS
+Area 862 Graphics LLC
+2.2 Facebook
+Si el canal de entrada es Facebook, se aplica el mismo proceso que para clientes no registrados en nuestra base de datos.
+2.3 Instagram
+Si el canal de entrada es Instagram, se aplica el mismo proceso que Facebook.
+3. Lógica de Identificación de Clientes con Etiquetas (Tags)
+El sistema implementa un mecanismo de identificación basado en etiquetas para categorizar automáticamente a los clientes:
+La Única categoría con el que se acciona el Flujo es con contactos que no son
+Personales | IprintPOS | Diseñadores
+3.1 Categorías de Clientes
+Cómo se indentifica cada uno:
+Familia o personales → Tag = Personal
+IprintPOS → Tag = IprintPOS
+Area 862 Graphics → Tag = ClientesArea
+Disenadores → Tag = Area862Designers
+3.2 Proceso de Identificación
+El sistema determina si el contacto es un cliente activo o un cliente nuevo mediante la detección en nuestra base de datos.
+4. Flujos de Conversación
+4.1 Flujo para Clientes Existentes
+Si es activo (lo detecta en nuestra base de datos):
+Mensaje de bienvenida:
+👋 ¡Hola! Qué gusto volver a tener noticias suyas 😊
+ Espero que todo esté yendo muy bien.
+Solicitud de asistencia:
+Por favor, cuéntame en qué puedo ayudarle esta vez 🤔✨
+Asignación automática:
+Aca espera y asigna automáticamente a Felipe Delgado como su agente
+4.2 Flujo para Clientes Nuevos
+Si no está en la base de Datos:
+¡Hola! 🙌 Somos de Area 862 Graphics.
+📩😊Cuentanos ya uno de nuestros agentes le brindo información sobre nuestros servicios y precios ?
+Respuesta es Si
+	Contesta 
+Perfecto ✅ entonces solo envíenos los datos e información para poder preparar el diseño de su orden ✍️😊
+Respuesta es NO
+	Comienza el flujo para validar el zip code:
+
+Vi que te interesan algunos de nuestros productos y quiero ayudarte a encontrar las mejores opciones 😄
+
+📍 Por favor, envíame solo el número de tu código postal (ZIP), por ejemplo 75208 ✉️
+Con eso confirmo si llegamos a tu zona y te paso los precios enseguida 🚚✨
+
+Si escribes algo diferente o fuera del tema (como “hola”, “gracias”, “quiero ver productos”), te recordaré que necesito tu ZIP code para continuar ✅
+Validación de código postal:
+El sistema debe poder entender el zip code dentro de una respuesta del cliente diferente como "zip code 75104" o "code 75104"
+Opción alternativa:
+3.-entender si el cliente da el nombre de la ciudad en vez de el zip code
+4.3 Selección de Productos
+Darle la opcion de que producto necesita:
+¿En cuál de estos productos está interesado? (Indica el número del producto)
+Tarjetas
+Magnéticos
+Post Cards
+Playeras
+Flexibilidad en la respuesta:
+Entienda por numero o por el nombre del producto
+Expansión futura:
+Poder hacer mas larga la lista de productos pero no como opcion inicial, si no que si el cliente solicita otro precio o producto, pueda contestar de forma automatica…
+5. Requisitos Técnicos
+5.1 Validación de Código Postal
+Capacidad para reconocer códigos postales en diferentes formatos (ej: "zip code 75104", "code 75104") tenemos un documento para filtrar los codigos
+Alternativa: aceptar el nombre de la ciudad en lugar del código postal
+5.2 Selección de Productos
+Reconocimiento de productos por número o por nombre
+Lista inicial de productos: Tarjetas, Magnéticos, Post Cards, Playeras
+5.3 Escalabilidad
+El sistema debe permitir expandir la lista de productos sin mostrarlos todos como opciones iniciales
+Capacidad de responder a solicitudes de precios o productos adicionales durante la conversación
+Asignación automática de agentes según el tipo de cliente y canal de entrada
+Poder parar el flujo a discreción del agente admin
+Poder anexar mas zip codes o ciudades al sistema para futuras areas de entrega o areas que se nos hayan podido olvidar
+El aprendizaje de como el cliente interactua, para poder implementar mas pasos de forma automatica
+
+
