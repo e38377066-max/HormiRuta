@@ -214,22 +214,24 @@ export default function TripPlannerPage() {
     const lat = e.latLng.lat()
     const lng = e.latLng.lng()
     
+    addStop({
+      address: `Ubicación ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      latitude: lat,
+      longitude: lng
+    })
+
     const geocoder = new window.google.maps.Geocoder()
     try {
       const result = await geocoder.geocode({ location: { lat, lng } })
-      if (result.results[0]) {
-        addStop({
-          address: result.results[0].formatted_address,
-          latitude: lat,
-          longitude: lng
-        })
+      if (result.results && result.results[0]) {
+        setStops(prev => prev.map(stop => 
+          stop.latitude === lat && stop.longitude === lng
+            ? { ...stop, address: result.results[0].formatted_address }
+            : stop
+        ))
       }
     } catch (err) {
-      addStop({
-        address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-        latitude: lat,
-        longitude: lng
-      })
+      console.log('Geocode not available, using coordinates')
     }
   }
 
@@ -399,7 +401,7 @@ export default function TripPlannerPage() {
       }
     })
 
-    if (stopsList.length > 0) {
+    if (stopsList.length > 1) {
       const bounds = new window.google.maps.LatLngBounds()
       stopsList.forEach(stop => {
         if (stop.latitude && stop.longitude) {
@@ -409,7 +411,16 @@ export default function TripPlannerPage() {
       if (userLocation) {
         bounds.extend(userLocation)
       }
-      mapInstanceRef.current.fitBounds(bounds, 60)
+      mapInstanceRef.current.fitBounds(bounds, 80)
+      
+      const listener = window.google.maps.event.addListener(mapInstanceRef.current, 'idle', () => {
+        if (mapInstanceRef.current.getZoom() > 16) {
+          mapInstanceRef.current.setZoom(16)
+        }
+        window.google.maps.event.removeListener(listener)
+      })
+    } else if (stopsList.length === 1 && stopsList[0].latitude) {
+      mapInstanceRef.current.panTo({ lat: stopsList[0].latitude, lng: stopsList[0].longitude })
     }
   }
 
