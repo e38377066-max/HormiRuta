@@ -428,195 +428,123 @@ export default function TripPlannerPage() {
           <div className="handle-bar"></div>
         </div>
         
-        <div className="panel-scrollable">
-          <div className="search-section">
-            <div className="search-input-wrapper">
-              <span className="material-icons search-icon">search</span>
-              <input
-                ref={searchInputRef}
-                type="text"
-                className="search-input"
-                value={searchQuery}
-                onChange={(e) => searchAddress(e.target.value)}
-                onFocus={() => setShowSearch(true)}
-                placeholder="Pulsa para añadir"
-              />
-              <button className="input-action" onClick={() => setShowRouteMenu(true)}>
-                <span className="material-icons">more_vert</span>
-              </button>
-            </div>
-            
-            {showSearch && searchSuggestions.length > 0 && (
-              <div className="suggestions-dropdown">
-                {searchSuggestions.map((sug, i) => (
-                  <div key={i} className="suggestion-item" onClick={() => selectSearchSuggestion(sug)}>
-                    <span className="material-icons">place</span>
-                    <span>{sug.description}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className="panel-header">
+          <div className="panel-header-left">
+            <span className="stops-count">{stops.length} parada{stops.length !== 1 ? 's' : ''}</span>
           </div>
-          
-          {stops.length > 0 && (
-            <div className="route-header">
-              <div className="stats-chips">
-                <div className="stat-chip">
-                  <span className="material-icons">schedule</span>
-                  <span>{formatDuration(totalDuration)}</span>
-                </div>
-                <div className="stat-chip">
-                  <span className="material-icons">place</span>
-                  <span>{stops.length} paradas</span>
-                </div>
-                <div className="stat-chip">
-                  <span className="material-icons">straighten</span>
-                  <span>{totalDistance.toFixed(1)} km</span>
-                </div>
-              </div>
-              <div className="route-title" onClick={() => setShowRouteNameDialog(true)}>
-                <span className="title-text">{routeName}</span>
-                <span className="material-icons edit-icon">edit</span>
-              </div>
-            </div>
-          )}
-          
-          <div className="stops-section">
-            {startAddress && (
-              <div className="origin-item">
-                <span className="material-icons text-positive">home</span>
-                <div className="origin-content">
-                  <div className="origin-label">Punto de partida</div>
-                  <div className="origin-address">{startAddress}</div>
-                </div>
-              </div>
-            )}
-            
-            {stops.length > 0 && (
-              <div className="stops-header">PARADAS ({stops.length})</div>
-            )}
-            
-            <div className="stops-list">
-              {stops.map((stop, index) => (
-                <div key={stop.id} className={`stop-item ${stop.completed ? 'completed' : ''}`}>
-                  <div className="stop-badge" style={{ background: stop.completed ? '#4caf50' : (stop.color || '#1976d2') }}>
-                    {stop.completed ? <span className="material-icons">check</span> : <span>{stop.id}</span>}
-                  </div>
-                  <div className="stop-content">
-                    <div className={`stop-address ${stop.completed ? 'text-strike' : ''}`}>{stop.name || stop.address}</div>
-                    {stop.distance && (
-                      <div className="stop-meta">
-                        {stop.distance.toFixed(1)} km · {Math.round(stop.duration || 0)} min
-                      </div>
-                    )}
-                  </div>
-                  <div className="stop-actions">
-                    {navigationMode ? (
-                      <button className="action-btn" onClick={() => toggleStopComplete(index)}>
-                        <span className="material-icons">{stop.completed ? 'replay' : 'check'}</span>
-                      </button>
-                    ) : (
-                      <>
-                        <button className="action-btn delete" onClick={() => removeStop(index)}>
-                          <span className="material-icons">close</span>
-                        </button>
-                        <span className="material-icons drag-handle">drag_indicator</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {roundTrip && startAddress && (
-              <div className="origin-item">
-                <span className="material-icons text-warning">flag</span>
-                <div className="origin-content">
-                  <div className="origin-label">Regreso al inicio</div>
-                </div>
-              </div>
-            )}
-            
-            {!stops.length && (
-              <div className="empty-state">
-                <div className="empty-icon-circle">
-                  <span className="material-icons">add</span>
-                </div>
-                <div className="empty-text">
-                  Añade las primeras paradas para<br/>empezar a crear la ruta
-                </div>
-              </div>
-            )}
+          <div className="panel-header-right">
+            <button className="header-btn" onClick={focusSearch}>
+              <span className="material-icons">search</span>
+            </button>
+            <button className="header-btn" onClick={() => setShowRouteMenu(true)}>
+              <span className="material-icons">more_vert</span>
+            </button>
           </div>
         </div>
         
-        <div className="panel-footer">
-          {stops.length > 0 && (
-            <div className="time-big">{formatDuration(totalDuration)}</div>
-          )}
+        <div className="panel-scrollable">
+          <div className="route-name-section" onClick={() => setShowRouteNameDialog(true)}>
+            <h2 className="route-name">{routeName}</h2>
+          </div>
           
-          {stops.length === 0 ? (
-            <>
-              <button className="btn-primary btn-full" onClick={focusSearch}>
-                <span className="material-icons">add</span>
-                Añadir paradas
-              </button>
-              <button className="btn-outline btn-full mt-2">
-                Copiar paradas de una ruta anterior
-              </button>
-            </>
-          ) : !isOptimized && stops.length >= 2 ? (
-            <button className="btn-primary btn-full" onClick={optimizeRoute} disabled={optimizing}>
-              <span className="material-icons">auto_fix_high</span>
-              {optimizing ? 'Optimizando...' : 'Optimizar la ruta'}
-            </button>
-          ) : isOptimized && !navigationMode ? (
-            <div className="row-buttons">
-              <button className="btn-outline col" onClick={() => setIsOptimized(false)}>Ajustar</button>
-              <button className="btn-primary col" onClick={confirmRoute}>Confirmar</button>
-            </div>
-          ) : navigationMode ? (
-            <>
-              {nextPendingStop && (
-                <div className="next-stop-card">
-                  <div className="next-stop-row">
-                    <div className="stop-badge-nav" style={{ background: nextPendingStop.color || '#1976d2' }}>
-                      <span>{nextPendingStop.id}</span>
-                    </div>
-                    <div className="next-stop-content">
-                      <div className="next-label">Próxima parada</div>
-                      <div className="next-address">{nextPendingStop.name || nextPendingStop.address}</div>
-                    </div>
-                  </div>
+          <div className="config-section">
+            <div className="config-label">Configuración de ruta</div>
+            
+            <div className="config-item">
+              <div className="config-item-left">
+                <span className="config-time">{formatDuration(totalDuration).split(' ')[0]}</span>
+                <div className="config-content">
+                  <div className="config-title">Empezar desde la ubicación actual</div>
+                  <div className="config-subtitle">Utiliza la posición del GPS al optimizar</div>
                 </div>
-              )}
-              <div className="row-buttons">
-                <button className="btn-outline col-3" onClick={exitNavigation}>
-                  <span className="material-icons">edit</span>
-                </button>
-                {nextPendingStop && (
-                  <button className="btn-positive col" onClick={() => toggleStopComplete(stops.indexOf(nextPendingStop))}>
-                    <span className="material-icons">check</span>
-                    Completar
-                  </button>
-                )}
               </div>
-              {!nextPendingStop && (
-                <div className="route-complete">
-                  <span className="material-icons text-positive">celebration</span>
-                  <div className="complete-text">Ruta completada</div>
-                  <button className="btn-link" onClick={clearRoute}>Nueva ruta</button>
+              <span className="material-icons config-icon">home</span>
+            </div>
+            
+            <div className="config-item" onClick={() => setRoundTrip(!roundTrip)}>
+              <div className="config-item-left">
+                <span className="config-time">•</span>
+                <div className="config-content">
+                  <div className="config-title">Viaje de ida y vuelta</div>
+                  <div className="config-subtitle">{roundTrip ? 'Regresa al punto de inicio' : 'Volver al punto de partida'}</div>
                 </div>
-              )}
+              </div>
+              <span className="material-icons config-icon">{roundTrip ? 'check_box' : 'flag'}</span>
+            </div>
+            
+            <div className="config-item">
+              <div className="config-item-left">
+                <span className="config-time">•</span>
+                <div className="config-content">
+                  <div className="config-title">Sin descanso</div>
+                  <div className="config-subtitle">Pulsa para planificar un descanso</div>
+                </div>
+              </div>
+              <span className="material-icons config-icon">free_breakfast</span>
+            </div>
+          </div>
+          
+          {stops.length > 0 && (
+            <>
+              <div className="stops-section-header">Parada</div>
+              {stops.map((stop, index) => (
+                <div key={stop.id} className="stop-row" onClick={() => navigationMode && toggleStopComplete(index)}>
+                  <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="stop-name">{stop.name || stop.address?.split(',')[0] || 'Lugar sin nombre'}</span>
+                  {!navigationMode && (
+                    <button 
+                      className="header-btn" 
+                      onClick={(e) => { e.stopPropagation(); removeStop(index); }}
+                      style={{ marginRight: -8 }}
+                    >
+                      <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
+                    </button>
+                  )}
+                  <div className={`stop-indicator ${stop.completed ? 'completed' : ''}`}></div>
+                </div>
+              ))}
             </>
-          ) : (
-            <button className="btn-primary btn-full" onClick={focusSearch}>
-              <span className="material-icons">add</span>
-              Añadir paradas
-            </button>
           )}
         </div>
+        
+        <div className="panel-footer">
+          <button 
+            className="btn-optimize" 
+            onClick={stops.length >= 2 ? optimizeRoute : focusSearch} 
+            disabled={optimizing}
+          >
+            <span className="material-icons">{stops.length >= 2 ? 'autorenew' : 'add'}</span>
+            {optimizing ? 'Optimizando...' : stops.length >= 2 ? 'Optimizar la ruta' : 'Añadir paradas'}
+          </button>
+        </div>
       </div>
+      
+      {showSearch && (
+        <div className="search-overlay">
+          <div className="search-header">
+            <button className="search-back" onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchSuggestions([]); }}>
+              <span className="material-icons">arrow_back</span>
+            </button>
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="search-input-full"
+              value={searchQuery}
+              onChange={(e) => searchAddress(e.target.value)}
+              placeholder="Pulsa para añadir más"
+              autoFocus
+            />
+          </div>
+          <div className="search-results">
+            {searchSuggestions.map((sug, i) => (
+              <div key={i} className="search-result-item" onClick={() => selectSearchSuggestion(sug)}>
+                <span className="material-icons">place</span>
+                <span className="search-result-text">{sug.description}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       {showRouteMenu && (
         <div className="modal-overlay" onClick={() => setShowRouteMenu(false)}>
