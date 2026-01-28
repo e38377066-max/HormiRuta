@@ -36,12 +36,12 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-01-28: Added chatbot system with conversation flow management
+- 2026-01-28: Added business hours verification with out-of-hours auto-response
+- 2026-01-28: Added flexible ZIP/city validation for Respond.io integration
 - 2026-01-28: Added Capacitor 6 for hybrid mobile app (iOS/Android)
 - 2026-01-28: Added route optimization options (vehicle type, avoid tolls/highways, traffic)
 - 2026-01-28: Unified design across all dashboard pages with clean white/light theme
-- 2026-01-28: Added semantic CSS classes (page-container, stat-card, content-card, modal-backdrop)
-- 2026-01-28: Fixed Respond.io API filters - Added required category: 'contactField' parameter
-- 2026-01-28: Cleaned project structure - Removed old Quasar/Vue.js frontend and Python backend
 - 2026-01-28: Migrated frontend from Quasar/Vue.js to React + Vite
 
 ## Technology Stack
@@ -104,6 +104,13 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 - POST /api/messaging/coverage-zones - Create coverage zone
 - POST /api/messaging/coverage-zones/bulk - Bulk create zones
 
+### Chatbot Control
+- GET /api/messaging/chatbot/states - List all conversation states
+- GET /api/messaging/chatbot/state/:contactId - Get conversation state for contact
+- POST /api/messaging/chatbot/pause/:contactId - Pause bot for contact
+- POST /api/messaging/chatbot/resume/:contactId - Resume bot for contact
+- POST /api/messaging/chatbot/reset/:contactId - Reset conversation for contact
+
 ## Environment Variables
 - DATABASE_URL - PostgreSQL connection string
 - SESSION_SECRET - Express session secret
@@ -147,3 +154,43 @@ The app uses a helper utility (src/utils/capacitor.js) that:
 - Detects if running on native or web
 - Uses native plugins when available (better GPS, haptics)
 - Falls back to web APIs when on browser
+
+## Chatbot System
+
+### Conversation Flow
+1. **Business Hours Check** - Verifies if within business hours before responding
+2. **Out of Hours Message** - Sends automated message and assigns to default agent
+3. **Customer Detection** - Checks if customer exists in database
+4. **Prior Info Check** - Asks if customer already received pricing info
+5. **ZIP Validation** - Requests and validates ZIP code or city name
+6. **Product Selection** - Shows product menu and processes selection
+7. **Agent Assignment** - Assigns to default agent (Felipe Delgado)
+
+### Conversation States
+- `initial` - New conversation, awaiting first message
+- `awaiting_prior_info` - Waiting for yes/no answer about prior info
+- `awaiting_zip` - Waiting for ZIP code or city name
+- `awaiting_product` - Waiting for product selection
+- `assigned` - Conversation assigned to human agent
+
+### Excluded Tags
+Contacts with these tags are excluded from chatbot:
+- Personal
+- IprintPOS
+- ClientesArea
+- Area862Designers
+
+### Products (configurable)
+1. Tarjetas
+2. Magneticos
+3. Post Cards
+4. Playeras
+
+### Chatbot Settings
+All settings are configurable in MessagingSettings model:
+- Business hours (start, end, days, timezone)
+- Welcome messages (existing vs new customers)
+- ZIP request/reminder messages
+- Product menu
+- Excluded tags
+- Default agent for assignment
