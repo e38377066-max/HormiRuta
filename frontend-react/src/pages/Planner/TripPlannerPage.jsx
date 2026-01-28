@@ -12,6 +12,10 @@ export default function TripPlannerPage() {
   const markersRef = useRef([])
   const directionsRendererRef = useRef(null)
   const searchInputRef = useRef(null)
+  const userLocationMarkerRef = useRef(null)
+  const watchIdRef = useRef(null)
+  const [userLocation, setUserLocation] = useState(null)
+  const [addingStopMode, setAddingStopMode] = useState(false)
   
   const [stops, setStops] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -121,27 +125,114 @@ export default function TripPlannerPage() {
     
     mapInstanceRef.current = new google.maps.Map(mapRef.current, {
       center: { lat: 20.6597, lng: -103.3496 },
-      zoom: 12,
+      zoom: 14,
       mapTypeControl: false,
       streetViewControl: false,
       fullscreenControl: false,
-      zoomControl: false
+      zoomControl: false,
+      gestureHandling: 'greedy'
     })
 
     directionsRendererRef.current = new google.maps.DirectionsRenderer({
       map: mapInstanceRef.current,
       suppressMarkers: false,
-      polylineOptions: { strokeColor: '#1976d2', strokeWeight: 4 }
+      polylineOptions: { strokeColor: '#5b8def', strokeWeight: 5 }
     })
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(pos => {
+    mapInstanceRef.current.addListener('click', handleMapClick)
+
+    startLocationTracking()
+  }
+
+  const startLocationTracking = () => {
+    if (!navigator.geolocation) return
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        mapInstanceRef.current.setCenter(loc)
+        setUserLocation(loc)
+        mapInstanceRef.current?.setCenter(loc)
         reverseGeocode(loc)
+        updateUserLocationMarker(loc)
+      },
+      (err) => console.error('Geolocation error:', err),
+      { enableHighAccuracy: true }
+    )
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setUserLocation(loc)
+        updateUserLocationMarker(loc)
+      },
+      (err) => console.error('Watch position error:', err),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    )
+  }
+
+  const updateUserLocationMarker = (location) => {
+    if (!mapInstanceRef.current) return
+
+    if (userLocationMarkerRef.current) {
+      userLocationMarkerRef.current.setPosition(location)
+    } else {
+      userLocationMarkerRef.current = new window.google.maps.Marker({
+        position: location,
+        map: mapInstanceRef.current,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: '#4285F4',
+          fillOpacity: 1,
+          strokeWeight: 3,
+          strokeColor: 'white'
+        },
+        zIndex: 999
+      })
+
+      new window.google.maps.Circle({
+        map: mapInstanceRef.current,
+        center: location,
+        radius: 30,
+        fillColor: '#4285F4',
+        fillOpacity: 0.15,
+        strokeColor: '#4285F4',
+        strokeOpacity: 0.3,
+        strokeWeight: 1
       })
     }
   }
+
+  const handleMapClick = async (e) => {
+    const lat = e.latLng.lat()
+    const lng = e.latLng.lng()
+    
+    const geocoder = new window.google.maps.Geocoder()
+    try {
+      const result = await geocoder.geocode({ location: { lat, lng } })
+      if (result.results[0]) {
+        addStop({
+          address: result.results[0].formatted_address,
+          latitude: lat,
+          longitude: lng
+        })
+      }
+    } catch (err) {
+      addStop({
+        address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        latitude: lat,
+        longitude: lng
+      })
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+      }
+    }
+  }, [])
 
   const reverseGeocode = async (location) => {
     const geocoder = new window.google.maps.Geocoder()
@@ -363,10 +454,16 @@ export default function TripPlannerPage() {
   }
 
   const centerOnLocation = () => {
-    if (navigator.geolocation) {
+    if (userLocation) {
+      mapInstanceRef.current?.setCenter(userLocation)
+      mapInstanceRef.current?.setZoom(16)
+    } else if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(pos => {
-        mapInstanceRef.current?.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-        mapInstanceRef.current?.setZoom(15)
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setUserLocation(loc)
+        mapInstanceRef.current?.setCenter(loc)
+        mapInstanceRef.current?.setZoom(16)
+        updateUserLocationMarker(loc)
       })
     }
   }
