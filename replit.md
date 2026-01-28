@@ -36,9 +36,10 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-01-28: Unified design across all dashboard pages with clean white/light theme
+- 2026-01-28: Added semantic CSS classes (page-container, stat-card, content-card, modal-backdrop)
+- 2026-01-28: Fixed Respond.io API filters - Added required category: 'contactField' parameter
 - 2026-01-28: Cleaned project structure - Removed old Quasar/Vue.js frontend and Python backend
-- 2026-01-28: Improved admin panel design - Modern dark theme with better UX
-- 2026-01-28: Fixed Respond.io timezone error - Added required timezone parameter
 - 2026-01-28: Migrated frontend from Quasar/Vue.js to React + Vite
 
 ## Technology Stack
