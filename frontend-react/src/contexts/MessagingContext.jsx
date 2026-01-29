@@ -148,6 +148,11 @@ export function MessagingProvider({ children }) {
     return response.data
   }
 
+  const validateZip = async (zipOrCity) => {
+    const response = await api.post('/api/messaging/validate-zip', { zipOrCity })
+    return response.data
+  }
+
   const value = {
     orders,
     coverageZones,
@@ -174,7 +179,8 @@ export function MessagingProvider({ children }) {
     getPollingStatus,
     startPolling,
     stopPolling,
-    syncContacts
+    syncContacts,
+    validateZip
   }
 
   return <MessagingContext.Provider value={value}>{children}</MessagingContext.Provider>

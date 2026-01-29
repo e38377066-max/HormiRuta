@@ -647,6 +647,39 @@ router.delete('/coverage-zones/:id', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/validate-zip', requireAuth, async (req, res) => {
+  try {
+    const { zipOrCity } = req.body;
+    
+    if (!zipOrCity || !zipOrCity.trim()) {
+      return res.status(400).json({ error: 'ZIP code o ciudad requerido' });
+    }
+
+    const validationService = new AddressValidationService(req.session.userId);
+    const result = await validationService.validateZipOrCity(zipOrCity.trim());
+    
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    let copyMessage = '';
+    if (result.valid) {
+      copyMessage = settings?.coverage_message || 'Tenemos cobertura en tu zona!';
+    } else {
+      copyMessage = settings?.no_coverage_message || 'Lo sentimos, actualmente no tenemos cobertura en tu zona.';
+    }
+
+    res.json({
+      ...result,
+      copyMessage,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Validate ZIP error:', error);
+    res.status(500).json({ error: 'Error al validar' });
+  }
+});
+
 router.post('/validate-address', requireAuth, async (req, res) => {
   try {
     const { address } = req.body;

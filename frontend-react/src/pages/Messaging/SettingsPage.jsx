@@ -5,7 +5,7 @@ import './MessagingPages.css'
 
 export default function SettingsPage() {
   const navigate = useNavigate()
-  const { fetchSettings, updateSettings, testConnection, startPolling, stopPolling, getPollingStatus, syncContacts } = useMessaging()
+  const { fetchSettings, updateSettings, testConnection, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip } = useMessaging()
   
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -16,6 +16,12 @@ export default function SettingsPage() {
   const [pollingInterval, setPollingInterval] = useState(30)
   const [pollingStatus, setPollingStatus] = useState({ active: false, lastPoll: null })
   const [activeTab, setActiveTab] = useState('connection')
+  
+  const [zipInput, setZipInput] = useState('')
+  const [validating, setValidating] = useState(false)
+  const [validationResult, setValidationResult] = useState(null)
+  const [validationHistory, setValidationHistory] = useState([])
+  const [copySuccess, setCopySuccess] = useState(false)
 
   const pollingIntervals = [
     { label: '15 segundos', value: 15 },
@@ -226,9 +232,48 @@ export default function SettingsPage() {
     return businessDays.split(',').includes(dayValue)
   }
 
+  const handleValidateZip = async () => {
+    if (!zipInput.trim()) return
+    
+    setValidating(true)
+    setValidationResult(null)
+    setCopySuccess(false)
+    
+    try {
+      const result = await validateZip(zipInput.trim())
+      setValidationResult(result)
+      
+      const historyItem = {
+        id: Date.now(),
+        zipOrCity: zipInput.trim(),
+        valid: result.valid,
+        message: result.message,
+        copyMessage: result.copyMessage,
+        timestamp: new Date().toLocaleTimeString()
+      }
+      setValidationHistory(prev => [historyItem, ...prev].slice(0, 20))
+      setZipInput('')
+    } catch (err) {
+      setValidationResult({ valid: false, message: 'Error al validar' })
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handleCopyMessage = async (message) => {
+    try {
+      await navigator.clipboard.writeText(message)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    } catch (err) {
+      alert('Error al copiar')
+    }
+  }
+
   const tabs = [
     { id: 'connection', label: 'Conexion', icon: 'link' },
     { id: 'chatbot', label: 'Chatbot', icon: 'smart_toy' },
+    { id: 'validator', label: 'Validador ZIP', icon: 'pin_drop' },
     { id: 'messages', label: 'Mensajes', icon: 'chat' },
     { id: 'automation', label: 'Automatizacion', icon: 'auto_fix_high' }
   ]
@@ -496,7 +541,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="tags-preview">
-                {form.excluded_tags.split(',').filter(t => t.trim()).map((tag, i) => (
+                {String(form.excluded_tags || '').split(',').filter(t => t.trim()).map((tag, i) => (
                   <span key={i} className="tag outline">{tag.trim()}</span>
                 ))}
               </div>
@@ -519,7 +564,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div className="products-preview">
-                {form.products.split(',').filter(p => p.trim()).map((product, i) => (
+                {String(form.products || '').split(',').filter(p => p.trim()).map((product, i) => (
                   <div key={i} className="product-item">
                     <span className="product-number">{i + 1}</span>
                     <span className="product-name">{product.trim()}</span>
@@ -537,6 +582,108 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+          </>
+        )}
+
+        {activeTab === 'validator' && (
+          <>
+            <div className="settings-card">
+              <h3>
+                <span className="material-icons">pin_drop</span>
+                Validador de ZIP Code / Ciudad
+              </h3>
+              
+              <div className="validator-section">
+                <div className="validator-input-row">
+                  <div className="field-group" style={{ flex: 1 }}>
+                    <input
+                      type="text"
+                      value={zipInput}
+                      onChange={(e) => setZipInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleValidateZip()}
+                      placeholder="Ingresa ZIP code o ciudad..."
+                    />
+                  </div>
+                  <button 
+                    className="btn-primary"
+                    onClick={handleValidateZip}
+                    disabled={validating || !zipInput.trim()}
+                  >
+                    {validating ? (
+                      <>
+                        <span className="spinner-small"></span>
+                        Validando...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-icons">search</span>
+                        Verificar
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {validationResult && (
+                  <div className={`validation-result ${validationResult.valid ? 'success' : 'error'}`}>
+                    <div className="result-header">
+                      <span className="material-icons">
+                        {validationResult.valid ? 'check_circle' : 'cancel'}
+                      </span>
+                      <span className="result-message">{validationResult.message}</span>
+                    </div>
+                    {validationResult.copyMessage && (
+                      <div className="result-actions">
+                        <button 
+                          className={`btn-copy ${copySuccess ? 'copied' : ''}`}
+                          onClick={() => handleCopyMessage(validationResult.copyMessage)}
+                        >
+                          <span className="material-icons">
+                            {copySuccess ? 'check' : 'content_copy'}
+                          </span>
+                          {copySuccess ? 'Copiado!' : 'Copiar mensaje'}
+                        </button>
+                        <div className="copy-preview">
+                          "{validationResult.copyMessage.substring(0, 60)}{validationResult.copyMessage.length > 60 ? '...' : ''}"
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {validationHistory.length > 0 && (
+              <div className="settings-card">
+                <h3>
+                  <span className="material-icons">history</span>
+                  Historial de Validaciones
+                </h3>
+                
+                <div className="validation-history">
+                  {validationHistory.map(item => (
+                    <div key={item.id} className={`history-item ${item.valid ? 'valid' : 'invalid'}`}>
+                      <div className="history-main">
+                        <span className="material-icons">
+                          {item.valid ? 'check_circle' : 'cancel'}
+                        </span>
+                        <span className="history-value">{item.zipOrCity}</span>
+                        <span className="history-message">{item.message}</span>
+                      </div>
+                      <div className="history-actions">
+                        <button 
+                          className="btn-icon-small"
+                          onClick={() => handleCopyMessage(item.copyMessage)}
+                          title="Copiar mensaje"
+                        >
+                          <span className="material-icons">content_copy</span>
+                        </button>
+                        <span className="history-time">{item.timestamp}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
