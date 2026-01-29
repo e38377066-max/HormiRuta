@@ -130,12 +130,21 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 - App ID: com.hormiruta.app
 - App Name: HormiRuta
 - Web Dir: dist
+- Min SDK: 22 (Android 5.1)
+- Target SDK: 34 (Android 14)
 
 ### Native Plugins
 - @capacitor/geolocation - GPS location tracking
 - @capacitor/haptics - Vibration feedback
 - @capacitor/status-bar - Native status bar styling
 - @capacitor/splash-screen - Native splash screen
+
+### Android Permissions
+- INTERNET - Network access
+- ACCESS_NETWORK_STATE - Network state
+- ACCESS_FINE_LOCATION - GPS high precision
+- ACCESS_COARSE_LOCATION - Approximate location
+- VIBRATE - Haptic feedback
 
 ### Build Commands
 ```bash
@@ -144,14 +153,22 @@ cd frontend-react
 # Build for mobile
 npm run build:mobile
 
-# Add platforms (requires local development)
-npm run cap:add:android
-npm run cap:add:ios
+# Sync with native platforms
+npx cap sync android
 
-# Open in IDE
-npm run cap:android  # Opens Android Studio
-npm run cap:ios      # Opens Xcode
+# Open in Android Studio
+npx cap open android
 ```
+
+### Android Build Instructions
+See `frontend-react/ANDROID_BUILD.md` for complete build instructions.
+
+**Quick Start:**
+1. Run `npm run build` to compile web app
+2. Run `npx cap sync android` to sync with Android
+3. Edit `android/app/src/main/res/values/strings.xml` to add Google Maps API key
+4. Run `npx cap open android` to open in Android Studio
+5. Build > Build APK
 
 ### Platform-Specific Setup
 The app uses a helper utility (src/utils/capacitor.js) that:
