@@ -241,13 +241,15 @@ Centralized service for all Respond.io API v2 interactions.
 #### Space (Workspace)
 - `listUsers(limit?, cursorId?)` - List agents in workspace
 - `getUser(userId)` - Get specific user
-- `listChannels()` - List channels
-- `listCustomFields()` - List custom fields
-- `createCustomField(name, type)` - Create custom field
-- `listMessageTemplates()` - List message templates
-- `createSpaceTag(name, color?)` - Create workspace tag
-- `updateSpaceTag(tagId, name, color?)` - Update tag
-- `deleteSpaceTag(tagId)` - Delete tag
+- `listChannels(limit?, cursorId?)` - List channels
+- `listCustomFields(limit?, cursorId?)` - List custom fields
+- `getCustomField(fieldId)` - Get custom field by ID
+- `createCustomField(name, dataType, options?)` - Create custom field (dataType: text, list, checkbox, email, number, url, datetime)
+- `listClosingNotes(limit?, cursorId?)` - List closing notes
+- `listMessageTemplates(channelId, limit?, cursorId?)` - List message templates for channel
+- `createSpaceTag(name, options?)` - Create workspace tag (options: description, colorCode, emoji)
+- `updateSpaceTag(currentName, updates?)` - Update tag by current name
+- `deleteSpaceTag(name)` - Delete tag by name
 
 ### Identifier Format
 Contacts can be identified using:

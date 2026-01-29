@@ -344,54 +344,94 @@ class RespondApiService {
   /**
    * List channels in workspace
    */
-  async listChannels() {
-    return this.request('GET', '/space/channel');
+  async listChannels(limit = 10, cursorId = null) {
+    const params = { limit };
+    if (cursorId) params.cursorId = cursorId;
+    return this.request('GET', '/space/channel', null, params);
   }
 
   /**
    * List custom fields
    */
-  async listCustomFields() {
-    return this.request('GET', '/space/custom_field');
+  async listCustomFields(limit = 10, cursorId = null) {
+    const params = { limit };
+    if (cursorId) params.cursorId = cursorId;
+    return this.request('GET', '/space/custom_field', null, params);
+  }
+
+  /**
+   * Get a custom field by ID
+   */
+  async getCustomField(fieldId) {
+    return this.request('GET', `/space/custom_field/${fieldId}`);
   }
 
   /**
    * Create a custom field
+   * @param {string} name - Field name (max 50 chars)
+   * @param {string} dataType - Type: text, list, checkbox, email, number, url, datetime
+   * @param {object} options - Optional: slug, description, allowedValues (for list type)
    */
-  async createCustomField(name, type) {
-    return this.request('POST', '/space/custom_field', { name, type });
+  async createCustomField(name, dataType, options = {}) {
+    const data = { name, dataType };
+    if (options.slug) data.slug = options.slug;
+    if (options.description) data.description = options.description;
+    if (options.allowedValues) data.allowedValues = options.allowedValues;
+    return this.request('POST', '/space/custom_field', data);
   }
 
   /**
-   * List message templates
+   * List closing notes in workspace
    */
-  async listMessageTemplates() {
-    return this.request('GET', '/space/message_template');
+  async listClosingNotes(limit = 10, cursorId = null) {
+    const params = { limit };
+    if (cursorId) params.cursorId = cursorId;
+    return this.request('GET', '/space/closing_notes', null, params);
+  }
+
+  /**
+   * List message templates for a channel
+   * @param {number} channelId - The channel ID
+   */
+  async listMessageTemplates(channelId, limit = 10, cursorId = null) {
+    const params = { limit };
+    if (cursorId) params.cursorId = cursorId;
+    return this.request('GET', `/space/channel/${channelId}/template`, null, params);
   }
 
   /**
    * Create a space tag
+   * @param {string} name - Tag name (required)
+   * @param {object} options - Optional: description, colorCode, emoji
    */
-  async createSpaceTag(name, color = null) {
+  async createSpaceTag(name, options = {}) {
     const data = { name };
-    if (color) data.color = color;
+    if (options.description) data.description = options.description;
+    if (options.colorCode) data.colorCode = options.colorCode;
+    if (options.emoji) data.emoji = options.emoji;
     return this.request('POST', '/space/tag', data);
   }
 
   /**
    * Update a space tag
+   * @param {string} currentName - Current tag name (required)
+   * @param {object} updates - Fields to update: name, description, colorCode, emoji
    */
-  async updateSpaceTag(tagId, name, color = null) {
-    const data = { name };
-    if (color) data.color = color;
-    return this.request('PUT', `/space/tag/${tagId}`, data);
+  async updateSpaceTag(currentName, updates = {}) {
+    const data = { currentName };
+    if (updates.name) data.name = updates.name;
+    if (updates.description) data.description = updates.description;
+    if (updates.colorCode) data.colorCode = updates.colorCode;
+    if (updates.emoji) data.emoji = updates.emoji;
+    return this.request('PUT', '/space/tag', data);
   }
 
   /**
-   * Delete a space tag
+   * Delete a space tag by name
+   * @param {string} name - Tag name to delete
    */
-  async deleteSpaceTag(tagId) {
-    return this.request('DELETE', `/space/tag/${tagId}`);
+  async deleteSpaceTag(name) {
+    return this.request('DELETE', '/space/tag', { name });
   }
 
   // ==========================================
