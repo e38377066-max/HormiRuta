@@ -273,7 +273,6 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'connection', label: 'Conexion', icon: 'link' },
     { id: 'chatbot', label: 'Chatbot', icon: 'smart_toy' },
-    { id: 'validator', label: 'Validador ZIP', icon: 'pin_drop' },
     { id: 'messages', label: 'Mensajes', icon: 'chat' },
     { id: 'automation', label: 'Automatizacion', icon: 'auto_fix_high' }
   ]
@@ -582,108 +581,6 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-          </>
-        )}
-
-        {activeTab === 'validator' && (
-          <>
-            <div className="settings-card">
-              <h3>
-                <span className="material-icons">pin_drop</span>
-                Validador de ZIP Code / Ciudad
-              </h3>
-              
-              <div className="validator-section">
-                <div className="validator-input-row">
-                  <div className="field-group" style={{ flex: 1 }}>
-                    <input
-                      type="text"
-                      value={zipInput}
-                      onChange={(e) => setZipInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleValidateZip()}
-                      placeholder="Ingresa ZIP code o ciudad..."
-                    />
-                  </div>
-                  <button 
-                    className="btn-primary"
-                    onClick={handleValidateZip}
-                    disabled={validating || !zipInput.trim()}
-                  >
-                    {validating ? (
-                      <>
-                        <span className="spinner-small"></span>
-                        Validando...
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-icons">search</span>
-                        Verificar
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {validationResult && (
-                  <div className={`validation-result ${validationResult.valid ? 'success' : 'error'}`}>
-                    <div className="result-header">
-                      <span className="material-icons">
-                        {validationResult.valid ? 'check_circle' : 'cancel'}
-                      </span>
-                      <span className="result-message">{validationResult.message}</span>
-                    </div>
-                    {validationResult.copyMessage && (
-                      <div className="result-actions">
-                        <button 
-                          className={`btn-copy ${copySuccess ? 'copied' : ''}`}
-                          onClick={() => handleCopyMessage(validationResult.copyMessage)}
-                        >
-                          <span className="material-icons">
-                            {copySuccess ? 'check' : 'content_copy'}
-                          </span>
-                          {copySuccess ? 'Copiado!' : 'Copiar mensaje'}
-                        </button>
-                        <div className="copy-preview">
-                          "{validationResult.copyMessage.substring(0, 60)}{validationResult.copyMessage.length > 60 ? '...' : ''}"
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {validationHistory.length > 0 && (
-              <div className="settings-card">
-                <h3>
-                  <span className="material-icons">history</span>
-                  Historial de Validaciones
-                </h3>
-                
-                <div className="validation-history">
-                  {validationHistory.map(item => (
-                    <div key={item.id} className={`history-item ${item.valid ? 'valid' : 'invalid'}`}>
-                      <div className="history-main">
-                        <span className="material-icons">
-                          {item.valid ? 'check_circle' : 'cancel'}
-                        </span>
-                        <span className="history-value">{item.zipOrCity}</span>
-                        <span className="history-message">{item.message}</span>
-                      </div>
-                      <div className="history-actions">
-                        <button 
-                          className="btn-icon-small"
-                          onClick={() => handleCopyMessage(item.copyMessage)}
-                          title="Copiar mensaje"
-                        >
-                          <span className="material-icons">content_copy</span>
-                        </button>
-                        <span className="history-time">{item.timestamp}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         )}
 

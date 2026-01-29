@@ -11,6 +11,8 @@ export default function OrdersPage() {
   const [showValidateZip, setShowValidateZip] = useState(false)
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState(null)
+  const [validationHistory, setValidationHistory] = useState([])
+  const [copySuccess, setCopySuccess] = useState(false)
   const [zipForm, setZipForm] = useState({ 
     zip_code: '', 
     contact_name: '', 
@@ -65,13 +67,32 @@ export default function OrdersPage() {
     if (!zipForm.zip_code) return
     setValidating(true)
     setValidationResult(null)
+    setCopySuccess(false)
     try {
       const response = await api.post('/api/messaging/validate-zip', {
-        zip_code: zipForm.zip_code,
-        contact_name: zipForm.contact_name,
-        platform: zipForm.platform
+        zipOrCity: zipForm.zip_code
       })
-      setValidationResult(response.data)
+      const result = {
+        ...response.data,
+        hasCoverage: response.data.valid,
+        zipCode: zipForm.zip_code,
+        contactName: zipForm.contact_name,
+        platform: zipForm.platform
+      }
+      setValidationResult(result)
+      
+      const historyItem = {
+        id: Date.now(),
+        zipCode: zipForm.zip_code,
+        contactName: zipForm.contact_name,
+        platform: zipForm.platform,
+        hasCoverage: result.valid,
+        message: result.message,
+        copyMessage: result.copyMessage,
+        zone: result.zone,
+        timestamp: new Date().toLocaleTimeString()
+      }
+      setValidationHistory(prev => [historyItem, ...prev].slice(0, 20))
     } catch (err) {
       console.error('Error validating ZIP:', err)
       setValidationResult({ 
@@ -84,10 +105,22 @@ export default function OrdersPage() {
     }
   }
 
+  const handleCopyMessage = async (message) => {
+    if (!message) return
+    try {
+      await navigator.clipboard.writeText(message)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    } catch (err) {
+      alert('Error al copiar')
+    }
+  }
+
   const handleCloseValidation = () => {
     setShowValidateZip(false)
     setZipForm({ zip_code: '', contact_name: '', platform: 'facebook' })
     setValidationResult(null)
+    setCopySuccess(false)
   }
 
   return (
@@ -261,22 +294,74 @@ export default function OrdersPage() {
 
               {validationResult && (
                 <div className={`validation-result ${validationResult.hasCoverage ? 'success' : 'error'}`}>
-                  <span className="material-icons result-icon">
-                    {validationResult.hasCoverage ? 'check_circle' : 'cancel'}
-                  </span>
-                  <h4>
-                    {validationResult.hasCoverage ? 'Cobertura Disponible' : 'Sin Cobertura'}
-                  </h4>
-                  <p>
-                    {validationResult.hasCoverage 
-                      ? `El codigo postal ${zipForm.zip_code} tiene cobertura de entrega.`
-                      : `El codigo postal ${zipForm.zip_code} no esta dentro de nuestra zona de cobertura.`}
-                  </p>
+                  <div className="result-header">
+                    <span className="material-icons">
+                      {validationResult.hasCoverage ? 'check_circle' : 'cancel'}
+                    </span>
+                    <div>
+                      <h4 style={{ margin: 0 }}>
+                        {validationResult.hasCoverage ? 'Cobertura Disponible' : 'Sin Cobertura'}
+                      </h4>
+                      <p style={{ margin: '4px 0 0', fontSize: '14px' }}>
+                        {validationResult.message || (validationResult.hasCoverage 
+                          ? `El codigo postal ${zipForm.zip_code} tiene cobertura de entrega.`
+                          : `El codigo postal ${zipForm.zip_code} no esta dentro de nuestra zona de cobertura.`)}
+                      </p>
+                    </div>
+                  </div>
                   {validationResult.zone && (
-                    <p style={{ marginTop: '8px', fontWeight: '500' }}>
+                    <p style={{ marginTop: '8px', fontWeight: '500', fontSize: '14px' }}>
                       Zona: {validationResult.zone.city}, {validationResult.zone.state}
                     </p>
                   )}
+                  {validationResult.copyMessage && (
+                    <div className="result-actions">
+                      <button 
+                        className={`btn-copy ${copySuccess ? 'copied' : ''}`}
+                        onClick={() => handleCopyMessage(validationResult.copyMessage)}
+                      >
+                        <span className="material-icons">
+                          {copySuccess ? 'check' : 'content_copy'}
+                        </span>
+                        {copySuccess ? 'Copiado!' : 'Copiar mensaje'}
+                      </button>
+                      <div className="copy-preview">
+                        "{validationResult.copyMessage.substring(0, 50)}{validationResult.copyMessage.length > 50 ? '...' : ''}"
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {validationHistory.length > 0 && (
+                <div className="validation-history-section">
+                  <h4 style={{ margin: '16px 0 8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="material-icons" style={{ fontSize: '20px' }}>history</span>
+                    Historial
+                  </h4>
+                  <div className="validation-history">
+                    {validationHistory.map(item => (
+                      <div key={item.id} className={`history-item ${item.hasCoverage ? 'valid' : 'invalid'}`}>
+                        <div className="history-main">
+                          <span className="material-icons">
+                            {item.hasCoverage ? 'check_circle' : 'cancel'}
+                          </span>
+                          <span className="history-value">{item.zipCode}</span>
+                          {item.contactName && <span className="history-name">({item.contactName})</span>}
+                        </div>
+                        <div className="history-actions">
+                          <button 
+                            className="btn-icon-small"
+                            onClick={() => handleCopyMessage(item.copyMessage)}
+                            title="Copiar mensaje"
+                          >
+                            <span className="material-icons">content_copy</span>
+                          </button>
+                          <span className="history-time">{item.timestamp}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
