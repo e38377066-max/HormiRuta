@@ -2,13 +2,61 @@ import ConversationState from '../models/ConversationState.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import MessagingOrder from '../models/MessagingOrder.js';
 import AddressValidationService from './addressValidation.js';
+import respondApiService from './respondApiService.js';
 
 class ChatbotService {
-  constructor(userId, settings, respondio) {
+  constructor(userId, settings) {
     this.userId = userId;
     this.settings = settings;
-    this.respondio = respondio;
+    this.api = respondApiService;
     this.addressValidation = new AddressValidationService(userId);
+    
+    // Set user context for API service (multi-tenant support)
+    this.api.setContext(userId, settings.respond_api_token);
+  }
+
+  /**
+   * Send message to contact via Respond.io API
+   */
+  async sendMessage(contactId, text) {
+    try {
+      const result = await this.api.sendMessage(`id:${contactId}`, text);
+      console.log(`[User ${this.userId}] Message sent to contact ${contactId}: ${text.substring(0, 50)}...`);
+      return result;
+    } catch (error) {
+      console.error(`[User ${this.userId}] Failed to send message to ${contactId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Assign contact to agent via Respond.io API
+   */
+  async assignToAgent(contactId, agentIdOrEmail) {
+    try {
+      const result = await this.api.assignConversation(`id:${contactId}`, agentIdOrEmail);
+      console.log(`[User ${this.userId}] Contact ${contactId} assigned to ${agentIdOrEmail}`);
+      
+      // Also add a comment for tracking
+      await this.api.addComment(`id:${contactId}`, `[Bot] Conversación asignada automáticamente a agente`);
+      
+      return result;
+    } catch (error) {
+      console.error(`[User ${this.userId}] Failed to assign contact ${contactId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Add tracking tag to contact
+   */
+  async addTrackingTag(contactId, tag = 'BotAtendido') {
+    try {
+      await this.api.addTags(`id:${contactId}`, [tag]);
+      console.log(`[User ${this.userId}] Tag '${tag}' added to contact ${contactId}`);
+    } catch (error) {
+      console.error(`[User ${this.userId}] Failed to add tag to ${contactId}:`, error.message);
+    }
   }
 
   isWithinBusinessHours() {
@@ -148,11 +196,12 @@ class ChatbotService {
         const outOfHoursMsg = this.settings.out_of_hours_message || 
           '🌙 ¡Hola hola! 😊\n\nGracias por comunicarte con nosotros 😊 Ahorita estamos fuera de horario 🕒 pero puedes dejar tu mensaje sin problema 💬\n\nEscríbenos lo que necesitas 🙌 y en cuanto estemos de regreso en horario laboral lo leemos y te respondemos lo más pronto posible 💛📲';
         
-        await this.respondio.sendMessage(contact.id, outOfHoursMsg);
+        await this.sendMessage(contact.id, outOfHoursMsg);
         await this.updateConversationState(contact.id, { out_of_hours_notified: true });
 
-        if (this.settings.default_agent_id) {
-          await this.respondio.assignContact(contact.id, this.settings.default_agent_id);
+        const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
+        if (agentId) {
+          await this.assignToAgent(contact.id, agentId);
         }
         
         return { handled: true, action: 'out_of_hours_message', message: outOfHoursMsg };
@@ -190,14 +239,16 @@ class ChatbotService {
       const welcomeMsg = this.settings.welcome_existing_customer ||
         '👋 ¡Hola! Qué gusto volver a tener noticias suyas 😊 Espero que todo esté yendo muy bien.\n\nPor favor, cuéntame en qué puedo ayudarle esta vez 🤔✨';
       
-      await this.respondio.sendMessage(contact.id, welcomeMsg);
+      await this.sendMessage(contact.id, welcomeMsg);
       await this.updateConversationState(contact.id, {
         state: 'assigned',
         is_existing_customer: true
       });
 
-      if (this.settings.default_agent_id) {
-        await this.respondio.assignContact(contact.id, this.settings.default_agent_id);
+      const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
+      if (agentId) {
+        await this.assignToAgent(contact.id, agentId);
+        await this.addTrackingTag(contact.id, 'ClienteExistente');
       }
       
       return { handled: true, action: 'welcome_existing', message: welcomeMsg };
@@ -205,7 +256,7 @@ class ChatbotService {
       const welcomeMsg = this.settings.welcome_new_customer ||
         '¡Hola! 🙌 Somos de Area 862 Graphics.\n\n📩😊 Cuéntanos, ¿ya uno de nuestros agentes le brindó información sobre nuestros servicios y precios?';
       
-      await this.respondio.sendMessage(contact.id, welcomeMsg);
+      await this.sendMessage(contact.id, welcomeMsg);
       await this.updateConversationState(contact.id, {
         state: 'awaiting_prior_info',
         awaiting_response: 'yes_no'
@@ -222,14 +273,16 @@ class ChatbotService {
       const hasInfoMsg = this.settings.has_info_response ||
         'Perfecto ✅ entonces solo envíenos los datos e información para poder preparar el diseño de su orden ✍️😊';
       
-      await this.respondio.sendMessage(contact.id, hasInfoMsg);
+      await this.sendMessage(contact.id, hasInfoMsg);
       await this.updateConversationState(contact.id, {
         state: 'assigned',
         has_prior_info: true
       });
 
-      if (this.settings.default_agent_id) {
-        await this.respondio.assignContact(contact.id, this.settings.default_agent_id);
+      const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
+      if (agentId) {
+        await this.assignToAgent(contact.id, agentId);
+        await this.addTrackingTag(contact.id, 'TieneInfoPrevia');
       }
       
       return { handled: true, action: 'has_prior_info', message: hasInfoMsg };
@@ -237,7 +290,7 @@ class ChatbotService {
       const requestZipMsg = this.settings.request_zip_message ||
         'Vi que te interesan algunos de nuestros productos y quiero ayudarte a encontrar las mejores opciones 😄\n\n📍 Por favor, envíame solo el número de tu código postal (ZIP), por ejemplo 75208 ✉️\n\nCon eso confirmo si llegamos a tu zona y te paso los precios enseguida 🚚✨';
       
-      await this.respondio.sendMessage(contact.id, requestZipMsg);
+      await this.sendMessage(contact.id, requestZipMsg);
       await this.updateConversationState(contact.id, {
         state: 'awaiting_zip',
         has_prior_info: false,
@@ -247,7 +300,7 @@ class ChatbotService {
       return { handled: true, action: 'request_zip', message: requestZipMsg };
     } else {
       const remindMsg = 'Por favor, responde Sí o No: ¿Ya te brindaron información sobre nuestros servicios y precios? 😊';
-      await this.respondio.sendMessage(contact.id, remindMsg);
+      await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'remind_yes_no', message: remindMsg };
     }
   }
@@ -265,12 +318,12 @@ class ChatbotService {
           .replace('{{city}}', validation.zone?.city || '')
           .replace('{{zone}}', validation.zone?.zone_name || '');
         
-        await this.respondio.sendMessage(contact.id, coverageMsg);
+        await this.sendMessage(contact.id, coverageMsg);
 
         const productMenuMsg = this.settings.product_menu_message ||
           '¿En cuál de estos productos está interesado? (Indica el número del producto)\n\n1. Tarjetas\n2. Magnéticos\n3. Post Cards\n4. Playeras';
         
-        await this.respondio.sendMessage(contact.id, productMenuMsg);
+        await this.sendMessage(contact.id, productMenuMsg);
         
         await this.updateConversationState(contact.id, {
           state: 'awaiting_product',
@@ -284,10 +337,12 @@ class ChatbotService {
           .replace('{{zip_code}}', validation.value)
           .replace('{{city}}', validation.value);
         
-        await this.respondio.sendMessage(contact.id, noCoverageMsg);
+        await this.sendMessage(contact.id, noCoverageMsg);
 
-        if (this.settings.default_agent_id) {
-          await this.respondio.assignContact(contact.id, this.settings.default_agent_id);
+        const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
+        if (agentId) {
+          await this.assignToAgent(contact.id, agentId);
+          await this.addTrackingTag(contact.id, 'SinCobertura');
         }
         
         await this.updateConversationState(contact.id, { state: 'assigned' });
@@ -298,7 +353,7 @@ class ChatbotService {
       const remindZipMsg = this.settings.remind_zip_message ||
         'Para poder continuar, necesito que me envíes tu código postal (ZIP) ✅\n\nPor ejemplo: 75208';
       
-      await this.respondio.sendMessage(contact.id, remindZipMsg);
+      await this.sendMessage(contact.id, remindZipMsg);
       return { handled: true, action: 'remind_zip', message: remindZipMsg };
     }
   }
@@ -309,14 +364,22 @@ class ChatbotService {
     if (product) {
       const confirmMsg = `¡Perfecto! Has seleccionado: ${product.name} 👍\n\nUn momento, te paso con uno de nuestros agentes para darte más información sobre precios y disponibilidad 😊`;
       
-      await this.respondio.sendMessage(contact.id, confirmMsg);
+      await this.sendMessage(contact.id, confirmMsg);
       await this.updateConversationState(contact.id, {
         state: 'assigned',
         selected_product: product.name
       });
 
-      if (this.settings.default_agent_id) {
-        await this.respondio.assignContact(contact.id, this.settings.default_agent_id);
+      const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
+      if (agentId) {
+        await this.assignToAgent(contact.id, agentId);
+        await this.addTrackingTag(contact.id, 'ProductoSeleccionado');
+        
+        // Add comment with product info for agent reference
+        await this.api.addComment(
+          `id:${contact.id}`,
+          `[Bot] Cliente seleccionó: ${product.name}. ZIP validado: ${convState.validated_zip || 'N/A'}`
+        );
       }
       
       return { handled: true, action: 'product_selected', product: product.name, message: confirmMsg };
@@ -325,7 +388,7 @@ class ChatbotService {
         '¿En cuál de estos productos está interesado? (Indica el número del producto)\n\n1. Tarjetas\n2. Magnéticos\n3. Post Cards\n4. Playeras';
       
       const remindMsg = `No entendí tu selección. ${productMenuMsg}`;
-      await this.respondio.sendMessage(contact.id, remindMsg);
+      await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'remind_product', message: remindMsg };
     }
   }

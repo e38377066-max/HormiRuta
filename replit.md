@@ -36,6 +36,10 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-01-29: Integrated Respond.io API v2 for chatbot messaging (send messages, assign agents, add tags)
+- 2026-01-29: Added respondApiService.js with all Respond.io API endpoints
+- 2026-01-29: Chatbot now sends real messages via API and assigns contacts to agents
+- 2026-01-29: Added tracking tags (BotAtendido, ClienteExistente, ProductoSeleccionado, etc.)
 - 2026-01-28: Added chatbot system with conversation flow management
 - 2026-01-28: Added business hours verification with out-of-hours auto-response
 - 2026-01-28: Added flexible ZIP/city validation for Respond.io integration
@@ -194,3 +198,66 @@ All settings are configurable in MessagingSettings model:
 - Product menu
 - Excluded tags
 - Default agent for assignment
+
+## Respond.io API Integration
+
+### Service: respondApiService.js
+Centralized service for all Respond.io API v2 interactions.
+
+### Available Methods
+
+#### Messaging
+- `sendMessage(identifier, text, channelId?, messageTag?)` - Send message to contact
+- `getMessage(identifier, messageId)` - Get specific message
+- `listMessages(identifier, limit?, cursorId?)` - List messages for contact
+
+#### Contacts
+- `createContact(identifier, contactData)` - Create new contact
+- `updateContact(identifier, contactData)` - Update contact
+- `createOrUpdateContact(identifier, contactData)` - Create or update contact
+- `deleteContact(identifier)` - Delete contact
+- `getContact(identifier)` - Get contact by identifier
+- `listContacts(filters)` - List contacts with filters
+- `mergeContacts(contactIds, mergedData)` - Merge two contacts
+- `listContactChannels(identifier)` - List channels for contact
+
+#### Tags
+- `addTags(identifier, tags[])` - Add tags to contact (max 10)
+- `removeTags(identifier, tags[])` - Remove tags from contact
+
+#### Conversations
+- `assignConversation(identifier, assignee)` - Assign to agent (ID or email)
+- `unassignConversation(identifier)` - Unassign contact
+- `setConversationStatus(identifier, status, category?, summary?)` - Open/close
+- `openConversation(identifier)` - Open conversation
+- `closeConversation(identifier, category?, summary?)` - Close with notes
+
+#### Lifecycle
+- `updateLifecycle(identifier, name)` - Update lifecycle stage
+
+#### Comments
+- `addComment(identifier, text)` - Add internal comment
+
+#### Space (Workspace)
+- `listUsers(limit?, cursorId?)` - List agents in workspace
+- `getUser(userId)` - Get specific user
+- `listChannels()` - List channels
+- `listCustomFields()` - List custom fields
+- `createCustomField(name, type)` - Create custom field
+- `listMessageTemplates()` - List message templates
+- `createSpaceTag(name, color?)` - Create workspace tag
+- `updateSpaceTag(tagId, name, color?)` - Update tag
+- `deleteSpaceTag(tagId)` - Delete tag
+
+### Identifier Format
+Contacts can be identified using:
+- `id:123` - Contact ID
+- `email:user@example.com` - Email
+- `phone:+1234567890` - Phone number
+
+### Tracking Tags Added by Bot
+- `BotAtendido` - Contact processed by bot
+- `ClienteExistente` - Existing customer
+- `TieneInfoPrevia` - Customer has prior info
+- `ProductoSeleccionado` - Product was selected
+- `SinCobertura` - No coverage in ZIP area

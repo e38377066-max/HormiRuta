@@ -161,7 +161,7 @@ class PollingService {
       });
 
       if (settings.attention_mode === 'automatic') {
-        const chatbot = new ChatbotService(userId, settings, respondio);
+        const chatbot = new ChatbotService(userId, settings);
         const result = await chatbot.processMessage(contact, messageText);
         
         console.log(`Chatbot result for ${contact.firstName}: ${JSON.stringify(result)}`);

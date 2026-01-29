@@ -1,0 +1,152 @@
+Get a message
+get
+https://api.respond.io/v2/contact/{identifier}/message/{messageId}
+
+Retrieves a message based on the message ID. You can get the message ID that was returned upon sending through Send a message endpoint.
+Request
+Path Parameters
+identifier
+string
+required
+
+Identifier of the contact that can either be a phone number, email or contact ID. Examples: id:123 , email:abdc@gmail.com , phone:+60121233112
+messageId
+integer
+required
+
+1662965880
+Responses
+200
+400
+401
+429
+449
+500
+Body
+responses
+/
+200
+messageId
+integer
+required
+
+Unique ID of the message
+Example:
+1262965213
+channelMessageId
+contactId
+integer
+required
+
+ID of the contact to which the message was sent.
+Example:
+123
+channelId
+integer
+required
+Example:
+123
+traffic
+string
+required
+
+Defines if the message was received or sent
+Allowed values:
+outgoingincoming
+message
+type
+any
+required
+Allowed value:
+text
+text
+string
+required
+Example:
+Message text
+messageTag
+string
+
+Required if the channel is facebook or instagram and the message is being sent outsde the standard 24 hour messaging window. Reference
+Allowed values:
+ACCOUNT_UPDATEPOST_PURCHASE_UPDATECONFIRMED_EVENT_UPDATE
+status
+array[object]
+
+The delivery statuses of the message
+value
+string
+required
+Allowed values:
+pendingsentdeliveredreadfailed
+timestamp
+integer
+required
+
+Unix timestamp in seconds
+Example:
+1662965213
+message
+string
+
+Reason of the failure.
+Example:
+Failed reason
+sender
+source
+string
+Example:
+user
+userId
+string
+Example:
+123456789
+teamId
+string
+Example:
+123456789
+Token
+:
+identifier*
+:
+messageId*
+:
+
+const request = require('request');
+
+const options = {
+  method: 'GET',
+  url: 'https://api.respond.io/v2/contact/{identifier}/message/{messageId}',
+  headers: {Accept: 'application/json', Authorization: 'Bearer 123'}
+};
+
+request(options, function (error, response, body) {
+  if (error) throw new Error(error);
+
+  console.log(body);
+});
+
+{
+  "messageId": 1262965213,
+  "channelMessageId": "string",
+  "contactId": 123,
+  "channelId": 123,
+  "traffic": "outgoing",
+  "message": {
+    "type": "text",
+    "text": "Message text",
+    "messageTag": "ACCOUNT_UPDATE"
+  },
+  "status": [
+    {
+      "value": "pending",
+      "timestamp": 1662965213,
+      "message": "Failed reason"
+    }
+  ],
+  "sender": {
+    "source": "user",
+    "userId": 123456789,
+    "teamId": 123456789
+  }
+}

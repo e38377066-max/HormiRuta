@@ -10,6 +10,7 @@ import {
 } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import RespondioService from '../services/respondio.js';
+import respondApiService from '../services/respondApiService.js';
 import AddressValidationService from '../services/addressValidation.js';
 import ChatbotService from '../services/chatbotService.js';
 import pollingService from '../services/pollingService.js';
@@ -68,6 +69,10 @@ router.put('/settings', requireAuth, async (req, res) => {
     }
 
     await settings.save();
+    
+    // Clear API token cache when settings are updated
+    respondApiService.clearTokenCache(req.session.userId);
+    
     res.json(settings.toDict());
   } catch (error) {
     console.error('Update messaging settings error:', error);
@@ -882,8 +887,7 @@ router.post('/chatbot/pause/:contactId', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
     }
 
-    const respondio = new RespondioService(settings.respond_api_token);
-    const chatbot = new ChatbotService(req.session.userId, settings, respondio);
+    const chatbot = new ChatbotService(req.session.userId, settings);
     const result = await chatbot.pauseBot(req.params.contactId);
 
     res.json(result);
@@ -903,8 +907,7 @@ router.post('/chatbot/resume/:contactId', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
     }
 
-    const respondio = new RespondioService(settings.respond_api_token);
-    const chatbot = new ChatbotService(req.session.userId, settings, respondio);
+    const chatbot = new ChatbotService(req.session.userId, settings);
     const result = await chatbot.resumeBot(req.params.contactId);
 
     res.json(result);
@@ -924,8 +927,7 @@ router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
     }
 
-    const respondio = new RespondioService(settings.respond_api_token);
-    const chatbot = new ChatbotService(req.session.userId, settings, respondio);
+    const chatbot = new ChatbotService(req.session.userId, settings);
     const result = await chatbot.resetConversation(req.params.contactId);
 
     res.json(result);

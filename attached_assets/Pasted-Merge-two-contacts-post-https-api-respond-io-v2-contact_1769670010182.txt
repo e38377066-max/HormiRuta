@@ -1,0 +1,143 @@
+Merge two contacts
+post
+https://api.respond.io/v2/contact/merge
+
+Merge two contacts by their IDs
+Request
+Body
+
+The contact that is older becomes the "primary contact".
+contactIds
+array[integer]
+
+IDs of the two contacts that are to be merged
+firstName
+string
+required
+Example:
+Muhammad
+lastName
+string or null
+Example:
+Mahin
+phone
+string or null
+Example:
++60123456789
+email
+string or null
+Example:
+test@example.com
+language
+string or null
+
+Following the ISO 639-1 standard.
+Example:
+ms
+profilePic
+string or null
+Example:
+https://cdn.respond.io/profile_avatar.png
+countryCode
+string or null
+
+Following the ISO 3166-1 alpha-2 standard.
+Example:
+MY
+custom_fields
+array[object] or null
+name
+string
+required
+Example:
+Company Website
+value
+string or null
+
+Formatting rulesShow all...
+Example:
+https://example.com
+Responses
+200
+400
+401
+429
+500
+Body
+contactId
+integer
+
+ID of the contact on which the action was performed.
+Token
+:
+{
+  "contactIds": [
+    0
+  ],
+  "firstName": "Muhammad ",
+  "lastName": "Mahin",
+  "phone": "+60123456789",
+  "email": "test@example.com",
+  "language": "ms",
+  "profilePic": "https://cdn.respond.io/profile_avatar.png",
+  "countryCode": "MY",
+  "custom_fields": [
+    {
+      "name": "Company Website",
+      "value": "https://example.com"
+    }
+  ]
+}
+
+{
+  "contactIds": [
+    0
+  ],
+  "firstName": "Muhammad ",
+  "lastName": "Mahin",
+  "phone": "+60123456789",
+  "email": "test@example.com",
+  "language": "ms",
+  "profilePic": "https://cdn.respond.io/profile_avatar.png",
+  "countryCode": "MY",
+  "custom_fields": [
+    {
+      "name": "Company Website",
+      "value": "https://example.com"
+    }
+  ]
+}
+
+const request = require('request');
+
+const options = {
+  method: 'POST',
+  url: 'https://api.respond.io/v2/contact/merge',
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    Authorization: 'Bearer 123'
+  },
+  body: {
+    contactIds: [0],
+    firstName: 'Muhammad ',
+    lastName: 'Mahin',
+    phone: '+60123456789',
+    email: 'test@example.com',
+    language: 'ms',
+    profilePic: 'https://cdn.respond.io/profile_avatar.png',
+    countryCode: 'MY',
+    custom_fields: [{name: 'Company Website', value: 'https://example.com'}]
+  },
+  json: true
+};
+
+request(options, function (error, response, body) {
+  if (error) throw new Error(error);
+
+  console.log(body);
+});
+
+{
+  "contactId": 0
+}
