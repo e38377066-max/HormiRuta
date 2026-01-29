@@ -651,12 +651,16 @@ router.post('/validate-zip', requireAuth, async (req, res) => {
   try {
     const { zipOrCity } = req.body;
     
+    console.log('Validate ZIP request:', { zipOrCity, userId: req.session.userId });
+    
     if (!zipOrCity || !zipOrCity.trim()) {
       return res.status(400).json({ error: 'ZIP code o ciudad requerido' });
     }
 
     const validationService = new AddressValidationService(req.session.userId);
     const result = await validationService.validateZipOrCity(zipOrCity.trim());
+    
+    console.log('Validation result:', result);
     
     const settings = await MessagingSettings.findOne({
       where: { user_id: req.session.userId }
