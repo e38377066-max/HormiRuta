@@ -207,7 +207,13 @@ Centralized service for all Respond.io API v2 interactions.
 ### Available Methods
 
 #### Messaging
-- `sendMessage(identifier, text, channelId?, messageTag?)` - Send message to contact
+- `sendMessage(identifier, text, channelId?, messageTag?)` - Send text message to contact
+- `sendAttachment(identifier, attachmentType, url, channelId?)` - Send attachment (image, video, audio, file)
+- `sendQuickReply(identifier, title, replies[], channelId?)` - Send quick reply buttons
+- `sendCustomPayload(identifier, payload, channelId?)` - Send channel-specific payload
+- `sendWhatsAppTemplate(identifier, templateName, languageCode, components[], channelId?)` - Send WhatsApp template
+- `sendEmail(identifier, emailData, channelId?)` - Send email (text, subject, cc, bcc, attachments)
+- `sendRawMessage(identifier, message, channelId?)` - Send any message type (generic)
 - `getMessage(identifier, messageId)` - Get specific message
 - `listMessages(identifier, limit?, cursorId?)` - List messages for contact
 

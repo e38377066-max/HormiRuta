@@ -156,6 +156,125 @@ class RespondApiService {
     return this.request('GET', `/contact/${identifier}/message`, null, params);
   }
 
+  /**
+   * Send an attachment (image, video, audio, file) to a contact
+   * @param {string} identifier - Contact identifier
+   * @param {string} attachmentType - Type: image, video, audio, file
+   * @param {string} url - Publicly accessible URL of the attachment
+   * @param {number|null} channelId - Optional channel ID
+   */
+  async sendAttachment(identifier, attachmentType, url, channelId = null) {
+    const data = {
+      message: {
+        type: 'attachment',
+        attachment: {
+          type: attachmentType,
+          url: url
+        }
+      }
+    };
+
+    if (channelId) data.channelId = channelId;
+
+    return this.request('POST', `/contact/${identifier}/message`, data);
+  }
+
+  /**
+   * Send quick reply buttons to a contact
+   * @param {string} identifier - Contact identifier
+   * @param {string} title - Message title
+   * @param {string[]} replies - Array of reply options
+   * @param {number|null} channelId - Optional channel ID
+   */
+  async sendQuickReply(identifier, title, replies, channelId = null) {
+    const data = {
+      message: {
+        type: 'quick_reply',
+        title: title,
+        replies: replies
+      }
+    };
+
+    if (channelId) data.channelId = channelId;
+
+    return this.request('POST', `/contact/${identifier}/message`, data);
+  }
+
+  /**
+   * Send a custom payload message
+   * @param {string} identifier - Contact identifier
+   * @param {object} payload - Channel-specific payload
+   * @param {number|null} channelId - Optional channel ID
+   */
+  async sendCustomPayload(identifier, payload, channelId = null) {
+    const data = {
+      message: {
+        type: 'custom_payload',
+        payload: payload
+      }
+    };
+
+    if (channelId) data.channelId = channelId;
+
+    return this.request('POST', `/contact/${identifier}/message`, data);
+  }
+
+  /**
+   * Send a WhatsApp template message
+   * @param {string} identifier - Contact identifier
+   * @param {string} templateName - Template name
+   * @param {string} languageCode - Language code (ISO 639-1)
+   * @param {array} components - Template components (header, body, footer, buttons)
+   * @param {number|null} channelId - Optional channel ID
+   */
+  async sendWhatsAppTemplate(identifier, templateName, languageCode, components = [], channelId = null) {
+    const data = {
+      message: {
+        type: 'whatsapp_template',
+        template: {
+          name: templateName,
+          languageCode: languageCode,
+          components: components
+        }
+      }
+    };
+
+    if (channelId) data.channelId = channelId;
+
+    return this.request('POST', `/contact/${identifier}/message`, data);
+  }
+
+  /**
+   * Send an email message
+   * @param {string} identifier - Contact identifier
+   * @param {object} emailData - Email data: text, subject, cc, bcc, replyToMessageId, attachments
+   * @param {number|null} channelId - Optional channel ID
+   */
+  async sendEmail(identifier, emailData, channelId = null) {
+    const message = {
+      type: 'email',
+      ...emailData
+    };
+
+    const data = { message };
+    if (channelId) data.channelId = channelId;
+
+    return this.request('POST', `/contact/${identifier}/message`, data);
+  }
+
+  /**
+   * Send any message type (generic method)
+   * @param {string} identifier - Contact identifier
+   * @param {object} message - Full message object with type
+   * @param {number|null} channelId - Optional channel ID
+   */
+  async sendRawMessage(identifier, message, channelId = null) {
+    const data = { message };
+    if (channelId) data.channelId = channelId;
+
+    return this.request('POST', `/contact/${identifier}/message`, data);
+  }
+
   // ==========================================
   // CONTACT ENDPOINTS
   // ==========================================
