@@ -212,7 +212,7 @@ export default function SettingsPage() {
   }
 
   const toggleDay = (dayValue) => {
-    const businessDays = form.business_days || ''
+    const businessDays = String(form.business_days || '')
     const currentDays = businessDays.split(',').filter(d => d)
     if (currentDays.includes(dayValue)) {
       handleInputChange('business_days', currentDays.filter(d => d !== dayValue).join(','))
@@ -222,7 +222,7 @@ export default function SettingsPage() {
   }
 
   const isDaySelected = (dayValue) => {
-    const businessDays = form.business_days || ''
+    const businessDays = String(form.business_days || '')
     return businessDays.split(',').includes(dayValue)
   }
 
