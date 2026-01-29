@@ -1,15 +1,30 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMessaging } from '../../contexts/MessagingContext'
+import api from '../../api'
 import './MessagingPages.css'
 
 export default function OrdersPage() {
   const navigate = useNavigate()
-  const { orders, stats, settings, fetchOrders, fetchStats, fetchSettings, confirmOrder, cancelOrder, completeOrder, createOrder, loading } = useMessaging()
+  const { orders, stats, settings, fetchOrders, fetchStats, fetchSettings, confirmOrder, cancelOrder, completeOrder, loading } = useMessaging()
   const [filter, setFilter] = useState('')
-  const [showNewOrder, setShowNewOrder] = useState(false)
-  const [newOrder, setNewOrder] = useState({ customer_name: '', customer_phone: '', address: '', notes: '' })
-  const [creating, setCreating] = useState(false)
+  const [showValidateZip, setShowValidateZip] = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [validationResult, setValidationResult] = useState(null)
+  const [zipForm, setZipForm] = useState({ 
+    zip_code: '', 
+    contact_name: '', 
+    platform: 'facebook' 
+  })
+
+  const platforms = [
+    { id: 'facebook', label: 'Facebook', icon: 'facebook' },
+    { id: 'instagram', label: 'Instagram', icon: 'photo_camera' },
+    { id: 'whatsapp', label: 'WhatsApp', icon: 'chat' },
+    { id: 'sms', label: 'SMS', icon: 'sms' },
+    { id: 'email', label: 'Email', icon: 'email' },
+    { id: 'phone', label: 'Telefono', icon: 'phone' }
+  ]
 
   useEffect(() => {
     fetchOrders(filter || null)
@@ -46,18 +61,33 @@ export default function OrdersPage() {
     return new Date(dateStr).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
 
-  const handleCreateOrder = async () => {
-    if (!newOrder.address) return
-    setCreating(true)
+  const handleValidateZip = async () => {
+    if (!zipForm.zip_code) return
+    setValidating(true)
+    setValidationResult(null)
     try {
-      await createOrder(newOrder)
-      setShowNewOrder(false)
-      setNewOrder({ customer_name: '', customer_phone: '', address: '', notes: '' })
+      const response = await api.post('/api/messaging/validate-zip', {
+        zip_code: zipForm.zip_code,
+        contact_name: zipForm.contact_name,
+        platform: zipForm.platform
+      })
+      setValidationResult(response.data)
     } catch (err) {
-      console.error('Error creating order:', err)
+      console.error('Error validating ZIP:', err)
+      setValidationResult({ 
+        success: false, 
+        hasCoverage: false, 
+        message: 'Error al validar el codigo postal' 
+      })
     } finally {
-      setCreating(false)
+      setValidating(false)
     }
+  }
+
+  const handleCloseValidation = () => {
+    setShowValidateZip(false)
+    setZipForm({ zip_code: '', contact_name: '', platform: 'facebook' })
+    setValidationResult(null)
   }
 
   return (
@@ -97,9 +127,9 @@ export default function OrdersPage() {
       )}
 
       <div className="action-bar">
-        <button className="btn-primary" onClick={() => setShowNewOrder(true)}>
-          <span className="material-icons">add</span>
-          Nueva Orden
+        <button className="btn-primary" onClick={() => setShowValidateZip(true)}>
+          <span className="material-icons">pin_drop</span>
+          Validar ZIP
         </button>
         <button className="btn-secondary" onClick={() => navigate('/messaging/coverage')}>
           <span className="material-icons">map</span>
@@ -177,53 +207,88 @@ export default function OrdersPage() {
         )}
       </div>
 
-      {showNewOrder && (
-        <div className="modal-backdrop" onClick={() => setShowNewOrder(false)}>
+      {showValidateZip && (
+        <div className="modal-backdrop" onClick={handleCloseValidation}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Nueva Orden Manual</h3>
-              <button className="modal-close" onClick={() => setShowNewOrder(false)}>
+              <h3>Validar Codigo Postal</h3>
+              <button className="modal-close" onClick={handleCloseValidation}>
                 <span className="material-icons">close</span>
               </button>
             </div>
             <div className="modal-body">
+              <p style={{ margin: '0 0 16px', color: '#666', fontSize: '14px' }}>
+                Valida la cobertura para contactos que no provienen de Respond.io
+              </p>
+              
               <div className="field-group">
-                <label>Nombre del cliente</label>
+                <label>Codigo Postal (ZIP)</label>
                 <input
                   type="text"
-                  value={newOrder.customer_name}
-                  onChange={(e) => setNewOrder({ ...newOrder, customer_name: e.target.value })}
+                  value={zipForm.zip_code}
+                  onChange={(e) => setZipForm({ ...zipForm, zip_code: e.target.value })}
+                  placeholder="Ej: 75104"
+                  autoFocus
                 />
               </div>
+
               <div className="field-group">
-                <label>Telefono</label>
+                <label>Nombre del contacto (opcional)</label>
                 <input
                   type="text"
-                  value={newOrder.customer_phone}
-                  onChange={(e) => setNewOrder({ ...newOrder, customer_phone: e.target.value })}
+                  value={zipForm.contact_name}
+                  onChange={(e) => setZipForm({ ...zipForm, contact_name: e.target.value })}
+                  placeholder="Nombre del cliente"
                 />
               </div>
+
               <div className="field-group">
-                <label>Direccion de entrega</label>
-                <textarea
-                  rows={2}
-                  value={newOrder.address}
-                  onChange={(e) => setNewOrder({ ...newOrder, address: e.target.value })}
-                />
+                <label>Plataforma de contacto</label>
+                <div className="platform-select">
+                  {platforms.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`platform-option ${zipForm.platform === p.id ? 'selected' : ''}`}
+                      onClick={() => setZipForm({ ...zipForm, platform: p.id })}
+                    >
+                      <span className="material-icons">{p.icon}</span>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="field-group">
-                <label>Notas adicionales</label>
-                <textarea
-                  rows={2}
-                  value={newOrder.notes}
-                  onChange={(e) => setNewOrder({ ...newOrder, notes: e.target.value })}
-                />
-              </div>
+
+              {validationResult && (
+                <div className={`validation-result ${validationResult.hasCoverage ? 'success' : 'error'}`}>
+                  <span className="material-icons result-icon">
+                    {validationResult.hasCoverage ? 'check_circle' : 'cancel'}
+                  </span>
+                  <h4>
+                    {validationResult.hasCoverage ? 'Cobertura Disponible' : 'Sin Cobertura'}
+                  </h4>
+                  <p>
+                    {validationResult.hasCoverage 
+                      ? `El codigo postal ${zipForm.zip_code} tiene cobertura de entrega.`
+                      : `El codigo postal ${zipForm.zip_code} no esta dentro de nuestra zona de cobertura.`}
+                  </p>
+                  {validationResult.zone && (
+                    <p style={{ marginTop: '8px', fontWeight: '500' }}>
+                      Zona: {validationResult.zone.city}, {validationResult.zone.state}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
             <div className="modal-footer">
-              <button className="btn-cancel" onClick={() => setShowNewOrder(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={handleCreateOrder} disabled={creating}>
-                {creating ? 'Creando...' : 'Crear Orden'}
+              <button className="btn-cancel" onClick={handleCloseValidation}>Cerrar</button>
+              <button 
+                className="btn-primary" 
+                onClick={handleValidateZip} 
+                disabled={validating || !zipForm.zip_code}
+              >
+                <span className="material-icons">search</span>
+                {validating ? 'Validando...' : 'Validar'}
               </button>
             </div>
           </div>

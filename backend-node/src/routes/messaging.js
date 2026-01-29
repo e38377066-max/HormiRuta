@@ -95,6 +95,59 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/validate-zip', requireAuth, async (req, res) => {
+  try {
+    const { zip_code, contact_name, platform } = req.body;
+    
+    if (!zip_code) {
+      return res.status(400).json({ error: 'Codigo postal requerido' });
+    }
+
+    const cleanZip = zip_code.toString().trim();
+    
+    const zone = await CoverageZone.findOne({
+      where: { 
+        user_id: req.session.userId,
+        zip_code: cleanZip,
+        is_active: true
+      }
+    });
+
+    const hasCoverage = !!zone;
+
+    await MessageLog.create({
+      user_id: req.session.userId,
+      contact_id: `manual_${Date.now()}`,
+      direction: 'inbound',
+      message_type: 'zip_validation',
+      content: JSON.stringify({
+        zip_code: cleanZip,
+        contact_name: contact_name || 'Manual validation',
+        platform: platform || 'manual',
+        hasCoverage
+      }),
+      channel_type: platform || 'manual',
+      status: 'processed'
+    });
+
+    res.json({
+      success: true,
+      hasCoverage,
+      zip_code: cleanZip,
+      zone: zone ? {
+        city: zone.city,
+        state: zone.state,
+        delivery_fee: zone.delivery_fee
+      } : null,
+      contact_name,
+      platform
+    });
+  } catch (error) {
+    console.error('Validate ZIP error:', error);
+    res.status(500).json({ error: 'Error al validar codigo postal' });
+  }
+});
+
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const { status, limit = 50, offset = 0 } = req.query;
