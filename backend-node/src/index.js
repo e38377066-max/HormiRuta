@@ -46,14 +46,16 @@ if (!sessionSecret && process.env.NODE_ENV === 'production') {
   throw new Error('SESSION_SECRET is required in production');
 }
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 app.use(session({
   secret: sessionSecret || 'dev-secret-key-for-local-development',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: true,
+    secure: isProduction,
     httpOnly: true,
-    sameSite: 'none',
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
