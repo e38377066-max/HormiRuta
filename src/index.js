@@ -4,6 +4,18 @@ import cors from 'cors';
 import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+console.log('===========================================');
+console.log('HormiRuta - Iniciando servidor...');
+console.log('===========================================');
+console.log('Variables de entorno cargadas:');
+console.log('- DATABASE_URL:', process.env.DATABASE_URL ? 'Configurada' : 'NO CONFIGURADA');
+console.log('- SESSION_SECRET:', process.env.SESSION_SECRET ? 'Configurada' : 'NO CONFIGURADA');
+console.log('- NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('- PORT:', process.env.PORT || '5000');
+console.log('- SERVER_DOMAIN:', process.env.SERVER_DOMAIN || 'localhost');
+console.log('===========================================');
+
 import { sequelize } from './models/index.js';
 
 import authRoutes from './routes/auth.js';
