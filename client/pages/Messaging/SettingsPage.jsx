@@ -415,6 +415,74 @@ export default function SettingsPage() {
 
         {activeTab === 'chatbot' && (
           <>
+            <div className="settings-card flow-overview">
+              <h3>
+                <span className="material-icons">account_tree</span>
+                Flujo de Conversacion del Chatbot
+              </h3>
+              <p className="description">El chatbot sigue este flujo automatico para cada conversacion entrante</p>
+              
+              <div className="flow-diagram">
+                <div className="flow-step">
+                  <div className="flow-number">1</div>
+                  <div className="flow-content">
+                    <strong>Verificacion de Horario</strong>
+                    <span>Si esta fuera de horario, envia mensaje automatico y finaliza</span>
+                  </div>
+                </div>
+                <div className="flow-arrow">
+                  <span className="material-icons">arrow_downward</span>
+                </div>
+                <div className="flow-step">
+                  <div className="flow-number">2</div>
+                  <div className="flow-content">
+                    <strong>Identificacion de Cliente</strong>
+                    <span>Verifica tags (Personal, IprintPOS, etc.) para excluir del flujo</span>
+                  </div>
+                </div>
+                <div className="flow-arrow">
+                  <span className="material-icons">arrow_downward</span>
+                </div>
+                <div className="flow-step">
+                  <div className="flow-number">3</div>
+                  <div className="flow-content">
+                    <strong>Cliente Existente vs Nuevo</strong>
+                    <span>Si existe en BD, saluda y asigna agente. Si es nuevo, continua flujo</span>
+                  </div>
+                </div>
+                <div className="flow-arrow">
+                  <span className="material-icons">arrow_downward</span>
+                </div>
+                <div className="flow-step">
+                  <div className="flow-number">4</div>
+                  <div className="flow-content">
+                    <strong>Verificar Informacion Previa</strong>
+                    <span>Pregunta si ya le dieron precios. Si = asigna agente, No = pide ZIP</span>
+                  </div>
+                </div>
+                <div className="flow-arrow">
+                  <span className="material-icons">arrow_downward</span>
+                </div>
+                <div className="flow-step">
+                  <div className="flow-number">5</div>
+                  <div className="flow-content">
+                    <strong>Validacion de Cobertura</strong>
+                    <span>Valida ZIP/ciudad y responde con cobertura o sin cobertura</span>
+                  </div>
+                </div>
+                <div className="flow-arrow">
+                  <span className="material-icons">arrow_downward</span>
+                </div>
+                <div className="flow-step">
+                  <div className="flow-number">6</div>
+                  <div className="flow-content">
+                    <strong>Menu de Productos</strong>
+                    <span>Si hay cobertura, muestra productos disponibles</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="settings-card">
               <h3>
                 <span className="material-icons">schedule</span>
