@@ -78,7 +78,10 @@ sudo chown -R $USER:$USER /var/www/hormiruta
 ## Paso 5: Configurar Variables de Entorno
 
 ```bash
-# Crear archivo de variables de entorno
+# Copiar el archivo de ejemplo
+cp .env.example .env
+
+# Editar con tus valores reales
 nano .env
 ```
 

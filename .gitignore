@@ -22,9 +22,10 @@ yarn-error.log*
 *.swp
 *.swo
 
-# Local env files
+# Local env files (el .env.example SI se sube como plantilla)
 .env.local*
 .env
+!.env.example
 
 # Development environment files
 .replit
