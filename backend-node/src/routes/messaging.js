@@ -594,34 +594,53 @@ router.delete('/coverage-zones/:id', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/validate-zip', requireAuth, async (req, res) => {
+router.post('/validate-zip', async (req, res) => {
   try {
     const { zipOrCity } = req.body;
     
-    console.log('Validate ZIP request:', { zipOrCity, userId: req.session.userId });
+    const userId = req.session?.userId || 1;
+    console.log('Validate ZIP request:', { zipOrCity, userId });
     
     if (!zipOrCity || !zipOrCity.trim()) {
       return res.status(400).json({ error: 'ZIP code o ciudad requerido' });
     }
 
-    const validationService = new AddressValidationService(req.session.userId);
-    const result = await validationService.validateZipOrCity(zipOrCity.trim());
+    const cleanInput = zipOrCity.trim();
     
-    console.log('Validation result:', result);
+    const zone = await CoverageZone.findOne({
+      where: { 
+        zip_code: cleanInput,
+        is_active: true
+      }
+    });
+
+    const valid = !!zone;
+    
+    console.log('Validation result:', { valid, zone: zone?.city });
     
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: userId }
     });
 
     let copyMessage = '';
-    if (result.valid) {
+    if (valid) {
       copyMessage = settings?.coverage_message || 'Tenemos cobertura en tu zona!';
     } else {
       copyMessage = settings?.no_coverage_message || 'Lo sentimos, actualmente no tenemos cobertura en tu zona.';
     }
 
     res.json({
-      ...result,
+      valid,
+      type: 'zip',
+      value: cleanInput,
+      zone: zone ? {
+        id: zone.id,
+        zip_code: zone.zip_code,
+        city: zone.city,
+        state: zone.state,
+        delivery_fee: zone.delivery_fee
+      } : null,
+      message: valid ? `ZIP ${cleanInput} validado - ${zone.city || 'Zona con cobertura'}` : `No hay cobertura en ZIP ${cleanInput}`,
       copyMessage,
       timestamp: new Date().toISOString()
     });
