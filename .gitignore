@@ -2,20 +2,8 @@
 .thumbs.db
 node_modules
 
-# Quasar core related directories
-.quasar
+# Build output
 /dist
-/quasar.config.*.temporary.compiled*
-
-# Cordova related directories and files
-/src-cordova/node_modules
-/src-cordova/platforms
-/src-cordova/plugins
-/src-cordova/www
-
-# Capacitor related directories and files
-/src-capacitor/www
-/src-capacitor/node_modules
 
 # Log files
 npm-debug.log*
@@ -29,5 +17,21 @@ yarn-error.log*
 *.njsproj
 *.sln
 
-# local .env files
+# Local env files
 .env.local*
+.env
+
+# Capacitor Android (keep android folder but ignore build artifacts)
+android/.gradle
+android/app/build
+android/build
+android/local.properties
+android/.idea
+android/*.iml
+android/app/*.iml
+
+# Capacitor iOS
+ios/App/build
+ios/App/Pods
+ios/DerivedData
+ios/.xcworkspace
