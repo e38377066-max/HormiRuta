@@ -1,37 +1,29 @@
 # HormiRuta
 
 ## Overview
-HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega construida con React + Vite y Node.js/Express como backend API. Disenada para conductores y empresas de logistica.
+HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega construida con React + Vite y Node.js/Express. Servidor unificado que sirve tanto la API como el frontend desde el mismo puerto. Disenada para conductores y empresas de logistica.
 
 ## Project Structure
 ```
-├── frontend-react/            # Frontend React + Vite
-│   ├── src/
-│   │   ├── api.js             # Axios client configuration
-│   │   ├── App.jsx            # Main app with routing
-│   │   ├── contexts/          # React Context providers
-│   │   │   ├── AuthContext.jsx    # Authentication state
-│   │   │   └── MessagingContext.jsx # Messaging/orders state
-│   │   ├── layouts/           # Layout components
-│   │   │   ├── DashboardLayout.jsx  # Web dashboard (admin, messaging)
-│   │   │   └── PlannerLayout.jsx    # Route planner (mobile-optimized)
-│   │   └── pages/             # Page components
-│   │       ├── Auth/          # Login, Register
-│   │       ├── Admin/         # Admin panel (dashboard, users)
-│   │       ├── Messaging/     # Orders, Coverage, Settings
-│   │       └── Planner/       # TripPlannerPage with Google Maps
-│   ├── public/                # Static assets (logos, icons)
-│   ├── package.json           # React dependencies
-│   └── vite.config.js         # Vite configuration
-├── backend-node/              # Backend Node.js/Express API
+├── backend-node/              # Servidor unificado (API + Frontend)
 │   ├── src/
 │   │   ├── config/            # Database configuration
 │   │   ├── middleware/        # Auth + role middleware
 │   │   ├── models/            # Sequelize ORM models
 │   │   ├── routes/            # API routes (auth, admin, messaging)
 │   │   ├── services/          # Respond.io, polling, address validation
-│   │   └── index.js           # Main Express app
-│   └── package.json           # Node dependencies
+│   │   └── index.js           # Main Express app (serves API + static)
+│   ├── public/                # Frontend compilado (generado por build)
+│   └── package.json           # Dependencies + build scripts
+├── frontend-react/            # Codigo fuente del Frontend
+│   ├── src/
+│   │   ├── api.js             # Axios client (rutas relativas)
+│   │   ├── App.jsx            # Main app with routing
+│   │   ├── contexts/          # React Context providers
+│   │   ├── layouts/           # Layout components
+│   │   └── pages/             # Page components
+│   ├── package.json           # React dependencies
+│   └── vite.config.js         # Vite config (builds to backend/public)
 └── attached_assets/           # Reference assets
 ```
 
@@ -66,8 +58,16 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 - Password Hashing: bcryptjs
 
 ## Workflows
-1. Start application - React Vite dev server (port 5000)
-2. Backend API - Node.js/Express API server (port 8000)
+1. HormiRuta Server - Servidor unificado Node.js/Express + React (puerto 5000)
+
+## Build Commands
+```bash
+# Para desarrollo: ejecutar el servidor
+cd backend-node && npm start
+
+# Para reconstruir el frontend
+cd backend-node && npm run build
+```
 
 ## Key Features
 - User authentication (email/password)
