@@ -30,9 +30,12 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-01-30: Created comprehensive DOCUMENTATION.md for development team
+- 2026-01-30: Removed all platform-specific references from codebase for client delivery
+- 2026-01-30: Added SERVER_URL and SERVER_DOMAIN environment variables for flexible deployment
 - 2026-01-30: Added Capacitor configuration for Android and iOS mobile compilation
 - 2026-01-30: Generated Android project (android/) and iOS project (ios/)
-- 2026-01-30: Updated .gitignore to exclude Replit-specific files
+- 2026-01-30: Updated .gitignore to exclude platform-specific files
 - 2026-01-30: Unified project structure - single root with src/, client/, public/
 - 2026-01-30: Expanded ZIP validation to search by city, address, or zone name
 - 2026-01-29: Integrated Respond.io API v2 for chatbot messaging
