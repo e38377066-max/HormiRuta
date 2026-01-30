@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { sequelize } from './models/index.js';
 
 import authRoutes from './routes/auth.js';
@@ -10,8 +12,11 @@ import historyRoutes from './routes/history.js';
 import messagingRoutes from './routes/messaging.js';
 import adminRoutes from './routes/admin.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 5000;
 
 const allowedOrigins = [
   `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost'}`,
@@ -63,6 +68,16 @@ app.use('/api/stops', stopsRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/messaging', messagingRoutes);
 app.use('/api/admin', adminRoutes);
+
+const publicPath = path.join(__dirname, '..', 'public');
+app.use(express.static(publicPath));
+
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(publicPath, 'index.html'));
+});
 
 async function startServer() {
   try {
