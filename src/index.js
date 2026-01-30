@@ -19,8 +19,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 const allowedOrigins = [
-  `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost'}`,
-  `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost'}:5000`,
+  `https://${process.env.SERVER_DOMAIN || 'localhost'}`,
+  `https://${process.env.SERVER_DOMAIN || 'localhost'}:5000`,
   'http://localhost:5000',
   'http://127.0.0.1:5000',
   'http://localhost:9000',

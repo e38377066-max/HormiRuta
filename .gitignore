@@ -26,9 +26,10 @@ yarn-error.log*
 .env.local*
 .env
 
-# Replit specific files (do not upload to external Git)
+# Development environment files
 .replit
 replit.nix
+replit.md
 .cache/
 .config/
 .local/

@@ -6,8 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    // URL del servidor en produccion - cambiar cuando se publique
-    url: 'https://caaf8ac1-a1bd-45cc-8a8c-3b948bf6c458-00-3o0xgbhfiz77b.kirk.replit.dev',
+    url: process.env.SERVER_URL || 'https://api.hormiruta.com',
     cleartext: true
   },
   plugins: {
