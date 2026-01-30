@@ -71,14 +71,14 @@ app.use('/api/history', historyRoutes);
 app.use('/api/messaging', messagingRoutes);
 app.use('/api/admin', adminRoutes);
 
-const publicPath = path.join(__dirname, '..', 'public');
-app.use(express.static(publicPath));
+const distPath = path.join(__dirname, '..', 'dist');
+app.use(express.static(distPath));
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
   }
-  res.sendFile(path.join(publicPath, 'index.html'));
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 async function startServer() {
