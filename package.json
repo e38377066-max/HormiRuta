@@ -7,10 +7,13 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "build": "vite build",
-    "build:mobile": "vite build && npx cap sync",
+    "build": "vite build && cp public/*.png public/*.svg dist/ 2>/dev/null || true",
+    "build:mobile": "npm run build && npx cap sync",
     "cap:sync": "npx cap sync",
-    "cap:android": "npx cap open android"
+    "cap:android": "npx cap open android",
+    "cap:ios": "npx cap open ios",
+    "cap:add:android": "npx cap add android",
+    "cap:add:ios": "npx cap add ios"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.1",
