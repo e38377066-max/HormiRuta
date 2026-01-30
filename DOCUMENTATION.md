@@ -711,10 +711,25 @@ npx cap open ios
 | `DATABASE_URL` | URL de conexion PostgreSQL | Si |
 | `SESSION_SECRET` | Secreto para sesiones Express | Si (produccion) |
 | `PORT` | Puerto del servidor | No (default: 5000) |
-| `NODE_ENV` | Entorno (development/production) | No |
-| `SERVER_DOMAIN` | Dominio del servidor | No |
-| `SERVER_URL` | URL completa del servidor | No |
+| `NODE_ENV` | Entorno (development/production) | Si (produccion) |
+| `SERVER_DOMAIN` | Dominio del servidor (ej: api.hormiruta.com) | Si (produccion) |
+| `VITE_API_URL` | URL del API para apps moviles | Si (movil) |
 | `VITE_GOOGLE_MAPS_API_KEY` | API key de Google Maps | Si |
+
+### Ejemplo de Configuracion para AWS
+
+```bash
+# En el servidor AWS (archivo .env o variables de entorno)
+DATABASE_URL=postgresql://usuario:password@host:5432/hormiruta
+SESSION_SECRET=tu-secreto-seguro-de-32-caracteres-minimo
+NODE_ENV=production
+SERVER_DOMAIN=api.hormiruta.com
+PORT=5000
+
+# Para compilar el frontend (en tiempo de build)
+VITE_API_URL=https://api.hormiruta.com
+VITE_GOOGLE_MAPS_API_KEY=tu-api-key-de-google
+```
 
 ### Scripts Disponibles
 

@@ -1,7 +1,15 @@
 import axios from 'axios'
+import { Capacitor } from '@capacitor/core'
+
+const getBaseURL = () => {
+  if (Capacitor.isNativePlatform()) {
+    return import.meta.env.VITE_API_URL || 'https://api.hormiruta.com'
+  }
+  return ''
+}
 
 const api = axios.create({ 
-  baseURL: '',
+  baseURL: getBaseURL(),
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
