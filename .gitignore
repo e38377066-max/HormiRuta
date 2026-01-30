@@ -1,5 +1,8 @@
+# OS files
 .DS_Store
 .thumbs.db
+
+# Dependencies
 node_modules
 
 # Build output
@@ -16,10 +19,23 @@ yarn-error.log*
 *.ntvs*
 *.njsproj
 *.sln
+*.swp
+*.swo
 
 # Local env files
 .env.local*
 .env
+
+# Replit specific files (do not upload to external Git)
+.replit
+replit.nix
+.cache/
+.config/
+.local/
+.upm/
+attached_assets/
+.breakpoints
+.replit.nix
 
 # Capacitor Android (keep android folder but ignore build artifacts)
 android/.gradle
@@ -29,9 +45,12 @@ android/local.properties
 android/.idea
 android/*.iml
 android/app/*.iml
+android/captures/
 
-# Capacitor iOS
+# Capacitor iOS (keep ios folder but ignore build artifacts)
 ios/App/build
 ios/App/Pods
 ios/DerivedData
-ios/.xcworkspace
+ios/*.xcworkspace
+ios/.xcodeproj
+*.xcuserstate

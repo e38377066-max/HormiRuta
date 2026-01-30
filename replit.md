@@ -1,7 +1,7 @@
 # HormiRuta
 
 ## Overview
-HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega construida con React + Vite y Node.js/Express. Servidor unificado que sirve tanto la API como el frontend desde el mismo puerto. Disenada para conductores y empresas de logistica.
+HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega construida con React + Vite y Node.js/Express. Servidor unificado que sirve tanto la API como el frontend desde el mismo puerto. Diseñada para conductores y empresas de logistica en el area metropolitana de Dallas.
 
 ## Project Structure
 ```
@@ -21,17 +21,21 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 │   └── main.jsx               # React entry point
 ├── public/                    # Archivos estaticos (imagenes, iconos)
 ├── dist/                      # Frontend compilado (generado por build)
+├── android/                   # Proyecto Android (Capacitor)
+├── ios/                       # Proyecto iOS (Capacitor)
+├── capacitor.config.ts        # Configuracion Capacitor para mobile
 ├── package.json               # Dependencies + scripts unificados
 ├── vite.config.js             # Configuracion de Vite
 └── index.html                 # HTML entry point
 ```
 
 ## Recent Changes
+- 2026-01-30: Added Capacitor configuration for Android and iOS mobile compilation
+- 2026-01-30: Generated Android project (android/) and iOS project (ios/)
+- 2026-01-30: Updated .gitignore to exclude Replit-specific files
 - 2026-01-30: Unified project structure - single root with src/, client/, public/
 - 2026-01-30: Expanded ZIP validation to search by city, address, or zone name
 - 2026-01-29: Integrated Respond.io API v2 for chatbot messaging
-- 2026-01-29: Added respondApiService.js with all Respond.io API endpoints
-- 2026-01-28: Added chatbot system with conversation flow management
 - 2026-01-28: Migrated frontend from Quasar/Vue.js to React + Vite
 
 ## Technology Stack
@@ -53,10 +57,31 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 
 ## Scripts
 ```bash
-npm start        # Run production server (port 5000)
-npm run dev      # Run with --watch for development
-npm run build    # Build frontend to dist/
+npm start              # Run production server (port 5000)
+npm run dev            # Run with --watch for development
+npm run build          # Build frontend to dist/
+npm run build:mobile   # Build + sync with Capacitor
+npm run cap:sync       # Sync web assets to mobile projects
+npm run cap:android    # Open Android Studio
+npm run cap:ios        # Open Xcode (Mac only)
+npm run cap:add:android # Add Android platform
+npm run cap:add:ios     # Add iOS platform
 ```
+
+## Mobile Compilation
+
+### Android (Windows/Mac/Linux)
+1. Run `npm run build` to compile frontend
+2. Run `npx cap sync android` to sync with Android project
+3. Open Android Studio and select the `android/` folder
+4. Connect device or use emulator and click Run
+
+### iOS (Mac only)
+1. Run `npm run build` to compile frontend
+2. Run `npx cap sync ios` to sync with iOS project
+3. Run `cd ios/App && pod install` to install dependencies
+4. Open `ios/App/App.xcworkspace` in Xcode
+5. Select device/simulator and click Run
 
 ## Key Features
 - User authentication (email/password)
@@ -98,8 +123,17 @@ npm run build    # Build frontend to dist/
 - SESSION_SECRET - Express session secret
 - VITE_GOOGLE_MAPS_API_KEY - Google Maps API key
 
-## Development
-1. Run `npm start` to start the server
-2. Server runs on port 5000 serving both API and frontend
-3. Database tables are auto-created on startup via Sequelize sync
-4. To rebuild frontend: `npm run build`
+## Git Exclusions
+The following Replit-specific files/folders are excluded from Git:
+- `.replit` - Replit configuration
+- `.cache/` - Replit cache
+- `.config/` - Replit config
+- `.local/` - Local Replit data
+- `.upm/` - Replit package manager
+- `attached_assets/` - Replit attached files
+
+## Development Notes
+1. Server runs on port 5000 serving both API and frontend
+2. Database tables are auto-created on startup via Sequelize sync
+3. Frontend build output goes to `dist/` folder
+4. Mobile apps read from `dist/` via Capacitor sync
