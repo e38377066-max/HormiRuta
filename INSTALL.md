@@ -120,9 +120,11 @@ Guardar con `Ctrl+O`, `Enter`, `Ctrl+X`.
 npm install
 
 # Esto instala automaticamente:
-# - Backend: express, sequelize, pg, bcryptjs, cors, express-session
+# - Backend: express, sequelize, pg, bcryptjs, cors, express-session, dotenv
 # - Frontend: react, react-dom, react-router-dom, axios, vite
 # - Movil: capacitor y plugins
+
+# El servidor usa dotenv para cargar automaticamente el archivo .env
 ```
 
 ---
