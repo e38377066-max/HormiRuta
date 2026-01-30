@@ -5,7 +5,10 @@ const config: CapacitorConfig = {
   appName: 'HormiRuta',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    // URL del servidor en produccion - cambiar cuando se publique
+    url: 'https://caaf8ac1-a1bd-45cc-8a8c-3b948bf6c458-00-3o0xgbhfiz77b.kirk.replit.dev',
+    cleartext: true
   },
   plugins: {
     SplashScreen: {
@@ -16,7 +19,20 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'dark',
       backgroundColor: '#0d1b2a'
+    },
+    Keyboard: {
+      resize: 'body',
+      resizeOnFullScreen: true
     }
+  },
+  android: {
+    allowMixedContent: true,
+    captureInput: true,
+    webContentsDebuggingEnabled: true
+  },
+  ios: {
+    contentInset: 'automatic',
+    scrollEnabled: false
   }
 };
 
