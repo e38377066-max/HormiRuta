@@ -602,21 +602,71 @@ router.post('/validate-zip', async (req, res) => {
     console.log('Validate ZIP request:', { zipOrCity, userId });
     
     if (!zipOrCity || !zipOrCity.trim()) {
-      return res.status(400).json({ error: 'ZIP code o ciudad requerido' });
+      return res.status(400).json({ error: 'ZIP code, ciudad o direccion requerido' });
     }
 
     const cleanInput = zipOrCity.trim();
+    let zone = null;
+    let searchType = 'unknown';
+    let searchValue = cleanInput;
     
-    const zone = await CoverageZone.findOne({
-      where: { 
-        zip_code: cleanInput,
-        is_active: true
+    const zipMatch = cleanInput.match(/\b(\d{5})\b/);
+    if (zipMatch) {
+      const zipCode = zipMatch[1];
+      zone = await CoverageZone.findOne({
+        where: { 
+          zip_code: zipCode,
+          is_active: true
+        }
+      });
+      if (zone) {
+        searchType = 'zip';
+        searchValue = zipCode;
       }
-    });
+    }
+    
+    if (!zone) {
+      zone = await CoverageZone.findOne({
+        where: { 
+          city: { [Op.iLike]: cleanInput },
+          is_active: true
+        }
+      });
+      if (zone) {
+        searchType = 'city';
+        searchValue = zone.city;
+      }
+    }
+    
+    if (!zone) {
+      zone = await CoverageZone.findOne({
+        where: { 
+          city: { [Op.iLike]: `%${cleanInput}%` },
+          is_active: true
+        }
+      });
+      if (zone) {
+        searchType = 'city';
+        searchValue = zone.city;
+      }
+    }
+    
+    if (!zone) {
+      zone = await CoverageZone.findOne({
+        where: { 
+          zone_name: { [Op.iLike]: `%${cleanInput}%` },
+          is_active: true
+        }
+      });
+      if (zone) {
+        searchType = 'zone';
+        searchValue = zone.zone_name || zone.city;
+      }
+    }
 
     const valid = !!zone;
     
-    console.log('Validation result:', { valid, zone: zone?.city });
+    console.log('Validation result:', { valid, searchType, searchValue, zone: zone?.city });
     
     const settings = await MessagingSettings.findOne({
       where: { user_id: userId }
@@ -629,18 +679,33 @@ router.post('/validate-zip', async (req, res) => {
       copyMessage = settings?.no_coverage_message || 'Lo sentimos, actualmente no tenemos cobertura en tu zona.';
     }
 
+    let message = '';
+    if (valid) {
+      if (searchType === 'zip') {
+        message = `ZIP ${searchValue} validado - ${zone.city || 'Zona con cobertura'}`;
+      } else if (searchType === 'city') {
+        message = `Ciudad ${zone.city} validada - ZIP ${zone.zip_code}`;
+      } else {
+        message = `Zona ${searchValue} validada - ${zone.city}, ZIP ${zone.zip_code}`;
+      }
+    } else {
+      message = `No hay cobertura para "${cleanInput}"`;
+    }
+
     res.json({
       valid,
-      type: 'zip',
-      value: cleanInput,
+      type: searchType,
+      value: searchValue,
+      originalInput: cleanInput,
       zone: zone ? {
         id: zone.id,
         zip_code: zone.zip_code,
         city: zone.city,
         state: zone.state,
+        zone_name: zone.zone_name,
         delivery_fee: zone.delivery_fee
       } : null,
-      message: valid ? `ZIP ${cleanInput} validado - ${zone.city || 'Zona con cobertura'}` : `No hay cobertura en ZIP ${cleanInput}`,
+      message,
       copyMessage,
       timestamp: new Date().toISOString()
     });

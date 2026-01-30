@@ -341,12 +341,12 @@ export default function OrdersPage() {
             </div>
             <div className="modal-body">
               <div className="field-group">
-                <label>Codigo Postal (ZIP)</label>
+                <label>ZIP, Ciudad o Direccion</label>
                 <input
                   type="text"
                   value={zipForm.zip_code}
                   onChange={(e) => setZipForm({ ...zipForm, zip_code: e.target.value })}
-                  placeholder="Ej: 75228"
+                  placeholder="Ej: 75228, Dallas, Arlington..."
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && handleValidateZip()}
                 />
