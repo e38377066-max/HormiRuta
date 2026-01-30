@@ -30,6 +30,8 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-01-30: Created INSTALL.md with complete AWS Ubuntu installation guide
+- 2026-01-30: Updated client/api.js for mobile app compatibility with external servers
 - 2026-01-30: Created comprehensive DOCUMENTATION.md for development team
 - 2026-01-30: Removed all platform-specific references from codebase for client delivery
 - 2026-01-30: Added SERVER_URL and SERVER_DOMAIN environment variables for flexible deployment
