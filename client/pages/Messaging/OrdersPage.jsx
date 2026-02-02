@@ -230,8 +230,8 @@ export default function OrdersPage() {
                     <div className="order-name">{order.customerName || order.customer_name || 'Sin nombre'}</div>
                     <div className="order-address">{order.address || 'Sin direccion'}</div>
                     <div className="order-tags">
-                      <span className={`tag ${order.validation_status === 'valid' || order.hasCoverage ? 'success' : 'danger'}`}>
-                        {order.validation_status === 'valid' || order.hasCoverage ? 'Cobertura OK' : 'Sin cobertura'}
+                      <span className={`tag ${order.validation_status === 'covered' || order.validation_status === 'valid' ? 'success' : 'danger'}`}>
+                        {order.validation_status === 'covered' || order.validation_status === 'valid' ? 'Cobertura OK' : 'Sin cobertura'}
                       </span>
                       {order.channel_type && <span className="tag outline">{order.channel_type}</span>}
                       {order.lifecycle && <span className="tag lifecycle">{order.lifecycle}</span>}
