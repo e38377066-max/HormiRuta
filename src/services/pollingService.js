@@ -150,7 +150,7 @@ class PollingService {
   }
 
   async processContactMessages(userId, apiToken, contact, poller, respondio) {
-    const messagesResult = await respondio.listMessages(contact.id, { limit: 20 });
+    const messagesResult = await respondio.listMessages(contact.id, { limit: 50 });
     
     if (!messagesResult.success) {
       console.error(`Failed to fetch messages for contact ${contact.id}:`, messagesResult.error);
