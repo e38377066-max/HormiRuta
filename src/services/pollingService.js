@@ -219,8 +219,9 @@ class PollingService {
       
       const extractedZip = addressValidation.extractZipCode(messageText);
       const hasZipCode = extractedZip !== null;
+      const channelId = message.channelId || null;
 
-      console.log(`Message from ${contact.firstName}: "${messageText.substring(0, 50)}..." - isAddress: ${validation.isAddress}, hasZIP: ${hasZipCode}, ZIP: ${extractedZip || 'none'}`);
+      console.log(`Message from ${contact.firstName}: "${messageText.substring(0, 50)}..." - isAddress: ${validation.isAddress}, hasZIP: ${hasZipCode}, ZIP: ${extractedZip || 'none'}, ChannelId: ${channelId || 'N/A'}`);
 
       if (validation.isAddress || hasZipCode) {
         const zipToUse = validation.zipCode || extractedZip;
@@ -249,6 +250,7 @@ class PollingService {
             customer_name: customerName,
             customer_phone: contact.phone || null,
             channel_type: 'respond.io',
+            channel_id: contact.channelId || null,
             address: validation.isAddress ? messageText : `ZIP: ${zipToUse}`,
             zip_code: zipToUse,
             address_type: validation.addressType || 'unknown',
@@ -258,7 +260,7 @@ class PollingService {
             lifecycle: contact.lifecycle || null,
             notes: validation.needsApartmentNumber ? 'Pendiente: Solicitar numero de apartamento' : (validation.isAddress ? null : 'Solo ZIP code recibido - falta direccion completa')
           });
-          console.log(`Created new order #${order.id} for ${customerName} (ZIP: ${zipToUse}, Lifecycle: ${contact.lifecycle || 'N/A'})`);
+          console.log(`Created new order #${order.id} for ${customerName} (ZIP: ${zipToUse}, Channel: ${contact.channelId || 'N/A'})`);
         } else {
           await order.update({
             address: validation.isAddress ? messageText : (order.address || `ZIP: ${zipToUse}`),
