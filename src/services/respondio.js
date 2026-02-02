@@ -17,9 +17,12 @@ class RespondioService {
 
   async sendMessage(contactIdentifier, text, channelId = null) {
     try {
-      const identifier = typeof contactIdentifier === 'number' 
-        ? `id:${contactIdentifier}` 
-        : contactIdentifier;
+      let identifier = contactIdentifier;
+      if (typeof contactIdentifier === 'number') {
+        identifier = `id:${contactIdentifier}`;
+      } else if (typeof contactIdentifier === 'string' && /^\d+$/.test(contactIdentifier)) {
+        identifier = `id:${contactIdentifier}`;
+      }
       
       const payload = {
         message: {
