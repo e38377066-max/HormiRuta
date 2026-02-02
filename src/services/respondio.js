@@ -137,8 +137,7 @@ class RespondioService {
         timezone: timezone,
         filter: {
           $and: [{
-            category: 'contactField',
-            field: 'lifecycle',
+            category: 'lifecycle',
             operator: 'isEqualTo',
             value: lifecycle
           }]
