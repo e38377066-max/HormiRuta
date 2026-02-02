@@ -31,14 +31,6 @@ export default function SettingsPage() {
     { label: '5 minutos', value: 300 }
   ]
 
-  const messageHistoryLimits = [
-    { label: '20 mensajes', value: 20 },
-    { label: '50 mensajes', value: 50 },
-    { label: '100 mensajes', value: 100 },
-    { label: '150 mensajes', value: 150 },
-    { label: '200 mensajes', value: 200 }
-  ]
-
   const [form, setForm] = useState({
     respond_api_token: '',
     is_active: false,
@@ -409,15 +401,14 @@ export default function SettingsPage() {
 
               <div className="field-group">
                 <label>Historial de mensajes a revisar</label>
-                <select
+                <input
+                  type="number"
+                  min="10"
+                  max="500"
                   value={form.message_history_limit}
-                  onChange={(e) => handleInputChange('message_history_limit', parseInt(e.target.value))}
-                >
-                  {messageHistoryLimits.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <p className="field-hint">Cuantos mensajes revisar por contacto para detectar ZIP codes</p>
+                  onChange={(e) => handleInputChange('message_history_limit', parseInt(e.target.value) || 50)}
+                />
+                <p className="field-hint">Cuantos mensajes revisar por contacto para detectar ZIP codes (10-500)</p>
               </div>
 
               <div className="button-row">
