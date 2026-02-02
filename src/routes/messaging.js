@@ -82,21 +82,27 @@ router.put('/settings', requireAuth, async (req, res) => {
 
 router.post('/settings/test-connection', requireAuth, async (req, res) => {
   try {
+    console.log('[Test Connection] Iniciando prueba de conexión...');
+    
     const settings = await MessagingSettings.findOne({
       where: { user_id: req.session.userId }
     });
 
     if (!settings?.respond_api_token) {
+      console.log('[Test Connection] ERROR: No hay token configurado');
       return res.status(400).json({ error: 'No hay API token configurado' });
     }
 
+    console.log('[Test Connection] Token encontrado, probando conexión...');
     const service = new RespondioService(settings.respond_api_token);
     const result = await service.testConnection();
 
+    console.log('[Test Connection] Resultado:', result);
     res.json(result);
   } catch (error) {
-    console.error('Test connection error:', error);
-    res.status(500).json({ error: 'Error al probar conexion' });
+    console.error('[Test Connection] ERROR:', error.message);
+    console.error(error.stack);
+    res.status(500).json({ error: 'Error al probar conexion: ' + error.message });
   }
 });
 
