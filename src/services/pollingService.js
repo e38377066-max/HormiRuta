@@ -252,18 +252,20 @@ class PollingService {
             status: 'pending',
             validation_status: hasCoverage ? 'covered' : 'no_coverage',
             validation_message: validationMsg,
+            lifecycle: contact.lifecycle || null,
             notes: validation.needsApartmentNumber ? 'Pendiente: Solicitar numero de apartamento' : (validation.isAddress ? null : 'Solo ZIP code recibido - falta direccion completa')
           });
-          console.log(`Created new order #${order.id} for ${customerName} (ZIP: ${zipToUse})`);
+          console.log(`Created new order #${order.id} for ${customerName} (ZIP: ${zipToUse}, Lifecycle: ${contact.lifecycle || 'N/A'})`);
         } else {
           await order.update({
             address: validation.isAddress ? messageText : (order.address || `ZIP: ${zipToUse}`),
             zip_code: zipToUse,
             address_type: validation.addressType || order.address_type,
             validation_status: hasCoverage ? 'covered' : 'no_coverage',
-            validation_message: validationMsg
+            validation_message: validationMsg,
+            lifecycle: contact.lifecycle || order.lifecycle
           });
-          console.log(`Updated order #${order.id} with ZIP: ${zipToUse}`);
+          console.log(`Updated order #${order.id} with ZIP: ${zipToUse}, Lifecycle: ${contact.lifecycle || 'N/A'}`);
         }
 
         await MessageLog.update(

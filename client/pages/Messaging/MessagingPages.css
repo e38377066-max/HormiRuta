@@ -1343,6 +1343,7 @@
 .tag.info { background: #e3f2fd; color: #1565c0; }
 .tag.primary { background: #e3f2fd; color: #1565c0; }
 .tag.outline { background: transparent; border: 1px solid #ddd; color: #666; }
+.tag.lifecycle { background: #fce4ec; color: #c2185b; font-weight: 500; }
 
 .order-meta {
   display: flex;

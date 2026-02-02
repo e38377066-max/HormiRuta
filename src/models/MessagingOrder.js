@@ -134,6 +134,10 @@ const MessagingOrder = sequelize.define('MessagingOrder', {
   cancel_reason: {
     type: DataTypes.STRING(500),
     allowNull: true
+  },
+  lifecycle: {
+    type: DataTypes.STRING(50),
+    allowNull: true
   }
 }, {
   tableName: 'messaging_orders',
@@ -173,6 +177,7 @@ MessagingOrder.prototype.toDict = function() {
     completed_at: this.completed_at,
     cancelled_at: this.cancelled_at,
     cancel_reason: this.cancel_reason,
+    lifecycle: this.lifecycle,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

@@ -234,6 +234,7 @@ export default function OrdersPage() {
                         {order.validation_status === 'valid' || order.hasCoverage ? 'Cobertura OK' : 'Sin cobertura'}
                       </span>
                       {order.channel_type && <span className="tag outline">{order.channel_type}</span>}
+                      {order.lifecycle && <span className="tag lifecycle">{order.lifecycle}</span>}
                     </div>
                   </div>
                   <div className="order-meta">
