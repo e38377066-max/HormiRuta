@@ -88,9 +88,9 @@ class RespondioService {
   }
 
   async listContactsByLifecycle(options = {}) {
+    const { lifecycleStage = 'Pending', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
+    
     try {
-      const { lifecycleStage = 'Pending', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
-      
       const params = {};
       if (limit) params.limit = Math.min(limit, 99);
       if (cursorId) params.cursorId = cursorId;
