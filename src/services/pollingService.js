@@ -103,47 +103,46 @@ class PollingService {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = new RespondioService(apiToken);
     
-    console.log(`[Polling] Buscando contactos con tags New Lead y Pending...`);
+    console.log(`[Polling] Obteniendo todos los contactos y filtrando por lifecycle...`);
     
     let allContacts = [];
+    let cursorId = null;
+    let pageCount = 0;
+    const maxPages = 3;
     
-    const lifecycleStages = ['New Lead', 'Pending'];
-    
-    for (const stage of lifecycleStages) {
-      let cursorId = null;
-      let pageCount = 0;
-      const maxPages = 2;
-      
-      while (pageCount < maxPages) {
-        const contactsResult = await respondio.listContactsByLifecycleValue({ 
-          lifecycle: stage,
-          limit: 99,
-          cursorId: cursorId
-        });
+    while (pageCount < maxPages) {
+      const contactsResult = await respondio.listContacts({ 
+        limit: 99,
+        cursorId: cursorId
+      });
 
-        if (!contactsResult.success) {
-          console.log(`[Polling] No se encontraron contactos con lifecycle "${stage}": ${contactsResult.error || 'Sin error'}`);
-          break;
-        }
-
-        const items = contactsResult.items || [];
-        console.log(`[Polling] Lifecycle "${stage}" pagina ${pageCount + 1}: ${items.length} contactos`);
-        allContacts = [...allContacts, ...items];
-        
-        if (!contactsResult.pagination?.nextCursor || items.length < 99) {
-          break;
-        }
-        
-        cursorId = contactsResult.pagination.nextCursor;
-        pageCount++;
+      if (!contactsResult.success) {
+        console.error('[Polling] Error obteniendo contactos:', contactsResult.error);
+        break;
       }
+
+      const items = contactsResult.items || [];
+      allContacts = [...allContacts, ...items];
+      console.log(`[Polling] Pagina ${pageCount + 1}: ${items.length} contactos obtenidos`);
+      
+      if (!contactsResult.pagination?.nextCursor || items.length < 99) {
+        break;
+      }
+      
+      cursorId = contactsResult.pagination.nextCursor;
+      pageCount++;
     }
 
-    const uniqueContacts = allContacts.filter((contact, index, self) =>
+    const targetLifecycles = ['New Lead', 'Pending'];
+    const filteredContacts = allContacts.filter(contact => 
+      contact.lifecycle && targetLifecycles.includes(contact.lifecycle)
+    );
+
+    const uniqueContacts = filteredContacts.filter((contact, index, self) =>
       index === self.findIndex(c => c.id === contact.id)
     );
 
-    console.log(`[Polling] Encontrados ${uniqueContacts.length} contactos con lifecycle New Lead/Pending`);
+    console.log(`[Polling] Total contactos: ${allContacts.length}, Con lifecycle New Lead/Pending: ${uniqueContacts.length}`);
 
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio);
