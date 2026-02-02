@@ -258,18 +258,24 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
 
     order.status = 'confirmed';
     await order.save();
+    console.log(`[Confirm] Orden #${order.id} confirmada - Contact: ${order.respond_contact_id}, Channel: ${order.channel_id || 'N/A'}`);
 
     const settings = await MessagingSettings.findOne({
       where: { user_id: req.session.userId }
     });
 
     if (settings?.respond_api_token && order.respond_contact_id) {
+      const message = settings.order_confirmed_message || 'Tu pedido ha sido confirmado.';
+      console.log(`[Confirm] Enviando SMS a contacto ${order.respond_contact_id}: "${message.substring(0, 50)}..."`);
+      
       const service = new RespondioService(settings.respond_api_token);
       const result = await service.sendMessage(
         order.respond_contact_id,
-        settings.order_confirmed_message,
-        order.channel_id
+        message,
+        order.channel_id || null
       );
+
+      console.log(`[Confirm] Resultado envio:`, result);
 
       if (result.success) {
         await MessageLog.create({
@@ -278,13 +284,18 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
           respond_contact_id: order.respond_contact_id,
           respond_message_id: result.messageId,
           direction: 'outbound',
-          content: settings.order_confirmed_message,
+          content: message,
           channel_type: order.channel_type,
           status: 'sent',
           is_automated: true,
           automation_type: 'order_confirmed'
         });
+        console.log(`[Confirm] Mensaje guardado en log - ID: ${result.messageId}`);
+      } else {
+        console.error(`[Confirm] Error al enviar mensaje:`, result.error);
       }
+    } else {
+      console.log(`[Confirm] No se envio mensaje - Token: ${!!settings?.respond_api_token}, ContactID: ${order.respond_contact_id || 'N/A'}`);
     }
 
     res.json(order.toDict());
