@@ -103,7 +103,10 @@ class PollingService {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = new RespondioService(apiToken);
     
-    console.log(`[Polling] Obteniendo conversaciones ABIERTAS con lifecycle New Lead/Pending...`);
+    const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+    const messageLimit = settings?.message_history_limit || 50;
+    
+    console.log(`[Polling] Obteniendo conversaciones ABIERTAS con lifecycle New Lead/Pending (limite: ${messageLimit} msgs)...`);
     
     let allContacts = [];
     let cursorId = null;
@@ -145,12 +148,12 @@ class PollingService {
     console.log(`[Polling] Conversaciones abiertas: ${allContacts.length}, Con lifecycle New Lead/Pending: ${uniqueContacts.length}`);
 
     for (const contact of uniqueContacts) {
-      await this.processContactMessages(userId, apiToken, contact, poller, respondio);
+      await this.processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit);
     }
   }
 
-  async processContactMessages(userId, apiToken, contact, poller, respondio) {
-    const messagesResult = await respondio.listMessages(contact.id, { limit: 50 });
+  async processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit = 50) {
+    const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
     
     if (!messagesResult.success) {
       console.error(`Failed to fetch messages for contact ${contact.id}:`, messagesResult.error);

@@ -31,6 +31,14 @@ export default function SettingsPage() {
     { label: '5 minutos', value: 300 }
   ]
 
+  const messageHistoryLimits = [
+    { label: '20 mensajes', value: 20 },
+    { label: '50 mensajes', value: 50 },
+    { label: '100 mensajes', value: 100 },
+    { label: '150 mensajes', value: 150 },
+    { label: '200 mensajes', value: 200 }
+  ]
+
   const [form, setForm] = useState({
     respond_api_token: '',
     is_active: false,
@@ -58,7 +66,8 @@ export default function SettingsPage() {
     products: 'Tarjetas,Magneticos,Post Cards,Playeras',
     excluded_tags: 'Personal,IprintPOS,ClientesArea,Area862Designers',
     default_agent_id: '',
-    default_agent_name: ''
+    default_agent_name: '',
+    message_history_limit: 50
   })
   const [hasExistingToken, setHasExistingToken] = useState(false)
 
@@ -123,7 +132,8 @@ export default function SettingsPage() {
           products: settings.products || 'Tarjetas,Magneticos,Post Cards,Playeras',
           excluded_tags: settings.excluded_tags || 'Personal,IprintPOS,ClientesArea,Area862Designers',
           default_agent_id: settings.default_agent_id || '',
-          default_agent_name: settings.default_agent_name || ''
+          default_agent_name: settings.default_agent_name || '',
+          message_history_limit: settings.message_history_limit || 50
         })
       }
     } catch (err) {
@@ -384,7 +394,8 @@ export default function SettingsPage() {
                 <span>{pollingStatus.active ? 'Sincronizando' : 'Detenido'}</span>
               </div>
 
-              <div className="button-row">
+              <div className="field-group">
+                <label>Intervalo de sincronizacion</label>
                 <select
                   value={pollingInterval}
                   onChange={(e) => setPollingInterval(parseInt(e.target.value))}
@@ -394,10 +405,25 @@ export default function SettingsPage() {
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
-                
+              </div>
+
+              <div className="field-group">
+                <label>Historial de mensajes a revisar</label>
+                <select
+                  value={form.message_history_limit}
+                  onChange={(e) => handleInputChange('message_history_limit', parseInt(e.target.value))}
+                >
+                  {messageHistoryLimits.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="field-hint">Cuantos mensajes revisar por contacto para detectar ZIP codes</p>
+              </div>
+
+              <div className="button-row">
                 {!pollingStatus.active ? (
                   <button className="btn-success" onClick={handleStartPolling} disabled={pollingLoading || !form.is_active}>
-                    Iniciar
+                    Iniciar Sincronizacion
                   </button>
                 ) : (
                   <button className="btn-danger" onClick={handleStopPolling} disabled={pollingLoading}>

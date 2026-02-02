@@ -141,6 +141,11 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
       { id: 3, name: 'Post Cards', keywords: ['postcards', 'postcard', 'post cards', 'post card', 'postal', 'postales'] },
       { id: 4, name: 'Playeras', keywords: ['playeras', 'playera', 'camisetas', 'camiseta', 'shirts', 'shirt', 't-shirt'] }
     ]
+  },
+  // Límite de mensajes a revisar por contacto
+  message_history_limit: {
+    type: DataTypes.INTEGER,
+    defaultValue: 50
   }
 }, {
   tableName: 'messaging_settings',
@@ -181,6 +186,7 @@ MessagingSettings.prototype.toDict = function() {
     product_menu_message: this.product_menu_message,
     excluded_tags: this.excluded_tags,
     products: this.products,
+    message_history_limit: this.message_history_limit,
     created_at: this.created_at,
     updated_at: this.updated_at
   };
