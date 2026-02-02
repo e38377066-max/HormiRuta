@@ -103,32 +103,18 @@ class PollingService {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = new RespondioService(apiToken);
     
-    console.log(`[Polling] Buscando contactos por lifecycle (Pending, New Lead, Approved)...`);
-    const [pendingContacts, newLeadContacts, approvedContacts] = await Promise.all([
-      respondio.listContactsByLifecycle({ lifecycleStage: 'Pending', limit: 50 }),
-      respondio.listContactsByLifecycle({ lifecycleStage: 'New Lead', limit: 50 }),
-      respondio.listContactsByLifecycle({ lifecycleStage: 'Approved', limit: 50 })
-    ]);
+    console.log(`[Polling] Buscando contactos con conversaciones abiertas...`);
+    const contactsResult = await respondio.listContacts({ status: 'open', limit: 50 });
 
-    if (!pendingContacts.success && !newLeadContacts.success && !approvedContacts.success) {
+    if (!contactsResult.success) {
       console.error('[Polling] ERROR: No se pudo obtener contactos de Respond.io');
-      console.error('[Polling] Pending error:', pendingContacts.error);
-      console.error('[Polling] New Lead error:', newLeadContacts.error);
-      console.error('[Polling] Approved error:', approvedContacts.error);
+      console.error('[Polling] Error:', contactsResult.error);
       return;
     }
 
-    const allContacts = [
-      ...(pendingContacts.items || []),
-      ...(newLeadContacts.items || []),
-      ...(approvedContacts.items || [])
-    ];
-    
-    const uniqueContacts = allContacts.filter((contact, index, self) =>
-      index === self.findIndex(c => c.id === contact.id)
-    );
+    const uniqueContacts = contactsResult.items || [];
 
-    console.log(`Found ${uniqueContacts.length} contacts (Pending: ${pendingContacts.items?.length || 0}, New Lead: ${newLeadContacts.items?.length || 0}, Approved: ${approvedContacts.items?.length || 0})`);
+    console.log(`[Polling] Encontrados ${uniqueContacts.length} contactos con conversaciones abiertas`);
 
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio);
