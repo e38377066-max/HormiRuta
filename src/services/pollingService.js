@@ -107,27 +107,27 @@ class PollingService {
     
     let allContacts = [];
     
-    const targetTags = ['New Lead', 'Pending'];
+    const lifecycleStages = ['New Lead', 'Pending'];
     
-    for (const tag of targetTags) {
+    for (const stage of lifecycleStages) {
       let cursorId = null;
       let pageCount = 0;
       const maxPages = 2;
       
       while (pageCount < maxPages) {
-        const contactsResult = await respondio.listContactsByTag({ 
-          tag: tag,
+        const contactsResult = await respondio.listContactsByLifecycleValue({ 
+          lifecycle: stage,
           limit: 99,
           cursorId: cursorId
         });
 
         if (!contactsResult.success) {
-          console.log(`[Polling] No se encontraron contactos con tag "${tag}": ${contactsResult.error || 'Sin error'}`);
+          console.log(`[Polling] No se encontraron contactos con lifecycle "${stage}": ${contactsResult.error || 'Sin error'}`);
           break;
         }
 
         const items = contactsResult.items || [];
-        console.log(`[Polling] Tag "${tag}" pagina ${pageCount + 1}: ${items.length} contactos`);
+        console.log(`[Polling] Lifecycle "${stage}" pagina ${pageCount + 1}: ${items.length} contactos`);
         allContacts = [...allContacts, ...items];
         
         if (!contactsResult.pagination?.nextCursor || items.length < 99) {
@@ -143,7 +143,7 @@ class PollingService {
       index === self.findIndex(c => c.id === contact.id)
     );
 
-    console.log(`[Polling] Encontrados ${uniqueContacts.length} contactos con tags New Lead/Pending`);
+    console.log(`[Polling] Encontrados ${uniqueContacts.length} contactos con lifecycle New Lead/Pending`);
 
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio);

@@ -124,8 +124,8 @@ class RespondioService {
     }
   }
 
-  async listContactsByTag(options = {}) {
-    const { tag = 'New Lead', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
+  async listContactsByLifecycleValue(options = {}) {
+    const { lifecycle = 'New Lead', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
     
     try {
       const params = {};
@@ -137,9 +137,10 @@ class RespondioService {
         timezone: timezone,
         filter: {
           $and: [{
-            field: 'tags',
-            operator: 'contains',
-            value: tag
+            category: 'contactField',
+            field: 'lifecycle',
+            operator: 'isEqualTo',
+            value: lifecycle
           }]
         }
       };
@@ -151,7 +152,7 @@ class RespondioService {
         pagination: response.data?.pagination || null
       };
     } catch (error) {
-      console.error(`Respond.io list contacts by tag (${tag}) error:`, error.response?.data || error.message);
+      console.error(`Respond.io list contacts by lifecycle (${lifecycle}) error:`, error.response?.data || error.message);
       return {
         success: false,
         items: [],
