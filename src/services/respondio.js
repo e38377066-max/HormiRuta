@@ -136,11 +136,9 @@ class RespondioService {
         search: '',
         timezone: timezone,
         filter: {
-          $and: [{
-            category: 'tag',
-            operator: 'hasAny',
-            value: [tag]
-          }]
+          field: 'tags',
+          operator: 'contains',
+          value: tag
         }
       };
 
