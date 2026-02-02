@@ -57,7 +57,10 @@ class RespondioService {
 
       const body = {
         search: search || '',
-        timezone: timezone
+        timezone: timezone,
+        filter: {
+          $and: []
+        }
       };
 
       if (status) {
