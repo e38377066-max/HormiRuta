@@ -124,6 +124,42 @@ class RespondioService {
     }
   }
 
+  async listContactsByTag(options = {}) {
+    const { tag = 'New Lead', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
+    
+    try {
+      const params = {};
+      if (limit) params.limit = Math.min(limit, 99);
+      if (cursorId) params.cursorId = cursorId;
+
+      const body = {
+        search: '',
+        timezone: timezone,
+        filter: {
+          $and: [{
+            category: 'tag',
+            operator: 'hasAny',
+            value: [tag]
+          }]
+        }
+      };
+
+      const response = await this.client.post('/contact/list', body, { params });
+      return {
+        success: true,
+        items: response.data?.items || [],
+        pagination: response.data?.pagination || null
+      };
+    } catch (error) {
+      console.error(`Respond.io list contacts by tag (${tag}) error:`, error.response?.data || error.message);
+      return {
+        success: false,
+        items: [],
+        error: error.response?.data?.message || error.message
+      };
+    }
+  }
+
   async getContact(contactIdentifier) {
     try {
       const identifier = typeof contactIdentifier === 'number' 

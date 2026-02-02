@@ -103,41 +103,47 @@ class PollingService {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = new RespondioService(apiToken);
     
-    console.log(`[Polling] Buscando todos los contactos recientes...`);
+    console.log(`[Polling] Buscando contactos con tags New Lead y Pending...`);
     
     let allContacts = [];
-    let cursorId = null;
-    let pageCount = 0;
-    const maxPages = 3;
     
-    while (pageCount < maxPages) {
-      const contactsResult = await respondio.listContacts({ 
-        limit: 99,
-        cursorId: cursorId
-      });
-
-      if (!contactsResult.success) {
-        console.error('[Polling] ERROR: No se pudo obtener contactos de Respond.io');
-        console.error('[Polling] Error:', contactsResult.error);
-        break;
-      }
-
-      const items = contactsResult.items || [];
-      allContacts = [...allContacts, ...items];
+    const targetTags = ['New Lead', 'Pending'];
+    
+    for (const tag of targetTags) {
+      let cursorId = null;
+      let pageCount = 0;
+      const maxPages = 2;
       
-      if (!contactsResult.pagination?.nextCursor || items.length < 99) {
-        break;
+      while (pageCount < maxPages) {
+        const contactsResult = await respondio.listContactsByTag({ 
+          tag: tag,
+          limit: 99,
+          cursorId: cursorId
+        });
+
+        if (!contactsResult.success) {
+          console.log(`[Polling] No se encontraron contactos con tag "${tag}": ${contactsResult.error || 'Sin error'}`);
+          break;
+        }
+
+        const items = contactsResult.items || [];
+        console.log(`[Polling] Tag "${tag}" pagina ${pageCount + 1}: ${items.length} contactos`);
+        allContacts = [...allContacts, ...items];
+        
+        if (!contactsResult.pagination?.nextCursor || items.length < 99) {
+          break;
+        }
+        
+        cursorId = contactsResult.pagination.nextCursor;
+        pageCount++;
       }
-      
-      cursorId = contactsResult.pagination.nextCursor;
-      pageCount++;
     }
 
     const uniqueContacts = allContacts.filter((contact, index, self) =>
       index === self.findIndex(c => c.id === contact.id)
     );
 
-    console.log(`[Polling] Encontrados ${uniqueContacts.length} contactos en total`);
+    console.log(`[Polling] Encontrados ${uniqueContacts.length} contactos con tags New Lead/Pending`);
 
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio);
