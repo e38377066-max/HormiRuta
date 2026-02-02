@@ -103,18 +103,41 @@ class PollingService {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = new RespondioService(apiToken);
     
-    console.log(`[Polling] Buscando contactos con conversaciones abiertas...`);
-    const contactsResult = await respondio.listContacts({ status: 'open', limit: 50 });
+    console.log(`[Polling] Buscando todos los contactos recientes...`);
+    
+    let allContacts = [];
+    let cursorId = null;
+    let pageCount = 0;
+    const maxPages = 3;
+    
+    while (pageCount < maxPages) {
+      const contactsResult = await respondio.listContacts({ 
+        limit: 99,
+        cursorId: cursorId
+      });
 
-    if (!contactsResult.success) {
-      console.error('[Polling] ERROR: No se pudo obtener contactos de Respond.io');
-      console.error('[Polling] Error:', contactsResult.error);
-      return;
+      if (!contactsResult.success) {
+        console.error('[Polling] ERROR: No se pudo obtener contactos de Respond.io');
+        console.error('[Polling] Error:', contactsResult.error);
+        break;
+      }
+
+      const items = contactsResult.items || [];
+      allContacts = [...allContacts, ...items];
+      
+      if (!contactsResult.pagination?.nextCursor || items.length < 99) {
+        break;
+      }
+      
+      cursorId = contactsResult.pagination.nextCursor;
+      pageCount++;
     }
 
-    const uniqueContacts = contactsResult.items || [];
+    const uniqueContacts = allContacts.filter((contact, index, self) =>
+      index === self.findIndex(c => c.id === contact.id)
+    );
 
-    console.log(`[Polling] Encontrados ${uniqueContacts.length} contactos con conversaciones abiertas`);
+    console.log(`[Polling] Encontrados ${uniqueContacts.length} contactos en total`);
 
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio);
