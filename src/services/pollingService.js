@@ -185,11 +185,22 @@ class PollingService {
 
       const addressValidation = new AddressValidationService(userId);
       const validation = await addressValidation.validateAddress(messageText);
+      
+      const extractedZip = addressValidation.extractZipCode(messageText);
+      const hasZipCode = extractedZip !== null;
 
-      console.log(`Message from ${contact.firstName}: "${messageText.substring(0, 50)}..." - isAddress: ${validation.isAddress}`);
+      console.log(`Message from ${contact.firstName}: "${messageText.substring(0, 50)}..." - isAddress: ${validation.isAddress}, hasZIP: ${hasZipCode}, ZIP: ${extractedZip || 'none'}`);
 
-      if (validation.isAddress) {
-        console.log(`Creating/updating order for address: ${messageText.substring(0, 50)}...`);
+      if (validation.isAddress || hasZipCode) {
+        const zipToUse = validation.zipCode || extractedZip;
+        const coverageCheck = await addressValidation.checkCoverage(zipToUse);
+        const hasCoverage = validation.hasCoverage || coverageCheck.hasCoverage;
+        const validationMsg = validation.isAddress 
+          ? validation.validationMessage 
+          : (hasCoverage ? `ZIP ${zipToUse} con cobertura` : `ZIP ${zipToUse} sin cobertura`);
+        
+        console.log(`Creating/updating order - ZIP: ${zipToUse}, Coverage: ${hasCoverage}`);
+        
         let order = await MessagingOrder.findOne({
           where: {
             user_id: userId,
@@ -207,24 +218,24 @@ class PollingService {
             customer_name: customerName,
             customer_phone: contact.phone || null,
             channel_type: 'respond.io',
-            address: messageText,
-            zip_code: validation.zipCode,
-            address_type: validation.addressType,
+            address: validation.isAddress ? messageText : `ZIP: ${zipToUse}`,
+            zip_code: zipToUse,
+            address_type: validation.addressType || 'unknown',
             status: 'pending',
-            validation_status: validation.hasCoverage ? 'covered' : 'no_coverage',
-            validation_message: validation.validationMessage,
-            notes: validation.needsApartmentNumber ? 'Pendiente: Solicitar numero de apartamento' : null
+            validation_status: hasCoverage ? 'covered' : 'no_coverage',
+            validation_message: validationMsg,
+            notes: validation.needsApartmentNumber ? 'Pendiente: Solicitar numero de apartamento' : (validation.isAddress ? null : 'Solo ZIP code recibido - falta direccion completa')
           });
-          console.log(`Created new order #${order.id} for ${customerName}`);
+          console.log(`Created new order #${order.id} for ${customerName} (ZIP: ${zipToUse})`);
         } else {
           await order.update({
-            address: messageText,
-            zip_code: validation.zipCode,
-            address_type: validation.addressType,
-            validation_status: validation.hasCoverage ? 'covered' : 'no_coverage',
-            validation_message: validation.validationMessage
+            address: validation.isAddress ? messageText : (order.address || `ZIP: ${zipToUse}`),
+            zip_code: zipToUse,
+            address_type: validation.addressType || order.address_type,
+            validation_status: hasCoverage ? 'covered' : 'no_coverage',
+            validation_message: validationMsg
           });
-          console.log(`Updated order #${order.id} with new address`);
+          console.log(`Updated order #${order.id} with ZIP: ${zipToUse}`);
         }
 
         await MessageLog.update(
