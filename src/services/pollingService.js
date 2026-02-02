@@ -103,7 +103,7 @@ class PollingService {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = new RespondioService(apiToken);
     
-    console.log(`[Polling] Obteniendo todos los contactos y filtrando por lifecycle...`);
+    console.log(`[Polling] Obteniendo conversaciones ABIERTAS con lifecycle New Lead/Pending...`);
     
     let allContacts = [];
     let cursorId = null;
@@ -111,19 +111,19 @@ class PollingService {
     const maxPages = 3;
     
     while (pageCount < maxPages) {
-      const contactsResult = await respondio.listContacts({ 
+      const contactsResult = await respondio.listOpenConversations({ 
         limit: 99,
         cursorId: cursorId
       });
 
       if (!contactsResult.success) {
-        console.error('[Polling] Error obteniendo contactos:', contactsResult.error);
+        console.error('[Polling] Error obteniendo conversaciones abiertas:', contactsResult.error);
         break;
       }
 
       const items = contactsResult.items || [];
       allContacts = [...allContacts, ...items];
-      console.log(`[Polling] Pagina ${pageCount + 1}: ${items.length} contactos obtenidos`);
+      console.log(`[Polling] Pagina ${pageCount + 1}: ${items.length} conversaciones abiertas`);
       
       if (!contactsResult.pagination?.nextCursor || items.length < 99) {
         break;
@@ -142,7 +142,7 @@ class PollingService {
       index === self.findIndex(c => c.id === contact.id)
     );
 
-    console.log(`[Polling] Total contactos: ${allContacts.length}, Con lifecycle New Lead/Pending: ${uniqueContacts.length}`);
+    console.log(`[Polling] Conversaciones abiertas: ${allContacts.length}, Con lifecycle New Lead/Pending: ${uniqueContacts.length}`);
 
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio);
