@@ -13,19 +13,31 @@ class PollingService {
   }
 
   async startPolling(userId, intervalSeconds = 30) {
+    console.log(`[Polling] Iniciando polling para usuario ${userId}...`);
+    
     if (this.activePollers.has(userId)) {
-      console.log(`Polling already active for user ${userId}`);
+      console.log(`[Polling] Ya está activo para usuario ${userId}`);
       return { success: true, message: 'Polling ya está activo' };
     }
 
     const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
-    if (!settings || !settings.respond_api_token) {
-      return { success: false, error: 'No se ha configurado el token de API de Respond.io' };
+    
+    if (!settings) {
+      console.log(`[Polling] ERROR: No hay configuración de mensajería para usuario ${userId}`);
+      return { success: false, error: 'No hay configuración de mensajería. Ve a Configuración primero.' };
+    }
+    
+    if (!settings.respond_api_token) {
+      console.log(`[Polling] ERROR: No hay token de API para usuario ${userId}`);
+      return { success: false, error: 'No se ha configurado el token de API de Respond.io. Configúralo en Ajustes.' };
     }
 
     if (!settings.is_active) {
-      return { success: false, error: 'El módulo de mensajería está desactivado' };
+      console.log(`[Polling] ERROR: Módulo de mensajería desactivado para usuario ${userId}`);
+      return { success: false, error: 'El módulo de mensajería está desactivado. Actívalo en Ajustes.' };
     }
+    
+    console.log(`[Polling] Configuración válida. Token: ${settings.respond_api_token.substring(0, 10)}...`);
 
     const poller = {
       userId,
@@ -40,19 +52,23 @@ class PollingService {
       if (!poller.isRunning) return;
       
       try {
+        console.log(`[Polling] Ejecutando poll para usuario ${userId}...`);
         await this.pollForNewMessages(userId, settings.respond_api_token, poller);
         poller.lastPoll = new Date();
+        console.log(`[Polling] Poll completado para usuario ${userId}`);
       } catch (error) {
-        console.error(`Polling error for user ${userId}:`, error.message);
+        console.error(`[Polling] ERROR en poll para usuario ${userId}:`, error.message);
+        console.error(error.stack);
       }
     };
 
+    console.log(`[Polling] Ejecutando primer poll...`);
     await pollFn();
     
     poller.intervalId = setInterval(pollFn, poller.intervalMs);
     this.activePollers.set(userId, poller);
 
-    console.log(`Started polling for user ${userId} every ${intervalSeconds}s`);
+    console.log(`[Polling] ACTIVO para usuario ${userId} cada ${intervalSeconds}s`);
     return { success: true, message: `Polling iniciado cada ${intervalSeconds} segundos` };
   }
 
@@ -84,8 +100,10 @@ class PollingService {
   }
 
   async pollForNewMessages(userId, apiToken, poller) {
+    console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = new RespondioService(apiToken);
     
+    console.log(`[Polling] Buscando contactos por lifecycle (Pending, New Lead, Approved)...`);
     const [pendingContacts, newLeadContacts, approvedContacts] = await Promise.all([
       respondio.listContactsByLifecycle({ lifecycleStage: 'Pending', limit: 50 }),
       respondio.listContactsByLifecycle({ lifecycleStage: 'New Lead', limit: 50 }),
@@ -93,7 +111,10 @@ class PollingService {
     ]);
 
     if (!pendingContacts.success && !newLeadContacts.success && !approvedContacts.success) {
-      console.error('Failed to fetch contacts:', pendingContacts.error || newLeadContacts.error || approvedContacts.error);
+      console.error('[Polling] ERROR: No se pudo obtener contactos de Respond.io');
+      console.error('[Polling] Pending error:', pendingContacts.error);
+      console.error('[Polling] New Lead error:', newLeadContacts.error);
+      console.error('[Polling] Approved error:', approvedContacts.error);
       return;
     }
 
