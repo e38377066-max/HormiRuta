@@ -167,18 +167,38 @@ class PollingService {
       .filter(msg => !poller.processedMessageIds.has(msg.messageId))
       .reverse();
 
+    const addressValidation = new AddressValidationService(userId);
+    let lastZipMessage = null;
+    const nonZipMessages = [];
+
     for (const message of incomingMessages) {
-      await this.processIncomingMessage(userId, contact, message, respondio);
-      poller.processedMessageIds.add(message.messageId);
+      const messageText = message.message?.text || '';
+      const extractedZip = addressValidation.extractZipCode(messageText);
+      const validation = await addressValidation.validateAddress(messageText);
       
-      if (poller.processedMessageIds.size > 10000) {
-        const idsArray = Array.from(poller.processedMessageIds);
-        poller.processedMessageIds = new Set(idsArray.slice(-5000));
+      if (extractedZip || validation.isAddress) {
+        lastZipMessage = message;
+      } else {
+        nonZipMessages.push(message);
       }
+      poller.processedMessageIds.add(message.messageId);
+    }
+
+    for (const message of nonZipMessages) {
+      await this.processIncomingMessage(userId, contact, message, respondio, true);
+    }
+
+    if (lastZipMessage) {
+      await this.processIncomingMessage(userId, contact, lastZipMessage, respondio, false);
+    }
+
+    if (poller.processedMessageIds.size > 10000) {
+      const idsArray = Array.from(poller.processedMessageIds);
+      poller.processedMessageIds = new Set(idsArray.slice(-5000));
     }
   }
 
-  async processIncomingMessage(userId, contact, message, respondio) {
+  async processIncomingMessage(userId, contact, message, respondio, skipZipProcessing = false) {
     try {
       const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
       if (!settings) return;
@@ -195,8 +215,10 @@ class PollingService {
         message_type: message.message?.type || 'text',
         message_content: messageText,
         respond_message_id: message.messageId?.toString(),
-        processed: false
+        processed: skipZipProcessing
       });
+
+      if (skipZipProcessing) return;
 
       if (settings.attention_mode === 'automatic') {
         const chatbot = new ChatbotService(userId, settings);
