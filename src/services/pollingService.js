@@ -167,29 +167,14 @@ class PollingService {
       .filter(msg => !poller.processedMessageIds.has(msg.messageId))
       .reverse();
 
-    const addressValidation = new AddressValidationService(userId);
-    let lastZipMessage = null;
-    const nonZipMessages = [];
+    if (incomingMessages.length === 0) return;
+
+    const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+    const isAutomatic = settings?.attention_mode === 'automatic';
 
     for (const message of incomingMessages) {
-      const messageText = message.message?.text || '';
-      const extractedZip = addressValidation.extractZipCode(messageText);
-      const validation = await addressValidation.validateAddress(messageText);
-      
-      if (extractedZip || validation.isAddress) {
-        lastZipMessage = message;
-      } else {
-        nonZipMessages.push(message);
-      }
       poller.processedMessageIds.add(message.messageId);
-    }
-
-    for (const message of nonZipMessages) {
-      await this.processIncomingMessage(userId, contact, message, respondio, true);
-    }
-
-    if (lastZipMessage) {
-      await this.processIncomingMessage(userId, contact, lastZipMessage, respondio, false);
+      await this.processIncomingMessage(userId, contact, message, respondio, isAutomatic);
     }
 
     if (poller.processedMessageIds.size > 10000) {
@@ -198,7 +183,7 @@ class PollingService {
     }
   }
 
-  async processIncomingMessage(userId, contact, message, respondio, skipZipProcessing = false) {
+  async processIncomingMessage(userId, contact, message, respondio, useAutomaticMode = false) {
     try {
       const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
       if (!settings) return;
@@ -215,25 +200,24 @@ class PollingService {
         message_type: message.message?.type || 'text',
         message_content: messageText,
         respond_message_id: message.messageId?.toString(),
-        processed: skipZipProcessing
+        processed: false
       });
 
-      if (skipZipProcessing) return;
-
-      if (settings.attention_mode === 'automatic') {
+      if (useAutomaticMode) {
         const chatbot = new ChatbotService(userId, settings);
         const result = await chatbot.processMessage(contact, messageText);
         
-        console.log(`Chatbot result for ${contact.firstName}: ${JSON.stringify(result)}`);
+        console.log(`[Chatbot] ${contact.firstName}: "${messageText.substring(0, 30)}..." -> ${result.action || result.reason || 'no_action'}`);
         
         if (result.handled) {
           await this.logOutgoingMessage(userId, contact, result.message || '', result.action || 'chatbot');
-          await MessageLog.update(
-            { processed: true },
-            { where: { respond_message_id: message.messageId?.toString(), user_id: userId } }
-          );
-          return;
         }
+        
+        await MessageLog.update(
+          { processed: true },
+          { where: { respond_message_id: message.messageId?.toString(), user_id: userId } }
+        );
+        return;
       }
 
       const addressValidation = new AddressValidationService(userId);

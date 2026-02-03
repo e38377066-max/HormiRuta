@@ -494,15 +494,15 @@ router.post('/coverage-zones', requireAuth, async (req, res) => {
     const zone = await CoverageZone.create({
       user_id: req.session.userId,
       zip_code,
-      zone_name,
-      city,
-      state,
+      zone_name: zone_name || '',
+      city: city || '',
+      state: state || '',
       country: country || 'US',
       is_active: is_active !== false,
-      delivery_fee,
-      min_order_amount,
-      estimated_delivery_time,
-      notes
+      delivery_fee: delivery_fee !== '' && delivery_fee != null ? parseFloat(delivery_fee) : null,
+      min_order_amount: min_order_amount !== '' && min_order_amount != null ? parseFloat(min_order_amount) : null,
+      estimated_delivery_time: estimated_delivery_time || null,
+      notes: notes || null
     });
 
     res.status(201).json(zone.toDict());

@@ -233,6 +233,14 @@ class ChatbotService {
   }
 
   async handleInitialState(contact, messageText, convState) {
+    const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
+    const isCityMessage = this.addressValidation.isCityMessage(messageText);
+    
+    if (isZipMessage || isCityMessage) {
+      await this.updateConversationState(contact.id, { state: 'awaiting_zip' });
+      return await this.handleAwaitingZip(contact, messageText, convState);
+    }
+
     const isExisting = await this.checkIfExistingCustomer(contact);
     
     if (isExisting) {
@@ -267,6 +275,14 @@ class ChatbotService {
   }
 
   async handleAwaitingPriorInfo(contact, messageText, convState) {
+    const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
+    const isCityMessage = this.addressValidation.isCityMessage(messageText);
+    
+    if (isZipMessage || isCityMessage) {
+      await this.updateConversationState(contact.id, { state: 'awaiting_zip', has_prior_info: false });
+      return await this.handleAwaitingZip(contact, messageText, convState);
+    }
+
     const response = this.parseYesNoResponse(messageText);
     
     if (response === 'yes') {
@@ -311,6 +327,7 @@ class ChatbotService {
     
     if (isZipMessage || isCityMessage) {
       const validation = await this.addressValidation.validateZipOrCity(messageText);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
       
       if (validation.valid) {
         const coverageMsg = (this.settings.coverage_message || '✅ ¡Excelente! Tenemos cobertura en tu zona ({{zip_code}})')
@@ -319,6 +336,8 @@ class ChatbotService {
           .replace('{{zone}}', validation.zone?.zone_name || '');
         
         await this.sendMessage(contact.id, coverageMsg);
+
+        await this.createOrUpdateOrder(contact, validation.value, customerName, 'covered', validation.zone);
 
         const productMenuMsg = this.settings.product_menu_message ||
           '¿En cuál de estos productos está interesado? (Indica el número del producto)\n\n1. Tarjetas\n2. Magnéticos\n3. Post Cards\n4. Playeras';
@@ -330,6 +349,8 @@ class ChatbotService {
           validated_zip: validation.value,
           awaiting_response: 'product_selection'
         });
+
+        await this.addTrackingTag(contact.id, 'ConCobertura');
         
         return { handled: true, action: 'zip_validated', message: coverageMsg };
       } else {
@@ -338,6 +359,8 @@ class ChatbotService {
           .replace('{{city}}', validation.value);
         
         await this.sendMessage(contact.id, noCoverageMsg);
+
+        await this.createOrUpdateOrder(contact, validation.value, customerName, 'no_coverage', null);
 
         const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
         if (agentId) {
@@ -355,6 +378,46 @@ class ChatbotService {
       
       await this.sendMessage(contact.id, remindZipMsg);
       return { handled: true, action: 'remind_zip', message: remindZipMsg };
+    }
+  }
+
+  async createOrUpdateOrder(contact, zipCode, customerName, validationStatus, zone) {
+    try {
+      let order = await MessagingOrder.findOne({
+        where: {
+          user_id: this.userId,
+          respond_contact_id: contact.id.toString(),
+          status: 'pending'
+        }
+      });
+
+      const orderData = {
+        customer_name: customerName,
+        customer_phone: contact.phone || null,
+        zip_code: zipCode,
+        validation_status: validationStatus,
+        validation_message: validationStatus === 'covered' 
+          ? `ZIP ${zipCode} con cobertura${zone ? ` - ${zone.zone_name}` : ''}`
+          : `ZIP ${zipCode} sin cobertura`,
+        lifecycle: contact.lifecycle || null
+      };
+
+      if (order) {
+        await order.update(orderData);
+        console.log(`[Chatbot] Order updated for contact ${contact.id}, ZIP: ${zipCode}`);
+      } else {
+        await MessagingOrder.create({
+          user_id: this.userId,
+          respond_contact_id: contact.id.toString(),
+          channel_type: 'respond.io',
+          address: `ZIP: ${zipCode}`,
+          status: 'pending',
+          ...orderData
+        });
+        console.log(`[Chatbot] Order created for contact ${contact.id}, ZIP: ${zipCode}`);
+      }
+    } catch (error) {
+      console.error(`[Chatbot] Error creating/updating order:`, error.message);
     }
   }
 
