@@ -239,7 +239,6 @@ class PollingService {
           where: {
             user_id: userId,
             respond_contact_id: contact.id.toString(),
-            zip_code: zipToUse,
             status: 'pending'
           }
         });
@@ -264,12 +263,14 @@ class PollingService {
           console.log(`Created new order #${order.id} for ${customerName} (ZIP: ${zipToUse}, Channel: ${message.channelId || 'N/A'})`);
         } else {
           await order.update({
-            address: validation.isAddress ? messageText : order.address,
+            address: validation.isAddress ? messageText : `ZIP: ${zipToUse}`,
+            zip_code: zipToUse,
+            channel_id: message.channelId || order.channel_id,
             validation_status: hasCoverage ? 'covered' : 'no_coverage',
             validation_message: validationMsg,
             lifecycle: contact.lifecycle || order.lifecycle
           });
-          console.log(`Updated existing order #${order.id} for same ZIP: ${zipToUse}`);
+          console.log(`Updated order #${order.id} with new ZIP: ${zipToUse} (replaced previous)`);
         }
 
         await MessageLog.update(
