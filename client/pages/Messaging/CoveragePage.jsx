@@ -23,10 +23,44 @@ export default function CoveragePage() {
     estimated_delivery_time: '',
     notes: ''
   })
+  const [loadingZipInfo, setLoadingZipInfo] = useState(false)
 
   useEffect(() => {
     loadZones()
   }, [])
+
+  const fetchZipInfo = async (zipCode) => {
+    if (!zipCode || zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) return
+    
+    setLoadingZipInfo(true)
+    try {
+      const response = await fetch(`https://api.zippopotam.us/us/${zipCode}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.places && data.places.length > 0) {
+          const place = data.places[0]
+          setZoneForm(prev => ({
+            ...prev,
+            city: place['place name'] || '',
+            state: place['state abbreviation'] || '',
+            zone_name: prev.zone_name || place['place name'] || ''
+          }))
+        }
+      }
+    } catch (error) {
+      console.log('Could not fetch ZIP info:', error)
+    } finally {
+      setLoadingZipInfo(false)
+    }
+  }
+
+  const handleZipChange = (e) => {
+    const value = e.target.value
+    setZoneForm({ ...zoneForm, zip_code: value })
+    if (value.length === 5 && /^\d{5}$/.test(value)) {
+      fetchZipInfo(value)
+    }
+  }
 
   const loadZones = async () => {
     setLoading(true)
@@ -234,12 +268,13 @@ export default function CoveragePage() {
             </div>
             <div className="modal-body">
               <div className="field-group">
-                <label>Codigo Postal (ZIP)</label>
+                <label>Codigo Postal (ZIP) {loadingZipInfo && <span style={{fontSize: '12px', color: '#6366f1'}}>(buscando...)</span>}</label>
                 <input
                   type="text"
                   value={zoneForm.zip_code}
-                  onChange={(e) => setZoneForm({ ...zoneForm, zip_code: e.target.value })}
+                  onChange={handleZipChange}
                   disabled={!!editingZone}
+                  placeholder="Ingresa 5 digitos para autocompletar"
                 />
               </div>
               <div className="field-group">
