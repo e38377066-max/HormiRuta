@@ -30,6 +30,9 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-02-03: Added multi-agent system for assigning different agents by service/product
+- 2026-02-03: ServiceAgent model with CRUD endpoints and UI management
+- 2026-02-03: Chatbot automatically assigns agent based on selected product
 - 2026-01-30: Created INSTALL.md with complete AWS Ubuntu installation guide
 - 2026-01-30: Updated client/api.js for mobile app compatibility with external servers
 - 2026-01-30: Created comprehensive DOCUMENTATION.md for development team
