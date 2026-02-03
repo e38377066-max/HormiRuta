@@ -3,6 +3,25 @@ import { useNavigate } from 'react-router-dom'
 import { useMessaging } from '../../contexts/MessagingContext'
 import './MessagingPages.css'
 
+const parseProducts = (products) => {
+  if (!products) return 'Tarjetas,Magneticos,Post Cards,Playeras'
+  if (typeof products === 'string') {
+    try {
+      const parsed = JSON.parse(products)
+      if (Array.isArray(parsed)) {
+        return parsed.map(p => typeof p === 'object' ? p.name : p).join(',')
+      }
+    } catch {
+      return products
+    }
+    return products
+  }
+  if (Array.isArray(products)) {
+    return products.map(p => typeof p === 'object' ? p.name : p).join(',')
+  }
+  return 'Tarjetas,Magneticos,Post Cards,Playeras'
+}
+
 export default function SettingsPage() {
   const navigate = useNavigate()
   const { fetchSettings, updateSettings, testConnection, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip } = useMessaging()
@@ -121,7 +140,7 @@ export default function SettingsPage() {
           request_zip_message: settings.request_zip_message || '',
           remind_zip_message: settings.remind_zip_message || '',
           product_menu_message: settings.product_menu_message || '',
-          products: settings.products || 'Tarjetas,Magneticos,Post Cards,Playeras',
+          products: parseProducts(settings.products),
           excluded_tags: settings.excluded_tags || 'Personal,IprintPOS,ClientesArea,Area862Designers',
           default_agent_id: settings.default_agent_id || '',
           default_agent_name: settings.default_agent_name || '',
