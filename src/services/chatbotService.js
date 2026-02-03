@@ -1,6 +1,7 @@
 import ConversationState from '../models/ConversationState.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import MessagingOrder from '../models/MessagingOrder.js';
+import ServiceAgent from '../models/ServiceAgent.js';
 import AddressValidationService from './addressValidation.js';
 import respondApiService from './respondApiService.js';
 
@@ -433,15 +434,16 @@ class ChatbotService {
         selected_product: product.name
       });
 
-      const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
+      const agent = await this.findAgentForProduct(product.name);
+      const agentId = agent?.agent_id || agent?.agent_email || this.settings.default_agent_id || this.settings.default_agent_email;
+      
       if (agentId) {
         await this.assignToAgent(contact.id, agentId);
         await this.addTrackingTag(contact.id, 'ProductoSeleccionado');
         
-        // Add comment with product info for agent reference
         await this.api.addComment(
           `id:${contact.id}`,
-          `[Bot] Cliente seleccionó: ${product.name}. ZIP validado: ${convState.validated_zip || 'N/A'}`
+          `[Bot] Cliente seleccionó: ${product.name}. ZIP: ${convState.validated_zip || 'N/A'}. Asignado a: ${agent?.agent_name || 'Agente por defecto'}`
         );
       }
       
@@ -453,6 +455,29 @@ class ChatbotService {
       const remindMsg = `No entendí tu selección. ${productMenuMsg}`;
       await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'remind_product', message: remindMsg };
+    }
+  }
+
+  async findAgentForProduct(productName) {
+    try {
+      const agents = await ServiceAgent.findAll({
+        where: { user_id: this.userId, is_active: true }
+      });
+
+      const productLower = productName.toLowerCase();
+      
+      for (const agent of agents) {
+        const products = agent.products || [];
+        if (products.some(p => p.toLowerCase() === productLower)) {
+          return agent;
+        }
+      }
+
+      const defaultAgent = agents.find(a => a.is_default);
+      return defaultAgent || null;
+    } catch (error) {
+      console.error('[Chatbot] Error finding agent for product:', error.message);
+      return null;
     }
   }
 

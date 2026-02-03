@@ -6,6 +6,7 @@ import {
   MessageLog, 
   MessagingSettings,
   ConversationState,
+  ServiceAgent,
   User
 } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -1019,6 +1020,145 @@ router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Reset conversation error:', error);
     res.status(500).json({ error: 'Error al reiniciar conversacion' });
+  }
+});
+
+router.get('/agents', requireAuth, async (req, res) => {
+  try {
+    const agents = await ServiceAgent.findAll({
+      where: { user_id: req.session.userId },
+      order: [['service_name', 'ASC'], ['agent_name', 'ASC']]
+    });
+    res.json(agents.map(a => a.toDict()));
+  } catch (error) {
+    console.error('Get agents error:', error);
+    res.status(500).json({ error: 'Error al obtener agentes' });
+  }
+});
+
+router.post('/agents', requireAuth, async (req, res) => {
+  try {
+    const { agent_id, agent_name, agent_email, service_name, products, is_default } = req.body;
+
+    if (!agent_name || !service_name) {
+      return res.status(400).json({ error: 'Nombre del agente y servicio son requeridos' });
+    }
+
+    if (is_default) {
+      await ServiceAgent.update(
+        { is_default: false },
+        { where: { user_id: req.session.userId, service_name } }
+      );
+    }
+
+    const agent = await ServiceAgent.create({
+      user_id: req.session.userId,
+      agent_id: agent_id || null,
+      agent_name,
+      agent_email: agent_email || null,
+      service_name,
+      products: products || [],
+      is_default: is_default || false,
+      is_active: true
+    });
+
+    res.status(201).json(agent.toDict());
+  } catch (error) {
+    console.error('Create agent error:', error);
+    res.status(500).json({ error: 'Error al crear agente' });
+  }
+});
+
+router.put('/agents/:id', requireAuth, async (req, res) => {
+  try {
+    const agent = await ServiceAgent.findOne({
+      where: { id: req.params.id, user_id: req.session.userId }
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agente no encontrado' });
+    }
+
+    const { agent_id, agent_name, agent_email, service_name, products, is_default, is_active } = req.body;
+
+    if (is_default) {
+      await ServiceAgent.update(
+        { is_default: false },
+        { where: { user_id: req.session.userId, service_name: service_name || agent.service_name } }
+      );
+    }
+
+    await agent.update({
+      agent_id: agent_id !== undefined ? agent_id : agent.agent_id,
+      agent_name: agent_name || agent.agent_name,
+      agent_email: agent_email !== undefined ? agent_email : agent.agent_email,
+      service_name: service_name || agent.service_name,
+      products: products !== undefined ? products : agent.products,
+      is_default: is_default !== undefined ? is_default : agent.is_default,
+      is_active: is_active !== undefined ? is_active : agent.is_active
+    });
+
+    res.json(agent.toDict());
+  } catch (error) {
+    console.error('Update agent error:', error);
+    res.status(500).json({ error: 'Error al actualizar agente' });
+  }
+});
+
+router.delete('/agents/:id', requireAuth, async (req, res) => {
+  try {
+    const agent = await ServiceAgent.findOne({
+      where: { id: req.params.id, user_id: req.session.userId }
+    });
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agente no encontrado' });
+    }
+
+    await agent.destroy();
+    res.json({ success: true, message: 'Agente eliminado' });
+  } catch (error) {
+    console.error('Delete agent error:', error);
+    res.status(500).json({ error: 'Error al eliminar agente' });
+  }
+});
+
+router.get('/agents/by-service/:serviceName', requireAuth, async (req, res) => {
+  try {
+    const agents = await ServiceAgent.findAll({
+      where: { 
+        user_id: req.session.userId,
+        service_name: req.params.serviceName,
+        is_active: true
+      },
+      order: [['is_default', 'DESC'], ['agent_name', 'ASC']]
+    });
+    res.json(agents.map(a => a.toDict()));
+  } catch (error) {
+    console.error('Get agents by service error:', error);
+    res.status(500).json({ error: 'Error al obtener agentes' });
+  }
+});
+
+router.get('/agents/by-product/:productName', requireAuth, async (req, res) => {
+  try {
+    const agents = await ServiceAgent.findAll({
+      where: { 
+        user_id: req.session.userId,
+        is_active: true
+      }
+    });
+
+    const productName = req.params.productName.toLowerCase();
+    const matchingAgents = agents.filter(a => {
+      const products = a.products || [];
+      return products.some(p => p.toLowerCase() === productName);
+    });
+
+    res.json(matchingAgents.map(a => a.toDict()));
+  } catch (error) {
+    console.error('Get agents by product error:', error);
+    res.status(500).json({ error: 'Error al obtener agentes' });
   }
 });
 

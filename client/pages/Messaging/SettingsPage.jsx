@@ -24,9 +24,20 @@ const parseProducts = (products) => {
 
 export default function SettingsPage() {
   const navigate = useNavigate()
-  const { fetchSettings, updateSettings, testConnection, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip } = useMessaging()
+  const { fetchSettings, updateSettings, testConnection, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip, fetchAgents, createAgent, updateAgent, deleteAgent } = useMessaging()
   
   const [saving, setSaving] = useState(false)
+  const [agents, setAgents] = useState([])
+  const [showAgentForm, setShowAgentForm] = useState(false)
+  const [editingAgent, setEditingAgent] = useState(null)
+  const [agentForm, setAgentForm] = useState({
+    agent_id: '',
+    agent_name: '',
+    agent_email: '',
+    service_name: '',
+    products: [],
+    is_default: false
+  })
   const [testing, setTesting] = useState(false)
   const [showToken, setShowToken] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState(null)
@@ -109,7 +120,63 @@ export default function SettingsPage() {
   useEffect(() => {
     loadSettings()
     loadPollingStatus()
+    loadAgents()
   }, [])
+
+  const loadAgents = async () => {
+    try {
+      const data = await fetchAgents()
+      setAgents(data || [])
+    } catch (err) {
+      console.error('Error loading agents:', err)
+    }
+  }
+
+  const handleSaveAgent = async () => {
+    try {
+      const data = {
+        ...agentForm,
+        products: agentForm.products.length > 0 ? agentForm.products : []
+      }
+      
+      if (editingAgent) {
+        await updateAgent(editingAgent.id, data)
+      } else {
+        await createAgent(data)
+      }
+      
+      await loadAgents()
+      setShowAgentForm(false)
+      setEditingAgent(null)
+      setAgentForm({ agent_id: '', agent_name: '', agent_email: '', service_name: '', products: [], is_default: false })
+    } catch (err) {
+      console.error('Error saving agent:', err)
+      alert('Error al guardar agente')
+    }
+  }
+
+  const handleEditAgent = (agent) => {
+    setEditingAgent(agent)
+    setAgentForm({
+      agent_id: agent.agent_id || '',
+      agent_name: agent.agent_name,
+      agent_email: agent.agent_email || '',
+      service_name: agent.service_name,
+      products: agent.products || [],
+      is_default: agent.is_default
+    })
+    setShowAgentForm(true)
+  }
+
+  const handleDeleteAgent = async (id) => {
+    if (!window.confirm('¿Eliminar este agente?')) return
+    try {
+      await deleteAgent(id)
+      await loadAgents()
+    } catch (err) {
+      console.error('Error deleting agent:', err)
+    }
+  }
 
   const loadSettings = async () => {
     try {
@@ -600,31 +667,133 @@ export default function SettingsPage() {
 
             <div className="settings-card">
               <h3>
-                <span className="material-icons">person</span>
-                Agente por Defecto
+                <span className="material-icons">people</span>
+                Agentes por Servicio
               </h3>
-              <p className="description">Agente al que se asignan las conversaciones automaticamente</p>
+              <p className="description">Configura agentes para diferentes servicios (Area 862, IprintPOS, etc.)</p>
               
-              <div className="field-row">
-                <div className="field-group">
-                  <label>ID del Agente (Respond.io)</label>
-                  <input
-                    type="text"
-                    value={form.default_agent_id}
-                    onChange={(e) => handleInputChange('default_agent_id', e.target.value)}
-                    placeholder="Ej: 123456"
-                  />
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => {
+                  setEditingAgent(null)
+                  setAgentForm({ agent_id: '', agent_name: '', agent_email: '', service_name: '', products: [], is_default: false })
+                  setShowAgentForm(true)
+                }}
+                style={{ marginBottom: '1rem' }}
+              >
+                <span className="material-icons">add</span>
+                Agregar Agente
+              </button>
+
+              {showAgentForm && (
+                <div className="agent-form-modal" style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                  <h4>{editingAgent ? 'Editar Agente' : 'Nuevo Agente'}</h4>
+                  <div className="field-row">
+                    <div className="field-group">
+                      <label>Nombre del Agente *</label>
+                      <input
+                        type="text"
+                        value={agentForm.agent_name}
+                        onChange={(e) => setAgentForm({...agentForm, agent_name: e.target.value})}
+                        placeholder="Ej: Felipe Delgado"
+                      />
+                    </div>
+                    <div className="field-group">
+                      <label>Servicio *</label>
+                      <input
+                        type="text"
+                        value={agentForm.service_name}
+                        onChange={(e) => setAgentForm({...agentForm, service_name: e.target.value})}
+                        placeholder="Ej: Area 862, IprintPOS"
+                      />
+                    </div>
+                  </div>
+                  <div className="field-row">
+                    <div className="field-group">
+                      <label>ID en Respond.io</label>
+                      <input
+                        type="text"
+                        value={agentForm.agent_id}
+                        onChange={(e) => setAgentForm({...agentForm, agent_id: e.target.value})}
+                        placeholder="Ej: 123456"
+                      />
+                    </div>
+                    <div className="field-group">
+                      <label>Email</label>
+                      <input
+                        type="email"
+                        value={agentForm.agent_email}
+                        onChange={(e) => setAgentForm({...agentForm, agent_email: e.target.value})}
+                        placeholder="agente@email.com"
+                      />
+                    </div>
+                  </div>
+                  <div className="field-group">
+                    <label>Productos que maneja (separados por coma)</label>
+                    <input
+                      type="text"
+                      value={agentForm.products.join(',')}
+                      onChange={(e) => setAgentForm({...agentForm, products: e.target.value.split(',').map(p => p.trim()).filter(p => p)})}
+                      placeholder="Tarjetas, Magneticos, Playeras"
+                    />
+                  </div>
+                  <div className="checkbox-row">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={agentForm.is_default}
+                        onChange={(e) => setAgentForm({...agentForm, is_default: e.target.checked})}
+                      />
+                      <span>Agente por defecto para este servicio</span>
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                    <button className="btn btn-primary" onClick={handleSaveAgent}>
+                      {editingAgent ? 'Guardar Cambios' : 'Agregar'}
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => setShowAgentForm(false)}>
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
-                <div className="field-group">
-                  <label>Nombre del Agente</label>
-                  <input
-                    type="text"
-                    value={form.default_agent_name}
-                    onChange={(e) => handleInputChange('default_agent_name', e.target.value)}
-                    placeholder="Ej: Felipe Delgado"
-                  />
+              )}
+
+              {agents.length > 0 ? (
+                <div className="agents-list">
+                  {Object.entries(agents.reduce((acc, agent) => {
+                    if (!acc[agent.service_name]) acc[agent.service_name] = []
+                    acc[agent.service_name].push(agent)
+                    return acc
+                  }, {})).map(([serviceName, serviceAgents]) => (
+                    <div key={serviceName} className="service-group" style={{ marginBottom: '1rem' }}>
+                      <h4 style={{ color: '#1976d2', marginBottom: '0.5rem' }}>{serviceName}</h4>
+                      {serviceAgents.map(agent => (
+                        <div key={agent.id} className="agent-item" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.5rem', background: '#fff', borderRadius: '4px', marginBottom: '0.25rem' }}>
+                          <span className="material-icons" style={{ color: agent.is_default ? '#4caf50' : '#9e9e9e' }}>
+                            {agent.is_default ? 'star' : 'person'}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            <strong>{agent.agent_name}</strong>
+                            {agent.products?.length > 0 && (
+                              <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.5rem' }}>
+                                ({agent.products.join(', ')})
+                              </span>
+                            )}
+                          </div>
+                          <button className="btn-icon" onClick={() => handleEditAgent(agent)} title="Editar">
+                            <span className="material-icons">edit</span>
+                          </button>
+                          <button className="btn-icon" onClick={() => handleDeleteAgent(agent.id)} title="Eliminar">
+                            <span className="material-icons">delete</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
-              </div>
+              ) : (
+                <p style={{ color: '#666', fontStyle: 'italic' }}>No hay agentes configurados. Agrega uno para asignar conversaciones automaticamente.</p>
+              )}
             </div>
 
             <div className="settings-card">

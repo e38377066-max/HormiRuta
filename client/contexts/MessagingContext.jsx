@@ -153,6 +153,26 @@ export function MessagingProvider({ children }) {
     return response.data
   }
 
+  const fetchAgents = async () => {
+    const response = await api.get('/api/messaging/agents')
+    return response.data
+  }
+
+  const createAgent = async (data) => {
+    const response = await api.post('/api/messaging/agents', data)
+    return response.data
+  }
+
+  const updateAgent = async (id, data) => {
+    const response = await api.put(`/api/messaging/agents/${id}`, data)
+    return response.data
+  }
+
+  const deleteAgent = async (id) => {
+    const response = await api.delete(`/api/messaging/agents/${id}`)
+    return response.data
+  }
+
   const value = {
     orders,
     coverageZones,
@@ -180,7 +200,11 @@ export function MessagingProvider({ children }) {
     startPolling,
     stopPolling,
     syncContacts,
-    validateZip
+    validateZip,
+    fetchAgents,
+    createAgent,
+    updateAgent,
+    deleteAgent
   }
 
   return <MessagingContext.Provider value={value}>{children}</MessagingContext.Provider>
