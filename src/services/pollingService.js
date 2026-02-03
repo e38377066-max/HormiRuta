@@ -233,15 +233,16 @@ class PollingService {
         
         console.log(`Creating/updating order - ZIP: ${zipToUse}, Coverage: ${hasCoverage}`);
         
+        const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+        
         let order = await MessagingOrder.findOne({
           where: {
             user_id: userId,
             respond_contact_id: contact.id.toString(),
-            status: ['pending', 'confirmed']
+            zip_code: zipToUse,
+            status: 'pending'
           }
         });
-
-        const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
 
         if (!order) {
           order = await MessagingOrder.create({
@@ -250,7 +251,7 @@ class PollingService {
             customer_name: customerName,
             customer_phone: contact.phone || null,
             channel_type: 'respond.io',
-            channel_id: contact.channelId || null,
+            channel_id: message.channelId || null,
             address: validation.isAddress ? messageText : `ZIP: ${zipToUse}`,
             zip_code: zipToUse,
             address_type: validation.addressType || 'unknown',
@@ -260,17 +261,15 @@ class PollingService {
             lifecycle: contact.lifecycle || null,
             notes: validation.needsApartmentNumber ? 'Pendiente: Solicitar numero de apartamento' : (validation.isAddress ? null : 'Solo ZIP code recibido - falta direccion completa')
           });
-          console.log(`Created new order #${order.id} for ${customerName} (ZIP: ${zipToUse}, Channel: ${contact.channelId || 'N/A'})`);
+          console.log(`Created new order #${order.id} for ${customerName} (ZIP: ${zipToUse}, Channel: ${message.channelId || 'N/A'})`);
         } else {
           await order.update({
-            address: validation.isAddress ? messageText : (order.address || `ZIP: ${zipToUse}`),
-            zip_code: zipToUse,
-            address_type: validation.addressType || order.address_type,
+            address: validation.isAddress ? messageText : order.address,
             validation_status: hasCoverage ? 'covered' : 'no_coverage',
             validation_message: validationMsg,
             lifecycle: contact.lifecycle || order.lifecycle
           });
-          console.log(`Updated order #${order.id} with ZIP: ${zipToUse}, Lifecycle: ${contact.lifecycle || 'N/A'}`);
+          console.log(`Updated existing order #${order.id} for same ZIP: ${zipToUse}`);
         }
 
         await MessageLog.update(

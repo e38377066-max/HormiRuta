@@ -11,10 +11,7 @@ export default function OrdersPage() {
   const [showValidateZip, setShowValidateZip] = useState(false)
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState(null)
-  const [validationHistory, setValidationHistory] = useState(() => {
-    const saved = localStorage.getItem('zipValidationHistory')
-    return saved ? JSON.parse(saved) : []
-  })
+  const [validationHistory, setValidationHistory] = useState([])
   const [copySuccess, setCopySuccess] = useState(false)
   const [zipForm, setZipForm] = useState({ 
     zip_code: '', 
@@ -42,9 +39,8 @@ export default function OrdersPage() {
     fetchSettings()
   }, [filter])
 
-  useEffect(() => {
-    localStorage.setItem('zipValidationHistory', JSON.stringify(validationHistory))
-  }, [validationHistory])
+  const pendingOrders = orders.filter(o => o.status === 'pending')
+  const processedOrders = orders.filter(o => ['confirmed', 'cancelled', 'completed'].includes(o.status))
 
   const statusOptions = [
     { label: 'Todos', value: '' },
@@ -213,15 +209,15 @@ export default function OrdersPage() {
             <div className="loading-container">
               <div className="spinner"></div>
             </div>
-          ) : orders.length === 0 ? (
+          ) : pendingOrders.length === 0 ? (
             <div className="empty-state">
               <span className="material-icons">inbox</span>
-              <p>No hay ordenes aun</p>
+              <p>No hay ordenes pendientes</p>
               <span className="empty-hint">Las ordenes apareceran aqui cuando lleguen desde Respond.io</span>
             </div>
           ) : (
             <div className="orders-list">
-              {orders.map(order => (
+              {pendingOrders.map(order => (
                 <div key={order.id} className="order-card">
                   <div className={`order-icon ${getStatusColor(order.status)}`}>
                     <span className="material-icons">{getStatusIcon(order.status)}</span>
@@ -272,25 +268,42 @@ export default function OrdersPage() {
               <span className="material-icons" style={{ marginRight: '8px', fontSize: '20px' }}>history</span>
               Historial de Validaciones
             </h3>
-            {validationHistory.length > 0 && (
-              <button className="btn-text-small" onClick={clearHistory} title="Limpiar historial">
-                <span className="material-icons">delete_sweep</span>
-              </button>
-            )}
           </div>
 
-          {validationHistory.length === 0 ? (
+          {processedOrders.length === 0 && validationHistory.length === 0 ? (
             <div className="empty-state small">
               <span className="material-icons">fact_check</span>
               <p>Sin validaciones</p>
-              <span className="empty-hint">El historial aparecera aqui despues de validar codigos postales</span>
+              <span className="empty-hint">El historial aparecera aqui despues de confirmar o cancelar ordenes</span>
             </div>
           ) : (
             <div className="validation-history-list">
+              {processedOrders.map(order => {
+                const hasCoverage = order.validation_status === 'covered' || order.validation_status === 'valid'
+                return (
+                  <div key={order.id} className={`history-card ${hasCoverage ? 'valid' : 'invalid'}`}>
+                    <div className="history-status">
+                      <span className="material-icons">
+                        {order.status === 'confirmed' ? 'check_circle' : order.status === 'completed' ? 'done_all' : 'cancel'}
+                      </span>
+                    </div>
+                    <div className="history-content">
+                      <div className="history-top">
+                        <span className="history-zip">{order.zip_code || order.address}</span>
+                        <span className={`tag ${getStatusColor(order.status)}`}>
+                          {getStatusLabel(order.status)}
+                        </span>
+                      </div>
+                      <div className="history-name">{order.customerName || order.customer_name || 'Sin nombre'}</div>
+                      <div className="history-time">{formatDate(order.createdAt || order.created_at)}</div>
+                    </div>
+                  </div>
+                )
+              })}
               {validationHistory.map(item => {
                 const platformInfo = getPlatformInfo(item.platform)
                 return (
-                  <div key={item.id} className={`history-card ${item.hasCoverage ? 'valid' : 'invalid'}`}>
+                  <div key={`manual-${item.id}`} className={`history-card ${item.hasCoverage ? 'valid' : 'invalid'}`}>
                     <div className="history-status">
                       <span className="material-icons">
                         {item.hasCoverage ? 'check_circle' : 'cancel'}
@@ -309,19 +322,7 @@ export default function OrdersPage() {
                         </span>
                       </div>
                       <div className="history-name">{item.contactName}</div>
-                      {item.zone && (
-                        <div className="history-zone">{item.zone.city}, {item.zone.state}</div>
-                      )}
                       <div className="history-time">{item.timestamp}</div>
-                    </div>
-                    <div className="history-actions">
-                      <button 
-                        className="btn-icon-copy"
-                        onClick={() => handleCopyMessage(item.copyMessage)}
-                        title="Copiar mensaje"
-                      >
-                        <span className="material-icons">content_copy</span>
-                      </button>
                     </div>
                   </div>
                 )
