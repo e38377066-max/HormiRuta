@@ -107,6 +107,20 @@ class PollingService {
     const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
     const messageLimit = settings?.message_history_limit || 50;
     
+    // MODO PRUEBA: Solo procesar un contacto específico
+    if (settings?.test_mode && settings?.test_contact_id) {
+      console.log(`[Polling] MODO PRUEBA - Solo procesando contacto ID: ${settings.test_contact_id}`);
+      const contactResult = await respondio.getContact(settings.test_contact_id);
+      
+      if (contactResult.success && contactResult.contact) {
+        await this.processContactMessages(userId, apiToken, contactResult.contact, poller, respondio, messageLimit);
+        console.log(`[Polling] MODO PRUEBA - Contacto ${contactResult.contact.firstName || settings.test_contact_id} procesado`);
+      } else {
+        console.error(`[Polling] MODO PRUEBA - No se encontró el contacto ${settings.test_contact_id}`);
+      }
+      return;
+    }
+    
     console.log(`[Polling] Obteniendo conversaciones ABIERTAS con lifecycle New Lead/Pending (limite: ${messageLimit} msgs)...`);
     
     let allContacts = [];

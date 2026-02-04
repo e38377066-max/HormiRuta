@@ -174,6 +174,15 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
       { id: 4, name: 'Playeras', keywords: ['playeras', 'playera', 'camisetas', 'camiseta', 'shirts', 'shirt', 't-shirt'] }
     ]
   },
+  // Modo de prueba - solo procesar un contacto específico
+  test_mode: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  test_contact_id: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
   // Límite de mensajes a revisar por contacto
   message_history_limit: {
     type: DataTypes.INTEGER,
@@ -226,6 +235,8 @@ MessagingSettings.prototype.toDict = function() {
     passing_to_agent_message: this.passing_to_agent_message,
     excluded_tags: this.excluded_tags,
     products: this.products,
+    test_mode: this.test_mode,
+    test_contact_id: this.test_contact_id,
     message_history_limit: this.message_history_limit,
     created_at: this.created_at,
     updated_at: this.updated_at

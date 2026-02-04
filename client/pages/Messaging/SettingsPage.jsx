@@ -89,7 +89,9 @@ export default function SettingsPage() {
     excluded_tags: 'Personal,IprintPOS,ClientesArea,Area862Designers',
     default_agent_id: '',
     default_agent_name: '',
-    message_history_limit: 50
+    message_history_limit: 50,
+    test_mode: false,
+    test_contact_id: ''
   })
   const [hasExistingToken, setHasExistingToken] = useState(false)
 
@@ -211,7 +213,9 @@ export default function SettingsPage() {
           excluded_tags: settings.excluded_tags || 'Personal,IprintPOS,ClientesArea,Area862Designers',
           default_agent_id: settings.default_agent_id || '',
           default_agent_name: settings.default_agent_name || '',
-          message_history_limit: settings.message_history_limit || 50
+          message_history_limit: settings.message_history_limit || 50,
+          test_mode: settings.test_mode || false,
+          test_contact_id: settings.test_contact_id || ''
         })
       }
     } catch (err) {
@@ -817,6 +821,47 @@ export default function SettingsPage() {
                   <span key={i} className="tag outline">{tag.trim()}</span>
                 ))}
               </div>
+            </div>
+
+            <div className="settings-card">
+              <h3>
+                <span className="material-icons">science</span>
+                Modo de Prueba
+              </h3>
+              <p className="description">Prueba el chatbot con un solo contacto especifico</p>
+              
+              <div className="toggle-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={form.test_mode}
+                    onChange={(e) => handleInputChange('test_mode', e.target.checked)}
+                  />
+                  Activar modo de prueba
+                </label>
+              </div>
+
+              {form.test_mode && (
+                <div className="field-group">
+                  <label>ID del Contacto de Prueba</label>
+                  <input
+                    type="text"
+                    value={form.test_contact_id}
+                    onChange={(e) => handleInputChange('test_contact_id', e.target.value)}
+                    placeholder="Ej: 12345678 o id:12345678"
+                  />
+                  <small className="hint">
+                    Solo este contacto sera procesado por el chatbot. Obten el ID desde Respond.io.
+                  </small>
+                </div>
+              )}
+
+              {form.test_mode && form.test_contact_id && (
+                <div className="test-mode-active">
+                  <span className="material-icons">warning</span>
+                  MODO PRUEBA ACTIVO - Solo contacto ID: {form.test_contact_id}
+                </div>
+              )}
             </div>
 
             <div className="settings-card">
