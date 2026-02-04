@@ -538,7 +538,7 @@ class ChatbotService {
     const response = this.parseYesNoResponse(messageText);
     
     if (response === 'yes') {
-      // Ya tiene info - enviar catálogo/diseños y pedir ZIP
+      // Ya tiene info - enviar catálogo/diseños y pasar a agente
       await this.sendMessage(contact.id, msgs.hasInfoResponse);
       
       // Si hay link de catálogo configurado, enviarlo
@@ -546,14 +546,14 @@ class ChatbotService {
         await this.sendMessage(contact.id, this.settings.catalog_link);
       }
       
-      // Luego pedir ZIP
-      await this.sendMessage(contact.id, msgs.hasInfoRequestZip);
+      // Pasar a agente (no pedir ZIP porque ya tiene info)
+      await this.assignToDefaultAgent(contact.id);
+      await this.addTrackingTag(contact.id, 'TieneInfo');
       await this.updateConversationState(contact.id, {
-        state: 'awaiting_zip',
-        has_prior_info: true,
-        awaiting_response: 'zip_code'
+        state: 'assigned',
+        has_prior_info: true
       });
-      return { handled: true, action: 'has_info_send_catalog' };
+      return { handled: true, action: 'has_info_assigned_to_agent' };
       
     } else if (response === 'no') {
       // No tiene info - enviar menú de productos y pedir ZIP
