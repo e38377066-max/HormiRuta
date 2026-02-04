@@ -201,6 +201,19 @@ class PollingService {
     const isAutomatic = settings?.attention_mode === 'automatic';
 
     for (const message of incomingMessages) {
+      // Verificar en BD si este mensaje ya fue procesado (persistencia entre reinicios)
+      const alreadyProcessed = await MessageLog.findOne({
+        where: { 
+          respond_message_id: message.messageId?.toString(),
+          user_id: userId
+        }
+      });
+      
+      if (alreadyProcessed) {
+        poller.processedMessageIds.add(message.messageId);
+        continue; // Saltar mensaje ya procesado
+      }
+      
       poller.processedMessageIds.add(message.messageId);
       await this.processIncomingMessage(userId, contact, message, respondio, isAutomatic);
     }
