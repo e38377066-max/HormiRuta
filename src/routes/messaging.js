@@ -270,10 +270,11 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
       console.log(`[Confirm] Enviando SMS a contacto ${order.respond_contact_id}: "${message.substring(0, 50)}..."`);
       
       const service = new RespondioService(settings.respond_api_token);
+      // No pasar channelId - Respond.io usara el ultimo canal de interaccion automaticamente
       const result = await service.sendMessage(
         order.respond_contact_id,
         message,
-        order.channel_id || null
+        null
       );
 
       console.log(`[Confirm] Resultado envio:`, result);
@@ -354,10 +355,11 @@ router.post('/orders/:id/complete', requireAuth, async (req, res) => {
 
     if (settings?.respond_api_token && order.respond_contact_id) {
       const service = new RespondioService(settings.respond_api_token);
+      // No pasar channelId - Respond.io usara el ultimo canal de interaccion
       const result = await service.sendMessage(
         order.respond_contact_id,
         settings.order_completed_message,
-        order.channel_id
+        null
       );
 
       if (result.success) {
@@ -430,10 +432,11 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
     }
 
     const service = new RespondioService(settings.respond_api_token);
+    // No pasar channelId - Respond.io usara el ultimo canal de interaccion
     const result = await service.sendMessage(
       order.respond_contact_id,
       req.body.message,
-      order.channel_id
+      null
     );
 
     if (!result.success) {
