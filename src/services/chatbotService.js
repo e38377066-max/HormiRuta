@@ -331,12 +331,15 @@ class ChatbotService {
       return { handled: false, reason: 'excluded_tag' };
     }
 
-    const convState = await this.getOrCreateConversationState(contact.id);
+    let convState = await this.getOrCreateConversationState(contact.id);
     
-    // Actualizar último mensaje del cliente
+    // Actualizar último mensaje del cliente ANTES de verificar si debe responder
     await this.updateConversationState(contact.id, { 
       last_customer_message_at: new Date() 
     });
+    
+    // Recargar el estado actualizado para que shouldBotRespond use los tiempos correctos
+    convState = await this.getOrCreateConversationState(contact.id);
 
     // Verificar si el bot debe responder
     const shouldRespond = this.shouldBotRespond(convState);
