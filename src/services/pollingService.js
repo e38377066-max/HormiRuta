@@ -5,6 +5,7 @@ import MessagingSettings from '../models/MessagingSettings.js';
 import MessagingOrder from '../models/MessagingOrder.js';
 import MessageLog from '../models/MessageLog.js';
 import CoverageZone from '../models/CoverageZone.js';
+import ConversationState from '../models/ConversationState.js';
 
 class PollingService {
   constructor() {
@@ -162,6 +163,18 @@ class PollingService {
 
     const messages = messagesResult.items || [];
     
+    // Detectar mensajes salientes de agentes (no del bot) para marcar agente activo
+    const outgoingAgentMessages = messages
+      .filter(msg => msg.traffic === 'outgoing' && !msg.isAutomated)
+      .filter(msg => !poller.processedMessageIds.has(`out_${msg.messageId}`));
+    
+    if (outgoingAgentMessages.length > 0) {
+      await this.markAgentActivity(userId, contact.id);
+      for (const msg of outgoingAgentMessages) {
+        poller.processedMessageIds.add(`out_${msg.messageId}`);
+      }
+    }
+    
     const incomingMessages = messages
       .filter(msg => msg.traffic === 'incoming')
       .filter(msg => !poller.processedMessageIds.has(msg.messageId))
@@ -180,6 +193,22 @@ class PollingService {
     if (poller.processedMessageIds.size > 10000) {
       const idsArray = Array.from(poller.processedMessageIds);
       poller.processedMessageIds = new Set(idsArray.slice(-5000));
+    }
+  }
+
+  async markAgentActivity(userId, contactId) {
+    try {
+      await ConversationState.update(
+        { 
+          agent_active: true, 
+          last_agent_message_at: new Date(),
+          last_interaction: new Date()
+        },
+        { where: { user_id: userId, contact_id: contactId.toString() } }
+      );
+      console.log(`[Polling] Agente activo detectado para contacto ${contactId}`);
+    } catch (error) {
+      console.error(`[Polling] Error marcando agente activo:`, error.message);
     }
   }
 

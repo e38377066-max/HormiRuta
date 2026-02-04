@@ -155,6 +155,10 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
     type: DataTypes.INTEGER,
     defaultValue: 30
   },
+  passing_to_agent_message: {
+    type: DataTypes.TEXT,
+    defaultValue: 'Un momento, te conecto con uno de nuestros agentes 👨‍💼'
+  },
   // Tags para filtrar contactos
   excluded_tags: {
     type: DataTypes.JSON,
@@ -219,6 +223,7 @@ MessagingSettings.prototype.toDict = function() {
     frustrated_message: this.frustrated_message,
     product_selected_message: this.product_selected_message,
     abandonment_minutes: this.abandonment_minutes,
+    passing_to_agent_message: this.passing_to_agent_message,
     excluded_tags: this.excluded_tags,
     products: this.products,
     message_history_limit: this.message_history_limit,

@@ -111,6 +111,11 @@ ConversationState.prototype.toDict = function() {
     assigned_agent_id: this.assigned_agent_id,
     bot_paused: this.bot_paused,
     last_interaction: this.last_interaction,
+    last_bot_message_at: this.last_bot_message_at,
+    last_agent_message_at: this.last_agent_message_at,
+    last_customer_message_at: this.last_customer_message_at,
+    agent_active: this.agent_active,
+    greeting_sent: this.greeting_sent,
     context_data: this.context_data
   };
 };
