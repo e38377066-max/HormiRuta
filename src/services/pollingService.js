@@ -163,9 +163,10 @@ class PollingService {
 
     const messages = messagesResult.items || [];
     
-    // Detectar mensajes salientes de agentes (no del bot) para marcar agente activo
+    // Detectar mensajes salientes de agentes (sender.source === 'user') para marcar agente activo
+    // Según API Respond.io: sender.source = 'user' indica mensaje enviado por agente humano
     const outgoingAgentMessages = messages
-      .filter(msg => msg.traffic === 'outgoing' && !msg.isAutomated)
+      .filter(msg => msg.traffic === 'outgoing' && msg.sender?.source === 'user')
       .filter(msg => !poller.processedMessageIds.has(`out_${msg.messageId}`));
     
     if (outgoingAgentMessages.length > 0) {
