@@ -266,9 +266,13 @@ class ChatbotService {
       welcomeExisting: this.settings.welcome_existing_customer || 
         '¡Hola de nuevo! 👋 Qué gusto verte por aquí 😊\n\nEspero que todo haya salido bien con tu pedido anterior.\n\nCuéntame, ¿en qué puedo ayudarte hoy?',
       
-      // Ya tiene info - pedir ZIP
+      // Ya tiene info - enviar catálogo
+      hasInfoResponse: this.settings.has_info_response || 
+        'Perfecto ✅ Por acá puede ver algunos diseños que tenemos disponibles 🎨',
+      
+      // Ya tiene info - pedir ZIP después
       hasInfoRequestZip: this.settings.has_info_request_zip || 
-        '¡Qué bien! 😊 Me alegra que ya tengas los detalles.\n\nPara continuar con tu pedido, necesito confirmar tu zona de entrega.\n\n¿Me compartes tu código postal (ZIP)? 📍',
+        'Para poder continuar, necesito que me envíes tu código postal (ZIP) ✅\n\nPor ejemplo: 75208',
       
       // No tiene info - pedir ZIP
       noInfoRequestZip: this.settings.request_zip_message || 
@@ -534,24 +538,33 @@ class ChatbotService {
     const response = this.parseYesNoResponse(messageText);
     
     if (response === 'yes') {
-      // Ya tiene info, pero igual pedimos ZIP
+      // Ya tiene info - enviar catálogo/diseños y pedir ZIP
+      await this.sendMessage(contact.id, msgs.hasInfoResponse);
+      
+      // Si hay link de catálogo configurado, enviarlo
+      if (this.settings.catalog_link) {
+        await this.sendMessage(contact.id, this.settings.catalog_link);
+      }
+      
+      // Luego pedir ZIP
       await this.sendMessage(contact.id, msgs.hasInfoRequestZip);
       await this.updateConversationState(contact.id, {
         state: 'awaiting_zip',
         has_prior_info: true,
         awaiting_response: 'zip_code'
       });
-      return { handled: true, action: 'has_info_request_zip' };
+      return { handled: true, action: 'has_info_send_catalog' };
       
     } else if (response === 'no') {
-      // No tiene info, pedir ZIP
+      // No tiene info - enviar menú de productos y pedir ZIP
+      await this.sendMessage(contact.id, msgs.productMenu);
       await this.sendMessage(contact.id, msgs.noInfoRequestZip);
       await this.updateConversationState(contact.id, {
         state: 'awaiting_zip',
         has_prior_info: false,
         awaiting_response: 'zip_code'
       });
-      return { handled: true, action: 'no_info_request_zip' };
+      return { handled: true, action: 'no_info_send_menu' };
       
     } else {
       // No entendió, recordar

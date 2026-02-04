@@ -113,7 +113,11 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
   },
   has_info_response: {
     type: DataTypes.TEXT,
-    defaultValue: 'Perfecto ✅ entonces solo envíenos los datos e información para poder preparar el diseño de su orden ✍️😊'
+    defaultValue: 'Perfecto ✅ Por acá puede ver algunos diseños que tenemos disponibles 🎨'
+  },
+  catalog_link: {
+    type: DataTypes.TEXT,
+    defaultValue: ''
   },
   request_zip_message: {
     type: DataTypes.TEXT,
@@ -222,6 +226,7 @@ MessagingSettings.prototype.toDict = function() {
     welcome_existing_customer: this.welcome_existing_customer,
     welcome_new_customer: this.welcome_new_customer,
     has_info_response: this.has_info_response,
+    catalog_link: this.catalog_link,
     request_zip_message: this.request_zip_message,
     remind_zip_message: this.remind_zip_message,
     product_menu_message: this.product_menu_message,
