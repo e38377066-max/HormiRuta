@@ -127,6 +127,34 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
     type: DataTypes.TEXT,
     defaultValue: '¿En cuál de estos productos está interesado? (Indica el número del producto)\n\n1. Tarjetas\n2. Magnéticos\n3. Post Cards\n4. Playeras'
   },
+  has_info_request_zip: {
+    type: DataTypes.TEXT,
+    defaultValue: '¡Qué bien! 😊 Me alegra que ya tengas los detalles.\n\nPara continuar con tu pedido, necesito confirmar tu zona de entrega.\n\n¿Me compartes tu código postal (ZIP)? 📍'
+  },
+  remind_product_message: {
+    type: DataTypes.TEXT,
+    defaultValue: 'Disculpa, no entendí tu selección 😅\n\nPor favor responde con el número del producto:'
+  },
+  remind_yes_no_message: {
+    type: DataTypes.TEXT,
+    defaultValue: 'Por favor, responde Sí o No: ¿Ya te brindaron información sobre nuestros servicios y precios? 😊'
+  },
+  abandoned_message: {
+    type: DataTypes.TEXT,
+    defaultValue: '¡Hola! 👋 Noté que quedamos pendientes.\n\n¿Sigues interesado en continuar con tu pedido?\n¿Hay algo más en lo que pueda ayudarte?'
+  },
+  frustrated_message: {
+    type: DataTypes.TEXT,
+    defaultValue: 'Entiendo tu frustración y lamento mucho cualquier inconveniente 😔\n\nDéjame pasarte de inmediato con uno de nuestros agentes para resolver tu situación de la mejor manera posible.'
+  },
+  product_selected_message: {
+    type: DataTypes.TEXT,
+    defaultValue: '¡Perfecto! Te interesan {{product}} 👍\n\nDame un momento, te paso con uno de nuestros especialistas que te dará toda la información sobre precios, diseños y tiempos de entrega 📋✨'
+  },
+  abandonment_minutes: {
+    type: DataTypes.INTEGER,
+    defaultValue: 30
+  },
   // Tags para filtrar contactos
   excluded_tags: {
     type: DataTypes.JSON,
@@ -184,6 +212,13 @@ MessagingSettings.prototype.toDict = function() {
     request_zip_message: this.request_zip_message,
     remind_zip_message: this.remind_zip_message,
     product_menu_message: this.product_menu_message,
+    has_info_request_zip: this.has_info_request_zip,
+    remind_product_message: this.remind_product_message,
+    remind_yes_no_message: this.remind_yes_no_message,
+    abandoned_message: this.abandoned_message,
+    frustrated_message: this.frustrated_message,
+    product_selected_message: this.product_selected_message,
+    abandonment_minutes: this.abandonment_minutes,
     excluded_tags: this.excluded_tags,
     products: this.products,
     message_history_limit: this.message_history_limit,
