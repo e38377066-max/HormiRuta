@@ -190,9 +190,19 @@ class PollingService {
       }
     }
     
+    // Filtrar mensajes entrantes del CLIENTE (no del bot)
+    // Los mensajes del bot tienen sender.source = 'bot' o 'flow' o traffic = 'outgoing'
     const incomingMessages = messages
       .filter(msg => msg.traffic === 'incoming')
       .filter(msg => !poller.processedMessageIds.has(msg.messageId))
+      .filter(msg => {
+        // Ignorar mensajes del bot o flujos automáticos
+        const source = msg.sender?.source || '';
+        if (source === 'bot' || source === 'flow' || source === 'automation') {
+          return false;
+        }
+        return true;
+      })
       .reverse();
 
     if (incomingMessages.length === 0) return;
@@ -200,23 +210,29 @@ class PollingService {
     const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
     const isAutomatic = settings?.attention_mode === 'automatic';
 
-    for (const message of incomingMessages) {
-      // Verificar en BD si este mensaje ya fue procesado (persistencia entre reinicios)
-      const alreadyProcessed = await MessageLog.findOne({
-        where: { 
-          respond_message_id: message.messageId?.toString(),
-          user_id: userId
-        }
-      });
-      
-      if (alreadyProcessed) {
-        poller.processedMessageIds.add(message.messageId);
-        continue; // Saltar mensaje ya procesado
-      }
-      
-      poller.processedMessageIds.add(message.messageId);
-      await this.processIncomingMessage(userId, contact, message, respondio, isAutomatic);
+    // IMPORTANTE: Solo procesar el mensaje MÁS RECIENTE para evitar spam
+    // Los mensajes están en orden cronológico después del reverse()
+    const latestMessage = incomingMessages[incomingMessages.length - 1];
+    
+    // Marcar todos los mensajes como procesados para evitar re-procesamiento
+    for (const msg of incomingMessages) {
+      poller.processedMessageIds.add(msg.messageId);
     }
+    
+    // Verificar en BD si el último mensaje ya fue procesado
+    const alreadyProcessed = await MessageLog.findOne({
+      where: { 
+        respond_message_id: latestMessage.messageId?.toString(),
+        user_id: userId
+      }
+    });
+    
+    if (alreadyProcessed) {
+      return; // Ya fue procesado anteriormente
+    }
+    
+    // Procesar solo el mensaje más reciente
+    await this.processIncomingMessage(userId, contact, latestMessage, respondio, isAutomatic);
 
     if (poller.processedMessageIds.size > 10000) {
       const idsArray = Array.from(poller.processedMessageIds);

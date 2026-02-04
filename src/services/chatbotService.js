@@ -417,9 +417,57 @@ class ChatbotService {
 
   // ==================== HANDLERS POR ESTADO ====================
 
+  detectMessageIntent(messageText) {
+    const lowerText = messageText.toLowerCase().trim();
+    
+    // Detectar si quiere información
+    if (lowerText.includes('informacion') || lowerText.includes('información') ||
+        lowerText.includes('info') || lowerText.includes('precios') ||
+        lowerText.includes('costo') || lowerText.includes('cuanto')) {
+      return 'wants_info';
+    }
+    
+    // Detectar si quiere ordenar
+    if (lowerText.includes('ordenar') || lowerText.includes('pedir') ||
+        lowerText.includes('comprar') || lowerText.includes('quiero') ||
+        lowerText.includes('necesito')) {
+      return 'wants_order';
+    }
+    
+    // Detectar saludo simple
+    if (lowerText.match(/^(hola|hi|buenos?\s*d[ií]as?|buenas?\s*tardes?|buenas?\s*noches?)[\s!,.]*$/i)) {
+      return 'greeting';
+    }
+    
+    return 'unknown';
+  }
+
+  detectFacebookAdOrigin(contact) {
+    // Detectar si viene de Facebook Ad por el canal o fuente
+    const source = contact.source?.toLowerCase() || '';
+    const channel = contact.channel?.toLowerCase() || '';
+    const lastChannel = contact.lastChannel?.toLowerCase() || '';
+    
+    if (source.includes('facebook') || source.includes('fb') ||
+        channel.includes('facebook') || channel.includes('fb') ||
+        lastChannel.includes('facebook') || lastChannel.includes('fb')) {
+      return true;
+    }
+    
+    // También detectar por tags
+    const tags = contact.tags || [];
+    if (tags.some(t => t.toLowerCase().includes('facebook') || t.toLowerCase().includes('fb'))) {
+      return true;
+    }
+    
+    return false;
+  }
+
   async handleInitialState(contact, messageText, convState) {
     const msgs = this.getMessages();
     const isExisting = await this.checkIfExistingCustomer(contact);
+    const intent = this.detectMessageIntent(messageText);
+    const isFromFacebookAd = this.detectFacebookAdOrigin(contact);
     
     if (isExisting) {
       // Cliente existente
@@ -434,17 +482,48 @@ class ChatbotService {
       await this.addComment(contact.id, '[Bot] Cliente recurrente. Verificar historial de pedidos.');
       
       return { handled: true, action: 'welcome_existing' };
-    } else {
-      // Cliente nuevo
-      await this.sendMessage(contact.id, msgs.welcomeNew);
+    }
+    
+    // Cliente nuevo
+    // Si viene de Facebook Ad, asumimos que ya vio la info del anuncio
+    if (isFromFacebookAd || intent === 'wants_order') {
+      // Ya tienen información del anuncio, ir directo a pedir ZIP
+      await this.sendMessage(contact.id, msgs.hasInfoRequestZip);
       await this.updateConversationState(contact.id, {
-        state: 'awaiting_prior_info',
-        awaiting_response: 'yes_no',
+        state: 'awaiting_zip',
+        has_prior_info: true,
+        awaiting_response: 'zip_code',
         greeting_sent: true
       });
+      await this.addTrackingTag(contact.id, isFromFacebookAd ? 'FacebookAd' : 'QuiereOrdenar');
       
-      return { handled: true, action: 'welcome_new' };
+      return { handled: true, action: 'facebook_ad_direct_zip' };
     }
+    
+    if (intent === 'wants_info') {
+      // Quiere información, enviar el menú de productos directo
+      await this.sendMessage(contact.id, msgs.productMenu);
+      await this.sendMessage(contact.id, msgs.requestZip);
+      await this.updateConversationState(contact.id, {
+        state: 'awaiting_zip',
+        has_prior_info: true,
+        awaiting_response: 'zip_code',
+        greeting_sent: true
+      });
+      await this.addTrackingTag(contact.id, 'QuiereInfo');
+      
+      return { handled: true, action: 'wants_info_send_menu' };
+    }
+    
+    // Saludo o mensaje genérico - flujo normal
+    await this.sendMessage(contact.id, msgs.welcomeNew);
+    await this.updateConversationState(contact.id, {
+      state: 'awaiting_prior_info',
+      awaiting_response: 'yes_no',
+      greeting_sent: true
+    });
+    
+    return { handled: true, action: 'welcome_new' };
   }
 
   async handleAwaitingPriorInfo(contact, messageText, convState) {
