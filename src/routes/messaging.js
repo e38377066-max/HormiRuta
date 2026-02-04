@@ -266,8 +266,20 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
     });
 
     if (settings?.respond_api_token && order.respond_contact_id) {
-      const message = settings.order_confirmed_message || 'Tu pedido ha sido confirmado.';
-      console.log(`[Confirm] Enviando SMS a contacto ${order.respond_contact_id}: "${message.substring(0, 50)}..."`);
+      // Seleccionar mensaje basado en estado de cobertura
+      let message;
+      if (order.validation_status === 'covered') {
+        message = settings.coverage_message || 'Tu direccion esta dentro de nuestra zona de cobertura.';
+      } else if (order.validation_status === 'no_coverage') {
+        message = settings.no_coverage_message || 'Lo sentimos, actualmente no tenemos cobertura en tu zona.';
+      } else {
+        message = settings.order_confirmed_message || 'Tu pedido ha sido confirmado.';
+      }
+      
+      // Reemplazar variables en el mensaje
+      message = message.replace('{{zip_code}}', order.zip_code || '');
+      
+      console.log(`[Confirm] Enviando mensaje (${order.validation_status}) a contacto ${order.respond_contact_id}: "${message.substring(0, 50)}..."`);
       
       const service = new RespondioService(settings.respond_api_token);
       // No pasar channelId - Respond.io usara el ultimo canal de interaccion automaticamente
