@@ -59,6 +59,26 @@ const ConversationState = sequelize.define('ConversationState', {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW
   },
+  last_bot_message_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  last_agent_message_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  last_customer_message_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  agent_active: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  greeting_sent: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
   context_data: {
     type: DataTypes.JSON,
     defaultValue: {}

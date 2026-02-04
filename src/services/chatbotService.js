@@ -11,54 +11,67 @@ class ChatbotService {
     this.settings = settings;
     this.api = respondApiService;
     this.addressValidation = new AddressValidationService(userId);
-    
-    // Set user context for API service (multi-tenant support)
     this.api.setContext(userId, settings.respond_api_token);
+    
+    // Tiempo de abandono en minutos (configurable)
+    this.abandonmentMinutes = settings.abandonment_minutes || 30;
   }
 
-  /**
-   * Send message to contact via Respond.io API
-   */
+  // ==================== UTILIDADES DE ENVÍO ====================
+
   async sendMessage(contactId, text) {
     try {
       const result = await this.api.sendMessage(`id:${contactId}`, text);
-      console.log(`[User ${this.userId}] Message sent to contact ${contactId}: ${text.substring(0, 50)}...`);
+      console.log(`[Bot] Mensaje enviado a ${contactId}: ${text.substring(0, 50)}...`);
+      
+      // Registrar que el bot envió mensaje
+      await this.updateConversationState(contactId, { 
+        last_bot_message_at: new Date() 
+      });
+      
       return result;
     } catch (error) {
-      console.error(`[User ${this.userId}] Failed to send message to ${contactId}:`, error.message);
+      console.error(`[Bot] Error enviando mensaje a ${contactId}:`, error.message);
       throw error;
     }
   }
 
-  /**
-   * Assign contact to agent via Respond.io API
-   */
-  async assignToAgent(contactId, agentIdOrEmail) {
+  async assignToAgent(contactId, agentIdOrEmail, agentName = null) {
     try {
       const result = await this.api.assignConversation(`id:${contactId}`, agentIdOrEmail);
-      console.log(`[User ${this.userId}] Contact ${contactId} assigned to ${agentIdOrEmail}`);
+      console.log(`[Bot] Contacto ${contactId} asignado a ${agentName || agentIdOrEmail}`);
       
-      // Also add a comment for tracking
-      await this.api.addComment(`id:${contactId}`, `[Bot] Conversación asignada automáticamente a agente`);
+      await this.updateConversationState(contactId, { 
+        assigned_agent_id: agentIdOrEmail,
+        agent_active: true,
+        last_agent_message_at: new Date()
+      });
       
       return result;
     } catch (error) {
-      console.error(`[User ${this.userId}] Failed to assign contact ${contactId}:`, error.message);
+      console.error(`[Bot] Error asignando contacto ${contactId}:`, error.message);
       throw error;
     }
   }
 
-  /**
-   * Add tracking tag to contact
-   */
-  async addTrackingTag(contactId, tag = 'BotAtendido') {
+  async addTrackingTag(contactId, tag) {
     try {
       await this.api.addTags(`id:${contactId}`, [tag]);
-      console.log(`[User ${this.userId}] Tag '${tag}' added to contact ${contactId}`);
+      console.log(`[Bot] Tag '${tag}' agregado a ${contactId}`);
     } catch (error) {
-      console.error(`[User ${this.userId}] Failed to add tag to ${contactId}:`, error.message);
+      console.error(`[Bot] Error agregando tag a ${contactId}:`, error.message);
     }
   }
+
+  async addComment(contactId, comment) {
+    try {
+      await this.api.addComment(`id:${contactId}`, comment);
+    } catch (error) {
+      console.error(`[Bot] Error agregando comentario:`, error.message);
+    }
+  }
+
+  // ==================== VERIFICACIONES ====================
 
   isWithinBusinessHours() {
     if (!this.settings.business_hours_enabled) {
@@ -104,6 +117,45 @@ class ChatbotService {
     return false;
   }
 
+  isConversationAbandoned(convState) {
+    if (!convState.agent_active || !convState.last_agent_message_at) {
+      return false;
+    }
+    
+    const lastAgentTime = new Date(convState.last_agent_message_at).getTime();
+    const now = Date.now();
+    const diffMinutes = (now - lastAgentTime) / (1000 * 60);
+    
+    return diffMinutes >= this.abandonmentMinutes;
+  }
+
+  shouldBotRespond(convState) {
+    // Si el bot está pausado, no responder
+    if (convState.bot_paused) {
+      return { respond: false, reason: 'bot_paused' };
+    }
+    
+    // Si hay un agente activo y no está abandonado, no interferir
+    if (convState.agent_active && !this.isConversationAbandoned(convState)) {
+      return { respond: false, reason: 'agent_active' };
+    }
+    
+    // Si el último mensaje fue del bot y no ha pasado tiempo, esperar respuesta
+    if (convState.last_bot_message_at && convState.last_customer_message_at) {
+      const botTime = new Date(convState.last_bot_message_at).getTime();
+      const customerTime = new Date(convState.last_customer_message_at).getTime();
+      
+      // Si el bot fue el último en escribir, esperar
+      if (botTime > customerTime) {
+        return { respond: false, reason: 'waiting_customer_response' };
+      }
+    }
+    
+    return { respond: true };
+  }
+
+  // ==================== ESTADO DE CONVERSACIÓN ====================
+
   async getOrCreateConversationState(contactId) {
     let state = await ConversationState.findOne({
       where: { user_id: this.userId, contact_id: contactId.toString() }
@@ -137,13 +189,15 @@ class ChatbotService {
     return !!existingOrder;
   }
 
+  // ==================== PARSERS ====================
+
   parseYesNoResponse(text) {
     const cleanText = text.trim().toLowerCase();
     
-    const yesPatterns = ['si', 'sí', 'yes', 'ya', 'claro', 'correcto', 'afirmativo', 'ok', 'okay', 'dale', 'simon', 'seee', 'sep', 'sip', 'aja', 'ajá'];
-    const noPatterns = ['no', 'nop', 'nope', 'nel', 'negativo', 'todavia no', 'aun no', 'todavía no', 'aún no', 'not yet'];
+    const yesPatterns = ['si', 'sí', 'yes', 'ya', 'claro', 'correcto', 'afirmativo', 'ok', 'okay', 'dale', 'simon', 'seee', 'sep', 'sip', 'aja', 'ajá', 'exacto', 'asi es', 'así es'];
+    const noPatterns = ['no', 'nop', 'nope', 'nel', 'negativo', 'todavia no', 'aun no', 'todavía no', 'aún no', 'not yet', 'nada', 'nunca'];
     
-    if (yesPatterns.some(p => cleanText === p || cleanText.startsWith(p + ' '))) {
+    if (yesPatterns.some(p => cleanText === p || cleanText.startsWith(p + ' ') || cleanText.includes(p))) {
       return 'yes';
     }
     if (noPatterns.some(p => cleanText === p || cleanText.startsWith(p + ' '))) {
@@ -155,12 +209,13 @@ class ChatbotService {
   parseProductSelection(text) {
     const cleanText = text.trim().toLowerCase();
     const products = this.settings.products || [
-      { id: 1, name: 'Tarjetas', keywords: ['tarjetas', 'tarjeta', 'cards', 'card'] },
-      { id: 2, name: 'Magnéticos', keywords: ['magneticos', 'magnetico', 'magnets', 'magnet'] },
-      { id: 3, name: 'Post Cards', keywords: ['postcards', 'postcard', 'post cards', 'postal'] },
-      { id: 4, name: 'Playeras', keywords: ['playeras', 'playera', 'camisetas', 'shirts'] }
+      { id: 1, name: 'Tarjetas de presentación', keywords: ['tarjetas', 'tarjeta', 'cards', 'card', 'presentacion', 'presentación'] },
+      { id: 2, name: 'Magnéticos', keywords: ['magneticos', 'magnetico', 'magnéticos', 'magnético', 'magnets', 'magnet', 'iman', 'imán'] },
+      { id: 3, name: 'Post Cards', keywords: ['postcards', 'postcard', 'post cards', 'postal', 'postales'] },
+      { id: 4, name: 'Playeras', keywords: ['playeras', 'playera', 'camisetas', 'camiseta', 'shirts', 'shirt'] }
     ];
 
+    // Primero intentar por número
     const numMatch = cleanText.match(/^\d+$/);
     if (numMatch) {
       const num = parseInt(numMatch[0]);
@@ -168,8 +223,9 @@ class ChatbotService {
       if (product) return product;
     }
 
+    // Luego por keywords
     for (const product of products) {
-      for (const keyword of product.keywords) {
+      for (const keyword of (product.keywords || [])) {
         if (cleanText.includes(keyword.toLowerCase())) {
           return product;
         }
@@ -179,39 +235,161 @@ class ChatbotService {
     return null;
   }
 
+  detectFrustration(text) {
+    const cleanText = text.trim();
+    
+    // Detectar mayúsculas excesivas
+    const upperCount = (cleanText.match(/[A-Z]/g) || []).length;
+    const letterCount = (cleanText.match(/[a-zA-Z]/g) || []).length;
+    if (letterCount > 5 && upperCount / letterCount > 0.7) {
+      return true;
+    }
+    
+    // Palabras de frustración
+    const frustrationWords = ['molesto', 'enojado', 'frustrado', 'terrible', 'pesimo', 'pésimo', 'horrible', 'mal servicio', 'no sirve'];
+    if (frustrationWords.some(w => cleanText.toLowerCase().includes(w))) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  // ==================== MENSAJES CONFIGURABLES ====================
+
+  getMessages() {
+    return {
+      // Saludo nuevo cliente
+      welcomeNew: this.settings.welcome_new_customer || 
+        '¡Hola! 👋 Bienvenido a Area 862 Graphics 🎨\n\nNos da mucho gusto saludarte 😊\n\nCuéntame, ¿ya uno de nuestros agentes te brindó información sobre nuestros servicios y precios?',
+      
+      // Saludo cliente existente
+      welcomeExisting: this.settings.welcome_existing_customer || 
+        '¡Hola de nuevo! 👋 Qué gusto verte por aquí 😊\n\nEspero que todo haya salido bien con tu pedido anterior.\n\nCuéntame, ¿en qué puedo ayudarte hoy?',
+      
+      // Ya tiene info - pedir ZIP
+      hasInfoRequestZip: this.settings.has_info_request_zip || 
+        '¡Qué bien! 😊 Me alegra que ya tengas los detalles.\n\nPara continuar con tu pedido, necesito confirmar tu zona de entrega.\n\n¿Me compartes tu código postal (ZIP)? 📍',
+      
+      // No tiene info - pedir ZIP
+      noInfoRequestZip: this.settings.request_zip_message || 
+        '¡Perfecto! Con gusto te ayudo 😄\n\nPara verificar que llegamos a tu zona, ¿me puedes compartir tu código postal (ZIP)?\n\nPor ejemplo: 75208 📍',
+      
+      // Con cobertura
+      hasCoverage: this.settings.coverage_message || 
+        '✅ ¡Excelente noticia! Sí tenemos cobertura en tu zona ({{zip_code}}) 🚚\n\nAhora cuéntame, ¿en cuál de nuestros productos estás interesado?',
+      
+      // Menú de productos
+      productMenu: this.settings.product_menu_message || 
+        '1️⃣ Tarjetas de presentación\n2️⃣ Magnéticos\n3️⃣ Post Cards\n4️⃣ Playeras\n\nSolo responde con el número 😊',
+      
+      // Sin cobertura
+      noCoverage: this.settings.no_coverage_message || 
+        '😔 Lo siento mucho, actualmente no tenemos cobertura de entrega en la zona {{zip_code}}.\n\nPero no te preocupes, déjame pasarte con uno de nuestros agentes para ver si podemos encontrar una solución para ti 🤝',
+      
+      // Producto seleccionado
+      productSelected: this.settings.product_selected_message || 
+        '¡Perfecto! Te interesan {{product}} 👍\n\nDame un momento, te paso con uno de nuestros especialistas que te dará toda la información sobre precios, diseños y tiempos de entrega 📋✨',
+      
+      // Fuera de horario
+      outOfHours: this.settings.out_of_hours_message || 
+        '🌙 ¡Hola! Gracias por escribirnos 😊\n\nEn este momento estamos fuera de horario de atención.\nNuestro horario es de Lunes a Viernes de 9am a 6pm (hora de Dallas).\n\nPero no te preocupes, deja tu mensaje y en cuanto regresemos te respondemos lo antes posible 💬\n\nSi es urgente, también puedes dejarnos tu número y te llamamos mañana temprano 📞',
+      
+      // No entendió ZIP
+      remindZip: this.settings.remind_zip_message || 
+        '¡No te preocupes! 😊\n\nEl código postal (ZIP) son 5 números que identifican tu zona.\nLo puedes encontrar en tu correo o buscando en Google: "ZIP code + tu ciudad"\n\nPor ejemplo, si vives en Dallas puede ser 75201.\n\n¿Me lo puedes compartir? 📍',
+      
+      // No entendió producto
+      remindProduct: this.settings.remind_product_message || 
+        'Disculpa, no entendí tu selección 😅\n\nPor favor responde con el número del producto:',
+      
+      // No entendió Sí/No
+      remindYesNo: this.settings.remind_yes_no_message || 
+        'Por favor, responde Sí o No: ¿Ya te brindaron información sobre nuestros servicios y precios? 😊',
+      
+      // Conversación abandonada
+      abandonedConversation: this.settings.abandoned_message || 
+        '¡Hola! 👋 Noté que quedamos pendientes.\n\n¿Sigues interesado en continuar con tu pedido?\n¿Hay algo más en lo que pueda ayudarte?',
+      
+      // Cliente frustrado
+      frustratedCustomer: this.settings.frustrated_message || 
+        'Entiendo tu frustración y lamento mucho cualquier inconveniente 😔\n\nDéjame pasarte de inmediato con uno de nuestros agentes para resolver tu situación de la mejor manera posible.',
+      
+      // Pasando a agente
+      passingToAgent: this.settings.passing_to_agent_message || 
+        'Un momento, te conecto con uno de nuestros agentes 👨‍💼'
+    };
+  }
+
+  // ==================== PROCESO PRINCIPAL ====================
+
   async processMessage(contact, messageText) {
+    const msgs = this.getMessages();
+    
+    // Verificar tags excluidos
     if (this.hasExcludedTag(contact)) {
-      console.log(`Contact ${contact.id} has excluded tag, skipping chatbot`);
+      console.log(`[Bot] Contacto ${contact.id} tiene tag excluido, ignorando`);
       return { handled: false, reason: 'excluded_tag' };
     }
 
     const convState = await this.getOrCreateConversationState(contact.id);
+    
+    // Actualizar último mensaje del cliente
+    await this.updateConversationState(contact.id, { 
+      last_customer_message_at: new Date() 
+    });
 
-    if (convState.bot_paused) {
-      console.log(`Bot paused for contact ${contact.id}`);
-      return { handled: false, reason: 'bot_paused' };
+    // Verificar si el bot debe responder
+    const shouldRespond = this.shouldBotRespond(convState);
+    if (!shouldRespond.respond) {
+      console.log(`[Bot] No responder a ${contact.id}: ${shouldRespond.reason}`);
+      return { handled: false, reason: shouldRespond.reason };
     }
 
+    // Detectar frustración - pasar a agente inmediatamente
+    if (this.detectFrustration(messageText)) {
+      await this.sendMessage(contact.id, msgs.frustratedCustomer);
+      await this.assignToDefaultAgent(contact.id);
+      await this.addTrackingTag(contact.id, 'ClienteFrustrado');
+      await this.updateConversationState(contact.id, { state: 'assigned' });
+      return { handled: true, action: 'frustrated_customer' };
+    }
+
+    // Verificar horario de atención
     if (!this.isWithinBusinessHours()) {
       if (!convState.out_of_hours_notified) {
-        const outOfHoursMsg = this.settings.out_of_hours_message || 
-          '🌙 ¡Hola hola! 😊\n\nGracias por comunicarte con nosotros 😊 Ahorita estamos fuera de horario 🕒 pero puedes dejar tu mensaje sin problema 💬\n\nEscríbenos lo que necesitas 🙌 y en cuanto estemos de regreso en horario laboral lo leemos y te respondemos lo más pronto posible 💛📲';
-        
-        await this.sendMessage(contact.id, outOfHoursMsg);
+        await this.sendMessage(contact.id, msgs.outOfHours);
         await this.updateConversationState(contact.id, { out_of_hours_notified: true });
-
-        const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
-        if (agentId) {
-          await this.assignToAgent(contact.id, agentId);
-        }
-        
-        return { handled: true, action: 'out_of_hours_message', message: outOfHoursMsg };
+        await this.assignToDefaultAgent(contact.id);
+        await this.addTrackingTag(contact.id, 'FueraDeHorario');
+        return { handled: true, action: 'out_of_hours' };
       }
       return { handled: false, reason: 'out_of_hours_already_notified' };
     }
 
-    await this.updateConversationState(contact.id, { out_of_hours_notified: false });
+    // Reset out of hours flag si estamos en horario
+    if (convState.out_of_hours_notified) {
+      await this.updateConversationState(contact.id, { out_of_hours_notified: false });
+    }
 
+    // Verificar si conversación fue abandonada
+    if (this.isConversationAbandoned(convState)) {
+      await this.sendMessage(contact.id, msgs.abandonedConversation);
+      await this.updateConversationState(contact.id, { 
+        state: 'awaiting_continuation',
+        agent_active: false 
+      });
+      return { handled: true, action: 'abandoned_reengagement' };
+    }
+
+    // Detectar ZIP en cualquier momento
+    const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
+    const isCityMessage = this.addressValidation.isCityMessage(messageText);
+    
+    if (isZipMessage || isCityMessage) {
+      return await this.handleZipValidation(contact, messageText, convState);
+    }
+
+    // Procesar según estado actual
     switch (convState.state) {
       case 'initial':
         return await this.handleInitialState(contact, messageText, convState);
@@ -225,7 +403,11 @@ class ChatbotService {
       case 'awaiting_product':
         return await this.handleAwaitingProduct(contact, messageText, convState);
       
+      case 'awaiting_continuation':
+        return await this.handleAwaitingContinuation(contact, messageText, convState);
+      
       case 'assigned':
+        // Ya está asignado a agente, no interferir
         return { handled: false, reason: 'already_assigned' };
       
       default:
@@ -233,152 +415,226 @@ class ChatbotService {
     }
   }
 
-  async handleInitialState(contact, messageText, convState) {
-    const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
-    const isCityMessage = this.addressValidation.isCityMessage(messageText);
-    
-    if (isZipMessage || isCityMessage) {
-      await this.updateConversationState(contact.id, { state: 'awaiting_zip' });
-      return await this.handleAwaitingZip(contact, messageText, convState);
-    }
+  // ==================== HANDLERS POR ESTADO ====================
 
+  async handleInitialState(contact, messageText, convState) {
+    const msgs = this.getMessages();
     const isExisting = await this.checkIfExistingCustomer(contact);
     
     if (isExisting) {
-      const welcomeMsg = this.settings.welcome_existing_customer ||
-        '👋 ¡Hola! Qué gusto volver a tener noticias suyas 😊 Espero que todo esté yendo muy bien.\n\nPor favor, cuéntame en qué puedo ayudarle esta vez 🤔✨';
-      
-      await this.sendMessage(contact.id, welcomeMsg);
+      // Cliente existente
+      await this.sendMessage(contact.id, msgs.welcomeExisting);
       await this.updateConversationState(contact.id, {
         state: 'assigned',
-        is_existing_customer: true
+        is_existing_customer: true,
+        greeting_sent: true
       });
-
-      const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
-      if (agentId) {
-        await this.assignToAgent(contact.id, agentId);
-        await this.addTrackingTag(contact.id, 'ClienteExistente');
-      }
+      await this.assignToDefaultAgent(contact.id);
+      await this.addTrackingTag(contact.id, 'ClienteExistente');
+      await this.addComment(contact.id, '[Bot] Cliente recurrente. Verificar historial de pedidos.');
       
-      return { handled: true, action: 'welcome_existing', message: welcomeMsg };
+      return { handled: true, action: 'welcome_existing' };
     } else {
-      const welcomeMsg = this.settings.welcome_new_customer ||
-        '¡Hola! 🙌 Somos de Area 862 Graphics.\n\n📩😊 Cuéntanos, ¿ya uno de nuestros agentes le brindó información sobre nuestros servicios y precios?';
-      
-      await this.sendMessage(contact.id, welcomeMsg);
+      // Cliente nuevo
+      await this.sendMessage(contact.id, msgs.welcomeNew);
       await this.updateConversationState(contact.id, {
         state: 'awaiting_prior_info',
-        awaiting_response: 'yes_no'
+        awaiting_response: 'yes_no',
+        greeting_sent: true
       });
       
-      return { handled: true, action: 'welcome_new', message: welcomeMsg };
+      return { handled: true, action: 'welcome_new' };
     }
   }
 
   async handleAwaitingPriorInfo(contact, messageText, convState) {
-    const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
-    const isCityMessage = this.addressValidation.isCityMessage(messageText);
-    
-    if (isZipMessage || isCityMessage) {
-      await this.updateConversationState(contact.id, { state: 'awaiting_zip', has_prior_info: false });
-      return await this.handleAwaitingZip(contact, messageText, convState);
-    }
-
+    const msgs = this.getMessages();
     const response = this.parseYesNoResponse(messageText);
     
     if (response === 'yes') {
-      const hasInfoMsg = this.settings.has_info_response ||
-        'Perfecto ✅ entonces solo envíenos los datos e información para poder preparar el diseño de su orden ✍️😊';
-      
-      await this.sendMessage(contact.id, hasInfoMsg);
+      // Ya tiene info, pero igual pedimos ZIP
+      await this.sendMessage(contact.id, msgs.hasInfoRequestZip);
       await this.updateConversationState(contact.id, {
-        state: 'assigned',
-        has_prior_info: true
+        state: 'awaiting_zip',
+        has_prior_info: true,
+        awaiting_response: 'zip_code'
       });
-
-      const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
-      if (agentId) {
-        await this.assignToAgent(contact.id, agentId);
-        await this.addTrackingTag(contact.id, 'TieneInfoPrevia');
-      }
+      return { handled: true, action: 'has_info_request_zip' };
       
-      return { handled: true, action: 'has_prior_info', message: hasInfoMsg };
     } else if (response === 'no') {
-      const requestZipMsg = this.settings.request_zip_message ||
-        'Vi que te interesan algunos de nuestros productos y quiero ayudarte a encontrar las mejores opciones 😄\n\n📍 Por favor, envíame solo el número de tu código postal (ZIP), por ejemplo 75208 ✉️\n\nCon eso confirmo si llegamos a tu zona y te paso los precios enseguida 🚚✨';
-      
-      await this.sendMessage(contact.id, requestZipMsg);
+      // No tiene info, pedir ZIP
+      await this.sendMessage(contact.id, msgs.noInfoRequestZip);
       await this.updateConversationState(contact.id, {
         state: 'awaiting_zip',
         has_prior_info: false,
         awaiting_response: 'zip_code'
       });
+      return { handled: true, action: 'no_info_request_zip' };
       
-      return { handled: true, action: 'request_zip', message: requestZipMsg };
     } else {
-      const remindMsg = 'Por favor, responde Sí o No: ¿Ya te brindaron información sobre nuestros servicios y precios? 😊';
-      await this.sendMessage(contact.id, remindMsg);
-      return { handled: true, action: 'remind_yes_no', message: remindMsg };
+      // No entendió, recordar
+      await this.sendMessage(contact.id, msgs.remindYesNo);
+      return { handled: true, action: 'remind_yes_no' };
     }
   }
 
   async handleAwaitingZip(contact, messageText, convState) {
+    const msgs = this.getMessages();
+    
+    // Verificar si parece un ZIP
     const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
     const isCityMessage = this.addressValidation.isCityMessage(messageText);
     
     if (isZipMessage || isCityMessage) {
-      const validation = await this.addressValidation.validateZipOrCity(messageText);
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
-      
-      if (validation.valid) {
-        const coverageMsg = (this.settings.coverage_message || '✅ ¡Excelente! Tenemos cobertura en tu zona ({{zip_code}})')
-          .replace('{{zip_code}}', validation.value)
-          .replace('{{city}}', validation.zone?.city || '')
-          .replace('{{zone}}', validation.zone?.zone_name || '');
-        
-        await this.sendMessage(contact.id, coverageMsg);
-
-        await this.createOrUpdateOrder(contact, validation.value, customerName, 'covered', validation.zone);
-
-        const productMenuMsg = this.settings.product_menu_message ||
-          '¿En cuál de estos productos está interesado? (Indica el número del producto)\n\n1. Tarjetas\n2. Magnéticos\n3. Post Cards\n4. Playeras';
-        
-        await this.sendMessage(contact.id, productMenuMsg);
-        
-        await this.updateConversationState(contact.id, {
-          state: 'awaiting_product',
-          validated_zip: validation.value,
-          awaiting_response: 'product_selection'
-        });
-
-        await this.addTrackingTag(contact.id, 'ConCobertura');
-        
-        return { handled: true, action: 'zip_validated', message: coverageMsg };
-      } else {
-        const noCoverageMsg = (this.settings.no_coverage_message || 'Lo sentimos, actualmente no tenemos cobertura en {{zip_code}}')
-          .replace('{{zip_code}}', validation.value)
-          .replace('{{city}}', validation.value);
-        
-        await this.sendMessage(contact.id, noCoverageMsg);
-
-        await this.createOrUpdateOrder(contact, validation.value, customerName, 'no_coverage', null);
-
-        const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
-        if (agentId) {
-          await this.assignToAgent(contact.id, agentId);
-          await this.addTrackingTag(contact.id, 'SinCobertura');
-        }
-        
-        await this.updateConversationState(contact.id, { state: 'assigned' });
-        
-        return { handled: true, action: 'no_coverage', message: noCoverageMsg };
-      }
+      return await this.handleZipValidation(contact, messageText, convState);
     } else {
-      const remindZipMsg = this.settings.remind_zip_message ||
-        'Para poder continuar, necesito que me envíes tu código postal (ZIP) ✅\n\nPor ejemplo: 75208';
+      // No parece ZIP, dar ayuda
+      await this.sendMessage(contact.id, msgs.remindZip);
+      return { handled: true, action: 'remind_zip' };
+    }
+  }
+
+  async handleZipValidation(contact, messageText, convState) {
+    const msgs = this.getMessages();
+    const validation = await this.addressValidation.validateZipOrCity(messageText);
+    const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+    
+    if (validation.valid) {
+      // Con cobertura
+      const coverageMsg = msgs.hasCoverage
+        .replace('{{zip_code}}', validation.value)
+        .replace('{{city}}', validation.zone?.city || '')
+        .replace('{{zone}}', validation.zone?.zone_name || '');
       
-      await this.sendMessage(contact.id, remindZipMsg);
-      return { handled: true, action: 'remind_zip', message: remindZipMsg };
+      await this.sendMessage(contact.id, coverageMsg);
+      
+      // Enviar menú de productos
+      await this.sendMessage(contact.id, msgs.productMenu);
+      
+      await this.createOrUpdateOrder(contact, validation.value, customerName, 'covered', validation.zone);
+      
+      await this.updateConversationState(contact.id, {
+        state: 'awaiting_product',
+        validated_zip: validation.value,
+        awaiting_response: 'product_selection'
+      });
+      
+      await this.addTrackingTag(contact.id, 'ConCobertura');
+      
+      return { handled: true, action: 'zip_validated_with_coverage' };
+      
+    } else {
+      // Sin cobertura
+      const noCoverageMsg = msgs.noCoverage
+        .replace('{{zip_code}}', validation.value)
+        .replace('{{city}}', validation.value);
+      
+      await this.sendMessage(contact.id, noCoverageMsg);
+      await this.createOrUpdateOrder(contact, validation.value, customerName, 'no_coverage', null);
+      await this.assignToDefaultAgent(contact.id);
+      await this.addTrackingTag(contact.id, 'SinCobertura');
+      await this.addComment(contact.id, `[Bot] Cliente en zona sin cobertura. ZIP: ${validation.value}`);
+      
+      await this.updateConversationState(contact.id, { state: 'assigned' });
+      
+      return { handled: true, action: 'zip_no_coverage' };
+    }
+  }
+
+  async handleAwaitingProduct(contact, messageText, convState) {
+    const msgs = this.getMessages();
+    const product = this.parseProductSelection(messageText);
+    
+    if (product) {
+      const productMsg = msgs.productSelected.replace('{{product}}', product.name);
+      
+      await this.sendMessage(contact.id, productMsg);
+      await this.updateConversationState(contact.id, {
+        state: 'assigned',
+        selected_product: product.name
+      });
+
+      // Buscar agente específico para el producto
+      const agent = await this.findAgentForProduct(product.name);
+      const agentId = agent?.agent_id || agent?.agent_email || this.settings.default_agent_id || this.settings.default_agent_email;
+      
+      if (agentId) {
+        await this.assignToAgent(contact.id, agentId, agent?.agent_name);
+        await this.addTrackingTag(contact.id, 'ProductoSeleccionado');
+        await this.addComment(contact.id, 
+          `[Bot] Cliente nuevo. ZIP: ${convState.validated_zip || 'N/A'}. Producto: ${product.name}. Asignado a: ${agent?.agent_name || 'Agente por defecto'}`
+        );
+      }
+      
+      return { handled: true, action: 'product_selected', product: product.name };
+      
+    } else {
+      // No entendió, mostrar menú de nuevo
+      await this.sendMessage(contact.id, msgs.remindProduct);
+      await this.sendMessage(contact.id, msgs.productMenu);
+      return { handled: true, action: 'remind_product' };
+    }
+  }
+
+  async handleAwaitingContinuation(contact, messageText, convState) {
+    const msgs = this.getMessages();
+    const response = this.parseYesNoResponse(messageText);
+    
+    if (response === 'yes') {
+      // Quiere continuar, verificar dónde quedó
+      if (convState.validated_zip && !convState.selected_product) {
+        // Ya tiene ZIP, mostrar productos
+        await this.sendMessage(contact.id, '¡Perfecto! Continuemos 😊\n\n¿En cuál producto estás interesado?');
+        await this.sendMessage(contact.id, msgs.productMenu);
+        await this.updateConversationState(contact.id, { state: 'awaiting_product' });
+        return { handled: true, action: 'continue_to_products' };
+      } else {
+        // Empezar de nuevo
+        await this.sendMessage(contact.id, '¡Perfecto! Continuemos 😊\n\n¿Me compartes tu código postal (ZIP)? 📍');
+        await this.updateConversationState(contact.id, { state: 'awaiting_zip' });
+        return { handled: true, action: 'continue_to_zip' };
+      }
+    } else if (response === 'no') {
+      await this.sendMessage(contact.id, '¡Está bien! Si necesitas algo más adelante, aquí estaremos para ayudarte 😊 ¡Que tengas un excelente día!');
+      await this.updateConversationState(contact.id, { state: 'closed' });
+      return { handled: true, action: 'conversation_closed' };
+    } else {
+      // Asumir que quiere continuar
+      return await this.handleInitialState(contact, messageText, convState);
+    }
+  }
+
+  // ==================== UTILIDADES ====================
+
+  async assignToDefaultAgent(contactId) {
+    const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
+    if (agentId) {
+      await this.assignToAgent(contactId, agentId, this.settings.default_agent_name);
+    }
+  }
+
+  async findAgentForProduct(productName) {
+    try {
+      const agents = await ServiceAgent.findAll({
+        where: { user_id: this.userId, is_active: true }
+      });
+
+      const productLower = productName.toLowerCase();
+      
+      // Buscar agente específico para el producto
+      for (const agent of agents) {
+        const products = agent.products || [];
+        if (products.some(p => p.toLowerCase().includes(productLower) || productLower.includes(p.toLowerCase()))) {
+          return agent;
+        }
+      }
+
+      // Si no hay específico, buscar el default
+      const defaultAgent = agents.find(a => a.is_default);
+      return defaultAgent || null;
+    } catch (error) {
+      console.error('[Bot] Error buscando agente para producto:', error.message);
+      return null;
     }
   }
 
@@ -405,7 +661,7 @@ class ChatbotService {
 
       if (order) {
         await order.update(orderData);
-        console.log(`[Chatbot] Order updated for contact ${contact.id}, ZIP: ${zipCode}`);
+        console.log(`[Bot] Orden actualizada para contacto ${contact.id}, ZIP: ${zipCode}`);
       } else {
         await MessagingOrder.create({
           user_id: this.userId,
@@ -415,71 +671,14 @@ class ChatbotService {
           status: 'pending',
           ...orderData
         });
-        console.log(`[Chatbot] Order created for contact ${contact.id}, ZIP: ${zipCode}`);
+        console.log(`[Bot] Orden creada para contacto ${contact.id}, ZIP: ${zipCode}`);
       }
     } catch (error) {
-      console.error(`[Chatbot] Error creating/updating order:`, error.message);
+      console.error('[Bot] Error creando/actualizando orden:', error.message);
     }
   }
 
-  async handleAwaitingProduct(contact, messageText, convState) {
-    const product = this.parseProductSelection(messageText);
-    
-    if (product) {
-      const confirmMsg = `¡Perfecto! Has seleccionado: ${product.name} 👍\n\nUn momento, te paso con uno de nuestros agentes para darte más información sobre precios y disponibilidad 😊`;
-      
-      await this.sendMessage(contact.id, confirmMsg);
-      await this.updateConversationState(contact.id, {
-        state: 'assigned',
-        selected_product: product.name
-      });
-
-      const agent = await this.findAgentForProduct(product.name);
-      const agentId = agent?.agent_id || agent?.agent_email || this.settings.default_agent_id || this.settings.default_agent_email;
-      
-      if (agentId) {
-        await this.assignToAgent(contact.id, agentId);
-        await this.addTrackingTag(contact.id, 'ProductoSeleccionado');
-        
-        await this.api.addComment(
-          `id:${contact.id}`,
-          `[Bot] Cliente seleccionó: ${product.name}. ZIP: ${convState.validated_zip || 'N/A'}. Asignado a: ${agent?.agent_name || 'Agente por defecto'}`
-        );
-      }
-      
-      return { handled: true, action: 'product_selected', product: product.name, message: confirmMsg };
-    } else {
-      const productMenuMsg = this.settings.product_menu_message ||
-        '¿En cuál de estos productos está interesado? (Indica el número del producto)\n\n1. Tarjetas\n2. Magnéticos\n3. Post Cards\n4. Playeras';
-      
-      const remindMsg = `No entendí tu selección. ${productMenuMsg}`;
-      await this.sendMessage(contact.id, remindMsg);
-      return { handled: true, action: 'remind_product', message: remindMsg };
-    }
-  }
-
-  async findAgentForProduct(productName) {
-    try {
-      const agents = await ServiceAgent.findAll({
-        where: { user_id: this.userId, is_active: true }
-      });
-
-      const productLower = productName.toLowerCase();
-      
-      for (const agent of agents) {
-        const products = agent.products || [];
-        if (products.some(p => p.toLowerCase() === productLower)) {
-          return agent;
-        }
-      }
-
-      const defaultAgent = agents.find(a => a.is_default);
-      return defaultAgent || null;
-    } catch (error) {
-      console.error('[Chatbot] Error finding agent for product:', error.message);
-      return null;
-    }
-  }
+  // ==================== CONTROL DEL BOT ====================
 
   async pauseBot(contactId) {
     await this.updateConversationState(contactId, { bot_paused: true });
@@ -499,9 +698,30 @@ class ChatbotService {
       selected_product: null,
       validated_zip: null,
       out_of_hours_notified: false,
-      bot_paused: false
+      bot_paused: false,
+      agent_active: false,
+      greeting_sent: false,
+      last_bot_message_at: null,
+      last_agent_message_at: null,
+      last_customer_message_at: null
     });
     return { success: true, message: 'Conversación reiniciada' };
+  }
+
+  async markAgentActive(contactId, agentId) {
+    await this.updateConversationState(contactId, { 
+      agent_active: true,
+      assigned_agent_id: agentId,
+      last_agent_message_at: new Date()
+    });
+    return { success: true };
+  }
+
+  async markAgentInactive(contactId) {
+    await this.updateConversationState(contactId, { 
+      agent_active: false 
+    });
+    return { success: true };
   }
 }
 
