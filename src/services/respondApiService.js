@@ -153,7 +153,7 @@ class RespondApiService {
   async listMessages(identifier, limit = 10, cursorId = null) {
     const params = { limit };
     if (cursorId) params.cursorId = cursorId;
-    return this.request('GET', `/contact/${identifier}/message`, null, params);
+    return this.request('GET', `/contact/${identifier}/message/list`, null, params);
   }
 
   /**
