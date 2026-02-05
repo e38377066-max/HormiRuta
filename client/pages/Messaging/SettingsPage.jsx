@@ -883,16 +883,6 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="field-group">
-                <label>Link del catalogo de diseños</label>
-                <input
-                  type="text"
-                  value={form.catalog_link || ''}
-                  onChange={(e) => handleInputChange('catalog_link', e.target.value)}
-                  placeholder="https://mrtarjetas.com/?s=remod..."
-                />
-                <p className="field-hint">Se envia junto con el menu cuando el cliente dice que ya tiene informacion</p>
-              </div>
             </div>
           </>
         )}

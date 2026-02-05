@@ -554,7 +554,6 @@ class ChatbotService {
     
     if (response === 'yes') {
       // Ya tiene info - preguntar qué producto le interesa
-      await this.sendMessage(contact.id, msgs.hasInfoResponse);
       await this.sendMessage(contact.id, msgs.productMenu);
       
       await this.updateConversationState(contact.id, {
@@ -590,11 +589,6 @@ class ChatbotService {
       // Producto seleccionado - preguntar sobre diseño
       const designMsg = msgs.productSelectedAskDesign.replace('{{product}}', product);
       await this.sendMessage(contact.id, designMsg);
-      
-      // Si hay link de catálogo, enviarlo
-      if (this.settings.catalog_link) {
-        await this.sendMessage(contact.id, this.settings.catalog_link);
-      }
       
       await this.updateConversationState(contact.id, {
         state: 'awaiting_design_info',
