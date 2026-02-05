@@ -165,16 +165,16 @@ class ChatbotService {
       const messages = result.data.items;
       
       for (const msg of messages) {
-        if (msg.direction === 'outgoing' && msg.sender) {
-          const senderType = msg.sender.type || '';
-          const senderId = msg.sender.id || '';
+        // traffic: "outgoing" = mensaje enviado (no recibido)
+        // sender.source: "user" = enviado por un agente humano
+        if (msg.traffic === 'outgoing' && msg.sender) {
+          const senderSource = msg.sender.source || '';
+          const senderId = msg.sender.userId || '';
           
-          if (senderType === 'user' || (senderType !== 'bot' && senderType !== 'workflow')) {
-            const agentName = msg.sender.firstName 
-              ? `${msg.sender.firstName} ${msg.sender.lastName || ''}`.trim()
-              : senderId;
-            console.log(`[Bot] Agente ${agentName} ya respondio en conversacion ${contactId}`);
-            return { hasResponded: true, agentName };
+          // "user" significa agente humano, otros valores como "bot" o "workflow" son automatizados
+          if (senderSource === 'user') {
+            console.log(`[Bot] Agente (userId: ${senderId}) ya respondio en conversacion ${contactId}`);
+            return { hasResponded: true, agentName: senderId };
           }
         }
       }
