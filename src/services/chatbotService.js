@@ -293,6 +293,18 @@ class ChatbotService {
       if (num >= 1 && num <= productsList.length) {
         return productsList[num - 1];
       }
+      // Si es el número siguiente al último producto, es "Otros"
+      if (num === productsList.length + 1) {
+        return { id: num, name: 'Otros', isOther: true };
+      }
+    }
+    
+    // Detectar si escribe "otro", "otros", "diferente", etc.
+    const otherKeywords = ['otro', 'otros', 'otra', 'otras', 'diferente', 'distinto', 'other', 'something else'];
+    for (const keyword of otherKeywords) {
+      if (cleanText.includes(keyword)) {
+        return { id: productsList.length + 1, name: 'Otros', isOther: true };
+      }
     }
 
     // SEGUNDO: Buscar por nombre exacto o variantes
@@ -726,6 +738,23 @@ class ChatbotService {
     const product = this.parseProductSelection(messageText);
     
     if (product) {
+      // Si seleccionó "Otros", asignar a agente directamente
+      if (product.isOther) {
+        const otherMsg = '¡Perfecto! Te paso con uno de nuestros agentes para ayudarte con tu consulta 😊';
+        await this.sendMessage(contact.id, otherMsg);
+        
+        await this.updateConversationState(contact.id, {
+          state: 'assigned',
+          selected_product: 'Otros'
+        });
+        
+        await this.assignToDefaultAgent(contact.id);
+        await this.addTrackingTag(contact.id, 'ProductoOtros');
+        await this.addComment(contact.id, `[Bot] Cliente seleccionó "Otros". Requiere atención de agente.`);
+        
+        return { handled: true, action: 'other_product_assigned' };
+      }
+      
       // Cliente YA tiene información - preguntar sobre diseño
       const designQuestion = msgs.productSelectedAskDesign?.replace('{{product}}', product.name || product) ||
         `Perfecto, ${product.name || product} 👍\n\n¿Ya tienes un diseño en mente o te gustaría que te ayudemos a crear uno desde cero?`;
@@ -931,6 +960,23 @@ class ChatbotService {
     const product = this.parseProductSelection(messageText);
     
     if (product) {
+      // Si seleccionó "Otros", asignar a agente directamente
+      if (product.isOther) {
+        const otherMsg = '¡Perfecto! Te paso con uno de nuestros agentes para ayudarte con tu consulta 😊';
+        await this.sendMessage(contact.id, otherMsg);
+        
+        await this.updateConversationState(contact.id, {
+          state: 'assigned',
+          selected_product: 'Otros'
+        });
+        
+        await this.assignToDefaultAgent(contact.id);
+        await this.addTrackingTag(contact.id, 'ProductoOtros');
+        await this.addComment(contact.id, `[Bot] Cliente seleccionó "Otros". Requiere atención de agente.`);
+        
+        return { handled: true, action: 'other_product_assigned' };
+      }
+      
       // Obtener mensaje de información del producto
       const productInfo = this.getProductInfoMessage(product.name);
       
@@ -1014,13 +1060,14 @@ class ChatbotService {
       }
       if (Array.isArray(productsList) && productsList.length > 0) {
         const menuItems = productsList.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
-        return `¿En cual de estos productos estas interesado? (Indica el numero)\n\n${menuItems}`;
+        const otherOption = `${productsList.length + 1}. Otros`;
+        return `¿En cual de estos productos estas interesado? (Indica el numero)\n\n${menuItems}\n${otherOption}`;
       }
     } catch (e) {
       console.error('Error generating product menu:', e);
     }
-    // Fallback al mensaje configurado
-    return this.getMessages().productMenu;
+    // Fallback
+    return '¿En cual de estos productos estas interesado?\n\n1. Tarjetas\n2. Magnéticos\n3. Post cards\n4. Playeras\n5. Otros';
   }
 
   async handleAwaitingProduct(contact, messageText, convState) {
