@@ -894,21 +894,11 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <div className="field-group" style={{ marginTop: '16px' }}>
-                <label>Mensaje del menu de productos</label>
-                <textarea
-                  rows={6}
-                  value={form.product_menu_message}
-                  onChange={(e) => handleInputChange('product_menu_message', e.target.value)}
-                  placeholder={`1. Tarjetas\n2. Magneticos\n3. Post Cards\n4. Playeras`}
-                />
-              </div>
-
               {form.products && form.products.split(',').filter(p => p.trim()).length > 0 && (
-                <div className="menu-preview">
-                  <label>Vista previa del mensaje:</label>
+                <div className="menu-preview" style={{ marginTop: '16px' }}>
+                  <label>Mensaje del menu de productos</label>
                   <div className="preview-box">
-                    {form.product_menu_message || form.products.split(',').filter(p => p.trim()).map((p, i) => `${i + 1}. ${p.trim()}`).join('\n')}
+                    {form.products.split(',').filter(p => p.trim()).map((p, i) => `${i + 1}. ${p.trim()}`).join('\n')}
                   </div>
                 </div>
               )}
