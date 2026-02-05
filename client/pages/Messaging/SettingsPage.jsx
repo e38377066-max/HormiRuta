@@ -85,6 +85,7 @@ export default function SettingsPage() {
     request_zip_message: '',
     remind_zip_message: '',
     product_menu_message: '',
+    catalog_link: '',
     products: 'Tarjetas,Magneticos,Post Cards,Playeras',
     excluded_tags: 'Personal,IprintPOS,ClientesArea,Area862Designers',
     default_agent_id: '',
@@ -209,6 +210,7 @@ export default function SettingsPage() {
           request_zip_message: settings.request_zip_message || '',
           remind_zip_message: settings.remind_zip_message || '',
           product_menu_message: settings.product_menu_message || '',
+          catalog_link: settings.catalog_link || '',
           products: parseProducts(settings.products),
           excluded_tags: settings.excluded_tags || 'Personal,IprintPOS,ClientesArea,Area862Designers',
           default_agent_id: settings.default_agent_id || '',
@@ -879,6 +881,17 @@ export default function SettingsPage() {
                   onChange={(e) => handleInputChange('product_menu_message', e.target.value)}
                   placeholder="🔵 Paquetes disponibles...&#10;💰 500 por $60&#10;💰 1000 por $70..."
                 />
+              </div>
+
+              <div className="field-group">
+                <label>Link del catalogo de diseños</label>
+                <input
+                  type="text"
+                  value={form.catalog_link || ''}
+                  onChange={(e) => handleInputChange('catalog_link', e.target.value)}
+                  placeholder="https://mrtarjetas.com/?s=remod..."
+                />
+                <p className="field-hint">Se envia junto con el menu cuando el cliente dice que ya tiene informacion</p>
               </div>
             </div>
           </>
