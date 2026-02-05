@@ -119,21 +119,25 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No hay contacto de prueba configurado' });
     }
 
-    // Buscar el contacto por nombre
+    // Buscar el contacto por nombre usando listContacts con search
     const service = new RespondioService(settings.respond_api_token);
-    const contact = await service.searchContactByName(settings.test_contact_id);
+    const result = await service.listContacts({ search: settings.test_contact_id, limit: 10 });
     
-    if (!contact) {
-      return res.status(404).json({ error: 'Contacto de prueba no encontrado' });
+    if (!result.success || !result.items?.length) {
+      return res.status(404).json({ error: 'Contacto de prueba no encontrado en Respond.io' });
     }
 
+    const contact = result.items[0];
+
     // Borrar el estado de conversación
-    const ConversationState = require('../models/ConversationState');
     await ConversationState.destroy({
-      where: { contact_id: contact.id }
+      where: { 
+        user_id: req.session.userId,
+        contact_id: contact.id.toString() 
+      }
     });
 
-    console.log(`[Reset Test] Estado de conversación eliminado para contacto: ${contact.id}`);
+    console.log(`[Reset Test] Estado de conversación eliminado para contacto: ${contact.id} (${contact.firstName} ${contact.lastName})`);
     
     res.json({ 
       success: true, 
