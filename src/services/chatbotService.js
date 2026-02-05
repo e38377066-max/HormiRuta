@@ -402,7 +402,7 @@ class ChatbotService {
       
       // Sin cobertura
       noCoverage: this.settings.no_coverage_message || 
-        '😔 Lo siento mucho, actualmente no tenemos cobertura de entrega en la zona {{zip_code}}.\n\nPero no te preocupes, déjame pasarte con uno de nuestros agentes para ver si podemos encontrar una solución para ti 🤝',
+        'Lo sentimos, actualmente no tenemos cobertura en tu zona. Te notificaremos cuando ampliemos nuestra área de servicio.',
       
       // Producto seleccionado (con info previa) - preguntar sobre diseño
       productSelectedAskDesign: '¡Excelente elección! {{product}} 👍\n\n¿Ya tienes un diseño en mente o quieres que te lo hagamos de cero? 🎨',
@@ -567,6 +567,10 @@ class ChatbotService {
       case 'assigned':
         // Ya está asignado a agente, no interferir
         return { handled: false, reason: 'already_assigned' };
+      
+      case 'closed_no_coverage':
+        // Flujo cerrado por falta de cobertura, no responder
+        return { handled: true, action: 'ignored_no_coverage' };
       
       default:
         return await this.handleInitialState(contact, messageText, convState);
@@ -843,20 +847,20 @@ class ChatbotService {
       return { handled: true, action: 'zip_validated_with_coverage' };
       
     } else {
-      // Sin cobertura
+      // Sin cobertura - cerrar flujo sin asignar agente
       const noCoverageMsg = msgs.noCoverage
         .replace('{{zip_code}}', validation.value)
         .replace('{{city}}', validation.value);
       
       await this.sendMessage(contact.id, noCoverageMsg);
       await this.createOrUpdateOrder(contact, validation.value, customerName, 'no_coverage', null);
-      await this.assignToDefaultAgent(contact.id);
       await this.addTrackingTag(contact.id, 'SinCobertura');
       await this.addComment(contact.id, `[Bot] Cliente en zona sin cobertura. ZIP: ${validation.value}`);
       
-      await this.updateConversationState(contact.id, { state: 'assigned' });
+      // Cerrar flujo - no asignar a nadie
+      await this.updateConversationState(contact.id, { state: 'closed_no_coverage' });
       
-      return { handled: true, action: 'zip_no_coverage' };
+      return { handled: true, action: 'zip_no_coverage_closed' };
     }
   }
 
@@ -897,20 +901,20 @@ class ChatbotService {
         return { handled: true, action: 'zip_validated_show_menu' };
         
       } else {
-        // Sin cobertura
+        // Sin cobertura - cerrar flujo sin asignar agente
         const noCoverageMsg = msgs.noCoverage
           .replace('{{zip_code}}', validation.value)
           .replace('{{city}}', validation.value);
         
         await this.sendMessage(contact.id, noCoverageMsg);
         await this.createOrUpdateOrder(contact, validation.value, customerName, 'no_coverage', null);
-        await this.assignToDefaultAgent(contact.id);
         await this.addTrackingTag(contact.id, 'SinCobertura');
-        await this.addComment(contact.id, `[Bot] Cliente sin info en zona sin cobertura. ZIP: ${validation.value}`);
+        await this.addComment(contact.id, `[Bot] Cliente en zona sin cobertura. ZIP: ${validation.value}`);
         
-        await this.updateConversationState(contact.id, { state: 'assigned' });
+        // Cerrar flujo - no asignar a nadie
+        await this.updateConversationState(contact.id, { state: 'closed_no_coverage' });
         
-        return { handled: true, action: 'zip_no_coverage' };
+        return { handled: true, action: 'zip_no_coverage_closed' };
       }
     } else {
       // No parece ZIP - insistir en pedir ZIP
