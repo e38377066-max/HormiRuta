@@ -137,7 +137,23 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
       }
     });
 
-    console.log(`[Reset Test] Estado de conversación eliminado para contacto: ${contact.id} (${contact.firstName} ${contact.lastName})`);
+    // Borrar pedidos del contacto de prueba (para que no lo detecte como cliente existente)
+    await MessagingOrder.destroy({
+      where: { 
+        user_id: req.session.userId,
+        respond_contact_id: contact.id.toString() 
+      }
+    });
+
+    // Borrar logs de mensajes del contacto
+    await MessageLog.destroy({
+      where: { 
+        user_id: req.session.userId,
+        contact_id: contact.id.toString() 
+      }
+    });
+
+    console.log(`[Reset Test] Datos eliminados para contacto: ${contact.id} (${contact.firstName} ${contact.lastName})`);
     
     res.json({ 
       success: true, 
