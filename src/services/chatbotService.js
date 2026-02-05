@@ -242,6 +242,15 @@ class ChatbotService {
   parseProductSelection(text) {
     const cleanText = text.trim().toLowerCase();
     
+    // Sinónimos comunes para productos
+    const synonyms = {
+      'tarjetas': ['tarjeta', 'targetas', 'targeta', 'cards', 'card', 'presentacion', 'presentación', 'business'],
+      'magneticos': ['magnetico', 'magnéticos', 'magnético', 'magnets', 'magnet', 'iman', 'imán', 'imanes'],
+      'targetas': ['tarjetas', 'tarjeta', 'targeta', 'cards', 'card'],
+      'post cards': ['postcards', 'postcard', 'postal', 'postales', 'flyers', 'flyer'],
+      'playeras': ['playera', 'camisetas', 'camiseta', 'shirts', 'shirt', 't-shirt', 'tshirt', 'remeras', 'remera']
+    };
+    
     // Obtener productos de products_list configurado
     let productsList = [];
     try {
@@ -271,7 +280,7 @@ class ChatbotService {
     }
 
     // Primero intentar por número (solo el número o con texto adicional)
-    const numMatch = cleanText.match(/^(\d+)/);
+    const numMatch = cleanText.match(/(\d+)/);
     if (numMatch) {
       const num = parseInt(numMatch[1]);
       if (num >= 1 && num <= productsList.length) {
@@ -279,17 +288,41 @@ class ChatbotService {
       }
     }
 
-    // Buscar por nombre del producto (parcial o completo)
+    // Buscar por nombre del producto o sinónimos
     for (const product of productsList) {
       const productName = product.name.toLowerCase();
+      
       // Buscar si el texto contiene el nombre del producto
       if (cleanText.includes(productName)) {
         return product;
       }
-      // O si el nombre del producto contiene palabras clave del texto
-      const words = cleanText.split(/\s+/).filter(w => w.length > 2);
+      
+      // Buscar por sinónimos del producto
+      const productSynonyms = synonyms[productName] || [];
+      for (const syn of productSynonyms) {
+        if (cleanText.includes(syn)) {
+          return product;
+        }
+      }
+      
+      // Buscar sinónimos inversos (si el usuario usa un sinónimo que mapea al producto)
+      for (const [key, syns] of Object.entries(synonyms)) {
+        if (syns.includes(productName) || key === productName) {
+          for (const syn of syns) {
+            if (cleanText.includes(syn)) {
+              return product;
+            }
+          }
+          if (cleanText.includes(key)) {
+            return product;
+          }
+        }
+      }
+      
+      // Buscar palabras del texto en el nombre del producto
+      const words = cleanText.split(/\s+/).filter(w => w.length > 3);
       for (const word of words) {
-        if (productName.includes(word)) {
+        if (productName.includes(word) || word.includes(productName.substring(0, 4))) {
           return product;
         }
       }
