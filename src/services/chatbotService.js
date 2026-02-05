@@ -580,28 +580,18 @@ class ChatbotService {
       return { handled: true, action: 'facebook_ad_direct_zip' };
     }
     
-    if (intent === 'wants_info') {
-      // Quiere información, enviar el menú de productos directo
-      await this.sendMessage(contact.id, msgs.productMenu);
-      await this.sendMessage(contact.id, msgs.requestZip);
-      await this.updateConversationState(contact.id, {
-        state: 'awaiting_zip',
-        has_prior_info: true,
-        awaiting_response: 'zip_code',
-        greeting_sent: true
-      });
-      await this.addTrackingTag(contact.id, 'QuiereInfo');
-      
-      return { handled: true, action: 'wants_info_send_menu' };
-    }
-    
-    // Saludo o mensaje genérico - flujo normal
+    // Para cualquier mensaje (quiere info, saludo, o genérico):
+    // Siempre saludar y preguntar si ya tiene información previa
     await this.sendMessage(contact.id, msgs.welcomeNew);
     await this.updateConversationState(contact.id, {
       state: 'awaiting_prior_info',
       awaiting_response: 'yes_no',
       greeting_sent: true
     });
+    
+    if (intent === 'wants_info') {
+      await this.addTrackingTag(contact.id, 'QuiereInfo');
+    }
     
     return { handled: true, action: 'welcome_new' };
   }
