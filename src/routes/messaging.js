@@ -58,7 +58,7 @@ router.put('/settings', requireAuth, async (req, res) => {
       'business_hours_enabled', 'business_hours_start', 'business_hours_end',
       'business_days', 'timezone', 'out_of_hours_message',
       'default_agent_id', 'default_agent_name',
-      'welcome_existing_customer', 'welcome_new_customer',
+      'welcome_existing_customer', 'welcome_new_customer', 'welcome_from_ads',
       'has_info_response', 'request_zip_message', 'remind_zip_message',
       'product_menu_message', 'excluded_tags', 'products',
       'test_mode', 'test_contact_id', 'catalog_link', 'products_list'

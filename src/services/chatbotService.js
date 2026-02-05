@@ -516,13 +516,16 @@ class ChatbotService {
     }
     
     // Cliente nuevo
-    // Si viene de Facebook Ad, asumimos que ya vio la info del anuncio
+    // Si viene de Facebook Ad, saludar y pedir ZIP directo (flujo sin info)
     if (isFromFacebookAd || intent === 'wants_order') {
-      // Ya tienen información del anuncio, ir directo a pedir ZIP
-      await this.sendMessage(contact.id, msgs.hasInfoRequestZip);
+      // Saludar primero
+      const greeting = this.settings.welcome_from_ads || 'Hola! 👋 Gracias por tu interes.\n\nPara verificar si tenemos cobertura en tu zona, por favor enviame tu codigo postal (ZIP) 📍\n\nPor ejemplo: 75208';
+      await this.sendMessage(contact.id, greeting);
+      
       await this.updateConversationState(contact.id, {
-        state: 'awaiting_zip',
-        has_prior_info: true,
+        state: 'awaiting_zip_no_info',
+        has_prior_info: false,
+        from_ads: true,
         awaiting_response: 'zip_code',
         greeting_sent: true
       });

@@ -111,6 +111,10 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
     type: DataTypes.TEXT,
     defaultValue: '¡Hola! 🙌 Somos de Area 862 Graphics.\n\n📩😊 Cuéntanos, ¿ya uno de nuestros agentes le brindó información sobre nuestros servicios y precios?'
   },
+  welcome_from_ads: {
+    type: DataTypes.TEXT,
+    defaultValue: '¡Hola! 👋 Gracias por tu interés.\n\nPara verificar si tenemos cobertura en tu zona, por favor envíame tu código postal (ZIP) 📍\n\nPor ejemplo: 75208'
+  },
   has_info_response: {
     type: DataTypes.TEXT,
     defaultValue: 'Perfecto ✅ Por acá puede ver algunos diseños que tenemos disponibles 🎨'
