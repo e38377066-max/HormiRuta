@@ -131,6 +131,10 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
     type: DataTypes.TEXT,
     defaultValue: '¿En cuál de estos productos está interesado? (Indica el número del producto)\n\n1. Tarjetas\n2. Magnéticos\n3. Post Cards\n4. Playeras'
   },
+  products_list: {
+    type: DataTypes.TEXT,
+    defaultValue: '[]'
+  },
   has_info_request_zip: {
     type: DataTypes.TEXT,
     defaultValue: '¡Qué bien! 😊 Me alegra que ya tengas los detalles.\n\nPara continuar con tu pedido, necesito confirmar tu zona de entrega.\n\n¿Me compartes tu código postal (ZIP)? 📍'

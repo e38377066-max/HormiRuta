@@ -87,6 +87,7 @@ export default function SettingsPage() {
     product_menu_message: '',
     catalog_link: '',
     products: 'Tarjetas,Magneticos,Post Cards,Playeras',
+    products_list: [],
     excluded_tags: 'Personal,IprintPOS,ClientesArea,Area862Designers',
     default_agent_id: '',
     default_agent_name: '',
@@ -212,6 +213,7 @@ export default function SettingsPage() {
           product_menu_message: settings.product_menu_message || '',
           catalog_link: settings.catalog_link || '',
           products: parseProducts(settings.products),
+          products_list: settings.products_list ? (typeof settings.products_list === 'string' ? JSON.parse(settings.products_list) : settings.products_list) : [],
           excluded_tags: settings.excluded_tags || 'Personal,IprintPOS,ClientesArea,Area862Designers',
           default_agent_id: settings.default_agent_id || '',
           default_agent_name: settings.default_agent_name || '',
@@ -260,6 +262,10 @@ export default function SettingsPage() {
         delete dataToSave.respond_api_token
       } else {
         setHasExistingToken(true)
+      }
+      // Serialize products_list to JSON string
+      if (dataToSave.products_list) {
+        dataToSave.products_list = JSON.stringify(dataToSave.products_list)
       }
       await updateSettings(dataToSave)
       setForm(prev => ({ ...prev, respond_api_token: '' }))
@@ -874,31 +880,83 @@ export default function SettingsPage() {
               <p className="description">Productos que el chatbot ofrece a los clientes</p>
 
               <div className="field-group">
-                <label>Productos (separados por coma)</label>
-                <input
-                  type="text"
-                  value={form.products}
-                  onChange={(e) => handleInputChange('products', e.target.value)}
-                  placeholder="Tarjetas,Magneticos,Post Cards,Playeras"
-                />
+                <label>Agregar nuevo producto</label>
+                <div className="add-product-row">
+                  <input
+                    type="text"
+                    id="new-product-name"
+                    placeholder="Nombre del producto (ej: Tarjetas)"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const name = e.target.value.trim();
+                        if (name) {
+                          const currentProducts = form.products_list || [];
+                          handleInputChange('products_list', [...currentProducts, { name, message: '' }]);
+                          e.target.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-add-product"
+                    onClick={() => {
+                      const input = document.getElementById('new-product-name');
+                      const name = input.value.trim();
+                      if (name) {
+                        const currentProducts = form.products_list || [];
+                        handleInputChange('products_list', [...currentProducts, { name, message: '' }]);
+                        input.value = '';
+                      }
+                    }}
+                  >
+                    <span className="material-icons">add</span>
+                    Agregar
+                  </button>
+                </div>
               </div>
 
-              {form.products && form.products.split(',').filter(p => p.trim()).length > 0 && (
-                <div className="products-visual-list">
-                  {form.products.split(',').filter(p => p.trim()).map((product, index) => (
-                    <div key={index} className="product-item">
-                      <span className="product-number">{index + 1}</span>
-                      <span className="product-name">{product.trim()}</span>
+              {form.products_list && form.products_list.length > 0 && (
+                <div className="products-config-list">
+                  {form.products_list.map((product, index) => (
+                    <div key={index} className="product-config-item">
+                      <div className="product-header">
+                        <span className="product-number">{index + 1}</span>
+                        <span className="product-name">{product.name}</span>
+                        <button
+                          type="button"
+                          className="btn-remove-product"
+                          onClick={() => {
+                            const newList = form.products_list.filter((_, i) => i !== index);
+                            handleInputChange('products_list', newList);
+                          }}
+                        >
+                          <span className="material-icons">delete</span>
+                        </button>
+                      </div>
+                      <div className="product-message-field">
+                        <label>Mensaje de informacion para {product.name}:</label>
+                        <textarea
+                          rows={3}
+                          value={product.message || ''}
+                          onChange={(e) => {
+                            const newList = [...form.products_list];
+                            newList[index] = { ...newList[index], message: e.target.value };
+                            handleInputChange('products_list', newList);
+                          }}
+                          placeholder={`Informacion sobre ${product.name}...\nPrecios, caracteristicas, etc.`}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {form.products && form.products.split(',').filter(p => p.trim()).length > 0 && (
+              {form.products_list && form.products_list.length > 0 && (
                 <div className="menu-preview" style={{ marginTop: '16px' }}>
                   <label>Mensaje del menu de productos</label>
                   <div className="preview-box">
-                    {form.products.split(',').filter(p => p.trim()).map((p, i) => `${i + 1}. ${p.trim()}`).join('\n')}
+                    {form.products_list.map((p, i) => `${i + 1}. ${p.name}`).join('\n')}
                   </div>
                 </div>
               )}

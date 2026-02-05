@@ -2586,3 +2586,103 @@
   color: #333;
   line-height: 1.5;
 }
+
+.add-product-row {
+  display: flex;
+  gap: 8px;
+}
+
+.add-product-row input {
+  flex: 1;
+}
+
+.btn-add-product {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-add-product:hover {
+  background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
+  transform: translateY(-1px);
+}
+
+.btn-add-product .material-icons {
+  font-size: 18px;
+}
+
+.products-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.product-config-item {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+}
+
+.product-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.product-header .product-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.btn-remove-product {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #ffebee;
+  color: #c62828;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-remove-product:hover {
+  background: #ffcdd2;
+}
+
+.btn-remove-product .material-icons {
+  font-size: 18px;
+}
+
+.product-message-field {
+  margin-top: 8px;
+}
+
+.product-message-field label {
+  display: block;
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.product-message-field textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  resize: vertical;
+}

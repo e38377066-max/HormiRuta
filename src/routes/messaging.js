@@ -61,7 +61,7 @@ router.put('/settings', requireAuth, async (req, res) => {
       'welcome_existing_customer', 'welcome_new_customer',
       'has_info_response', 'request_zip_message', 'remind_zip_message',
       'product_menu_message', 'excluded_tags', 'products',
-      'test_mode', 'test_contact_id', 'catalog_link'
+      'test_mode', 'test_contact_id', 'catalog_link', 'products_list'
     ];
 
     for (const field of allowedFields) {
