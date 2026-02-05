@@ -30,6 +30,12 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-02-05: Bot no interfiere si un agente humano ya respondió en la conversación
+- 2026-02-05: Botón "Reiniciar Prueba" para limpiar historial de conversación en modo test
+- 2026-02-05: Fix productos guardados correctamente (products_list en toDict)
+- 2026-02-04: Sistema de productos con mensajes individuales por producto
+- 2026-02-04: Detección automática de origen Facebook Ads (saludo directo + pedir ZIP)
+- 2026-02-04: Insistencia de ZIP si usuario pregunta otras cosas antes de dar código
 - 2026-02-03: Added multi-agent system for assigning different agents by service/product
 - 2026-02-03: ServiceAgent model with CRUD endpoints and UI management
 - 2026-02-03: Chatbot automatically assigns agent based on selected product
@@ -101,6 +107,49 @@ npm run cap:add:ios     # Add iOS platform
 - Coverage zone management (ZIP codes)
 - Admin panel for user management
 - Multi-criteria validation (ZIP, city, address, zone name)
+- Intelligent chatbot with automatic/assisted modes
+
+## Chatbot System (Respond.io Integration)
+
+### Modos de Atencion
+1. **Modo Asistido**: El bot recopila información y pasa al agente para confirmar
+2. **Modo Automatico**: El bot maneja toda la conversación sin intervención humana
+
+### Flujo de Conversacion (Cliente SIN informacion previa)
+1. Cliente escribe → Bot saluda y pregunta si tiene información
+2. Cliente dice NO → Bot pide código ZIP
+3. Si cliente pregunta otra cosa → Bot insiste en pedir ZIP primero
+4. Cliente da ZIP → Bot valida cobertura
+5. Si hay cobertura → Bot muestra menú de productos numerado
+6. Cliente selecciona producto → Bot muestra información del producto
+7. Bot asigna al agente correspondiente según el producto
+
+### Flujo Facebook Ads
+- Si el contacto viene de Facebook Ad (detected by ad click event)
+- Bot salta la pregunta "¿tiene información?" 
+- Saluda directamente y pide código ZIP
+
+### Sistema de Productos (products_list)
+- Cada producto tiene nombre y mensaje de información
+- Almacenado como JSON en base de datos
+- Menú se genera automáticamente: "1. Producto A\n2. Producto B..."
+- Al seleccionar, se muestra el mensaje específico del producto
+
+### Sistema Multi-Agente
+- Agentes configurables por producto/servicio
+- Asignación automática según producto seleccionado
+- Fallback a agente por defecto si no hay coincidencia
+
+### Proteccion de Conversaciones
+- Bot verifica historial de mensajes antes de responder
+- Si un agente humano YA respondió → Bot NO interfiere
+- Permite que agentes tomen control sin conflictos
+
+### Modo de Prueba
+- Activar modo test para probar flujos con un contacto específico
+- Buscar contacto por nombre en Respond.io
+- Botón "Reiniciar Prueba" limpia el historial de conversación
+- Permite probar el flujo completo múltiples veces
 
 ## API Endpoints
 ### Authentication
@@ -123,8 +172,14 @@ npm run cap:add:ios     # Add iOS platform
 ### Messaging (Respond.io Integration)
 - GET /api/messaging/settings - Get messaging settings
 - PUT /api/messaging/settings - Update messaging settings
+- POST /api/messaging/settings/test-connection - Test Respond.io API connection
+- POST /api/messaging/settings/reset-test - Reset test conversation history
 - POST /api/messaging/validate-zip - Validate ZIP/city/address
 - GET /api/messaging/coverage-zones - Get coverage zones
+- GET /api/messaging/agents - List service agents
+- POST /api/messaging/agents - Create service agent
+- PUT /api/messaging/agents/:id - Update service agent
+- DELETE /api/messaging/agents/:id - Delete service agent
 
 ## Environment Variables
 - DATABASE_URL - PostgreSQL connection string
