@@ -2561,3 +2561,28 @@
   font-weight: 500;
   color: #333;
 }
+
+.menu-preview {
+  margin-top: 16px;
+  padding: 12px;
+  background: #e3f2fd;
+  border-radius: 8px;
+  border-left: 4px solid #1976d2;
+}
+
+.menu-preview label {
+  font-weight: 600;
+  color: #1565c0;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.preview-box {
+  background: white;
+  padding: 12px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  font-family: inherit;
+  color: #333;
+  line-height: 1.5;
+}

@@ -904,6 +904,15 @@ export default function SettingsPage() {
                 />
               </div>
 
+              {form.products && form.products.split(',').filter(p => p.trim()).length > 0 && (
+                <div className="menu-preview">
+                  <label>Vista previa del mensaje:</label>
+                  <div className="preview-box">
+                    {form.product_menu_message || form.products.split(',').filter(p => p.trim()).map((p, i) => `${i + 1}. ${p.trim()}`).join('\n')}
+                  </div>
+                </div>
+              )}
+
             </div>
           </>
         )}
