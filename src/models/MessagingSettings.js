@@ -248,6 +248,7 @@ MessagingSettings.prototype.toDict = function() {
     passing_to_agent_message: this.passing_to_agent_message,
     excluded_tags: this.excluded_tags,
     products: this.products,
+    products_list: this.products_list,
     test_mode: this.test_mode,
     test_contact_id: this.test_contact_id,
     message_history_limit: this.message_history_limit,
