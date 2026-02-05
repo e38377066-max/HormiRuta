@@ -290,7 +290,16 @@ class ChatbotService {
       noCoverage: this.settings.no_coverage_message || 
         '😔 Lo siento mucho, actualmente no tenemos cobertura de entrega en la zona {{zip_code}}.\n\nPero no te preocupes, déjame pasarte con uno de nuestros agentes para ver si podemos encontrar una solución para ti 🤝',
       
-      // Producto seleccionado
+      // Producto seleccionado (con info previa) - preguntar sobre diseño
+      productSelectedAskDesign: '¡Excelente elección! {{product}} 👍\n\n¿Ya tienes un diseño en mente o quieres que te lo hagamos de cero? 🎨',
+      
+      // Tiene diseño
+      hasDesignResponse: '¡Perfecto! 📸 Envíanos tu diseño o la información de lo que necesitas.\n\nUn agente te atenderá en breve para ayudarte con tu pedido.',
+      
+      // Necesita diseño nuevo
+      needsDesignResponse: '¡Genial! 🎨 Cuéntanos qué información quieres incluir en tu diseño (nombre, teléfono, logo, etc.)\n\nUn agente te atenderá en breve para crear algo increíble para ti.',
+      
+      // Producto seleccionado (sin info previa - flujo de validación)
       productSelected: this.settings.product_selected_message || 
         '¡Perfecto! Te interesan {{product}} 👍\n\nDame un momento, te paso con uno de nuestros especialistas que te dará toda la información sobre precios, diseños y tiempos de entrega 📋✨',
       
@@ -406,6 +415,12 @@ class ChatbotService {
       
       case 'awaiting_zip':
         return await this.handleAwaitingZip(contact, messageText, convState);
+      
+      case 'awaiting_product_selection':
+        return await this.handleAwaitingProductSelection(contact, messageText, convState);
+      
+      case 'awaiting_design_info':
+        return await this.handleAwaitingDesignInfo(contact, messageText, convState);
       
       case 'awaiting_product':
         return await this.handleAwaitingProduct(contact, messageText, convState);
@@ -538,22 +553,16 @@ class ChatbotService {
     const response = this.parseYesNoResponse(messageText);
     
     if (response === 'yes') {
-      // Ya tiene info - enviar catálogo/diseños y pasar a agente
+      // Ya tiene info - preguntar qué producto le interesa
       await this.sendMessage(contact.id, msgs.hasInfoResponse);
+      await this.sendMessage(contact.id, msgs.productMenu);
       
-      // Si hay link de catálogo configurado, enviarlo
-      if (this.settings.catalog_link) {
-        await this.sendMessage(contact.id, this.settings.catalog_link);
-      }
-      
-      // Pasar a agente (no pedir ZIP porque ya tiene info)
-      await this.assignToDefaultAgent(contact.id);
-      await this.addTrackingTag(contact.id, 'TieneInfo');
       await this.updateConversationState(contact.id, {
-        state: 'assigned',
-        has_prior_info: true
+        state: 'awaiting_product_selection',
+        has_prior_info: true,
+        awaiting_response: 'product'
       });
-      return { handled: true, action: 'has_info_assigned_to_agent' };
+      return { handled: true, action: 'has_info_ask_product' };
       
     } else if (response === 'no') {
       // No tiene info - enviar menú de productos y pedir ZIP
@@ -571,6 +580,88 @@ class ChatbotService {
       await this.sendMessage(contact.id, msgs.remindYesNo);
       return { handled: true, action: 'remind_yes_no' };
     }
+  }
+
+  async handleAwaitingProductSelection(contact, messageText, convState) {
+    const msgs = this.getMessages();
+    const product = this.parseProductSelection(messageText);
+    
+    if (product) {
+      // Producto seleccionado - preguntar sobre diseño
+      const designMsg = msgs.productSelectedAskDesign.replace('{{product}}', product);
+      await this.sendMessage(contact.id, designMsg);
+      
+      // Si hay link de catálogo, enviarlo
+      if (this.settings.catalog_link) {
+        await this.sendMessage(contact.id, this.settings.catalog_link);
+      }
+      
+      await this.updateConversationState(contact.id, {
+        state: 'awaiting_design_info',
+        selected_product: product,
+        awaiting_response: 'design_info'
+      });
+      
+      return { handled: true, action: 'product_selected_ask_design' };
+    } else {
+      // No entendió, recordar
+      await this.sendMessage(contact.id, msgs.remindProduct);
+      await this.sendMessage(contact.id, msgs.productMenu);
+      return { handled: true, action: 'remind_product' };
+    }
+  }
+
+  async handleAwaitingDesignInfo(contact, messageText, convState) {
+    const msgs = this.getMessages();
+    const hasDesign = this.parseDesignResponse(messageText);
+    
+    if (hasDesign === 'yes') {
+      // Tiene diseño
+      await this.sendMessage(contact.id, msgs.hasDesignResponse);
+    } else if (hasDesign === 'no') {
+      // Necesita diseño nuevo
+      await this.sendMessage(contact.id, msgs.needsDesignResponse);
+    } else {
+      // Respuesta ambigua - asumir que está dando info
+      await this.sendMessage(contact.id, msgs.hasDesignResponse);
+    }
+    
+    // Asignar a agente
+    await this.assignToDefaultAgent(contact.id);
+    await this.addTrackingTag(contact.id, `Producto_${convState.selected_product || 'General'}`);
+    await this.addTrackingTag(contact.id, hasDesign === 'yes' ? 'TieneDiseno' : 'NecesitaDiseno');
+    
+    await this.updateConversationState(contact.id, {
+      state: 'assigned',
+      context_data: { 
+        ...convState.context_data,
+        has_design: hasDesign === 'yes'
+      }
+    });
+    
+    return { handled: true, action: 'design_info_received_assigned' };
+  }
+
+  parseDesignResponse(text) {
+    const lowerText = text.toLowerCase().trim();
+    
+    // Detectar si tiene diseño
+    if (lowerText.includes('ya tengo') || lowerText.includes('si tengo') ||
+        lowerText.includes('tengo diseño') || lowerText.includes('tengo un diseño') ||
+        lowerText.match(/^s[ií][\s,!.]*$/i) || lowerText.includes('ya lo tengo')) {
+      return 'yes';
+    }
+    
+    // Detectar si necesita diseño nuevo
+    if (lowerText.includes('de cero') || lowerText.includes('desde cero') ||
+        lowerText.includes('no tengo') || lowerText.includes('haganlo') ||
+        lowerText.includes('háganlo') || lowerText.includes('nuevo') ||
+        lowerText.match(/^no[\s,!.]*$/i)) {
+      return 'no';
+    }
+    
+    // Respuesta ambigua
+    return 'unknown';
   }
 
   async handleAwaitingZip(contact, messageText, convState) {
