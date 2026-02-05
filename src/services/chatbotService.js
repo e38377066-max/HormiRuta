@@ -416,6 +416,15 @@ class ChatbotService {
       case 'awaiting_zip':
         return await this.handleAwaitingZip(contact, messageText, convState);
       
+      case 'awaiting_zip_no_info':
+        return await this.handleAwaitingZipNoInfo(contact, messageText, convState);
+      
+      case 'awaiting_product_no_info':
+        return await this.handleAwaitingProductNoInfo(contact, messageText, convState);
+      
+      case 'awaiting_product_response':
+        return await this.handleAwaitingProductResponse(contact, messageText, convState);
+      
       case 'awaiting_product_selection':
         return await this.handleAwaitingProductSelection(contact, messageText, convState);
       
@@ -564,15 +573,14 @@ class ChatbotService {
       return { handled: true, action: 'has_info_ask_product' };
       
     } else if (response === 'no') {
-      // No tiene info - enviar menú de productos y pedir ZIP
-      await this.sendMessage(contact.id, msgs.productMenu);
+      // No tiene info - pedir ZIP primero para validar cobertura
       await this.sendMessage(contact.id, msgs.noInfoRequestZip);
       await this.updateConversationState(contact.id, {
-        state: 'awaiting_zip',
+        state: 'awaiting_zip_no_info',
         has_prior_info: false,
         awaiting_response: 'zip_code'
       });
-      return { handled: true, action: 'no_info_send_menu' };
+      return { handled: true, action: 'no_info_request_zip' };
       
     } else {
       // No entendió, recordar
@@ -719,6 +727,164 @@ class ChatbotService {
       
       return { handled: true, action: 'zip_no_coverage' };
     }
+  }
+
+  // Handler para usuarios SIN información esperando ZIP
+  async handleAwaitingZipNoInfo(contact, messageText, convState) {
+    const msgs = this.getMessages();
+    
+    // Verificar si parece un ZIP
+    const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
+    const isCityMessage = this.addressValidation.isCityMessage(messageText);
+    
+    if (isZipMessage || isCityMessage) {
+      // Validar ZIP
+      const validation = await this.addressValidation.validateZipOrCity(messageText);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+      
+      if (validation.valid) {
+        // Con cobertura - mostrar menú de productos
+        const coverageMsg = msgs.hasCoverage
+          .replace('{{zip_code}}', validation.value)
+          .replace('{{city}}', validation.zone?.city || '')
+          .replace('{{zone}}', validation.zone?.zone_name || '');
+        
+        await this.sendMessage(contact.id, coverageMsg);
+        await this.sendMessage(contact.id, this.generateProductMenu());
+        
+        await this.createOrUpdateOrder(contact, validation.value, customerName, 'covered', validation.zone);
+        
+        await this.updateConversationState(contact.id, {
+          state: 'awaiting_product_no_info',
+          validated_zip: validation.value,
+          has_prior_info: false,
+          awaiting_response: 'product_selection'
+        });
+        
+        await this.addTrackingTag(contact.id, 'ConCobertura');
+        
+        return { handled: true, action: 'zip_validated_show_menu' };
+        
+      } else {
+        // Sin cobertura
+        const noCoverageMsg = msgs.noCoverage
+          .replace('{{zip_code}}', validation.value)
+          .replace('{{city}}', validation.value);
+        
+        await this.sendMessage(contact.id, noCoverageMsg);
+        await this.createOrUpdateOrder(contact, validation.value, customerName, 'no_coverage', null);
+        await this.assignToDefaultAgent(contact.id);
+        await this.addTrackingTag(contact.id, 'SinCobertura');
+        await this.addComment(contact.id, `[Bot] Cliente sin info en zona sin cobertura. ZIP: ${validation.value}`);
+        
+        await this.updateConversationState(contact.id, { state: 'assigned' });
+        
+        return { handled: true, action: 'zip_no_coverage' };
+      }
+    } else {
+      // No parece ZIP - insistir en pedir ZIP
+      const insistZipMsg = 'Por favor, antes de continuar necesito que me envies tu codigo postal (ZIP) para validar si tenemos cobertura en tu zona 📍\n\nPor ejemplo: 75208';
+      await this.sendMessage(contact.id, insistZipMsg);
+      return { handled: true, action: 'insist_zip' };
+    }
+  }
+
+  // Handler para usuarios SIN información seleccionando producto
+  async handleAwaitingProductNoInfo(contact, messageText, convState) {
+    const msgs = this.getMessages();
+    const product = this.parseProductSelection(messageText);
+    
+    if (product) {
+      // Obtener mensaje de información del producto
+      const productInfo = this.getProductInfoMessage(product.name);
+      
+      if (productInfo) {
+        await this.sendMessage(contact.id, productInfo);
+      } else {
+        // Si no hay mensaje configurado, usar mensaje genérico
+        const genericMsg = `Excelente eleccion! 👍 Has seleccionado: ${product.name}\n\nUn agente te atendera en breve para darte mas informacion.`;
+        await this.sendMessage(contact.id, genericMsg);
+      }
+      
+      await this.updateConversationState(contact.id, {
+        state: 'awaiting_product_response',
+        selected_product: product.name,
+        awaiting_response: 'product_response'
+      });
+      
+      return { handled: true, action: 'product_info_sent' };
+    } else {
+      // No entendió - recordar menú
+      await this.sendMessage(contact.id, msgs.remindProduct);
+      await this.sendMessage(contact.id, this.generateProductMenu());
+      return { handled: true, action: 'remind_product' };
+    }
+  }
+
+  // Handler para cuando el usuario responde al mensaje de info del producto
+  async handleAwaitingProductResponse(contact, messageText, convState) {
+    // El usuario respondió al mensaje de info - asignar a agente
+    const product = convState.selected_product || 'General';
+    
+    // Buscar agente específico para el producto
+    const agent = await this.findAgentForProduct(product);
+    const agentId = agent?.agent_id || agent?.agent_email || this.settings.default_agent_id || this.settings.default_agent_email;
+    
+    if (agentId) {
+      await this.assignToAgent(contact.id, agentId, agent?.agent_name);
+    } else {
+      await this.assignToDefaultAgent(contact.id);
+    }
+    
+    await this.addTrackingTag(contact.id, `Producto_${product}`);
+    await this.addTrackingTag(contact.id, 'SinInfoPrevia');
+    await this.addComment(contact.id, 
+      `[Bot] Cliente sin info previa. ZIP: ${convState.validated_zip || 'N/A'}. Producto: ${product}. Asignado a: ${agent?.agent_name || 'Agente por defecto'}`
+    );
+    
+    await this.updateConversationState(contact.id, { 
+      state: 'assigned',
+      selected_product: product
+    });
+    
+    return { handled: true, action: 'product_response_assigned' };
+  }
+
+  // Obtener mensaje de información del producto desde products_list
+  getProductInfoMessage(productName) {
+    try {
+      let productsList = this.settings.products_list;
+      if (typeof productsList === 'string') {
+        productsList = JSON.parse(productsList);
+      }
+      if (Array.isArray(productsList)) {
+        const product = productsList.find(p => 
+          p.name.toLowerCase() === productName.toLowerCase()
+        );
+        return product?.message || null;
+      }
+    } catch (e) {
+      console.error('Error getting product info:', e);
+    }
+    return null;
+  }
+
+  // Generar menú de productos desde products_list
+  generateProductMenu() {
+    try {
+      let productsList = this.settings.products_list;
+      if (typeof productsList === 'string') {
+        productsList = JSON.parse(productsList);
+      }
+      if (Array.isArray(productsList) && productsList.length > 0) {
+        const menuItems = productsList.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
+        return `¿En cual de estos productos estas interesado? (Indica el numero)\n\n${menuItems}`;
+      }
+    } catch (e) {
+      console.error('Error generating product menu:', e);
+    }
+    // Fallback al mensaje configurado
+    return this.getMessages().productMenu;
   }
 
   async handleAwaitingProduct(contact, messageText, convState) {
