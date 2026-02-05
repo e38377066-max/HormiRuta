@@ -630,38 +630,24 @@ class ChatbotService {
   }
 
   async handleAwaitingProductSelection(contact, messageText, convState) {
+    // Este handler es para clientes que YA tienen información
     const msgs = this.getMessages();
     const product = this.parseProductSelection(messageText);
     
     if (product) {
-      // Producto seleccionado - enviar información específica del producto
-      const productInfoMsg = this.getProductInfoMessage(product.name || product);
+      // Cliente YA tiene información - preguntar sobre diseño
+      const designQuestion = msgs.productSelectedAskDesign?.replace('{{product}}', product.name || product) ||
+        `Perfecto, ${product.name || product} 👍\n\n¿Ya tienes un diseño en mente o te gustaría que te ayudemos a crear uno desde cero?`;
       
-      if (productInfoMsg) {
-        await this.sendMessage(contact.id, productInfoMsg);
-      } else {
-        // Fallback si no hay mensaje configurado
-        const fallbackMsg = `Has seleccionado: ${product.name || product}\n\nUn agente te contactará en breve para darte más información.`;
-        await this.sendMessage(contact.id, fallbackMsg);
-      }
-      
-      // Asignar agente según producto
-      const agent = await this.findAgentForProduct(product.name || product);
-      if (agent) {
-        await this.assignToAgent(contact.id, agent.respond_agent_id, agent.agent_name);
-      } else {
-        await this.assignToDefaultAgent(contact.id);
-      }
-      
-      await this.addTrackingTag(contact.id, `Producto_${product.name || product}`);
-      await this.addComment(contact.id, `[Bot] Cliente interesado en: ${product.name || product}`);
+      await this.sendMessage(contact.id, designQuestion);
       
       await this.updateConversationState(contact.id, {
-        state: 'assigned',
-        selected_product: product.name || product
+        state: 'awaiting_design_info',
+        selected_product: product.name || product,
+        awaiting_response: 'design_info'
       });
       
-      return { handled: true, action: 'product_selected_info_sent' };
+      return { handled: true, action: 'product_selected_ask_design' };
     } else {
       // No entendió, mostrar menú de nuevo
       await this.sendMessage(contact.id, msgs.remindProduct);
