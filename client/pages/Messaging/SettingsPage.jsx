@@ -871,15 +871,36 @@ export default function SettingsPage() {
                 <span className="material-icons">inventory_2</span>
                 Menu de Productos
               </h3>
-              <p className="description">Mensaje que el chatbot envia al cliente con la informacion de productos</p>
+              <p className="description">Productos que el chatbot ofrece a los clientes</p>
 
               <div className="field-group">
+                <label>Productos (separados por coma)</label>
+                <input
+                  type="text"
+                  value={form.products}
+                  onChange={(e) => handleInputChange('products', e.target.value)}
+                  placeholder="Tarjetas,Magneticos,Post Cards,Playeras"
+                />
+              </div>
+
+              {form.products && form.products.split(',').filter(p => p.trim()).length > 0 && (
+                <div className="products-visual-list">
+                  {form.products.split(',').filter(p => p.trim()).map((product, index) => (
+                    <div key={index} className="product-item">
+                      <span className="product-number">{index + 1}</span>
+                      <span className="product-name">{product.trim()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="field-group" style={{ marginTop: '16px' }}>
                 <label>Mensaje del menu de productos</label>
                 <textarea
-                  rows={8}
+                  rows={6}
                   value={form.product_menu_message}
                   onChange={(e) => handleInputChange('product_menu_message', e.target.value)}
-                  placeholder="🔵 Paquetes disponibles...&#10;💰 500 por $60&#10;💰 1000 por $70..."
+                  placeholder={`1. Tarjetas\n2. Magneticos\n3. Post Cards\n4. Playeras`}
                 />
               </div>
 

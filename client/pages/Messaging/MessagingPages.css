@@ -2523,3 +2523,41 @@
   font-size: 0.85rem;
   margin-top: 4px;
 }
+
+.products-visual-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.product-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.product-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  color: white;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.product-name {
+  font-weight: 500;
+  color: #333;
+}
