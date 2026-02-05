@@ -24,7 +24,7 @@ const parseProducts = (products) => {
 
 export default function SettingsPage() {
   const navigate = useNavigate()
-  const { fetchSettings, updateSettings, testConnection, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip, fetchAgents, createAgent, updateAgent, deleteAgent } = useMessaging()
+  const { fetchSettings, updateSettings, testConnection, resetTest, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip, fetchAgents, createAgent, updateAgent, deleteAgent } = useMessaging()
   
   const [saving, setSaving] = useState(false)
   const [agents, setAgents] = useState([])
@@ -865,9 +865,28 @@ export default function SettingsPage() {
               )}
 
               {form.test_mode && form.test_contact_id && (
-                <div className="test-mode-active">
-                  <span className="material-icons">warning</span>
-                  MODO PRUEBA ACTIVO - Solo contacto ID: {form.test_contact_id}
+                <div className="test-mode-section">
+                  <div className="test-mode-active">
+                    <span className="material-icons">warning</span>
+                    MODO PRUEBA ACTIVO - Solo contacto: {form.test_contact_id}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-reset-test"
+                    onClick={async () => {
+                      if (confirm('Esto reiniciara el historial de conversacion del contacto de prueba. El flujo iniciara cuando envies un nuevo mensaje. ¿Continuar?')) {
+                        try {
+                          const result = await resetTest();
+                          alert(result.message || 'Historial reiniciado correctamente');
+                        } catch (err) {
+                          alert('Error: ' + (err.response?.data?.error || err.message));
+                        }
+                      }
+                    }}
+                  >
+                    <span className="material-icons">refresh</span>
+                    Reiniciar Prueba
+                  </button>
                 </div>
               )}
             </div>

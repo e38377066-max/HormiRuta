@@ -2479,6 +2479,14 @@
 }
 
 /* Modo de Prueba */
+.test-mode-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
 .test-mode-active {
   display: flex;
   align-items: center;
@@ -2487,14 +2495,40 @@
   border: 2px solid #ffc107;
   padding: 12px 16px;
   border-radius: 8px;
-  margin-top: 12px;
   font-weight: 600;
   color: #856404;
+  flex: 1;
 }
 
 .test-mode-active .material-icons {
   color: #ffc107;
   font-size: 20px;
+}
+
+.btn-reset-test {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+.btn-reset-test:hover {
+  background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+}
+
+.btn-reset-test .material-icons {
+  font-size: 18px;
 }
 
 .toggle-row {

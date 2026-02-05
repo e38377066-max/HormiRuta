@@ -108,6 +108,45 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
   }
 });
 
+// Reiniciar historial de prueba
+router.post('/settings/reset-test', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { user_id: req.session.userId }
+    });
+
+    if (!settings?.test_contact_id) {
+      return res.status(400).json({ error: 'No hay contacto de prueba configurado' });
+    }
+
+    // Buscar el contacto por nombre
+    const service = new RespondioService(settings.respond_api_token);
+    const contact = await service.searchContactByName(settings.test_contact_id);
+    
+    if (!contact) {
+      return res.status(404).json({ error: 'Contacto de prueba no encontrado' });
+    }
+
+    // Borrar el estado de conversación
+    const ConversationState = require('../models/ConversationState');
+    await ConversationState.destroy({
+      where: { contact_id: contact.id }
+    });
+
+    console.log(`[Reset Test] Estado de conversación eliminado para contacto: ${contact.id}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Historial de prueba reiniciado. El flujo iniciará cuando envíes un nuevo mensaje.',
+      contact_id: contact.id,
+      contact_name: `${contact.firstName || ''} ${contact.lastName || ''}`.trim()
+    });
+  } catch (error) {
+    console.error('[Reset Test] ERROR:', error.message);
+    res.status(500).json({ error: 'Error al reiniciar prueba: ' + error.message });
+  }
+});
+
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const { status, limit = 50, offset = 0 } = req.query;

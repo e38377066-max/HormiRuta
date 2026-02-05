@@ -38,6 +38,11 @@ export function MessagingProvider({ children }) {
     return response.data
   }
 
+  const resetTest = async () => {
+    const response = await api.post('/api/messaging/settings/reset-test')
+    return response.data
+  }
+
   const fetchOrders = async (status = null) => {
     setLoading(true)
     try {
@@ -183,6 +188,7 @@ export function MessagingProvider({ children }) {
     fetchSettings,
     updateSettings,
     testConnection,
+    resetTest,
     fetchOrders,
     fetchOrder,
     createOrder,
