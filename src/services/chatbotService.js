@@ -831,20 +831,21 @@ class ChatbotService {
       
       await this.sendMessage(contact.id, coverageMsg);
       
-      // Enviar menú de productos
-      await this.sendMessage(contact.id, msgs.productMenu);
+      // Enviar menú de productos generado dinámicamente
+      await this.sendMessage(contact.id, this.generateProductMenu());
       
       await this.createOrUpdateOrder(contact, validation.value, customerName, 'covered', validation.zone);
       
       await this.updateConversationState(contact.id, {
-        state: 'awaiting_product',
+        state: 'awaiting_product_no_info',
         validated_zip: validation.value,
+        has_prior_info: false,
         awaiting_response: 'product_selection'
       });
       
       await this.addTrackingTag(contact.id, 'ConCobertura');
       
-      return { handled: true, action: 'zip_validated_with_coverage' };
+      return { handled: true, action: 'zip_validated_show_menu' };
       
     } else {
       // Sin cobertura - cerrar flujo sin asignar agente
