@@ -6,9 +6,10 @@ import AddressValidationService from './addressValidation.js';
 import respondApiService from './respondApiService.js';
 
 class ChatbotService {
-  constructor(userId, settings) {
+  constructor(userId, settings, isTestMode = false) {
     this.userId = userId;
     this.settings = settings;
+    this.isTestMode = isTestMode;
     this.api = respondApiService;
     this.addressValidation = new AddressValidationService(userId);
     this.api.setContext(userId, settings.respond_api_token);
@@ -378,10 +379,15 @@ class ChatbotService {
 
     // IMPORTANTE: Verificar si un agente humano ya respondió en esta conversación
     // Si ya hay respuestas de agentes, el bot NO debe interferir
-    const agentCheck = await this.hasAgentAlreadyResponded(contact.id);
-    if (agentCheck.hasResponded) {
-      console.log(`[Bot] Agente ${agentCheck.agentName} ya atendio a ${contact.id}, bot no interferira`);
-      return { handled: false, reason: 'agent_already_responded', agentName: agentCheck.agentName };
+    // EXCEPCION: En modo de prueba, se salta esta verificación para permitir probar el flujo
+    if (!this.isTestMode) {
+      const agentCheck = await this.hasAgentAlreadyResponded(contact.id);
+      if (agentCheck.hasResponded) {
+        console.log(`[Bot] Agente ${agentCheck.agentName} ya atendio a ${contact.id}, bot no interferira`);
+        return { handled: false, reason: 'agent_already_responded', agentName: agentCheck.agentName };
+      }
+    } else {
+      console.log(`[Bot] MODO PRUEBA - Saltando verificación de agente para ${contact.id}`);
     }
 
     let convState = await this.getOrCreateConversationState(contact.id);

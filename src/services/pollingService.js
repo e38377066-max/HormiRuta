@@ -190,11 +190,11 @@ class PollingService {
     }
 
     for (const contact of uniqueContacts) {
-      await this.processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit);
+      await this.processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit, isTestMode);
     }
   }
 
-  async processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit = 50) {
+  async processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit = 50, isTestMode = false) {
     const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
     
     if (!messagesResult.success) {
@@ -259,7 +259,7 @@ class PollingService {
     }
     
     // Procesar solo el mensaje más reciente
-    await this.processIncomingMessage(userId, contact, latestMessage, respondio, isAutomatic);
+    await this.processIncomingMessage(userId, contact, latestMessage, respondio, isAutomatic, isTestMode);
 
     if (poller.processedMessageIds.size > 10000) {
       const idsArray = Array.from(poller.processedMessageIds);
@@ -283,7 +283,7 @@ class PollingService {
     }
   }
 
-  async processIncomingMessage(userId, contact, message, respondio, useAutomaticMode = false) {
+  async processIncomingMessage(userId, contact, message, respondio, useAutomaticMode = false, isTestMode = false) {
     try {
       const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
       if (!settings) return;
@@ -304,7 +304,7 @@ class PollingService {
       });
 
       if (useAutomaticMode) {
-        const chatbot = new ChatbotService(userId, settings);
+        const chatbot = new ChatbotService(userId, settings, isTestMode);
         const result = await chatbot.processMessage(contact, messageText);
         
         console.log(`[Chatbot] ${contact.firstName}: "${messageText.substring(0, 30)}..." -> ${result.action || result.reason || 'no_action'}`);
