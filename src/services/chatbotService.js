@@ -628,18 +628,24 @@ class ChatbotService {
     const isFromFacebookAd = this.detectFacebookAdOrigin(contact);
     
     if (isExisting) {
-      // Cliente existente
+      // Cliente existente - mismo flujo que cliente con info
       await this.sendMessage(contact.id, msgs.welcomeExisting);
+      
+      // Enviar menú de productos (igual que cliente con info)
+      const productMenu = this.generateProductMenu();
+      await this.sendMessage(contact.id, productMenu);
+      
       await this.updateConversationState(contact.id, {
-        state: 'assigned',
+        state: 'awaiting_product_selection_with_info',
         is_existing_customer: true,
+        has_prior_info: true,
         greeting_sent: true
       });
-      await this.assignToDefaultAgent(contact.id);
-      await this.addTrackingTag(contact.id, 'ClienteExistente');
-      await this.addComment(contact.id, '[Bot] Cliente recurrente. Verificar historial de pedidos.');
       
-      return { handled: true, action: 'welcome_existing' };
+      await this.addTrackingTag(contact.id, 'ClienteExistente');
+      await this.addComment(contact.id, '[Bot] Cliente recurrente. Mostrando menú de productos.');
+      
+      return { handled: true, action: 'welcome_existing_show_menu' };
     }
     
     // Cliente nuevo
