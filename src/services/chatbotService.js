@@ -241,25 +241,55 @@ class ChatbotService {
 
   parseProductSelection(text) {
     const cleanText = text.trim().toLowerCase();
-    const products = this.settings.products || [
-      { id: 1, name: 'Tarjetas de presentación', keywords: ['tarjetas', 'tarjeta', 'cards', 'card', 'presentacion', 'presentación'] },
-      { id: 2, name: 'Magnéticos', keywords: ['magneticos', 'magnetico', 'magnéticos', 'magnético', 'magnets', 'magnet', 'iman', 'imán'] },
-      { id: 3, name: 'Post Cards', keywords: ['postcards', 'postcard', 'post cards', 'postal', 'postales'] },
-      { id: 4, name: 'Playeras', keywords: ['playeras', 'playera', 'camisetas', 'camiseta', 'shirts', 'shirt'] }
-    ];
-
-    // Primero intentar por número
-    const numMatch = cleanText.match(/^\d+$/);
-    if (numMatch) {
-      const num = parseInt(numMatch[0]);
-      const product = products.find(p => p.id === num);
-      if (product) return product;
+    
+    // Obtener productos de products_list configurado
+    let productsList = [];
+    try {
+      let rawList = this.settings.products_list;
+      if (typeof rawList === 'string') {
+        rawList = JSON.parse(rawList);
+      }
+      if (Array.isArray(rawList) && rawList.length > 0) {
+        productsList = rawList.map((p, i) => ({
+          id: i + 1,
+          name: p.name,
+          message: p.message
+        }));
+      }
+    } catch (e) {
+      console.error('Error parsing products_list:', e);
+    }
+    
+    // Fallback a productos predefinidos si no hay lista configurada
+    if (productsList.length === 0) {
+      productsList = [
+        { id: 1, name: 'Tarjetas' },
+        { id: 2, name: 'Magnéticos' },
+        { id: 3, name: 'Post cards' },
+        { id: 4, name: 'Playeras' }
+      ];
     }
 
-    // Luego por keywords
-    for (const product of products) {
-      for (const keyword of (product.keywords || [])) {
-        if (cleanText.includes(keyword.toLowerCase())) {
+    // Primero intentar por número (solo el número o con texto adicional)
+    const numMatch = cleanText.match(/^(\d+)/);
+    if (numMatch) {
+      const num = parseInt(numMatch[1]);
+      if (num >= 1 && num <= productsList.length) {
+        return productsList[num - 1];
+      }
+    }
+
+    // Buscar por nombre del producto (parcial o completo)
+    for (const product of productsList) {
+      const productName = product.name.toLowerCase();
+      // Buscar si el texto contiene el nombre del producto
+      if (cleanText.includes(productName)) {
+        return product;
+      }
+      // O si el nombre del producto contiene palabras clave del texto
+      const words = cleanText.split(/\s+/).filter(w => w.length > 2);
+      for (const word of words) {
+        if (productName.includes(word)) {
           return product;
         }
       }
