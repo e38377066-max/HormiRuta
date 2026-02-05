@@ -154,6 +154,38 @@ class ChatbotService {
     return { respond: true };
   }
 
+  async hasAgentAlreadyResponded(contactId) {
+    try {
+      const result = await this.api.listMessages(`id:${contactId}`, 30);
+      
+      if (!result.success || !result.data?.items) {
+        return { hasResponded: false, agentName: null };
+      }
+
+      const messages = result.data.items;
+      
+      for (const msg of messages) {
+        if (msg.direction === 'outgoing' && msg.sender) {
+          const senderType = msg.sender.type || '';
+          const senderId = msg.sender.id || '';
+          
+          if (senderType === 'user' || (senderType !== 'bot' && senderType !== 'workflow')) {
+            const agentName = msg.sender.firstName 
+              ? `${msg.sender.firstName} ${msg.sender.lastName || ''}`.trim()
+              : senderId;
+            console.log(`[Bot] Agente ${agentName} ya respondio en conversacion ${contactId}`);
+            return { hasResponded: true, agentName };
+          }
+        }
+      }
+      
+      return { hasResponded: false, agentName: null };
+    } catch (error) {
+      console.error(`[Bot] Error verificando mensajes de agente:`, error.message);
+      return { hasResponded: false, agentName: null };
+    }
+  }
+
   // ==================== ESTADO DE CONVERSACIÓN ====================
 
   async getOrCreateConversationState(contactId) {
@@ -342,6 +374,14 @@ class ChatbotService {
     if (this.hasExcludedTag(contact)) {
       console.log(`[Bot] Contacto ${contact.id} tiene tag excluido, ignorando`);
       return { handled: false, reason: 'excluded_tag' };
+    }
+
+    // IMPORTANTE: Verificar si un agente humano ya respondió en esta conversación
+    // Si ya hay respuestas de agentes, el bot NO debe interferir
+    const agentCheck = await this.hasAgentAlreadyResponded(contact.id);
+    if (agentCheck.hasResponded) {
+      console.log(`[Bot] Agente ${agentCheck.agentName} ya atendio a ${contact.id}, bot no interferira`);
+      return { handled: false, reason: 'agent_already_responded', agentName: agentCheck.agentName };
     }
 
     let convState = await this.getOrCreateConversationState(contact.id);
