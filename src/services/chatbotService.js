@@ -240,15 +240,22 @@ class ChatbotService {
   }
 
   parseProductSelection(text) {
-    const cleanText = text.trim().toLowerCase();
+    const cleanText = text.trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Quitar acentos
     
-    // Sinónimos comunes para productos
-    const synonyms = {
-      'tarjetas': ['tarjeta', 'targetas', 'targeta', 'cards', 'card', 'presentacion', 'presentación', 'business'],
-      'magneticos': ['magnetico', 'magnéticos', 'magnético', 'magnets', 'magnet', 'iman', 'imán', 'imanes'],
-      'targetas': ['tarjetas', 'tarjeta', 'targeta', 'cards', 'card'],
-      'post cards': ['postcards', 'postcard', 'postal', 'postales', 'flyers', 'flyer'],
-      'playeras': ['playera', 'camisetas', 'camiseta', 'shirts', 'shirt', 't-shirt', 'tshirt', 'remeras', 'remera']
+    // Sinónimos y variantes comunes para productos
+    const productVariants = {
+      // Tarjetas y variantes
+      'tarjetas': ['tarjeta', 'targetas', 'targeta', 'tarjeta', 'tarjetas', 'cards', 'card', 'presentacion', 'business cards', 'business card'],
+      'targetas': ['tarjeta', 'tarjetas', 'targeta', 'cards', 'card', 'presentacion', 'business cards'],
+      // Magnéticos y variantes
+      'magneticos': ['magnetico', 'magneticos', 'magnets', 'magnet', 'iman', 'imanes', 'magnetic'],
+      'magnéticos': ['magnetico', 'magneticos', 'magnets', 'magnet', 'iman', 'imanes'],
+      // Post cards y variantes  
+      'post cards': ['postcards', 'postcard', 'post card', 'postal', 'postales', 'flyers', 'flyer', 'volantes', 'volante'],
+      'postcards': ['post cards', 'post card', 'postal', 'postales', 'flyers', 'flyer'],
+      // Playeras y variantes
+      'playeras': ['playera', 'camisetas', 'camiseta', 'shirts', 'shirt', 't-shirt', 'tshirt', 'remeras', 'remera', 'poleras', 'polera']
     };
     
     // Obtener productos de products_list configurado
@@ -269,7 +276,7 @@ class ChatbotService {
       console.error('Error parsing products_list:', e);
     }
     
-    // Fallback a productos predefinidos si no hay lista configurada
+    // Fallback si no hay lista configurada
     if (productsList.length === 0) {
       productsList = [
         { id: 1, name: 'Tarjetas' },
@@ -279,8 +286,8 @@ class ChatbotService {
       ];
     }
 
-    // Primero intentar por número (solo el número o con texto adicional)
-    const numMatch = cleanText.match(/(\d+)/);
+    // PRIMERO: Buscar por número (solo el primer número encontrado)
+    const numMatch = cleanText.match(/\b(\d+)\b/);
     if (numMatch) {
       const num = parseInt(numMatch[1]);
       if (num >= 1 && num <= productsList.length) {
@@ -288,41 +295,52 @@ class ChatbotService {
       }
     }
 
-    // Buscar por nombre del producto o sinónimos
+    // SEGUNDO: Buscar por nombre exacto o variantes
     for (const product of productsList) {
-      const productName = product.name.toLowerCase();
+      const productName = product.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       
-      // Buscar si el texto contiene el nombre del producto
+      // Match exacto
       if (cleanText.includes(productName)) {
         return product;
       }
       
-      // Buscar por sinónimos del producto
-      const productSynonyms = synonyms[productName] || [];
-      for (const syn of productSynonyms) {
-        if (cleanText.includes(syn)) {
+      // Buscar variantes del producto
+      const variants = productVariants[productName] || [];
+      for (const variant of variants) {
+        if (cleanText.includes(variant)) {
           return product;
         }
       }
       
-      // Buscar sinónimos inversos (si el usuario usa un sinónimo que mapea al producto)
-      for (const [key, syns] of Object.entries(synonyms)) {
-        if (syns.includes(productName) || key === productName) {
-          for (const syn of syns) {
-            if (cleanText.includes(syn)) {
+      // Buscar en todas las variantes conocidas
+      for (const [key, variantList] of Object.entries(productVariants)) {
+        const keyNorm = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        // Si el nombre del producto coincide con alguna key o variante
+        if (keyNorm === productName || variantList.includes(productName)) {
+          // Verificar si el texto del usuario contiene la key o alguna variante
+          if (cleanText.includes(keyNorm)) {
+            return product;
+          }
+          for (const v of variantList) {
+            if (cleanText.includes(v)) {
               return product;
             }
           }
-          if (cleanText.includes(key)) {
-            return product;
-          }
         }
       }
-      
-      // Buscar palabras del texto en el nombre del producto
-      const words = cleanText.split(/\s+/).filter(w => w.length > 3);
-      for (const word of words) {
-        if (productName.includes(word) || word.includes(productName.substring(0, 4))) {
+    }
+    
+    // TERCERO: Buscar coincidencia parcial (palabras de 4+ letras)
+    const words = cleanText.split(/\s+/).filter(w => w.length >= 4);
+    for (const word of words) {
+      for (const product of productsList) {
+        const productName = product.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        // Si la palabra está contenida en el nombre del producto o viceversa
+        if (productName.includes(word) || word.includes(productName.substring(0, Math.min(4, productName.length)))) {
+          return product;
+        }
+        // Verificar primeras 4 letras
+        if (word.substring(0, 4) === productName.substring(0, 4)) {
           return product;
         }
       }
