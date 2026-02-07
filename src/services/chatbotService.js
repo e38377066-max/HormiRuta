@@ -292,13 +292,27 @@ class ChatbotService {
     return matrix[b.length][a.length];
   }
 
+  sharedLetterRatio(a, b) {
+    const aChars = {};
+    const bChars = {};
+    for (const c of a) aChars[c] = (aChars[c] || 0) + 1;
+    for (const c of b) bChars[c] = (bChars[c] || 0) + 1;
+    let shared = 0;
+    for (const c of Object.keys(aChars)) {
+      shared += Math.min(aChars[c] || 0, bChars[c] || 0);
+    }
+    return shared / Math.max(a.length, b.length);
+  }
+
   isSimilar(word, target, threshold) {
     if (!word || !target) return false;
     const maxLen = Math.max(word.length, target.length);
     if (maxLen === 0) return true;
     const dist = this.levenshteinDistance(word, target);
-    const similarity = 1 - (dist / maxLen);
-    return similarity >= (threshold || 0.6);
+    const levSimilarity = 1 - (dist / maxLen);
+    const sharedRatio = this.sharedLetterRatio(word, target);
+    const combined = (levSimilarity + sharedRatio) / 2;
+    return combined >= (threshold || 0.55);
   }
 
   parseProductSelection(text) {
