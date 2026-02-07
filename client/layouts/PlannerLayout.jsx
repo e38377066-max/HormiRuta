@@ -39,7 +39,7 @@ export default function PlannerLayout() {
         
         <aside className={`planner-drawer ${drawerOpen ? 'open' : ''}`}>
           <div className="drawer-header">
-            <img src="/Hormiruta.png" alt="Area 862" className="drawer-logo" />
+            <img src="/Area862.png" alt="Area 862" className="drawer-logo" />
             <div className="drawer-brand">Area 862</div>
           </div>
           

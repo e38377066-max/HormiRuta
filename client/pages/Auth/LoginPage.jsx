@@ -33,7 +33,7 @@ export default function LoginPage() {
       <div className="login-card">
         <div className="text-center q-mb-lg">
           <div className="logo-avatar">
-            <img src="/Hormiruta.png" alt="Area 862" />
+            <img src="/Area862.png" alt="Area 862" />
           </div>
           <h1 className="brand-title">Area 862</h1>
           <p className="brand-subtitle">Accede a tu cuenta para continuar</p>
@@ -115,12 +115,12 @@ export default function LoginPage() {
       {showTerms && (
         <div className="modal-overlay" onClick={() => setShowTerms(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Términos & Condiciones de Hormiruta</h3>
+            <h3>Términos & Condiciones de Area 862</h3>
             <div className="modal-content">
-              <p><strong>EMPRESA:</strong> HORMIRUTA (Optimizador de Rutas)</p>
+              <p><strong>EMPRESA:</strong> Area 862 (Optimizador de Rutas)</p>
               <p><strong>FECHA:</strong> Octubre 2025</p>
               <h4>A. Disposiciones Generales</h4>
-              <p>El acceso y uso de la aplicación móvil "Hormiruta" constituye la aceptación total de estos Términos y Condiciones de Uso.</p>
+              <p>El acceso y uso de la aplicación móvil "Area 862" constituye la aceptación total de estos Términos y Condiciones de Uso.</p>
             </div>
             <button className="modal-close" onClick={() => setShowTerms(false)}>Cerrar</button>
           </div>
@@ -130,10 +130,10 @@ export default function LoginPage() {
       {showPrivacy && (
         <div className="modal-overlay" onClick={() => setShowPrivacy(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Aviso de Privacidad de Hormiruta</h3>
+            <h3>Aviso de Privacidad de Area 862</h3>
             <div className="modal-content">
-              <p><strong>EMPRESA:</strong> HORMIRUTA (Optimizador de Rutas)</p>
-              <p>Hormiruta es responsable del tratamiento de sus datos personales.</p>
+              <p><strong>EMPRESA:</strong> Area 862 (Optimizador de Rutas)</p>
+              <p>Area 862 es responsable del tratamiento de sus datos personales.</p>
             </div>
             <button className="modal-close" onClick={() => setShowPrivacy(false)}>Cerrar</button>
           </div>

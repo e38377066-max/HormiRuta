@@ -21,7 +21,7 @@ export default function DashboardLayout() {
             <span className="material-icons">menu</span>
           </button>
           <div className="q-avatar">
-            <img src="/Hormiruta.png" alt="Area 862" />
+            <img src="/Area862.png" alt="Area 862" />
           </div>
           <h1 className="q-toolbar-title">Area 862</h1>
           <span className="q-user-email">{user?.email}</span>
