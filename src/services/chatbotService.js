@@ -664,9 +664,7 @@ class ChatbotService {
         await this.updateConversationState(contact.id, { 
           out_of_hours_notified: false,
           agent_active: false,
-          state: 'initial',
-          is_existing_customer: true,
-          has_prior_info: true
+          state: 'initial'
         });
         convState = await this.getOrCreateConversationState(contact.id);
       } else {
