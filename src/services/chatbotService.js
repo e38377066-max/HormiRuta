@@ -101,7 +101,10 @@ class ChatbotService {
       businessDays = [1, 2, 3, 4, 5];
     }
 
+    console.log(`[Bot] Horario: dia=${dayStr}(${currentDay}), hora=${timeStr}, diasHabiles=${JSON.stringify(businessDays)}, diaEsHabil=${businessDays.includes(currentDay)}`);
+
     if (!businessDays.includes(currentDay)) {
+      console.log(`[Bot] FUERA DE HORARIO: ${dayStr} no es dia habil`);
       return false;
     }
 
@@ -110,7 +113,11 @@ class ChatbotService {
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = endHour * 60 + endMin;
 
-    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    const withinHours = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    if (!withinHours) {
+      console.log(`[Bot] FUERA DE HORARIO: ${hours}:${minutes} fuera de ${startHour}:${startMin}-${endHour}:${endMin}`);
+    }
+    return withinHours;
   }
 
   hasExcludedTag(contact) {
