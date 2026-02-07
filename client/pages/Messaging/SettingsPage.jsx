@@ -114,11 +114,31 @@ export default function SettingsPage() {
   ]
 
   const timezones = [
-    { label: 'Central (Chicago)', value: 'America/Chicago' },
-    { label: 'Este (New York)', value: 'America/New_York' },
-    { label: 'Montaña (Denver)', value: 'America/Denver' },
-    { label: 'Pacifico (Los Angeles)', value: 'America/Los_Angeles' },
-    { label: 'Mexico (CDMX)', value: 'America/Mexico_City' }
+    { label: 'Central - Dallas/Chicago (CST)', value: 'America/Chicago' },
+    { label: 'Este - New York/Miami (EST)', value: 'America/New_York' },
+    { label: 'Montaña - Denver/Phoenix (MST)', value: 'America/Denver' },
+    { label: 'Pacifico - Los Angeles (PST)', value: 'America/Los_Angeles' },
+    { label: 'Mexico - Ciudad de Mexico (CST)', value: 'America/Mexico_City' },
+    { label: 'Cuba - La Habana (CST)', value: 'America/Havana' },
+    { label: 'Colombia - Bogota (COT)', value: 'America/Bogota' },
+    { label: 'Venezuela - Caracas (VET)', value: 'America/Caracas' },
+    { label: 'Argentina - Buenos Aires (ART)', value: 'America/Argentina/Buenos_Aires' },
+    { label: 'Chile - Santiago (CLT)', value: 'America/Santiago' },
+    { label: 'Peru - Lima (PET)', value: 'America/Lima' },
+    { label: 'Ecuador - Quito (ECT)', value: 'America/Guayaquil' },
+    { label: 'Panama - Ciudad de Panama (EST)', value: 'America/Panama' },
+    { label: 'Republica Dominicana - Santo Domingo (AST)', value: 'America/Santo_Domingo' },
+    { label: 'Puerto Rico (AST)', value: 'America/Puerto_Rico' },
+    { label: 'España - Madrid (CET)', value: 'Europe/Madrid' },
+    { label: 'Brasil - Sao Paulo (BRT)', value: 'America/Sao_Paulo' },
+    { label: 'Honduras - Tegucigalpa (CST)', value: 'America/Tegucigalpa' },
+    { label: 'Guatemala (CST)', value: 'America/Guatemala' },
+    { label: 'El Salvador (CST)', value: 'America/El_Salvador' },
+    { label: 'Costa Rica (CST)', value: 'America/Costa_Rica' },
+    { label: 'Nicaragua - Managua (CST)', value: 'America/Managua' },
+    { label: 'Bolivia - La Paz (BOT)', value: 'America/La_Paz' },
+    { label: 'Paraguay - Asuncion (PYT)', value: 'America/Asuncion' },
+    { label: 'Uruguay - Montevideo (UYT)', value: 'America/Montevideo' }
   ]
 
   useEffect(() => {
