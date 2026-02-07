@@ -64,6 +64,9 @@ class PollingService {
       }
     };
 
+    console.log(`[Polling] Ejecutando sincronizacion inicial...`);
+    await this.initializeConversationSnapshot(userId, settings.respond_api_token);
+
     console.log(`[Polling] Ejecutando primer poll...`);
     await pollFn();
     
@@ -268,6 +271,91 @@ class PollingService {
     if (poller.processedMessageIds.size > 10000) {
       const idsArray = Array.from(poller.processedMessageIds);
       poller.processedMessageIds = new Set(idsArray.slice(-5000));
+    }
+  }
+
+  async initializeConversationSnapshot(userId, apiToken) {
+    try {
+      console.log(`[Polling] === SINCRONIZACION INICIAL: Escaneando TODAS las conversaciones ===`);
+      const respondio = new RespondioService(apiToken);
+      const now = new Date();
+
+      let allOpenContacts = [];
+      let cursorId = null;
+      let pageCount = 0;
+      let openFetchComplete = true;
+      while (true) {
+        const result = await respondio.listOpenConversations({ limit: 99, cursorId });
+        if (!result.success) {
+          console.error(`[Polling] Error obteniendo conversaciones abiertas en pagina ${pageCount + 1}`);
+          openFetchComplete = false;
+          break;
+        }
+        allOpenContacts = [...allOpenContacts, ...(result.items || [])];
+        pageCount++;
+        if (!result.pagination?.nextCursor || (result.items || []).length < 99) break;
+        cursorId = result.pagination.nextCursor;
+      }
+      console.log(`[Polling] Conversaciones abiertas encontradas: ${allOpenContacts.length} (${pageCount} paginas)`);
+
+      let allClosedContacts = [];
+      cursorId = null;
+      pageCount = 0;
+      let closedFetchComplete = true;
+      while (true) {
+        const result = await respondio.listClosedConversations({ limit: 99, cursorId });
+        if (!result.success) {
+          console.error(`[Polling] Error obteniendo conversaciones cerradas en pagina ${pageCount + 1}`);
+          closedFetchComplete = false;
+          break;
+        }
+        allClosedContacts = [...allClosedContacts, ...(result.items || [])];
+        pageCount++;
+        if (!result.pagination?.nextCursor || (result.items || []).length < 99) break;
+        cursorId = result.pagination.nextCursor;
+      }
+      console.log(`[Polling] Conversaciones cerradas encontradas: ${allClosedContacts.length} (${pageCount} paginas)`);
+
+      if (!openFetchComplete) {
+        console.warn(`[Polling] Sincronizacion ABORTADA: no se pudieron obtener todas las conversaciones abiertas. No se actualizara ningun estado.`);
+        return;
+      }
+
+      const openContactIds = new Set(allOpenContacts.map(c => c.id.toString()));
+      const closedContactIds = new Set(allClosedContacts.map(c => c.id.toString()));
+
+      const trackedStates = await ConversationState.findAll({
+        where: {
+          user_id: userId,
+          state: { [Op.in]: ['assigned', 'closed_no_coverage'] }
+        }
+      });
+
+      let openCount = 0, closedCount = 0, unknownCount = 0;
+
+      for (const convState of trackedStates) {
+        const contactId = convState.contact_id;
+
+        if (openContactIds.has(contactId)) {
+          await convState.update({ last_seen_open_at: now, conversation_closed_at: null });
+          openCount++;
+        } else if (closedContactIds.has(contactId)) {
+          if (!convState.conversation_closed_at) {
+            await convState.update({ conversation_closed_at: now });
+          }
+          closedCount++;
+        } else if (closedFetchComplete) {
+          if (!convState.conversation_closed_at) {
+            await convState.update({ conversation_closed_at: now });
+          }
+          unknownCount++;
+        }
+      }
+
+      console.log(`[Polling] === SINCRONIZACION COMPLETA ===`);
+      console.log(`[Polling] Contactos rastreados: ${trackedStates.length} | Abiertos: ${openCount} | Cerrados: ${closedCount} | No encontrados: ${unknownCount}`);
+    } catch (error) {
+      console.error(`[Polling] Error en sincronizacion inicial:`, error.message);
     }
   }
 
