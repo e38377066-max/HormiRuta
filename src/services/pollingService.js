@@ -274,9 +274,9 @@ class PollingService {
     }
   }
 
-  async checkForNewMessagesAfterBot(respondio, contactId, convState) {
+  async checkForReopenedConversation(respondio, contactId, convState) {
     try {
-      const result = await respondio.listMessages(parseInt(contactId), { limit: 20 });
+      const result = await respondio.listMessages(parseInt(contactId), { limit: 10 });
       if (!result.success || !result.items || result.items.length === 0) {
         return false;
       }
@@ -284,41 +284,27 @@ class PollingService {
       const messages = result.items;
       
       console.log(`[Polling] Contacto ${contactId}: revisando ${messages.length} mensajes para detectar reapertura...`);
-      for (let i = 0; i < Math.min(6, messages.length); i++) {
+      for (let i = 0; i < Math.min(5, messages.length); i++) {
         const msg = messages[i];
         const text = (msg.message?.text || '').substring(0, 40);
         console.log(`  [${i}] traffic=${msg.traffic}, type=${msg.message?.type}, sender=${msg.sender?.source}, text="${text}"`);
       }
 
-      let hasNewerIncomingFromContact = false;
-      let foundOutgoingAfter = false;
+      const newestMsg = messages[0];
+      if (!newestMsg) return false;
       
-      for (const msg of messages) {
-        if (msg.traffic === 'incoming') {
-          const source = msg.sender?.source || '';
-          if (source !== 'bot' && source !== 'flow' && source !== 'automation') {
-            if (!foundOutgoingAfter) {
-              hasNewerIncomingFromContact = true;
-            }
-          }
-        } else if (msg.traffic === 'outgoing') {
-          if (hasNewerIncomingFromContact) {
-            foundOutgoingAfter = true;
-            break;
-          } else {
-            return false;
-          }
-        }
-      }
+      const isIncomingFromContact = newestMsg.traffic === 'incoming' && 
+        !['bot', 'flow', 'automation'].includes(newestMsg.sender?.source || '');
       
-      if (hasNewerIncomingFromContact && foundOutgoingAfter) {
-        console.log(`[Polling] Contacto ${contactId}: DETECTADO patron de reapertura -> mensajes del contacto despues del ultimo mensaje saliente del bot`);
+      if (isIncomingFromContact) {
+        console.log(`[Polling] Contacto ${contactId}: DETECTADO - el mensaje mas reciente es del contacto ("${(newestMsg.message?.text || '').substring(0, 30)}") y el bot ya habia terminado su interaccion (state=${convState.state}, out_of_hours=${convState.out_of_hours_notified})`);
         return true;
       }
       
+      console.log(`[Polling] Contacto ${contactId}: el mensaje mas reciente NO es del contacto (traffic=${newestMsg.traffic}, sender=${newestMsg.sender?.source}), no hay reapertura`);
       return false;
     } catch (error) {
-      console.error(`[Polling] Error verificando mensajes para ${contactId}:`, error.message);
+      console.error(`[Polling] Error verificando reapertura para ${contactId}:`, error.message);
       return false;
     }
   }
@@ -387,10 +373,10 @@ class PollingService {
 
         if (openContactIds.has(contactId)) {
           const botInteractionDone = convState.out_of_hours_notified || 
-            convState.state === 'closed_no_coverage';
+            ['assigned', 'closed_no_coverage'].includes(convState.state);
           
           if (botInteractionDone) {
-            const hasNewMessages = await this.checkForNewMessagesAfterBot(respondio, contactId, convState);
+            const hasNewMessages = await this.checkForReopenedConversation(respondio, contactId, convState);
             if (hasNewMessages) {
               await convState.update({ conversation_closed_at: convState.updatedAt || now });
               console.log(`[Polling] Sync inicial: contacto ${contactId} ABIERTO pero con mensajes nuevos despues de interaccion del bot -> marcado como REABIERTO`);
