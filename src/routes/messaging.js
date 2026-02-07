@@ -149,7 +149,7 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
     await MessageLog.destroy({
       where: { 
         user_id: req.session.userId,
-        contact_id: contact.id.toString() 
+        respond_contact_id: contact.id.toString() 
       }
     });
 
