@@ -305,6 +305,8 @@ class ChatbotService {
     const cleanText = text.trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     
+    const cleanTextLettersOnly = cleanText.replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+    
     const allVariants = {
       'tarjetas': ['tarjeta', 'targetas', 'targeta', 'tarjeta', 'tarjetas', 'tarjtas', 'tarjeta', 'tarjet', 'tajetas', 'tajeta', 'cards', 'card', 'presentacion', 'business cards', 'business card', 'bussines card', 'bisnes card', 'bisness'],
       'magneticos': ['magnetico', 'magneticos', 'magnets', 'magnet', 'iman', 'imanes', 'magnetic', 'magntico', 'magnsticos', 'magnetico', 'mangeticos', 'mangneticos', 'magnéticos', 'maneticos'],
@@ -362,20 +364,28 @@ class ChatbotService {
       }
     }
 
+    const textVersions = [cleanText, cleanTextLettersOnly];
+    const textNoSpacesVersions = [cleanText.replace(/\s+/g, ''), cleanTextLettersOnly.replace(/\s+/g, '')];
+
     for (const product of productsList) {
       const productName = product.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       const productNameNoSpaces = productName.replace(/\s+/g, '');
-      const cleanTextNoSpaces = cleanText.replace(/\s+/g, '');
       
-      if (cleanText.includes(productName) || cleanTextNoSpaces.includes(productNameNoSpaces)) {
-        return product;
+      for (const tv of textVersions) {
+        if (tv.includes(productName)) return product;
+      }
+      for (const tvns of textNoSpacesVersions) {
+        if (tvns.includes(productNameNoSpaces)) return product;
       }
       
       const variants = allVariants[productName] || [];
       for (const variant of variants) {
         const variantNoSpaces = variant.replace(/\s+/g, '');
-        if (cleanText.includes(variant) || cleanTextNoSpaces.includes(variantNoSpaces)) {
-          return product;
+        for (const tv of textVersions) {
+          if (tv.includes(variant)) return product;
+        }
+        for (const tvns of textNoSpacesVersions) {
+          if (tvns.includes(variantNoSpaces)) return product;
         }
       }
       
@@ -385,27 +395,33 @@ class ChatbotService {
         if (allMatchTerms.some(t => t === productName || t.replace(/\s+/g, '') === productNameNoSpaces)) {
           for (const term of allMatchTerms) {
             const termNoSpaces = term.replace(/\s+/g, '');
-            if (cleanText.includes(term) || cleanTextNoSpaces.includes(termNoSpaces)) {
-              return product;
+            for (const tv of textVersions) {
+              if (tv.includes(term)) return product;
+            }
+            for (const tvns of textNoSpacesVersions) {
+              if (tvns.includes(termNoSpaces)) return product;
             }
           }
         }
       }
     }
     
-    const userWords = cleanText.split(/\s+/).filter(w => w.length >= 3);
-    for (const word of userWords) {
+    const allUserWords = [...new Set([
+      ...cleanText.split(/\s+/).filter(w => w.length >= 3),
+      ...cleanTextLettersOnly.split(/\s+/).filter(w => w.length >= 3)
+    ])];
+    
+    for (const word of allUserWords) {
       for (const product of productsList) {
         const productName = product.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const productWords = productName.split(/\s+/);
         
         for (const pWord of productWords) {
-          if (pWord.length >= 3 && this.isSimilar(word, pWord, 0.65)) {
+          if (pWord.length >= 3 && this.isSimilar(word, pWord, 0.6)) {
             return product;
           }
         }
         
-        const variants = allVariants[productName] || [];
         for (const [key, variantList] of Object.entries(allVariants)) {
           const keyNorm = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
           const allTerms = [keyNorm, ...variantList];
@@ -413,7 +429,7 @@ class ChatbotService {
             for (const term of allTerms) {
               const termWords = term.split(/\s+/);
               for (const tw of termWords) {
-                if (tw.length >= 3 && this.isSimilar(word, tw, 0.65)) {
+                if (tw.length >= 3 && this.isSimilar(word, tw, 0.6)) {
                   return product;
                 }
               }
