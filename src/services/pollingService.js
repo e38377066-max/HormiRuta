@@ -193,7 +193,7 @@ class PollingService {
     }
 
     if (pageCount > 0) {
-      await this.detectClosedConversations(userId, allContacts);
+      await this.detectConversationStateChanges(userId, allContacts);
     }
 
     for (const contact of uniqueContacts) {
@@ -274,41 +274,6 @@ class PollingService {
     }
   }
 
-  async checkForReopenedConversation(respondio, contactId, convState) {
-    try {
-      const result = await respondio.listMessages(parseInt(contactId), { limit: 10 });
-      if (!result.success || !result.items || result.items.length === 0) {
-        return false;
-      }
-
-      const messages = result.items;
-      
-      console.log(`[Polling] Contacto ${contactId}: revisando ${messages.length} mensajes para detectar reapertura...`);
-      for (let i = 0; i < Math.min(5, messages.length); i++) {
-        const msg = messages[i];
-        const text = (msg.message?.text || '').substring(0, 40);
-        console.log(`  [${i}] traffic=${msg.traffic}, type=${msg.message?.type}, sender=${msg.sender?.source}, text="${text}"`);
-      }
-
-      const newestMsg = messages[0];
-      if (!newestMsg) return false;
-      
-      const isIncomingFromContact = newestMsg.traffic === 'incoming' && 
-        !['bot', 'flow', 'automation'].includes(newestMsg.sender?.source || '');
-      
-      if (isIncomingFromContact) {
-        console.log(`[Polling] Contacto ${contactId}: DETECTADO - el mensaje mas reciente es del contacto ("${(newestMsg.message?.text || '').substring(0, 30)}") y el bot ya habia terminado su interaccion (state=${convState.state}, out_of_hours=${convState.out_of_hours_notified})`);
-        return true;
-      }
-      
-      console.log(`[Polling] Contacto ${contactId}: el mensaje mas reciente NO es del contacto (traffic=${newestMsg.traffic}, sender=${newestMsg.sender?.source}), no hay reapertura`);
-      return false;
-    } catch (error) {
-      console.error(`[Polling] Error verificando reapertura para ${contactId}:`, error.message);
-      return false;
-    }
-  }
-
   async initializeConversationSnapshot(userId, apiToken) {
     try {
       console.log(`[Polling] === SINCRONIZACION INICIAL: Escaneando TODAS las conversaciones ===`);
@@ -366,51 +331,38 @@ class PollingService {
         }
       });
 
-      let openCount = 0, closedCount = 0, unknownCount = 0, reopenedCount = 0;
+      let openCount = 0, closedCount = 0, unknownCount = 0;
 
       for (const convState of trackedStates) {
         const contactId = convState.contact_id;
 
         if (openContactIds.has(contactId)) {
-          const botInteractionDone = convState.out_of_hours_notified || 
-            ['assigned', 'closed_no_coverage'].includes(convState.state);
-          
-          if (botInteractionDone) {
-            const hasNewMessages = await this.checkForReopenedConversation(respondio, contactId, convState);
-            if (hasNewMessages) {
-              await convState.update({ conversation_closed_at: convState.updatedAt || now });
-              console.log(`[Polling] Sync inicial: contacto ${contactId} ABIERTO pero con mensajes nuevos despues de interaccion del bot -> marcado como REABIERTO`);
-              reopenedCount++;
-              openCount++;
-              continue;
-            }
-          }
-          
           await convState.update({ last_seen_open_at: now, conversation_closed_at: null });
+          console.log(`[Polling] Sync inicial: contacto ${contactId} -> ABIERTA`);
           openCount++;
         } else if (closedContactIds.has(contactId)) {
           if (!convState.conversation_closed_at) {
             await convState.update({ conversation_closed_at: now });
-            console.log(`[Polling] Sync inicial: contacto ${contactId} detectado como CERRADO`);
           }
+          console.log(`[Polling] Sync inicial: contacto ${contactId} -> CERRADA`);
           closedCount++;
         } else if (closedFetchComplete) {
           if (!convState.conversation_closed_at) {
             await convState.update({ conversation_closed_at: now });
-            console.log(`[Polling] Sync inicial: contacto ${contactId} no encontrado, asumido CERRADO`);
           }
+          console.log(`[Polling] Sync inicial: contacto ${contactId} -> NO ENCONTRADO, asumido CERRADA`);
           unknownCount++;
         }
       }
 
       console.log(`[Polling] === SINCRONIZACION COMPLETA ===`);
-      console.log(`[Polling] Contactos rastreados: ${trackedStates.length} | Abiertos: ${openCount} | Cerrados: ${closedCount} | No encontrados: ${unknownCount} | Reabiertos: ${reopenedCount}`);
+      console.log(`[Polling] Contactos rastreados: ${trackedStates.length} | Abiertos: ${openCount} | Cerrados: ${closedCount} | No encontrados: ${unknownCount}`);
     } catch (error) {
       console.error(`[Polling] Error en sincronizacion inicial:`, error.message);
     }
   }
 
-  async detectClosedConversations(userId, openContacts) {
+  async detectConversationStateChanges(userId, openContacts) {
     try {
       const openContactIds = new Set(openContacts.map(c => c.id.toString()));
       const now = new Date();
@@ -424,18 +376,19 @@ class PollingService {
 
       for (const convState of trackedStates) {
         if (openContactIds.has(convState.contact_id)) {
-          if (!convState.last_seen_open_at || (now - convState.last_seen_open_at) > 60000) {
-            await convState.update({ last_seen_open_at: now });
+          if (convState.conversation_closed_at) {
+            console.log(`[Polling] REAPERTURA detectada: contacto ${convState.contact_id} estaba CERRADA (${convState.conversation_closed_at.toISOString()}) y ahora esta ABIERTA`);
           }
+          await convState.update({ last_seen_open_at: now });
         } else {
           if (!convState.conversation_closed_at) {
             await convState.update({ conversation_closed_at: now });
-            console.log(`[Polling] Conversacion cerrada detectada para contacto ${convState.contact_id}`);
+            console.log(`[Polling] CIERRE detectado: contacto ${convState.contact_id} ya no esta en conversaciones abiertas -> marcada CERRADA`);
           }
         }
       }
     } catch (error) {
-      console.error(`[Polling] Error detectando conversaciones cerradas:`, error.message);
+      console.error(`[Polling] Error detectando cambios de estado:`, error.message);
     }
   }
 
