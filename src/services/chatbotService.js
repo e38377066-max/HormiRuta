@@ -170,7 +170,7 @@ class ChatbotService {
         return true;
       }
 
-      console.log(`[Bot] Conversacion ${contactId} sigue abierta (nunca fue cerrada), no interferir`);
+      console.log(`[Bot] Conversacion ${contactId} sigue abierta (no se ha detectado cierre), no interferir`);
       return false;
     } catch (error) {
       console.error(`[Bot] Error verificando si conversacion fue reabierta:`, error.message);
@@ -229,8 +229,14 @@ class ChatbotService {
   }
 
   async updateConversationState(contactId, updates) {
+    const finalUpdates = { ...updates, last_interaction: new Date() };
+    
+    if (updates.state === 'assigned' || updates.state === 'closed_no_coverage') {
+      finalUpdates.last_seen_open_at = new Date();
+    }
+    
     await ConversationState.update(
-      { ...updates, last_interaction: new Date() },
+      finalUpdates,
       { where: { user_id: this.userId, contact_id: contactId.toString() } }
     );
   }

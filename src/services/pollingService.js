@@ -189,12 +189,12 @@ class PollingService {
       console.log(`[Polling] MODO PRUEBA - Procesando solo ${uniqueContacts.length} contacto(s)`);
     }
 
-    for (const contact of uniqueContacts) {
-      await this.processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit, isTestMode);
-    }
-
     if (!isTestMode && pageCount > 0) {
       await this.detectClosedConversations(userId, allContacts);
+    }
+
+    for (const contact of uniqueContacts) {
+      await this.processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit, isTestMode);
     }
   }
 
@@ -274,19 +274,25 @@ class PollingService {
   async detectClosedConversations(userId, openContacts) {
     try {
       const openContactIds = new Set(openContacts.map(c => c.id.toString()));
+      const now = new Date();
 
-      const activeStates = await ConversationState.findAll({
+      const trackedStates = await ConversationState.findAll({
         where: {
           user_id: userId,
-          state: { [Op.in]: ['assigned', 'closed_no_coverage'] },
-          conversation_closed_at: null
+          state: { [Op.in]: ['assigned', 'closed_no_coverage'] }
         }
       });
 
-      for (const convState of activeStates) {
-        if (!openContactIds.has(convState.contact_id)) {
-          await convState.update({ conversation_closed_at: new Date() });
-          console.log(`[Polling] Conversacion cerrada detectada para contacto ${convState.contact_id}`);
+      for (const convState of trackedStates) {
+        if (openContactIds.has(convState.contact_id)) {
+          if (!convState.last_seen_open_at || (now - convState.last_seen_open_at) > 60000) {
+            await convState.update({ last_seen_open_at: now });
+          }
+        } else {
+          if (!convState.conversation_closed_at) {
+            await convState.update({ conversation_closed_at: now });
+            console.log(`[Polling] Conversacion cerrada detectada para contacto ${convState.contact_id}`);
+          }
         }
       }
     } catch (error) {
