@@ -274,6 +274,55 @@ class PollingService {
     }
   }
 
+  async checkForNewMessagesAfterBot(respondio, contactId, convState) {
+    try {
+      const result = await respondio.listMessages(parseInt(contactId), { limit: 20 });
+      if (!result.success || !result.items || result.items.length === 0) {
+        return false;
+      }
+
+      const messages = result.items;
+      
+      console.log(`[Polling] Contacto ${contactId}: revisando ${messages.length} mensajes para detectar reapertura...`);
+      for (let i = 0; i < Math.min(6, messages.length); i++) {
+        const msg = messages[i];
+        const text = (msg.message?.text || '').substring(0, 40);
+        console.log(`  [${i}] traffic=${msg.traffic}, type=${msg.message?.type}, sender=${msg.sender?.source}, text="${text}"`);
+      }
+
+      let hasNewerIncomingFromContact = false;
+      let foundOutgoingAfter = false;
+      
+      for (const msg of messages) {
+        if (msg.traffic === 'incoming') {
+          const source = msg.sender?.source || '';
+          if (source !== 'bot' && source !== 'flow' && source !== 'automation') {
+            if (!foundOutgoingAfter) {
+              hasNewerIncomingFromContact = true;
+            }
+          }
+        } else if (msg.traffic === 'outgoing') {
+          if (hasNewerIncomingFromContact) {
+            foundOutgoingAfter = true;
+            break;
+          } else {
+            return false;
+          }
+        }
+      }
+      
+      if (hasNewerIncomingFromContact && foundOutgoingAfter) {
+        console.log(`[Polling] Contacto ${contactId}: DETECTADO patron de reapertura -> mensajes del contacto despues del ultimo mensaje saliente del bot`);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error(`[Polling] Error verificando mensajes para ${contactId}:`, error.message);
+      return false;
+    }
+  }
+
   async initializeConversationSnapshot(userId, apiToken) {
     try {
       console.log(`[Polling] === SINCRONIZACION INICIAL: Escaneando TODAS las conversaciones ===`);
@@ -331,12 +380,26 @@ class PollingService {
         }
       });
 
-      let openCount = 0, closedCount = 0, unknownCount = 0;
+      let openCount = 0, closedCount = 0, unknownCount = 0, reopenedCount = 0;
 
       for (const convState of trackedStates) {
         const contactId = convState.contact_id;
 
         if (openContactIds.has(contactId)) {
+          const botInteractionDone = convState.out_of_hours_notified || 
+            convState.state === 'closed_no_coverage';
+          
+          if (botInteractionDone) {
+            const hasNewMessages = await this.checkForNewMessagesAfterBot(respondio, contactId, convState);
+            if (hasNewMessages) {
+              await convState.update({ conversation_closed_at: convState.updatedAt || now });
+              console.log(`[Polling] Sync inicial: contacto ${contactId} ABIERTO pero con mensajes nuevos despues de interaccion del bot -> marcado como REABIERTO`);
+              reopenedCount++;
+              openCount++;
+              continue;
+            }
+          }
+          
           await convState.update({ last_seen_open_at: now, conversation_closed_at: null });
           openCount++;
         } else if (closedContactIds.has(contactId)) {
@@ -355,7 +418,7 @@ class PollingService {
       }
 
       console.log(`[Polling] === SINCRONIZACION COMPLETA ===`);
-      console.log(`[Polling] Contactos rastreados: ${trackedStates.length} | Abiertos: ${openCount} | Cerrados: ${closedCount} | No encontrados: ${unknownCount}`);
+      console.log(`[Polling] Contactos rastreados: ${trackedStates.length} | Abiertos: ${openCount} | Cerrados: ${closedCount} | No encontrados: ${unknownCount} | Reabiertos: ${reopenedCount}`);
     } catch (error) {
       console.error(`[Polling] Error en sincronizacion inicial:`, error.message);
     }
