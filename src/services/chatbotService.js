@@ -654,6 +654,26 @@ class ChatbotService {
     // Recargar el estado actualizado para que shouldBotRespond use los tiempos correctos
     convState = await this.getOrCreateConversationState(contact.id);
 
+    // REANUDACION POST FUERA-DE-HORARIO: Si el contacto recibió mensaje de fuera de horario
+    // y ahora estamos en horario de atención, verificar si un agente humano realmente respondió.
+    // Si NO respondió, resetear flags para que el bot inicie el flujo automático.
+    if (convState.out_of_hours_notified && convState.agent_active && this.isWithinBusinessHours()) {
+      const agentCheck = await this.hasAgentAlreadyResponded(contact.id);
+      if (!agentCheck.hasResponded) {
+        console.log(`[Bot] Contacto ${contact.id} vuelve en horario de atencion, ningun agente respondio, iniciando flujo automatico`);
+        await this.updateConversationState(contact.id, { 
+          out_of_hours_notified: false,
+          agent_active: false,
+          state: 'initial',
+          is_existing_customer: true,
+          has_prior_info: true
+        });
+        convState = await this.getOrCreateConversationState(contact.id);
+      } else {
+        console.log(`[Bot] Contacto ${contact.id} vuelve en horario pero agente ${agentCheck.agentName} ya respondio, bot no interferira`);
+      }
+    }
+
     // Verificar si el bot debe responder
     const shouldRespond = this.shouldBotRespond(convState);
     if (!shouldRespond.respond) {
