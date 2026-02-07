@@ -660,11 +660,15 @@ class ChatbotService {
     if (convState.out_of_hours_notified && convState.agent_active && this.isWithinBusinessHours()) {
       const agentCheck = await this.hasAgentAlreadyResponded(contact.id);
       if (!agentCheck.hasResponded) {
-        console.log(`[Bot] Contacto ${contact.id} vuelve en horario de atencion, ningun agente respondio, iniciando flujo automatico`);
+        const botInteracted = await this.hasBotAlreadyInteracted(contact.id);
+        const isExisting = botInteracted || convState.is_existing_customer;
+        console.log(`[Bot] Contacto ${contact.id} vuelve en horario de atencion, ningun agente respondio, iniciando flujo como ${isExisting ? 'CLIENTE EXISTENTE' : 'CLIENTE NUEVO'}`);
         await this.updateConversationState(contact.id, { 
           out_of_hours_notified: false,
           agent_active: false,
-          state: 'initial'
+          state: 'initial',
+          is_existing_customer: isExisting,
+          has_prior_info: isExisting
         });
         convState = await this.getOrCreateConversationState(contact.id);
       } else {
