@@ -43,6 +43,10 @@ const ConversationState = sequelize.define('ConversationState', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
+  is_reopened: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
   out_of_hours_notified: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
@@ -115,6 +119,7 @@ ConversationState.prototype.toDict = function() {
     selected_product: this.selected_product,
     validated_zip: this.validated_zip,
     is_existing_customer: this.is_existing_customer,
+    is_reopened: this.is_reopened,
     out_of_hours_notified: this.out_of_hours_notified,
     assigned_agent_id: this.assigned_agent_id,
     bot_paused: this.bot_paused,

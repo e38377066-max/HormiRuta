@@ -533,9 +533,9 @@ class ChatbotService {
     });
     
     // VERIFICAR REAPERTURA ANTES DE TODO: Si la conversacion fue cerrada y reabierta,
-    // limpiar todo el estado y reiniciar el flujo desde cero
+    // limpiar estado de flujo pero marcar como cliente existente (ya tuvo conversacion previa)
     if (convState.conversation_closed_at) {
-      console.log(`[Bot] Conversacion de ${contact.id} fue cerrada el ${convState.conversation_closed_at} y reabierta, reiniciando flujo completo`);
+      console.log(`[Bot] Conversacion de ${contact.id} fue cerrada el ${convState.conversation_closed_at} y reabierta, reiniciando flujo como CLIENTE EXISTENTE`);
       await this.updateConversationState(contact.id, { 
         state: 'initial',
         conversation_closed_at: null,
@@ -544,7 +544,9 @@ class ChatbotService {
         bot_paused: false,
         greeting_sent: false,
         awaiting_response: null,
-        has_prior_info: null,
+        has_prior_info: true,
+        is_existing_customer: true,
+        is_reopened: true,
         selected_product: null,
         validated_zip: null
       });
@@ -718,7 +720,8 @@ class ChatbotService {
 
   async handleInitialState(contact, messageText, convState) {
     const msgs = this.getMessages();
-    const isExisting = await this.checkIfExistingCustomer(contact);
+    const isExistingFromDB = await this.checkIfExistingCustomer(contact);
+    const isExisting = isExistingFromDB || convState.is_existing_customer || convState.is_reopened;
     const intent = this.detectMessageIntent(messageText);
     const isFromFacebookAd = this.detectFacebookAdOrigin(contact);
     
