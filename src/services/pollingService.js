@@ -192,7 +192,7 @@ class PollingService {
       console.log(`[Polling] MODO PRUEBA - Procesando solo ${uniqueContacts.length} contacto(s)`);
     }
 
-    if (!isTestMode && pageCount > 0) {
+    if (pageCount > 0) {
       await this.detectClosedConversations(userId, allContacts);
     }
 
@@ -327,7 +327,7 @@ class PollingService {
       const trackedStates = await ConversationState.findAll({
         where: {
           user_id: userId,
-          state: { [Op.in]: ['assigned', 'closed_no_coverage'] }
+          state: { [Op.notIn]: ['completed'] }
         }
       });
 
@@ -342,11 +342,13 @@ class PollingService {
         } else if (closedContactIds.has(contactId)) {
           if (!convState.conversation_closed_at) {
             await convState.update({ conversation_closed_at: now });
+            console.log(`[Polling] Sync inicial: contacto ${contactId} detectado como CERRADO`);
           }
           closedCount++;
         } else if (closedFetchComplete) {
           if (!convState.conversation_closed_at) {
             await convState.update({ conversation_closed_at: now });
+            console.log(`[Polling] Sync inicial: contacto ${contactId} no encontrado, asumido CERRADO`);
           }
           unknownCount++;
         }
@@ -367,7 +369,7 @@ class PollingService {
       const trackedStates = await ConversationState.findAll({
         where: {
           user_id: userId,
-          state: { [Op.in]: ['assigned', 'closed_no_coverage'] }
+          state: { [Op.notIn]: ['completed'] }
         }
       });
 

@@ -519,6 +519,25 @@ class ChatbotService {
       last_customer_message_at: new Date() 
     });
     
+    // VERIFICAR REAPERTURA ANTES DE TODO: Si la conversacion fue cerrada y reabierta,
+    // limpiar todo el estado y reiniciar el flujo desde cero
+    if (convState.conversation_closed_at) {
+      console.log(`[Bot] Conversacion de ${contact.id} fue cerrada el ${convState.conversation_closed_at} y reabierta, reiniciando flujo completo`);
+      await this.updateConversationState(contact.id, { 
+        state: 'initial',
+        conversation_closed_at: null,
+        out_of_hours_notified: false,
+        agent_active: false,
+        bot_paused: false,
+        greeting_sent: false,
+        awaiting_response: null,
+        has_prior_info: null,
+        selected_product: null,
+        validated_zip: null
+      });
+      convState = await this.getOrCreateConversationState(contact.id);
+    }
+    
     // Recargar el estado actualizado para que shouldBotRespond use los tiempos correctos
     convState = await this.getOrCreateConversationState(contact.id);
 
