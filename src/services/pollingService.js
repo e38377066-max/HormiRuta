@@ -197,15 +197,18 @@ class PollingService {
       });
       
       if (uniqueContacts.length === 0) {
-        console.log(`[Polling] MODO PRUEBA - No se encontró contacto que coincida con: ${testContactId}`);
-        return;
+        console.log(`[Polling] MODO PRUEBA - No se encontró contacto que coincida con: ${testContactId} en abiertas ni cerradas`);
+      } else {
+        console.log(`[Polling] MODO PRUEBA - Procesando solo ${uniqueContacts.length} contacto(s)`);
       }
-      
-      console.log(`[Polling] MODO PRUEBA - Procesando solo ${uniqueContacts.length} contacto(s)`);
     }
 
     if (pageCount > 0) {
       await this.detectConversationStateChanges(userId, allContacts);
+    }
+
+    if (uniqueContacts.length === 0) {
+      return;
     }
 
     for (const contact of uniqueContacts) {
