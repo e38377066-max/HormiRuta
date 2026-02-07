@@ -197,13 +197,10 @@ class ChatbotService {
       const messages = result.data.items;
       
       for (const msg of messages) {
-        // traffic: "outgoing" = mensaje enviado (no recibido)
-        // sender.source: "user" = enviado por un agente humano
         if (msg.traffic === 'outgoing' && msg.sender) {
           const senderSource = msg.sender.source || '';
           const senderId = msg.sender.userId || '';
           
-          // "user" significa agente humano, otros valores como "bot" o "workflow" son automatizados
           if (senderSource === 'user') {
             console.log(`[Bot] Agente (userId: ${senderId}) ya respondio en conversacion ${contactId}`);
             return { hasResponded: true, agentName: senderId };
@@ -215,6 +212,32 @@ class ChatbotService {
     } catch (error) {
       console.error(`[Bot] Error verificando mensajes de agente:`, error.message);
       return { hasResponded: false, agentName: null };
+    }
+  }
+
+  async hasBotAlreadyInteracted(contactId) {
+    try {
+      const result = await this.api.listMessages(`id:${contactId}`, 30);
+      
+      if (!result.success || !result.data?.items) {
+        return false;
+      }
+
+      const messages = result.data.items;
+      
+      for (const msg of messages) {
+        if (msg.traffic === 'outgoing' && msg.sender) {
+          const senderSource = msg.sender.source || '';
+          if (senderSource === 'bot' || senderSource === 'flow' || senderSource === 'automation') {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error(`[Bot] Error verificando mensajes bot previos:`, error.message);
+      return false;
     }
   }
 
@@ -585,6 +608,21 @@ class ChatbotService {
       last_customer_message_at: new Date() 
     });
     
+    // VERIFICAR HISTORIAL: Si el estado es 'initial' (recien creado) y la conversacion
+    // NUNCA fue cerrada, verificar si ya hay mensajes del bot en el historial.
+    // Si el bot ya interactuó antes, NO iniciar un nuevo flujo — la conversacion ya fue atendida.
+    if (convState.state === 'initial' && !convState.conversation_closed_at && !convState.is_existing_customer) {
+      const botAlreadyTalked = await this.hasBotAlreadyInteracted(contact.id);
+      if (botAlreadyTalked) {
+        console.log(`[Bot] Contacto ${contact.id} ya tiene mensajes del bot en historial (conversacion abierta sin cerrar), bot NO interferira`);
+        await this.updateConversationState(contact.id, { 
+          state: 'assigned',
+          is_existing_customer: true
+        });
+        return { handled: false, reason: 'bot_already_interacted_open_conversation' };
+      }
+    }
+
     // VERIFICAR REAPERTURA ANTES DE TODO: Si la conversacion fue cerrada y reabierta,
     // limpiar estado de flujo pero marcar como cliente existente (ya tuvo conversacion previa)
     if (convState.conversation_closed_at) {
