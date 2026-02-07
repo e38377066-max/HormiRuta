@@ -176,6 +176,21 @@ class PollingService {
         for (const contact of uniqueContacts) {
           const isOpen = allContacts.some(c => c.id === contact.id);
           console.log(`[Polling] MODO PRUEBA - Contacto encontrado: ${contact.firstName} ${contact.lastName} (ID: ${contact.id}, lifecycle: ${contact.lifecycle}, conversacion: ${isOpen ? 'ABIERTA' : 'CERRADA'})`);
+          
+          // Rastrear estado abierto/cerrado del contacto de prueba en la BD
+          const [convState] = await ConversationState.findOrCreate({
+            where: { user_id: userId, contact_id: contact.id.toString() },
+            defaults: { state: 'initial' }
+          });
+          
+          if (!isOpen && !convState.conversation_closed_at) {
+            // Contacto CERRADO y sin registro de cierre -> marcar como cerrado
+            await convState.update({ conversation_closed_at: new Date() });
+            console.log(`[Polling] MODO PRUEBA - Conversacion de ${contact.id} marcada como CERRADA en BD`);
+          } else if (isOpen && convState.conversation_closed_at) {
+            // Contacto ABIERTO pero tenia cierre registrado -> se detectara reapertura en processMessage
+            console.log(`[Polling] MODO PRUEBA - Contacto ${contact.id} tiene conversation_closed_at, reapertura se detectara en processMessage`);
+          }
         }
       }
       
