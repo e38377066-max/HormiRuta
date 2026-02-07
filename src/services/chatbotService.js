@@ -101,10 +101,7 @@ class ChatbotService {
       businessDays = [1, 2, 3, 4, 5];
     }
 
-    console.log(`[Horario] timezone=${timezone}, dayStr=${dayStr}, currentDay=${currentDay}, timeStr=${timeStr}, currentMinutes=${currentMinutes}, businessDays=${JSON.stringify(businessDays)}, raw_business_days=${JSON.stringify(this.settings.business_days)}, start=${this.settings.business_hours_start}, end=${this.settings.business_hours_end}`);
-
     if (!businessDays.includes(currentDay)) {
-      console.log(`[Horario] Dia ${currentDay} NO esta en businessDays ${JSON.stringify(businessDays)}`);
       return false;
     }
 
@@ -113,9 +110,7 @@ class ChatbotService {
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = endHour * 60 + endMin;
 
-    const result = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-    console.log(`[Horario] currentMinutes=${currentMinutes} vs start=${startMinutes} end=${endMinutes} -> ${result ? 'EN HORARIO' : 'FUERA DE HORARIO'}`);
-    return result;
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
   }
 
   hasExcludedTag(contact) {
