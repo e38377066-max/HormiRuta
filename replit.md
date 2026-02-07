@@ -30,6 +30,7 @@ HormiRuta es una aplicacion de planificacion y optimizacion de rutas de entrega 
 ```
 
 ## Recent Changes
+- 2026-02-07: Cliente existente con conversacion abierta: bot no inicia flujo si la conversacion ya estaba activa, solo si fue cerrada y reabierta
 - 2026-02-05: Bot no interfiere si un agente humano ya respondió en la conversación
 - 2026-02-05: Botón "Reiniciar Prueba" para limpiar historial de conversación en modo test
 - 2026-02-05: Fix productos guardados correctamente (products_list en toDict)
