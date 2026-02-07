@@ -159,11 +159,11 @@ class PollingService {
 
     console.log(`[Polling] Conversaciones abiertas: ${allContacts.length}, Con lifecycle New Lead/Pending: ${uniqueContacts.length}`);
 
-    // MODO PRUEBA: Filtrar solo el contacto específico
+    // MODO PRUEBA: Buscar contacto en TODAS las conversaciones abiertas (sin filtro de lifecycle)
     if (isTestMode && testContactId) {
       const testContactLower = testContactId.toLowerCase();
-      uniqueContacts = uniqueContacts.filter(contact => {
-        // Buscar por ID exacto, nombre, o teléfono
+      const searchPool = allContacts;
+      uniqueContacts = searchPool.filter(contact => {
         const contactId = String(contact.id || '');
         const firstName = (contact.firstName || '').toLowerCase();
         const lastName = (contact.lastName || '').toLowerCase();
@@ -178,14 +178,15 @@ class PollingService {
                         (testPhone.length >= 4 && phone.includes(testPhone));
         
         if (matches) {
-          console.log(`[Polling] MODO PRUEBA - Contacto encontrado: ${contact.firstName} ${contact.lastName} (ID: ${contact.id})`);
+          console.log(`[Polling] MODO PRUEBA - Contacto encontrado: ${contact.firstName} ${contact.lastName} (ID: ${contact.id}, lifecycle: ${contact.lifecycle})`);
         }
         return matches;
       });
       
       if (uniqueContacts.length === 0) {
         console.log(`[Polling] MODO PRUEBA - No se encontró contacto que coincida con: ${testContactId}`);
-        console.log(`[Polling] MODO PRUEBA - Contactos disponibles: ${allContacts.slice(0, 5).map(c => `${c.firstName} ${c.lastName} (${c.id})`).join(', ')}`);
+        const allNames = allContacts.map(c => `${c.firstName} ${c.lastName} (${c.id}, ${c.lifecycle})`).join(', ');
+        console.log(`[Polling] MODO PRUEBA - Contactos disponibles (${allContacts.length}): ${allNames.substring(0, 500)}`);
         return;
       }
       
