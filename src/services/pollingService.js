@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import RespondioService from './respondio.js';
 import AddressValidationService from './addressValidation.js';
 import ChatbotService from './chatbotService.js';
@@ -120,9 +121,8 @@ class PollingService {
     let allContacts = [];
     let cursorId = null;
     let pageCount = 0;
-    const maxPages = 3;
     
-    while (pageCount < maxPages) {
+    while (true) {
       const contactsResult = await respondio.listOpenConversations({ 
         limit: 99,
         cursorId: cursorId
@@ -135,14 +135,14 @@ class PollingService {
 
       const items = contactsResult.items || [];
       allContacts = [...allContacts, ...items];
-      console.log(`[Polling] Pagina ${pageCount + 1}: ${items.length} conversaciones abiertas`);
+      pageCount++;
+      console.log(`[Polling] Pagina ${pageCount}: ${items.length} conversaciones abiertas`);
       
       if (!contactsResult.pagination?.nextCursor || items.length < 99) {
         break;
       }
       
       cursorId = contactsResult.pagination.nextCursor;
-      pageCount++;
     }
 
     const targetLifecycles = ['New Lead', 'Pending'];
@@ -191,6 +191,10 @@ class PollingService {
 
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit, isTestMode);
+    }
+
+    if (!isTestMode && pageCount > 0) {
+      await this.detectClosedConversations(userId, allContacts);
     }
   }
 
@@ -264,6 +268,29 @@ class PollingService {
     if (poller.processedMessageIds.size > 10000) {
       const idsArray = Array.from(poller.processedMessageIds);
       poller.processedMessageIds = new Set(idsArray.slice(-5000));
+    }
+  }
+
+  async detectClosedConversations(userId, openContacts) {
+    try {
+      const openContactIds = new Set(openContacts.map(c => c.id.toString()));
+
+      const activeStates = await ConversationState.findAll({
+        where: {
+          user_id: userId,
+          state: { [Op.in]: ['assigned', 'closed_no_coverage'] },
+          conversation_closed_at: null
+        }
+      });
+
+      for (const convState of activeStates) {
+        if (!openContactIds.has(convState.contact_id)) {
+          await convState.update({ conversation_closed_at: new Date() });
+          console.log(`[Polling] Conversacion cerrada detectada para contacto ${convState.contact_id}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[Polling] Error detectando conversaciones cerradas:`, error.message);
     }
   }
 

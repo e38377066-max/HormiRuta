@@ -79,6 +79,10 @@ const ConversationState = sequelize.define('ConversationState', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
+  conversation_closed_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   context_data: {
     type: DataTypes.JSON,
     defaultValue: {}
@@ -116,6 +120,7 @@ ConversationState.prototype.toDict = function() {
     last_customer_message_at: this.last_customer_message_at,
     agent_active: this.agent_active,
     greeting_sent: this.greeting_sent,
+    conversation_closed_at: this.conversation_closed_at,
     context_data: this.context_data
   };
 };

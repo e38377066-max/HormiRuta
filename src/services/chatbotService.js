@@ -155,61 +155,25 @@ class ChatbotService {
     return { respond: true };
   }
 
-  async isConversationFreshlyOpened(contactId) {
+  async isConversationReopened(contactId) {
     try {
-      const result = await this.api.listMessages(`id:${contactId}`, 30);
-      
-      if (!result.success || !result.data?.items) {
-        console.log(`[Bot] No se pudo obtener historial de ${contactId}, no interferir por seguridad`);
+      const convState = await ConversationState.findOne({
+        where: { user_id: this.userId, contact_id: contactId.toString() }
+      });
+
+      if (!convState) {
         return false;
       }
 
-      const messages = result.data.items;
-      
-      if (messages.length <= 1) {
+      if (convState.conversation_closed_at) {
+        console.log(`[Bot] Conversacion ${contactId} fue cerrada el ${convState.conversation_closed_at} y reabierta`);
         return true;
       }
-      
-      const currentMsg = messages[0];
-      const currentMsgTime = new Date(currentMsg.createdAt || currentMsg.timestamp).getTime();
-      
-      let lastOutgoingTime = null;
-      let foundCloseEvent = false;
-      
-      for (let i = 1; i < messages.length; i++) {
-        const msg = messages[i];
-        const msgType = (msg.message?.type || '').toLowerCase();
-        
-        if (msgType === 'event') {
-          const eventText = (msg.message?.event?.type || msg.message?.text || msg.event?.type || '').toLowerCase();
-          if (eventText.includes('close') || eventText.includes('closed')) {
-            foundCloseEvent = true;
-            console.log(`[Bot] Conversacion ${contactId} tiene evento de cierre, fue reabierta`);
-            return true;
-          }
-          continue;
-        }
-        
-        if (msg.traffic === 'outgoing' && !lastOutgoingTime) {
-          lastOutgoingTime = new Date(msg.createdAt || msg.timestamp).getTime();
-        }
-      }
-      
-      if (!lastOutgoingTime) {
-        return true;
-      }
-      
-      const gapMinutes = (currentMsgTime - lastOutgoingTime) / (1000 * 60);
-      
-      if (gapMinutes <= 60) {
-        console.log(`[Bot] Conversacion ${contactId} activa (ultimo saliente hace ${Math.round(gapMinutes)} min)`);
-        return false;
-      }
-      
-      console.log(`[Bot] Conversacion ${contactId}: gap de ${Math.round(gapMinutes)} min desde ultimo saliente, tratando como reabierta`);
-      return true;
+
+      console.log(`[Bot] Conversacion ${contactId} sigue abierta (nunca fue cerrada), no interferir`);
+      return false;
     } catch (error) {
-      console.error(`[Bot] Error verificando estado de conversacion:`, error.message);
+      console.error(`[Bot] Error verificando si conversacion fue reabierta:`, error.message);
       return false;
     }
   }
@@ -636,20 +600,26 @@ class ChatbotService {
         return await this.handleAwaitingContinuation(contact, messageText, convState);
       
       case 'assigned': {
-        const isFreshReopen = await this.isConversationFreshlyOpened(contact.id);
-        if (isFreshReopen) {
-          console.log(`[Bot] Conversacion de ${contact.id} fue reabierta, reiniciando flujo`);
-          await this.updateConversationState(contact.id, { state: 'initial' });
+        const wasReopened = await this.isConversationReopened(contact.id);
+        if (wasReopened) {
+          console.log(`[Bot] Conversacion de ${contact.id} fue cerrada y reabierta, reiniciando flujo`);
+          await this.updateConversationState(contact.id, { 
+            state: 'initial', 
+            conversation_closed_at: null 
+          });
           return await this.handleInitialState(contact, messageText, convState);
         }
         return { handled: false, reason: 'already_assigned' };
       }
       
       case 'closed_no_coverage': {
-        const isFreshReopenNoCov = await this.isConversationFreshlyOpened(contact.id);
-        if (isFreshReopenNoCov) {
-          console.log(`[Bot] Conversacion de ${contact.id} (sin cobertura) fue reabierta, reiniciando flujo`);
-          await this.updateConversationState(contact.id, { state: 'initial' });
+        const wasReopenedNoCov = await this.isConversationReopened(contact.id);
+        if (wasReopenedNoCov) {
+          console.log(`[Bot] Conversacion de ${contact.id} (sin cobertura) fue cerrada y reabierta, reiniciando flujo`);
+          await this.updateConversationState(contact.id, { 
+            state: 'initial', 
+            conversation_closed_at: null 
+          });
           return await this.handleInitialState(contact, messageText, convState);
         }
         return { handled: true, action: 'ignored_no_coverage' };
@@ -715,13 +685,6 @@ class ChatbotService {
     const isFromFacebookAd = this.detectFacebookAdOrigin(contact);
     
     if (isExisting) {
-      const isFreshlyOpened = await this.isConversationFreshlyOpened(contact.id);
-      
-      if (!isFreshlyOpened) {
-        console.log(`[Bot] Cliente existente ${contact.id} con conversacion ya abierta, no iniciar flujo`);
-        return { handled: false, reason: 'existing_customer_active_conversation' };
-      }
-      
       await this.sendMessage(contact.id, msgs.welcomeExisting);
       
       const productMenu = this.generateProductMenu();
@@ -735,7 +698,7 @@ class ChatbotService {
       });
       
       await this.addTrackingTag(contact.id, 'ClienteExistente');
-      await this.addComment(contact.id, '[Bot] Cliente recurrente. Conversacion reabierta. Mostrando menu de productos.');
+      await this.addComment(contact.id, '[Bot] Cliente recurrente. Mostrando menu de productos.');
       
       return { handled: true, action: 'welcome_existing_show_menu' };
     }
