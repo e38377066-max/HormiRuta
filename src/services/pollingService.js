@@ -159,10 +159,22 @@ class PollingService {
 
     console.log(`[Polling] Conversaciones abiertas: ${allContacts.length}, Con lifecycle New Lead/Pending: ${uniqueContacts.length}`);
 
-    // MODO PRUEBA: Buscar contacto en TODAS las conversaciones abiertas (sin filtro de lifecycle)
+    // MODO PRUEBA: Buscar contacto en abiertas Y cerradas (sin filtro de lifecycle)
     if (isTestMode && testContactId) {
       const testContactLower = testContactId.toLowerCase();
-      const searchPool = allContacts;
+      
+      let allClosedContacts = [];
+      let closedCursor = null;
+      while (true) {
+        const closedResult = await respondio.listClosedConversations({ limit: 99, cursorId: closedCursor });
+        if (!closedResult.success) break;
+        allClosedContacts = [...allClosedContacts, ...(closedResult.items || [])];
+        if (!closedResult.pagination?.nextCursor || (closedResult.items || []).length < 99) break;
+        closedCursor = closedResult.pagination.nextCursor;
+      }
+      console.log(`[Polling] MODO PRUEBA - Buscando en ${allContacts.length} abiertas + ${allClosedContacts.length} cerradas`);
+      
+      const searchPool = [...allContacts, ...allClosedContacts];
       uniqueContacts = searchPool.filter(contact => {
         const contactId = String(contact.id || '');
         const firstName = (contact.firstName || '').toLowerCase();
@@ -178,15 +190,14 @@ class PollingService {
                         (testPhone.length >= 4 && phone.includes(testPhone));
         
         if (matches) {
-          console.log(`[Polling] MODO PRUEBA - Contacto encontrado: ${contact.firstName} ${contact.lastName} (ID: ${contact.id}, lifecycle: ${contact.lifecycle})`);
+          const isOpen = allContacts.some(c => c.id === contact.id);
+          console.log(`[Polling] MODO PRUEBA - Contacto encontrado: ${contact.firstName} ${contact.lastName} (ID: ${contact.id}, lifecycle: ${contact.lifecycle}, conversacion: ${isOpen ? 'ABIERTA' : 'CERRADA'})`);
         }
         return matches;
       });
       
       if (uniqueContacts.length === 0) {
         console.log(`[Polling] MODO PRUEBA - No se encontró contacto que coincida con: ${testContactId}`);
-        const allNames = allContacts.map(c => `${c.firstName} ${c.lastName} (${c.id}, ${c.lifecycle})`).join(', ');
-        console.log(`[Polling] MODO PRUEBA - Contactos disponibles (${allContacts.length}): ${allNames.substring(0, 500)}`);
         return;
       }
       
