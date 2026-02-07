@@ -235,6 +235,12 @@ class PollingService {
       for (const msg of outgoingAgentMessages) {
         poller.processedMessageIds.add(`out_${msg.messageId}`);
       }
+      // Agente humano ya respondió en esta conversación, NO procesar mensajes entrantes
+      // para evitar que el bot interfiera con conversaciones atendidas por agentes
+      for (const msg of messages.filter(m => m.traffic === 'incoming')) {
+        poller.processedMessageIds.add(msg.messageId);
+      }
+      return;
     }
     
     // Filtrar mensajes entrantes del CLIENTE (no del bot)
