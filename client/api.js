@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core'
 
 const getBaseURL = () => {
   if (Capacitor.isNativePlatform()) {
-    return import.meta.env.VITE_API_URL || 'https://api.hormiruta.com'
+    return import.meta.env.VITE_API_URL || 'https://api.area862.com'
   }
   return ''
 }

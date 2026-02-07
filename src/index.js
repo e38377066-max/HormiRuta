@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 console.log('===========================================');
-console.log('HormiRuta - Iniciando servidor...');
+console.log('Area 862 System - Iniciando servidor...');
 console.log('===========================================');
 console.log('Variables de entorno cargadas:');
 console.log('- DATABASE_URL:', process.env.DATABASE_URL ? 'Configurada' : 'NO CONFIGURADA');
@@ -68,7 +68,7 @@ app.use(session({
 }));
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'HormiRuta API funcionando (Node.js)' });
+  res.json({ status: 'ok', message: 'Area 862 System API funcionando (Node.js)' });
 });
 
 app.use('/api/auth', authRoutes);
@@ -101,7 +101,7 @@ async function startServer() {
     console.log('Database tables synchronized.');
     
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`HormiRuta API running on port ${PORT}`);
+      console.log(`Area 862 System API running on port ${PORT}`);
     });
   } catch (error) {
     console.error('Unable to start server:', error);

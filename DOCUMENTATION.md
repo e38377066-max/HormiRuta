@@ -1,4 +1,4 @@
-# HormiRuta - Documentacion Tecnica
+# Area 862 System - Documentacion Tecnica
 
 ## Indice
 
@@ -17,7 +17,7 @@
 
 ## Vision General
 
-HormiRuta es un sistema de gestion de logistica de entregas disenado para el area metropolitana de Dallas. Permite a conductores y empresas planificar rutas optimizadas, gestionar ordenes de entrega y validar zonas de cobertura.
+Area 862 System es un sistema de gestion de logistica de entregas disenado para el area metropolitana de Dallas. Permite a conductores y empresas planificar rutas optimizadas, gestionar ordenes de entrega y validar zonas de cobertura.
 
 ### Caracteristicas Principales
 
@@ -77,7 +77,7 @@ HormiRuta es un sistema de gestion de logistica de entregas disenado para el are
 ## Estructura del Proyecto
 
 ```
-hormiruta/
+area862/
 ├── src/                          # Backend - Servidor Express
 │   ├── config/
 │   │   └── database.js           # Configuracion de Sequelize/PostgreSQL
@@ -140,7 +140,7 @@ hormiruta/
 │
 ├── public/                       # Archivos estaticos
 │   ├── logo.png
-│   └── hormiruta-icon.svg
+│   └── area862-icon.svg
 │
 ├── dist/                         # Frontend compilado (generado)
 │
@@ -444,7 +444,7 @@ import { Capacitor } from '@capacitor/core';
 // Detecta si esta en app movil o web
 const getBaseURL = () => {
   if (Capacitor.isNativePlatform()) {
-    return process.env.SERVER_URL || 'https://api.hormiruta.com';
+    return process.env.SERVER_URL || 'https://api.area862.com';
   }
   return '';  // Usa el mismo origen en web
 };
@@ -643,12 +643,12 @@ Integracion para recibir y procesar ordenes desde mensajeria.
 `capacitor.config.ts`
 ```typescript
 const config: CapacitorConfig = {
-  appId: 'com.hormiruta.app',
-  appName: 'HormiRuta',
+  appId: 'com.area862.app',
+  appName: 'Area 862 System',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    url: process.env.SERVER_URL || 'https://api.hormiruta.com'
+    url: process.env.SERVER_URL || 'https://api.area862.com'
   },
   plugins: {
     SplashScreen: { ... },
@@ -712,7 +712,7 @@ npx cap open ios
 | `SESSION_SECRET` | Secreto para sesiones Express | Si (produccion) |
 | `PORT` | Puerto del servidor | No (default: 5000) |
 | `NODE_ENV` | Entorno (development/production) | Si (produccion) |
-| `SERVER_DOMAIN` | Dominio del servidor (ej: api.hormiruta.com) | Si (produccion) |
+| `SERVER_DOMAIN` | Dominio del servidor (ej: api.area862.com) | Si (produccion) |
 | `VITE_API_URL` | URL del API para apps moviles | Si (movil) |
 | `VITE_GOOGLE_MAPS_API_KEY` | API key de Google Maps | Si |
 
@@ -720,14 +720,14 @@ npx cap open ios
 
 ```bash
 # En el servidor AWS (archivo .env o variables de entorno)
-DATABASE_URL=postgresql://usuario:password@host:5432/hormiruta
+DATABASE_URL=postgresql://usuario:password@host:5432/area862
 SESSION_SECRET=tu-secreto-seguro-de-32-caracteres-minimo
 NODE_ENV=production
-SERVER_DOMAIN=api.hormiruta.com
+SERVER_DOMAIN=api.area862.com
 PORT=5000
 
 # Para compilar el frontend (en tiempo de build)
-VITE_API_URL=https://api.hormiruta.com
+VITE_API_URL=https://api.area862.com
 VITE_GOOGLE_MAPS_API_KEY=tu-api-key-de-google
 ```
 
@@ -968,4 +968,4 @@ Para preguntas tecnicas o soporte, contactar al equipo de desarrollo.
 
 ---
 
-*Documentacion generada para HormiRuta v1.0.0*
+*Documentacion generada para Area 862 System v1.0.0*

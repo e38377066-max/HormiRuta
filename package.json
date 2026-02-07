@@ -1,7 +1,7 @@
 {
-  "name": "hormiruta",
+  "name": "area862system",
   "version": "1.0.0",
-  "description": "HormiRuta - Sistema de Logistica de Entregas",
+  "description": "Area 862 System - Sistema de Logistica de Entregas",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

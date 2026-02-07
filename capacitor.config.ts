@@ -1,12 +1,12 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.hormiruta.app',
-  appName: 'HormiRuta',
+  appId: 'com.area862.app',
+  appName: 'Area 862',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    url: process.env.SERVER_URL || 'https://api.hormiruta.com',
+    url: process.env.SERVER_URL || 'https://api.area862.com',
     cleartext: true
   },
   plugins: {

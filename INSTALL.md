@@ -1,6 +1,6 @@
-# Guia de Instalacion - HormiRuta en AWS Ubuntu
+# Guia de Instalacion - Area 862 System en AWS Ubuntu
 
-Esta guia explica como instalar HormiRuta en un servidor AWS con Ubuntu Server.
+Esta guia explica como instalar Area 862 System en un servidor AWS con Ubuntu Server.
 
 ## Requisitos del Servidor
 
@@ -51,9 +51,9 @@ sudo systemctl start postgresql
 sudo systemctl enable postgresql
 
 # Crear usuario y base de datos
-sudo -u postgres psql -c "CREATE USER hormiruta WITH PASSWORD 'tu_password_seguro';"
-sudo -u postgres psql -c "CREATE DATABASE hormiruta OWNER hormiruta;"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE hormiruta TO hormiruta;"
+sudo -u postgres psql -c "CREATE USER area862 WITH PASSWORD 'tu_password_seguro';"
+sudo -u postgres psql -c "CREATE DATABASE area862 OWNER area862;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE area862 TO area862;"
 ```
 
 ---
@@ -66,11 +66,11 @@ sudo mkdir -p /var/www
 cd /var/www
 
 # Clonar el repositorio (reemplaza con tu URL de Git)
-sudo git clone https://tu-repositorio.git hormiruta
-cd hormiruta
+sudo git clone https://tu-repositorio.git area862
+cd area862
 
 # Dar permisos al usuario actual
-sudo chown -R $USER:$USER /var/www/hormiruta
+sudo chown -R $USER:$USER /var/www/area862
 ```
 
 ---
@@ -90,10 +90,10 @@ Contenido del archivo `.env`:
 ```bash
 # Base de datos PostgreSQL
 # Para RDS de AWS:
-DATABASE_URL=postgresql://usuario:password@tu-rds-endpoint.amazonaws.com:5432/hormiruta
+DATABASE_URL=postgresql://usuario:password@tu-rds-endpoint.amazonaws.com:5432/area862
 
 # Para PostgreSQL local:
-# DATABASE_URL=postgresql://hormiruta:tu_password_seguro@localhost:5432/hormiruta
+# DATABASE_URL=postgresql://area862:tu_password_seguro@localhost:5432/area862
 
 # Seguridad (genera un secreto aleatorio de 32+ caracteres)
 SESSION_SECRET=tu-secreto-muy-seguro-de-minimo-32-caracteres-aleatorios
@@ -158,7 +158,7 @@ npm start
 sudo npm install -g pm2
 
 # Iniciar la aplicacion con PM2
-pm2 start src/index.js --name hormiruta
+pm2 start src/index.js --name area862
 
 # Configurar PM2 para iniciar con el sistema
 pm2 startup systemd
@@ -167,9 +167,9 @@ pm2 save
 
 # Comandos utiles de PM2
 pm2 status          # Ver estado
-pm2 logs hormiruta  # Ver logs
-pm2 restart hormiruta # Reiniciar
-pm2 stop hormiruta  # Detener
+pm2 logs area862  # Ver logs
+pm2 restart area862 # Reiniciar
+pm2 stop area862  # Detener
 ```
 
 ---
@@ -181,7 +181,7 @@ pm2 stop hormiruta  # Detener
 sudo apt install -y nginx
 
 # Crear configuracion del sitio
-sudo nano /etc/nginx/sites-available/hormiruta
+sudo nano /etc/nginx/sites-available/area862
 ```
 
 Contenido:
@@ -207,7 +207,7 @@ server {
 
 ```bash
 # Activar el sitio
-sudo ln -s /etc/nginx/sites-available/hormiruta /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/area862 /etc/nginx/sites-enabled/
 
 # Verificar configuracion
 sudo nginx -t
@@ -257,7 +257,7 @@ sudo ufw enable
 
 3. **Verificar logs si hay errores:**
    ```bash
-   pm2 logs hormiruta --lines 100
+   pm2 logs area862 --lines 100
    ```
 
 ---
@@ -300,7 +300,7 @@ UPDATE users SET role = 'admin' WHERE email = 'tu-email@ejemplo.com';
 Para actualizar la aplicacion:
 
 ```bash
-cd /var/www/hormiruta
+cd /var/www/area862
 
 # Obtener cambios
 git pull
@@ -312,7 +312,7 @@ npm install
 npm run build
 
 # Reiniciar servidor
-pm2 restart hormiruta
+pm2 restart area862
 ```
 
 ---

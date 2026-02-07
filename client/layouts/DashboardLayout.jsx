@@ -21,9 +21,9 @@ export default function DashboardLayout() {
             <span className="material-icons">menu</span>
           </button>
           <div className="q-avatar">
-            <img src="/Hormiruta.png" alt="HormiRuta" />
+            <img src="/Hormiruta.png" alt="Area 862" />
           </div>
-          <h1 className="q-toolbar-title">HormiRuta</h1>
+          <h1 className="q-toolbar-title">Area 862</h1>
           <span className="q-user-email">{user?.email}</span>
           <button className="q-btn-icon" onClick={handleLogout} title="Cerrar sesión">
             <span className="material-icons">logout</span>

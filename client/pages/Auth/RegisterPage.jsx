@@ -53,9 +53,9 @@ export default function RegisterPage() {
       <div className="login-card">
         <div className="text-center q-mb-lg">
           <div className="logo-avatar">
-            <img src="/Hormiruta.png" alt="HormiRuta" />
+            <img src="/Hormiruta.png" alt="Area 862" />
           </div>
-          <h1 className="brand-title">HormiRuta</h1>
+          <h1 className="brand-title">Area 862</h1>
           <p className="brand-subtitle">Crea tu cuenta para empezar</p>
         </div>
 
