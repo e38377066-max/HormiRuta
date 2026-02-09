@@ -211,7 +211,11 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
   },
   followup_message: {
     type: DataTypes.TEXT,
-    defaultValue: '¡Hola! 👋 ¿Sigues ahí? Quedamos pendientes de nuestra conversación.\n\n¿Puedo ayudarte en algo más? 😊'
+    defaultValue: 'Hola! Sigues ahi? Quedamos pendientes de nuestra conversacion. Puedo ayudarte en algo mas?'
+  },
+  followup_message_2: {
+    type: DataTypes.TEXT,
+    defaultValue: 'Hola de nuevo! Como no recibimos respuesta, pausaremos la conversacion. Cuando gustes, escribenos y con gusto te atendemos!'
   }
 }, {
   tableName: 'messaging_settings',
@@ -268,6 +272,7 @@ MessagingSettings.prototype.toDict = function() {
     followup_enabled: this.followup_enabled,
     followup_timeout_minutes: this.followup_timeout_minutes,
     followup_message: this.followup_message,
+    followup_message_2: this.followup_message_2,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

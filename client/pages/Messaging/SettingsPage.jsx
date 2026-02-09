@@ -95,6 +95,7 @@ export default function SettingsPage() {
     followup_enabled: false,
     followup_timeout_minutes: 5,
     followup_message: '',
+    followup_message_2: '',
     test_mode: false,
     test_contact_id: ''
   })
@@ -244,6 +245,7 @@ export default function SettingsPage() {
           followup_enabled: settings.followup_enabled || false,
           followup_timeout_minutes: settings.followup_timeout_minutes || 5,
           followup_message: settings.followup_message || '',
+          followup_message_2: settings.followup_message_2 || '',
           test_mode: settings.test_mode || false,
           test_contact_id: settings.test_contact_id || ''
         })
@@ -1176,13 +1178,29 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="field-group">
-                    <label>Mensaje de seguimiento</label>
+                    <label>1er mensaje de seguimiento</label>
                     <textarea
                       rows={3}
                       value={form.followup_message}
                       onChange={(e) => handleInputChange('followup_message', e.target.value)}
                       placeholder="Hola! Sigues ahi? Quedamos pendientes de nuestra conversacion..."
                     />
+                    <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
+                      Se envia la primera vez que el cliente no responde
+                    </small>
+                  </div>
+
+                  <div className="field-group">
+                    <label>2do mensaje de seguimiento</label>
+                    <textarea
+                      rows={3}
+                      value={form.followup_message_2}
+                      onChange={(e) => handleInputChange('followup_message_2', e.target.value)}
+                      placeholder="Hola de nuevo! Como no recibimos respuesta, pausaremos la conversacion..."
+                    />
+                    <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
+                      Se envia la segunda vez. Despues de este, el bot se detiene para esa conversacion
+                    </small>
                   </div>
                 </>
               )}

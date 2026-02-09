@@ -270,7 +270,9 @@ class PollingService {
         }
 
         const newCount = (conv.followup_count || 0) + 1;
-        const followupMsg = settings.followup_message || '¡Hola! 👋 ¿Sigues ahí? Quedamos pendientes de nuestra conversación.\n\n¿Puedo ayudarte en algo más? 😊';
+        const followupMsg = newCount === 1
+          ? (settings.followup_message || 'Hola! Sigues ahi? Quedamos pendientes de nuestra conversacion. Puedo ayudarte en algo mas?')
+          : (settings.followup_message_2 || 'Hola de nuevo! Como no recibimos respuesta, pausaremos la conversacion. Cuando gustes, escribenos y con gusto te atendemos!');
         
         console.log(`[Followup] Enviando seguimiento #${newCount} a contacto ${conv.contact_id} (estado: ${conv.state})`);
         
