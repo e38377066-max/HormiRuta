@@ -193,7 +193,7 @@ class ChatbotService {
     }
   }
 
-  async hasAgentAlreadyResponded(contactId) {
+  async hasAgentAlreadyResponded(contactId, isReopened = false) {
     try {
       const result = await this.api.listMessages(`id:${contactId}`, 50);
       
@@ -202,6 +202,7 @@ class ChatbotService {
       }
 
       const messages = result.items;
+      const now = Date.now();
       
       for (const msg of messages) {
         if (msg.traffic === 'outgoing' && msg.sender) {
@@ -209,6 +210,13 @@ class ChatbotService {
           const senderId = msg.sender.userId || '';
           
           if (senderSource === 'user') {
+            if (isReopened) {
+              const msgTime = new Date(msg.createdAt || msg.timestamp || 0).getTime();
+              const minutesAgo = (now - msgTime) / (1000 * 60);
+              if (minutesAgo > 10) {
+                continue;
+              }
+            }
             console.log(`[Bot] Agente (userId: ${senderId}) ya respondio en conversacion ${contactId}`);
             return { hasResponded: true, agentName: senderId };
           }
@@ -595,22 +603,52 @@ class ChatbotService {
       return { handled: false, reason: 'excluded_tag' };
     }
 
-    // IMPORTANTE: Verificar si un agente humano ya respondió en esta conversación
-    // Si ya hay respuestas de agentes, el bot NO debe interferir
-    // EXCEPCION: En modo de prueba, se salta esta verificación para permitir probar el flujo
+    let convState = await this.getOrCreateConversationState(contact.id);
+
+    // PASO 1: VERIFICAR REAPERTURA - Si la conversacion fue cerrada y reabierta,
+    // resetear el flujo para cliente existente ANTES de verificar agentes
+    // (los mensajes de agente de ANTES del cierre no cuentan)
+    let isReopened = false;
+    if (convState.conversation_closed_at) {
+      console.log(`[Bot] Conversacion de ${contact.id} fue cerrada el ${convState.conversation_closed_at} y reabierta, reiniciando flujo como CLIENTE EXISTENTE`);
+      isReopened = true;
+      await this.updateConversationState(contact.id, { 
+        state: 'initial',
+        conversation_closed_at: null,
+        out_of_hours_notified: false,
+        agent_active: false,
+        bot_paused: false,
+        greeting_sent: false,
+        awaiting_response: null,
+        has_prior_info: true,
+        is_existing_customer: true,
+        is_reopened: true,
+        selected_product: null,
+        validated_zip: null
+      });
+      convState = await this.getOrCreateConversationState(contact.id);
+    }
+
+    // PASO 2: VERIFICAR AGENTE - Consultar directamente la API de Respond.io
+    // Si un agente ya respondio, el bot NUNCA debe interferir
+    // Para reaperturas: solo verificar mensajes de agente DESPUES de la reapertura
+    // EXCEPCION: En modo de prueba, se salta esta verificación
     if (!this.isTestMode) {
-      const agentCheck = await this.hasAgentAlreadyResponded(contact.id);
+      const agentCheck = await this.hasAgentAlreadyResponded(contact.id, isReopened);
       if (agentCheck.hasResponded) {
         console.log(`[Bot] Agente ${agentCheck.agentName} ya atendio a ${contact.id}, bot no interferira`);
+        await this.updateConversationState(contact.id, {
+          agent_active: true,
+          last_agent_message_at: new Date(),
+          is_existing_customer: true
+        });
         return { handled: false, reason: 'agent_already_responded', agentName: agentCheck.agentName };
       }
     } else {
       console.log(`[Bot] MODO PRUEBA - Saltando verificación de agente para ${contact.id}`);
     }
 
-    let convState = await this.getOrCreateConversationState(contact.id);
-    
-    // Si el bot estaba pausado por seguimiento sin respuesta, reactivar al recibir mensaje del cliente
+    // PASO 3: Manejar pausa por seguimiento
     if (convState.bot_paused) {
       console.log(`[Bot] Contacto ${contact.id} respondio despues de pausa por seguimiento, reactivando bot`);
       await this.updateConversationState(contact.id, {
@@ -628,11 +666,10 @@ class ChatbotService {
       });
     }
     
-    // VERIFICAR HISTORIAL: Si el estado es 'initial' (recien creado) y la conversacion
-    // NUNCA fue cerrada, verificar si ya hay mensajes del bot en el historial.
-    // Si el bot ya interactuó antes, NO iniciar un nuevo flujo — la conversacion ya fue atendida.
+    // PASO 4: VERIFICAR HISTORIAL para conversaciones abiertas sin cerrar
+    // Si el bot ya interactuó antes, NO iniciar un nuevo flujo
     // EXCEPCION: En modo prueba se salta esta verificación
-    if (!this.isTestMode && convState.state === 'initial' && !convState.conversation_closed_at && !convState.is_existing_customer) {
+    if (!this.isTestMode && convState.state === 'initial' && !convState.conversation_closed_at && !convState.is_existing_customer && !isReopened) {
       const botAlreadyTalked = await this.hasBotAlreadyInteracted(contact.id);
       if (botAlreadyTalked) {
         console.log(`[Bot] Contacto ${contact.id} ya tiene mensajes del bot en historial (conversacion abierta sin cerrar), bot NO interferira`);
@@ -644,35 +681,12 @@ class ChatbotService {
       }
     }
 
-    // VERIFICAR REAPERTURA ANTES DE TODO: Si la conversacion fue cerrada y reabierta,
-    // limpiar estado de flujo pero marcar como cliente existente (ya tuvo conversacion previa)
-    if (convState.conversation_closed_at) {
-      console.log(`[Bot] Conversacion de ${contact.id} fue cerrada el ${convState.conversation_closed_at} y reabierta, reiniciando flujo como CLIENTE EXISTENTE`);
-      await this.updateConversationState(contact.id, { 
-        state: 'initial',
-        conversation_closed_at: null,
-        out_of_hours_notified: false,
-        agent_active: false,
-        bot_paused: false,
-        greeting_sent: false,
-        awaiting_response: null,
-        has_prior_info: true,
-        is_existing_customer: true,
-        is_reopened: true,
-        selected_product: null,
-        validated_zip: null
-      });
-      convState = await this.getOrCreateConversationState(contact.id);
-    }
-    
-    // Recargar el estado actualizado para que shouldBotRespond use los tiempos correctos
+    // Recargar el estado actualizado
     convState = await this.getOrCreateConversationState(contact.id);
 
-    // REANUDACION POST FUERA-DE-HORARIO: Si el contacto recibió mensaje de fuera de horario
-    // y ahora estamos en horario de atención, verificar si un agente humano realmente respondió.
-    // Si NO respondió, resetear flags para que el bot inicie el flujo automático.
-    if (convState.out_of_hours_notified && convState.agent_active && this.isWithinBusinessHours()) {
-      const agentCheck = await this.hasAgentAlreadyResponded(contact.id);
+    // REANUDACION POST FUERA-DE-HORARIO
+    if (convState.out_of_hours_notified && this.isWithinBusinessHours()) {
+      const agentCheck = await this.hasAgentAlreadyResponded(contact.id, false);
       if (!agentCheck.hasResponded) {
         const botInteracted = await this.hasBotAlreadyInteracted(contact.id);
         const isExisting = botInteracted || convState.is_existing_customer;
@@ -687,6 +701,7 @@ class ChatbotService {
         convState = await this.getOrCreateConversationState(contact.id);
       } else {
         console.log(`[Bot] Contacto ${contact.id} vuelve en horario pero agente ${agentCheck.agentName} ya respondio, bot no interferira`);
+        return { handled: false, reason: 'agent_already_responded' };
       }
     }
 
