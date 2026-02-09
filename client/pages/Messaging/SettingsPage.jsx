@@ -705,53 +705,6 @@ export default function SettingsPage() {
 
             <div className="settings-card">
               <h3>
-                <span className="material-icons">timer</span>
-                Seguimiento Automatico
-              </h3>
-              <p className="description">Si el cliente no responde despues de un tiempo, el bot envia un recordatorio. Al segundo intento sin respuesta, se detiene.</p>
-              
-              <div className="checkbox-row">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={form.followup_enabled}
-                    onChange={(e) => handleInputChange('followup_enabled', e.target.checked)}
-                  />
-                  <span>Activar seguimiento automatico</span>
-                </label>
-              </div>
-
-              {form.followup_enabled && (
-                <>
-                  <div className="field-group">
-                    <label>Tiempo de espera (minutos)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="1440"
-                      value={form.followup_timeout_minutes}
-                      onChange={(e) => handleInputChange('followup_timeout_minutes', parseInt(e.target.value) || 5)}
-                    />
-                    <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
-                      Si nadie responde en este tiempo, se envia el mensaje de seguimiento
-                    </small>
-                  </div>
-
-                  <div className="field-group">
-                    <label>Mensaje de seguimiento</label>
-                    <textarea
-                      rows={3}
-                      value={form.followup_message}
-                      onChange={(e) => handleInputChange('followup_message', e.target.value)}
-                      placeholder="¡Hola! ¿Sigues ahí? Quedamos pendientes de nuestra conversación..."
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="settings-card">
-              <h3>
                 <span className="material-icons">people</span>
                 Agentes por Servicio
               </h3>
@@ -1188,6 +1141,53 @@ export default function SettingsPage() {
 
         {activeTab === 'automation' && (
           <>
+            <div className="settings-card">
+              <h3>
+                <span className="material-icons">timer</span>
+                Seguimiento Automatico
+              </h3>
+              <p className="description">Si el cliente no responde despues de un tiempo, el bot envia un recordatorio. Al segundo intento sin respuesta, se detiene.</p>
+              
+              <div className="checkbox-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={form.followup_enabled}
+                    onChange={(e) => handleInputChange('followup_enabled', e.target.checked)}
+                  />
+                  <span>Activar seguimiento automatico</span>
+                </label>
+              </div>
+
+              {form.followup_enabled && (
+                <>
+                  <div className="field-group">
+                    <label>Tiempo de espera (minutos)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1440"
+                      value={form.followup_timeout_minutes}
+                      onChange={(e) => handleInputChange('followup_timeout_minutes', parseInt(e.target.value) || 5)}
+                    />
+                    <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
+                      Si nadie responde en este tiempo, se envia el mensaje de seguimiento
+                    </small>
+                  </div>
+
+                  <div className="field-group">
+                    <label>Mensaje de seguimiento</label>
+                    <textarea
+                      rows={3}
+                      value={form.followup_message}
+                      onChange={(e) => handleInputChange('followup_message', e.target.value)}
+                      placeholder="Hola! Sigues ahi? Quedamos pendientes de nuestra conversacion..."
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
             <div className="settings-card">
               <h3>
                 <span className="material-icons">auto_fix_high</span>
