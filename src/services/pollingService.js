@@ -525,17 +525,32 @@ class PollingService {
 
   async markAgentActivity(userId, contactId) {
     try {
-      await ConversationState.update(
-        { 
-          agent_active: true, 
+      const [state, created] = await ConversationState.findOrCreate({
+        where: { user_id: userId, contact_id: contactId.toString() },
+        defaults: {
+          user_id: userId,
+          contact_id: contactId.toString(),
+          state: 'assigned',
+          agent_active: true,
+          last_agent_message_at: new Date(),
+          last_interaction: new Date(),
+          is_existing_customer: true,
+          followup_count: 0,
+          followup_last_sent_at: null
+        }
+      });
+
+      if (!created) {
+        await state.update({
+          agent_active: true,
           last_agent_message_at: new Date(),
           last_interaction: new Date(),
           followup_count: 0,
           followup_last_sent_at: null
-        },
-        { where: { user_id: userId, contact_id: contactId.toString() } }
-      );
-      console.log(`[Polling] Agente activo detectado para contacto ${contactId}`);
+        });
+      }
+
+      console.log(`[Polling] Agente activo detectado para contacto ${contactId} (registro ${created ? 'CREADO' : 'actualizado'})`);
     } catch (error) {
       console.error(`[Polling] Error marcando agente activo:`, error.message);
     }
