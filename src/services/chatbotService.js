@@ -610,9 +610,10 @@ class ChatbotService {
 
     let convState = await this.getOrCreateConversationState(contact.id);
     
-    // Actualizar último mensaje del cliente ANTES de verificar si debe responder
     await this.updateConversationState(contact.id, { 
-      last_customer_message_at: new Date() 
+      last_customer_message_at: new Date(),
+      followup_count: 0,
+      followup_last_sent_at: null
     });
     
     // VERIFICAR HISTORIAL: Si el estado es 'initial' (recien creado) y la conversacion

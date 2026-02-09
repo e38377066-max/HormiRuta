@@ -92,6 +92,9 @@ export default function SettingsPage() {
     default_agent_id: '',
     default_agent_name: '',
     message_history_limit: 50,
+    followup_enabled: false,
+    followup_timeout_minutes: 5,
+    followup_message: '',
     test_mode: false,
     test_contact_id: ''
   })
@@ -238,6 +241,9 @@ export default function SettingsPage() {
           default_agent_id: settings.default_agent_id || '',
           default_agent_name: settings.default_agent_name || '',
           message_history_limit: settings.message_history_limit || 50,
+          followup_enabled: settings.followup_enabled || false,
+          followup_timeout_minutes: settings.followup_timeout_minutes || 5,
+          followup_message: settings.followup_message || '',
           test_mode: settings.test_mode || false,
           test_contact_id: settings.test_contact_id || ''
         })
@@ -691,6 +697,53 @@ export default function SettingsPage() {
                       value={form.out_of_hours_message}
                       onChange={(e) => handleInputChange('out_of_hours_message', e.target.value)}
                       placeholder="Gracias por contactarnos. Nuestro horario de atencion es de Lunes a Viernes de 9am a 6pm..."
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="settings-card">
+              <h3>
+                <span className="material-icons">timer</span>
+                Seguimiento Automatico
+              </h3>
+              <p className="description">Si el cliente no responde despues de un tiempo, el bot envia un recordatorio. Al segundo intento sin respuesta, se detiene.</p>
+              
+              <div className="checkbox-row">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={form.followup_enabled}
+                    onChange={(e) => handleInputChange('followup_enabled', e.target.checked)}
+                  />
+                  <span>Activar seguimiento automatico</span>
+                </label>
+              </div>
+
+              {form.followup_enabled && (
+                <>
+                  <div className="field-group">
+                    <label>Tiempo de espera (minutos)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1440"
+                      value={form.followup_timeout_minutes}
+                      onChange={(e) => handleInputChange('followup_timeout_minutes', parseInt(e.target.value) || 5)}
+                    />
+                    <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
+                      Si nadie responde en este tiempo, se envia el mensaje de seguimiento
+                    </small>
+                  </div>
+
+                  <div className="field-group">
+                    <label>Mensaje de seguimiento</label>
+                    <textarea
+                      rows={3}
+                      value={form.followup_message}
+                      onChange={(e) => handleInputChange('followup_message', e.target.value)}
+                      placeholder="¡Hola! ¿Sigues ahí? Quedamos pendientes de nuestra conversación..."
                     />
                   </div>
                 </>

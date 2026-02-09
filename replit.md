@@ -30,6 +30,8 @@ Area 862 System es una aplicacion de planificacion y optimizacion de rutas de en
 ```
 
 ## Recent Changes
+- 2026-02-09: Renombrado proyecto completo de HormiRuta a Area 862 System (código, UI, mobile, docs)
+- 2026-02-09: Sistema de seguimiento automático: reenvío de mensaje si cliente no responde, configurable en minutos
 - 2026-02-07: Detección determinística de conversaciones cerradas via polling (campo conversation_closed_at en BD)
 - 2026-02-07: Cliente existente con conversacion abierta: bot no inicia flujo si la conversacion sigue abierta, solo si fue cerrada y reabierta
 - 2026-02-05: Bot no interfiere si un agente humano ya respondió en la conversación

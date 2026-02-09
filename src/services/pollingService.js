@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import sequelize from '../config/database.js';
 import RespondioService from './respondio.js';
 import AddressValidationService from './addressValidation.js';
 import ChatbotService from './chatbotService.js';
@@ -212,6 +213,84 @@ class PollingService {
     for (const contact of uniqueContacts) {
       await this.processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit, isTestMode);
     }
+
+    await this.checkFollowups(userId, apiToken, settings);
+  }
+
+  async checkFollowups(userId, apiToken, settings) {
+    if (!settings.followup_enabled || !settings.followup_timeout_minutes) {
+      return;
+    }
+
+    const timeoutMinutes = settings.followup_timeout_minutes;
+    const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+
+    const pendingConversations = await ConversationState.findAll({
+      where: {
+        user_id: userId,
+        bot_paused: false,
+        agent_active: false,
+        last_bot_message_at: { [Op.ne]: null, [Op.lt]: cutoffTime },
+        followup_count: { [Op.lt]: 2 },
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { last_customer_message_at: null },
+              { last_customer_message_at: { [Op.lt]: sequelize.col('last_bot_message_at') } }
+            ]
+          },
+          {
+            [Op.or]: [
+              { last_agent_message_at: null },
+              { last_agent_message_at: { [Op.lt]: sequelize.col('last_bot_message_at') } }
+            ]
+          }
+        ],
+        state: { [Op.notIn]: ['assigned', 'closed_no_coverage', 'initial'] }
+      }
+    });
+
+    if (pendingConversations.length === 0) {
+      return;
+    }
+
+    console.log(`[Followup] Encontradas ${pendingConversations.length} conversaciones sin respuesta (timeout: ${timeoutMinutes} min)`);
+    
+    const respondio = new RespondioService(apiToken);
+    const chatbot = new ChatbotService(userId, settings);
+
+    for (const conv of pendingConversations) {
+      try {
+        if (conv.followup_last_sent_at) {
+          const lastFollowup = new Date(conv.followup_last_sent_at).getTime();
+          const timeSinceFollowup = (Date.now() - lastFollowup) / (1000 * 60);
+          if (timeSinceFollowup < timeoutMinutes) {
+            continue;
+          }
+        }
+
+        const newCount = (conv.followup_count || 0) + 1;
+        const followupMsg = settings.followup_message || '¡Hola! 👋 ¿Sigues ahí? Quedamos pendientes de nuestra conversación.\n\n¿Puedo ayudarte en algo más? 😊';
+        
+        console.log(`[Followup] Enviando seguimiento #${newCount} a contacto ${conv.contact_id} (estado: ${conv.state})`);
+        
+        await chatbot.sendMessage(conv.contact_id, followupMsg);
+        
+        await conv.update({
+          followup_count: newCount,
+          followup_last_sent_at: new Date()
+        });
+
+        if (newCount >= 2) {
+          console.log(`[Followup] Contacto ${conv.contact_id}: 2do seguimiento enviado, deteniendo flujo`);
+          await conv.update({ bot_paused: true });
+          await chatbot.addTrackingTag(conv.contact_id, 'SinRespuesta');
+        }
+
+      } catch (error) {
+        console.error(`[Followup] Error procesando contacto ${conv.contact_id}:`, error.message);
+      }
+    }
   }
 
   async processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit = 50, isTestMode = false) {
@@ -417,7 +496,9 @@ class PollingService {
         { 
           agent_active: true, 
           last_agent_message_at: new Date(),
-          last_interaction: new Date()
+          last_interaction: new Date(),
+          followup_count: 0,
+          followup_last_sent_at: null
         },
         { where: { user_id: userId, contact_id: contactId.toString() } }
       );
