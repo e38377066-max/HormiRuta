@@ -92,6 +92,32 @@ class PollingService {
     return { success: false, error: 'No hay polling activo para este usuario' };
   }
 
+  async preloadContactMessages(userId, contactId) {
+    const poller = this.activePollers.get(userId);
+    if (!poller) return;
+
+    try {
+      const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+      if (!settings?.respond_api_token) return;
+
+      const respondio = new RespondioService(settings.respond_api_token);
+      const messagesResult = await respondio.listMessages(contactId, { limit: settings.message_history_limit || 50 });
+      
+      if (messagesResult.success && messagesResult.items) {
+        for (const msg of messagesResult.items) {
+          if (msg.traffic === 'outgoing') {
+            poller.processedMessageIds.add(`out_${msg.messageId}`);
+          } else {
+            poller.processedMessageIds.add(msg.messageId);
+          }
+        }
+        console.log(`[Reset Test] Pre-cargados ${messagesResult.items.length} mensajes existentes para contacto ${contactId}`);
+      }
+    } catch (error) {
+      console.error(`[Reset Test] Error pre-cargando mensajes:`, error.message);
+    }
+  }
+
   getPollingStatus(userId) {
     const poller = this.activePollers.get(userId);
     if (poller) {

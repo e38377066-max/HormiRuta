@@ -155,6 +155,8 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
 
     console.log(`[Reset Test] Datos eliminados para contacto: ${contact.id} (${contact.firstName} ${contact.lastName})`);
     
+    await pollingService.preloadContactMessages(req.session.userId, contact.id);
+    
     res.json({ 
       success: true, 
       message: 'Historial de prueba reiniciado. El flujo iniciará cuando envíes un nuevo mensaje.',
