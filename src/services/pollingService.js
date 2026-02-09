@@ -333,21 +333,26 @@ class PollingService {
     
     // Detectar mensajes salientes de agentes (sender.source === 'user') para marcar agente activo
     // Según API Respond.io: sender.source = 'user' indica mensaje enviado por agente humano
-    const outgoingAgentMessages = messages
-      .filter(msg => msg.traffic === 'outgoing' && msg.sender?.source === 'user')
-      .filter(msg => !poller.processedMessageIds.has(`out_${msg.messageId}`));
-    
-    if (outgoingAgentMessages.length > 0) {
-      await this.markAgentActivity(userId, contact.id);
-      for (const msg of outgoingAgentMessages) {
+    // En MODO PRUEBA: ignorar detección de agente para simular cliente nuevo
+    if (!isTestMode) {
+      const outgoingAgentMessages = messages
+        .filter(msg => msg.traffic === 'outgoing' && msg.sender?.source === 'user')
+        .filter(msg => !poller.processedMessageIds.has(`out_${msg.messageId}`));
+      
+      if (outgoingAgentMessages.length > 0) {
+        await this.markAgentActivity(userId, contact.id);
+        for (const msg of outgoingAgentMessages) {
+          poller.processedMessageIds.add(`out_${msg.messageId}`);
+        }
+        for (const msg of messages.filter(m => m.traffic === 'incoming')) {
+          poller.processedMessageIds.add(msg.messageId);
+        }
+        return;
+      }
+    } else {
+      for (const msg of messages.filter(m => m.traffic === 'outgoing')) {
         poller.processedMessageIds.add(`out_${msg.messageId}`);
       }
-      // Agente humano ya respondió en esta conversación, NO procesar mensajes entrantes
-      // para evitar que el bot interfiera con conversaciones atendidas por agentes
-      for (const msg of messages.filter(m => m.traffic === 'incoming')) {
-        poller.processedMessageIds.add(msg.messageId);
-      }
-      return;
     }
     
     // Filtrar mensajes entrantes del CLIENTE (no del bot)

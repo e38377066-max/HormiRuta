@@ -619,7 +619,8 @@ class ChatbotService {
     // VERIFICAR HISTORIAL: Si el estado es 'initial' (recien creado) y la conversacion
     // NUNCA fue cerrada, verificar si ya hay mensajes del bot en el historial.
     // Si el bot ya interactuó antes, NO iniciar un nuevo flujo — la conversacion ya fue atendida.
-    if (convState.state === 'initial' && !convState.conversation_closed_at && !convState.is_existing_customer) {
+    // EXCEPCION: En modo prueba se salta esta verificación
+    if (!this.isTestMode && convState.state === 'initial' && !convState.conversation_closed_at && !convState.is_existing_customer) {
       const botAlreadyTalked = await this.hasBotAlreadyInteracted(contact.id);
       if (botAlreadyTalked) {
         console.log(`[Bot] Contacto ${contact.id} ya tiene mensajes del bot en historial (conversacion abierta sin cerrar), bot NO interferira`);
