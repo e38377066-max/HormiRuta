@@ -6,7 +6,6 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    url: process.env.SERVER_URL || 'https://api.area862.com',
     cleartext: true
   },
   plugins: {

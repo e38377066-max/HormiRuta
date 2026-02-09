@@ -205,6 +205,10 @@
     font-size: 16px;
   }
   
+  .q-user-email {
+    display: none;
+  }
+  
   .q-page-container {
     padding: 12px;
     margin-top: 52px;

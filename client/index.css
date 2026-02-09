@@ -197,6 +197,27 @@ select:focus {
   }
 }
 
+@media (max-width: 480px) {
+  .grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+  
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .btn {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  
+  .table th,
+  .table td {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+}
+
 .stat-card {
   padding: 16px;
   border-radius: 8px;
