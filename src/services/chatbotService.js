@@ -195,13 +195,13 @@ class ChatbotService {
 
   async hasAgentAlreadyResponded(contactId) {
     try {
-      const result = await this.api.listMessages(`id:${contactId}`, 30);
+      const result = await this.api.listMessages(`id:${contactId}`, 50);
       
-      if (!result.success || !result.data?.items) {
+      if (!result.success || !result.items) {
         return { hasResponded: false, agentName: null };
       }
 
-      const messages = result.data.items;
+      const messages = result.items;
       
       for (const msg of messages) {
         if (msg.traffic === 'outgoing' && msg.sender) {
@@ -224,13 +224,13 @@ class ChatbotService {
 
   async hasBotAlreadyInteracted(contactId) {
     try {
-      const result = await this.api.listMessages(`id:${contactId}`, 30);
+      const result = await this.api.listMessages(`id:${contactId}`, 50);
       
-      if (!result.success || !result.data?.items) {
+      if (!result.success || !result.items) {
         return false;
       }
 
-      const messages = result.data.items;
+      const messages = result.items;
       
       for (const msg of messages) {
         if (msg.traffic === 'outgoing' && msg.sender) {
