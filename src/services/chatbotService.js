@@ -610,11 +610,23 @@ class ChatbotService {
 
     let convState = await this.getOrCreateConversationState(contact.id);
     
-    await this.updateConversationState(contact.id, { 
-      last_customer_message_at: new Date(),
-      followup_count: 0,
-      followup_last_sent_at: null
-    });
+    // Si el bot estaba pausado por seguimiento sin respuesta, reactivar al recibir mensaje del cliente
+    if (convState.bot_paused) {
+      console.log(`[Bot] Contacto ${contact.id} respondio despues de pausa por seguimiento, reactivando bot`);
+      await this.updateConversationState(contact.id, {
+        bot_paused: false,
+        followup_count: 0,
+        followup_last_sent_at: null,
+        last_customer_message_at: new Date()
+      });
+      convState = await this.getOrCreateConversationState(contact.id);
+    } else {
+      await this.updateConversationState(contact.id, { 
+        last_customer_message_at: new Date(),
+        followup_count: 0,
+        followup_last_sent_at: null
+      });
+    }
     
     // VERIFICAR HISTORIAL: Si el estado es 'initial' (recien creado) y la conversacion
     // NUNCA fue cerrada, verificar si ya hay mensajes del bot en el historial.
