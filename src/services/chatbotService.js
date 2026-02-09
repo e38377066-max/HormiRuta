@@ -151,8 +151,8 @@ class ChatbotService {
       return { respond: false, reason: 'bot_paused' };
     }
     
-    // Si hay un agente activo y no está abandonado, no interferir
-    if (convState.agent_active && !this.isConversationAbandoned(convState)) {
+    // Si hay un agente activo, NUNCA interferir - sin excepciones
+    if (convState.agent_active) {
       return { respond: false, reason: 'agent_active' };
     }
     
