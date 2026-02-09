@@ -199,6 +199,19 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
   message_history_limit: {
     type: DataTypes.INTEGER,
     defaultValue: 50
+  },
+  // Seguimiento automático: tiempo en minutos para reenviar mensaje si no hay respuesta
+  followup_enabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  followup_timeout_minutes: {
+    type: DataTypes.INTEGER,
+    defaultValue: 5
+  },
+  followup_message: {
+    type: DataTypes.TEXT,
+    defaultValue: '¡Hola! 👋 ¿Sigues ahí? Quedamos pendientes de nuestra conversación.\n\n¿Puedo ayudarte en algo más? 😊'
   }
 }, {
   tableName: 'messaging_settings',
@@ -252,6 +265,9 @@ MessagingSettings.prototype.toDict = function() {
     test_mode: this.test_mode,
     test_contact_id: this.test_contact_id,
     message_history_limit: this.message_history_limit,
+    followup_enabled: this.followup_enabled,
+    followup_timeout_minutes: this.followup_timeout_minutes,
+    followup_message: this.followup_message,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

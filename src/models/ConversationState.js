@@ -94,6 +94,14 @@ const ConversationState = sequelize.define('ConversationState', {
   context_data: {
     type: DataTypes.JSON,
     defaultValue: {}
+  },
+  followup_count: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  followup_last_sent_at: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   tableName: 'conversation_states',
@@ -131,7 +139,9 @@ ConversationState.prototype.toDict = function() {
     greeting_sent: this.greeting_sent,
     conversation_closed_at: this.conversation_closed_at,
     last_seen_open_at: this.last_seen_open_at,
-    context_data: this.context_data
+    context_data: this.context_data,
+    followup_count: this.followup_count,
+    followup_last_sent_at: this.followup_last_sent_at
   };
 };
 
