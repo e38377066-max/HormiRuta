@@ -204,14 +204,17 @@ npm run cap:add:ios     # Add iOS platform
 - Nginx reverse proxy + Let's Encrypt SSL
 - Mobile compilation: Android Studio / Xcode with Capacitor
 
+## User Preferences
+- Comunicacion en español
+- El cliente NO debe ver ninguna referencia a Replit en el codigo ni archivos entregables (es secreto de desarrollo)
+- La carpeta attached_assets/ nunca debe subirse a Git
+- Todos los archivos de configuracion del entorno de desarrollo estan excluidos del repositorio
+
 ## Git Exclusions
-The following Replit-specific files/folders are excluded from Git:
-- `.replit` - Replit configuration
-- `.cache/` - Replit cache
-- `.config/` - Replit config
-- `.local/` - Local Replit data
-- `.upm/` - Replit package manager
-- `attached_assets/` - Replit attached files
+Development environment files excluded from Git:
+- `.replit`, `replit.nix`, `replit.md`
+- `.cache/`, `.config/`, `.local/`, `.upm/`
+- `attached_assets/`
 
 ## Development Notes
 1. Server runs on port 5000 serving both API and frontend

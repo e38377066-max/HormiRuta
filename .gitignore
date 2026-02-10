@@ -31,13 +31,13 @@ yarn-error.log*
 .replit
 replit.nix
 replit.md
+.replit.nix
 .cache/
 .config/
 .local/
 .upm/
-attached_assets/
 .breakpoints
-.replit.nix
+attached_assets/
 
 # Capacitor Android (keep android folder but ignore build artifacts)
 android/.gradle
