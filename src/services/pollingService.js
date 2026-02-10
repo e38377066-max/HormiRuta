@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
 import RespondioService from './respondio.js';
 import AddressValidationService from './addressValidation.js';
+import AddressExtractorService from './addressExtractorService.js';
 import ChatbotService from './chatbotService.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import MessagingOrder from '../models/MessagingOrder.js';
@@ -13,6 +14,8 @@ class PollingService {
   constructor() {
     this.activePollers = new Map();
     this.processedMessages = new Map();
+    this.addressScannedContacts = new Set();
+    this.lastFullAddressScan = null;
   }
 
   async startPolling(userId, intervalSeconds = 30) {
@@ -241,6 +244,8 @@ class PollingService {
     }
 
     await this.checkFollowups(userId, apiToken, settings);
+
+    await this.scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings);
   }
 
   async checkFollowups(userId, apiToken, settings) {
@@ -674,6 +679,105 @@ class PollingService {
       message_content: text,
       processed: true
     });
+  }
+
+  async scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings) {
+    try {
+      const extractor = new AddressExtractorService();
+      let updatedCount = 0;
+      const MAX_CONTACTS_PER_SCAN = 15;
+      const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
+
+      let contactsToScan = allContacts.filter((contact, index, self) =>
+        index === self.findIndex(c => c.id === contact.id)
+      );
+
+      contactsToScan = contactsToScan.filter(c => !this.addressScannedContacts.has(c.id.toString()));
+
+      if (contactsToScan.length === 0) {
+        if (this.lastFullAddressScan && (Date.now() - this.lastFullAddressScan) > RESCAN_INTERVAL_MS) {
+          this.addressScannedContacts.clear();
+          console.log(`[AddressScan] Cache limpiado, proximo ciclo re-escaneara todos los contactos`);
+          this.lastFullAddressScan = Date.now();
+        }
+        return;
+      }
+
+      if (!this.lastFullAddressScan) {
+        this.lastFullAddressScan = Date.now();
+      }
+
+      const batch = contactsToScan.slice(0, MAX_CONTACTS_PER_SCAN);
+
+      for (const contact of batch) {
+        const contactIdStr = contact.id.toString();
+        this.addressScannedContacts.add(contactIdStr);
+
+        try {
+          const contactDetail = await respondio.getContact(contact.id);
+          if (!contactDetail.success) continue;
+
+          const contactData = contactDetail.data;
+          const customFields = contactData?.customFields || {};
+          const currentAddress = customFields?.address || customFields?.Address || '';
+
+          if (currentAddress && currentAddress.trim().length > 5) {
+            continue;
+          }
+
+          const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
+          if (!messagesResult.success || !messagesResult.items) continue;
+
+          const result = extractor.extractAddressFromConversation(messagesResult.items);
+
+          if (result && result.address) {
+            const components = extractor.extractFullAddressComponents(result.address);
+            const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+
+            const customFieldsUpdate = {};
+            customFieldsUpdate.address = result.address;
+
+            if (components.zip) {
+              customFieldsUpdate.zip_code = components.zip;
+            }
+
+            const updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
+
+            if (updateResult.success) {
+              updatedCount++;
+              console.log(`[AddressScan] Direccion actualizada para ${contactName} (${contact.id}): "${result.address}"${components.zip ? ` ZIP: ${components.zip}` : ''}`);
+            } else {
+              const altFieldsUpdate = {};
+              altFieldsUpdate['Address'] = result.address;
+              if (components.zip) {
+                altFieldsUpdate['Zip Code'] = components.zip;
+              }
+
+              const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
+              if (altResult.success) {
+                updatedCount++;
+                console.log(`[AddressScan] Direccion actualizada (alt) para ${contactName} (${contact.id}): "${result.address}"`);
+              } else {
+                console.error(`[AddressScan] Error actualizando direccion de ${contactName} (${contact.id}):`, updateResult.error);
+              }
+            }
+          }
+        } catch (contactError) {
+          console.error(`[AddressScan] Error procesando contacto ${contact.id}:`, contactError.message);
+        }
+      }
+
+      if (updatedCount > 0) {
+        console.log(`[AddressScan] === ${updatedCount} contactos actualizados con direccion ===`);
+      }
+
+      const remaining = contactsToScan.length - batch.length;
+      if (remaining > 0) {
+        console.log(`[AddressScan] ${batch.length} escaneados, ${remaining} pendientes para proximo ciclo`);
+      }
+    } catch (error) {
+      console.error(`[AddressScan] Error general en escaneo de direcciones:`, error.message);
+    }
   }
 }
 

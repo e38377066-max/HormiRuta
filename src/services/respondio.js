@@ -264,6 +264,28 @@ class RespondioService {
     }
   }
 
+  async updateContactCustomFields(contactIdentifier, customFields) {
+    try {
+      const identifier = typeof contactIdentifier === 'number' 
+        ? `id:${contactIdentifier}` 
+        : contactIdentifier;
+
+      const response = await this.client.patch(`/contact/${identifier}`, {
+        customFields
+      });
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Respond.io update custom fields error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message
+      };
+    }
+  }
+
   async listMessages(contactIdentifier, options = {}) {
     try {
       const identifier = typeof contactIdentifier === 'number' 
