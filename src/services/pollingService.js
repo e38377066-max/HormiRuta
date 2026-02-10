@@ -3,6 +3,7 @@ import sequelize from '../config/database.js';
 import RespondioService from './respondio.js';
 import AddressValidationService from './addressValidation.js';
 import AddressExtractorService from './addressExtractorService.js';
+import geocodingService from './geocodingService.js';
 import ChatbotService from './chatbotService.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import MessagingOrder from '../models/MessagingOrder.js';
@@ -731,32 +732,51 @@ class PollingService {
           const result = extractor.extractAddressFromConversation(messagesResult.items);
 
           if (result && result.address) {
-            const components = extractor.extractFullAddressComponents(result.address);
             const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+            let finalAddress = result.address;
+            let finalZip = null;
+
+            const geocoded = await geocodingService.geocodeAddress(result.address);
+
+            if (geocoded.success && geocoded.confidence === 'high') {
+              finalAddress = geocoded.fullAddress;
+              finalZip = geocoded.zip;
+              if (geocoded.wasChanged) {
+                console.log(`[AddressScan] Geocoding corrigió: "${result.address}" -> "${finalAddress}"`);
+              }
+            } else if (geocoded.success && geocoded.confidence === 'low') {
+              finalAddress = geocoded.fullAddress;
+              finalZip = geocoded.zip;
+              console.log(`[AddressScan] Geocoding (baja confianza): "${result.address}" -> "${finalAddress}"`);
+            } else {
+              const components = extractor.extractFullAddressComponents(result.address);
+              finalZip = components.zip;
+              console.log(`[AddressScan] Geocoding no disponible, usando dirección original: "${result.address}"`);
+            }
 
             const customFieldsUpdate = {};
-            customFieldsUpdate.address = result.address;
+            customFieldsUpdate.address = finalAddress;
 
-            if (components.zip) {
-              customFieldsUpdate.zip_code = components.zip;
+            if (finalZip) {
+              customFieldsUpdate.zip_code = finalZip;
             }
 
             const updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
 
             if (updateResult.success) {
               updatedCount++;
-              console.log(`[AddressScan] Direccion actualizada para ${contactName} (${contact.id}): "${result.address}"${components.zip ? ` ZIP: ${components.zip}` : ''}`);
+              console.log(`[AddressScan] Direccion actualizada para ${contactName} (${contact.id}): "${finalAddress}"${finalZip ? ` ZIP: ${finalZip}` : ''}`);
             } else {
               const altFieldsUpdate = {};
-              altFieldsUpdate['Address'] = result.address;
-              if (components.zip) {
-                altFieldsUpdate['Zip Code'] = components.zip;
+              altFieldsUpdate['Address'] = finalAddress;
+              if (finalZip) {
+                altFieldsUpdate['Zip Code'] = finalZip;
               }
 
               const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
               if (altResult.success) {
                 updatedCount++;
-                console.log(`[AddressScan] Direccion actualizada (alt) para ${contactName} (${contact.id}): "${result.address}"`);
+                console.log(`[AddressScan] Direccion actualizada (alt) para ${contactName} (${contact.id}): "${finalAddress}"`);
               } else {
                 console.error(`[AddressScan] Error actualizando direccion de ${contactName} (${contact.id}):`, updateResult.error);
               }

@@ -30,6 +30,7 @@ Area 862 System es una aplicacion de planificacion y optimizacion de rutas de en
 ```
 
 ## Recent Changes
+- 2026-02-10: Integración Google Maps Geocoding para corregir direcciones con errores antes de guardar en Respond.io
 - 2026-02-10: Escaneo automático de direcciones en polling: lee TODOS los chats, extrae direcciones válidas y actualiza custom fields (Address, Zip Code) en Respond.io
 - 2026-02-09: Renombrado proyecto completo de HormiRuta a Area 862 System (código, UI, mobile, docs)
 - 2026-02-09: Sistema de seguimiento automático: reenvío de mensaje si cliente no responde, configurable en minutos
