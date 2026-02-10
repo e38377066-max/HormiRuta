@@ -189,8 +189,20 @@ npm run cap:add:ios     # Add iOS platform
 
 ## Environment Variables
 - DATABASE_URL - PostgreSQL connection string
+- DATABASE_SSL - Set to 'true' to force SSL (auto-detected for cloud providers)
 - SESSION_SECRET - Express session secret
-- VITE_GOOGLE_MAPS_API_KEY - Google Maps API key
+- NODE_ENV - Environment (development/production)
+- PORT - Server port (default: 5000)
+- SERVER_DOMAIN - Server domain for CORS (without https://)
+- VITE_GOOGLE_MAPS_API_KEY - Google Maps API key (frontend)
+- GOOGLE_MAPS_API_KEY - Google Maps API key (backend geocoding)
+- VITE_API_URL - Full server URL for mobile apps (https://tu-dominio.com)
+
+## Production Deployment
+- See INSTALL.md for complete Ubuntu server setup guide
+- PM2 config: ecosystem.config.cjs
+- Nginx reverse proxy + Let's Encrypt SSL
+- Mobile compilation: Android Studio / Xcode with Capacitor
 
 ## Git Exclusions
 The following Replit-specific files/folders are excluded from Git:

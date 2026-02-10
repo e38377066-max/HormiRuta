@@ -8,6 +8,9 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+const useSSL = process.env.DATABASE_SSL === 'true' || 
+  (databaseUrl.includes('neon.tech') || databaseUrl.includes('rds.amazonaws.com') || databaseUrl.includes('supabase'));
+
 const sequelize = new Sequelize(databaseUrl, {
   dialect: 'postgres',
   logging: false,
@@ -17,12 +20,12 @@ const sequelize = new Sequelize(databaseUrl, {
     acquire: 30000,
     idle: 10000
   },
-  dialectOptions: {
-    ssl: process.env.NODE_ENV === 'production' ? {
+  dialectOptions: useSSL ? {
+    ssl: {
       require: true,
       rejectUnauthorized: false
-    } : false
-  }
+    }
+  } : {}
 });
 
 export default sequelize;
