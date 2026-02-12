@@ -1,4 +1,4 @@
-modules = ["vue-node-20", "nodejs-20", "java-graalvm22.3", "web", "python-3.11", "postgresql-16"]
+modules = ["nodejs-20", "web", "swift-5.8", "java-graalvm22.3", "ruby-3.2", "postgresql-16"]
 [agent]
 expertMode = true
 
@@ -45,6 +45,7 @@ run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
 [userenv.shared]
 VITE_GOOGLE_MAPS_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
 GOOGLE_MAPS_API_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
+NODE_ENV = "development"
 
 [userenv.development]
 SERVER_DOMAIN = "caaf8ac1-a1bd-45cc-8a8c-3b948bf6c458-00-3o0xgbhfiz77b.kirk.replit.dev"
