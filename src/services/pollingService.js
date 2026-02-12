@@ -795,6 +795,28 @@ class PollingService {
 
       contactsToScan = contactsToScan.filter(c => !this.addressScannedContacts.has(c.id.toString()));
 
+      const terminalStates = ['initial', 'assigned', 'completed', 'closed_no_coverage', 'closed'];
+
+      const contactIds = contactsToScan.map(c => c.id.toString());
+
+      if (contactIds.length > 0) {
+        const busyConversations = await ConversationState.findAll({
+          where: {
+            user_id: userId,
+            contact_id: { [Op.in]: contactIds },
+            state: { [Op.notIn]: terminalStates }
+          }
+        });
+
+        const busyContactIds = new Set(busyConversations.map(c => c.contact_id));
+
+        if (busyContactIds.size > 0) {
+          console.log(`[AddressScan] Saltando ${busyContactIds.size} contactos con flujo de chatbot activo: ${[...busyContactIds].join(', ')}`);
+        }
+
+        contactsToScan = contactsToScan.filter(c => !busyContactIds.has(c.id.toString()));
+      }
+
       if (contactsToScan.length === 0) {
         if (this.lastFullAddressScan && (Date.now() - this.lastFullAddressScan) > RESCAN_INTERVAL_MS) {
           this.addressScannedContacts.clear();

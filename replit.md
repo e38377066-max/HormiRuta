@@ -30,6 +30,7 @@ Area 862 System es una aplicacion de planificacion y optimizacion de rutas de en
 ```
 
 ## Recent Changes
+- 2026-02-12: Fix: Address scanner no se ejecuta sobre contactos con flujo de chatbot activo (estados awaiting_*) para evitar interferencia entre servicios
 - 2026-02-12: Fix critico: Bot no interfiere cuando agente humano ya respondio - validacion ZIP/ciudad no se ejecuta en estado 'assigned' ni cuando agent_active=true
 - 2026-02-12: Fix: Extraccion automatica de direcciones cuando agente esta activo - si cliente envia direccion y agente ya controla, se guarda Address y Zip Code en Respond.io sin enviar mensajes del bot
 - 2026-02-12: Fix: Cache del address scanner se limpia cuando contacto envia nuevo mensaje, permitiendo detectar nuevas direcciones
