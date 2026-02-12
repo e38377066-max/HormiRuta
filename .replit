@@ -46,6 +46,7 @@ run = ["node", "src/index.js"]
 VITE_GOOGLE_MAPS_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
 GOOGLE_MAPS_API_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
 NODE_ENV = "development"
+VITE_GOOGLE_MAPS_API_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
 
 [userenv.development]
 SERVER_DOMAIN = "caaf8ac1-a1bd-45cc-8a8c-3b948bf6c458-00-3o0xgbhfiz77b.kirk.replit.dev"
