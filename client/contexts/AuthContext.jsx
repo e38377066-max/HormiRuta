@@ -22,6 +22,9 @@ export function AuthProvider({ children }) {
       const response = await api.post('/api/auth/login', { email, password })
       setUser(response.data.user)
       localStorage.setItem('user', JSON.stringify(response.data.user))
+      if (response.data.token) {
+        localStorage.setItem('authToken', response.data.token)
+      }
       return { success: true, user: response.data.user }
     } catch (err) {
       const errorMsg = err.response?.data?.error || 'Error al iniciar sesion'
@@ -39,6 +42,9 @@ export function AuthProvider({ children }) {
       const response = await api.post('/api/auth/register', userData)
       setUser(response.data.user)
       localStorage.setItem('user', JSON.stringify(response.data.user))
+      if (response.data.token) {
+        localStorage.setItem('authToken', response.data.token)
+      }
       return { success: true, user: response.data.user }
     } catch (err) {
       const errorMsg = err.response?.data?.error || 'Error al registrar'
@@ -57,11 +63,18 @@ export function AuthProvider({ children }) {
     } finally {
       setUser(null)
       localStorage.removeItem('user')
+      localStorage.removeItem('authToken')
     }
   }
 
   const fetchCurrentUser = async () => {
     try {
+      const token = localStorage.getItem('authToken')
+      if (!token) {
+        setUser(null)
+        localStorage.removeItem('user')
+        return null
+      }
       const response = await api.get('/api/auth/me')
       setUser(response.data.user)
       localStorage.setItem('user', JSON.stringify(response.data.user))
@@ -69,6 +82,7 @@ export function AuthProvider({ children }) {
     } catch {
       setUser(null)
       localStorage.removeItem('user')
+      localStorage.removeItem('authToken')
       return null
     }
   }
