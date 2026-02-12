@@ -193,7 +193,7 @@ class ChatbotService {
     }
   }
 
-  async hasAgentAlreadyResponded(contactId, isReopened = false) {
+  async hasAgentAlreadyResponded(contactId, isReopened = false, cutoffTime = null) {
     try {
       const result = await this.api.listMessages(`id:${contactId}`, 50);
       
@@ -202,7 +202,6 @@ class ChatbotService {
       }
 
       const messages = result.items;
-      const now = Date.now();
       
       for (const msg of messages) {
         if (msg.traffic === 'outgoing' && msg.sender) {
@@ -210,10 +209,9 @@ class ChatbotService {
           const senderId = msg.sender.userId || '';
           
           if (senderSource === 'user') {
-            if (isReopened) {
+            if (isReopened && cutoffTime) {
               const msgTime = new Date(msg.createdAt || msg.timestamp || 0).getTime();
-              const minutesAgo = (now - msgTime) / (1000 * 60);
-              if (minutesAgo > 10) {
+              if (msgTime < cutoffTime) {
                 continue;
               }
             }
@@ -609,9 +607,11 @@ class ChatbotService {
     // resetear el flujo para cliente existente ANTES de verificar agentes
     // (los mensajes de agente de ANTES del cierre no cuentan)
     let isReopened = false;
+    let reopenedCutoffTime = null;
     if (convState.conversation_closed_at) {
       console.log(`[Bot] Conversacion de ${contact.id} fue cerrada el ${convState.conversation_closed_at} y reabierta, reiniciando flujo como CLIENTE EXISTENTE`);
       isReopened = true;
+      reopenedCutoffTime = new Date(convState.conversation_closed_at).getTime();
       await this.updateConversationState(contact.id, { 
         state: 'initial',
         conversation_closed_at: null,
@@ -634,7 +634,7 @@ class ChatbotService {
     // Para reaperturas: solo verificar mensajes de agente DESPUES de la reapertura
     // EXCEPCION: En modo de prueba, se salta esta verificación
     if (!this.isTestMode) {
-      const agentCheck = await this.hasAgentAlreadyResponded(contact.id, isReopened);
+      const agentCheck = await this.hasAgentAlreadyResponded(contact.id, isReopened, reopenedCutoffTime);
       if (agentCheck.hasResponded) {
         console.log(`[Bot] Agente ${agentCheck.agentName} ya atendio a ${contact.id}, bot no interferira`);
         await this.updateConversationState(contact.id, {
@@ -748,12 +748,17 @@ class ChatbotService {
       return { handled: true, action: 'abandoned_reengagement' };
     }
 
-    // Detectar ZIP en cualquier momento
-    const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
-    const isCityMessage = this.addressValidation.isCityMessage(messageText);
-    
-    if (isZipMessage || isCityMessage) {
-      return await this.handleZipValidation(contact, messageText, convState);
+    if (convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && !convState.agent_active) {
+      const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
+      const isCityMessage = this.addressValidation.isCityMessage(messageText);
+      
+      if (isZipMessage || isCityMessage) {
+        const isLikelyAddress = this.addressValidation.isLikelyAddress ? 
+          this.addressValidation.isLikelyAddress(messageText) : false;
+        if (!isLikelyAddress || isZipMessage) {
+          return await this.handleZipValidation(contact, messageText, convState);
+        }
+      }
     }
 
     // Procesar según estado actual

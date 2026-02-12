@@ -350,9 +350,19 @@ class PollingService {
         for (const msg of outgoingAgentMessages) {
           poller.processedMessageIds.add(`out_${msg.messageId}`);
         }
+
+        const newIncomingMessages = messages
+          .filter(m => m.traffic === 'incoming')
+          .filter(m => !poller.processedMessageIds.has(m.messageId));
+
         for (const msg of messages.filter(m => m.traffic === 'incoming')) {
           poller.processedMessageIds.add(msg.messageId);
         }
+
+        if (newIncomingMessages.length > 0) {
+          await this.extractAndSaveAddressFromMessages(userId, contact, newIncomingMessages, respondio);
+        }
+
         return;
       }
     } else {
@@ -378,19 +388,32 @@ class PollingService {
 
     if (incomingMessages.length === 0) return;
 
+    if (!isTestMode) {
+      const convState = await ConversationState.findOne({
+        where: { user_id: userId, contact_id: contact.id.toString() }
+      });
+      if (convState && convState.agent_active) {
+        console.log(`[Polling] Contacto ${contact.id} tiene agent_active=true, extrayendo direcciones sin procesar con bot`);
+        for (const msg of incomingMessages) {
+          poller.processedMessageIds.add(msg.messageId);
+        }
+        await this.extractAndSaveAddressFromMessages(userId, contact, incomingMessages, respondio);
+        this.addressScannedContacts.delete(contact.id.toString());
+        return;
+      }
+    }
+
+    this.addressScannedContacts.delete(contact.id.toString());
+
     const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
     const isAutomatic = settings?.attention_mode === 'automatic';
 
-    // IMPORTANTE: Solo procesar el mensaje MÁS RECIENTE para evitar spam
-    // Los mensajes están en orden cronológico después del reverse()
     const latestMessage = incomingMessages[incomingMessages.length - 1];
     
-    // Marcar todos los mensajes como procesados para evitar re-procesamiento
     for (const msg of incomingMessages) {
       poller.processedMessageIds.add(msg.messageId);
     }
     
-    // Verificar en BD si el último mensaje ya fue procesado
     const alreadyProcessed = await MessageLog.findOne({
       where: { 
         respond_message_id: latestMessage.messageId?.toString(),
@@ -399,10 +422,9 @@ class PollingService {
     });
     
     if (alreadyProcessed) {
-      return; // Ya fue procesado anteriormente
+      return;
     }
     
-    // Procesar solo el mensaje más reciente
     await this.processIncomingMessage(userId, contact, latestMessage, respondio, isAutomatic, isTestMode);
 
     if (poller.processedMessageIds.size > 10000) {
@@ -665,6 +687,67 @@ class PollingService {
       }
     } catch (error) {
       console.error('Error processing message:', error.message);
+    }
+  }
+
+  async extractAndSaveAddressFromMessages(userId, contact, messages, respondio) {
+    try {
+      const extractor = new AddressExtractorService();
+      const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+
+      for (const msg of messages) {
+        const text = msg.message?.text || '';
+        if (!text || text.length < 5) continue;
+
+        const extractedAddress = extractor.extractAddressFromMessage(text);
+        if (!extractedAddress) continue;
+
+        console.log(`[AddressScan-Agent] Direccion detectada en mensaje de ${contactName} (${contact.id}): "${extractedAddress}"`);
+
+        let finalAddress = extractedAddress;
+        let finalZip = null;
+
+        try {
+          const geocoded = await geocodingService.geocodeAddress(extractedAddress);
+          if (geocoded.success) {
+            finalAddress = geocoded.fullAddress;
+            finalZip = geocoded.zip || finalZip;
+            if (geocoded.wasChanged) {
+              console.log(`[AddressScan-Agent] Geocoding corrigio: "${extractedAddress}" -> "${finalAddress}"`);
+            }
+          }
+        } catch (geoError) {
+          console.error(`[AddressScan-Agent] Error geocoding:`, geoError.message);
+        }
+
+        const customFieldsUpdate = {};
+        customFieldsUpdate.address = finalAddress;
+        if (finalZip) {
+          customFieldsUpdate.zip_code = finalZip;
+        }
+
+        const updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
+        if (updateResult.success) {
+          console.log(`[AddressScan-Agent] Campos actualizados para ${contactName} (${contact.id}): Address="${finalAddress}"${finalZip ? ` ZIP: ${finalZip}` : ''}`);
+        } else {
+          const altFieldsUpdate = {};
+          altFieldsUpdate['Address'] = finalAddress;
+          if (finalZip) {
+            altFieldsUpdate['Zip Code'] = finalZip;
+          }
+          const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
+          if (altResult.success) {
+            console.log(`[AddressScan-Agent] Campos actualizados (nombres alternativos) para ${contactName} (${contact.id}): Address="${finalAddress}"`);
+          } else {
+            console.error(`[AddressScan-Agent] Error actualizando campos para ${contactName} (${contact.id}):`, altResult.error);
+          }
+        }
+
+        this.addressScannedContacts.delete(contact.id.toString());
+        break;
+      }
+    } catch (error) {
+      console.error(`[AddressScan-Agent] Error extrayendo direccion:`, error.message);
     }
   }
 
