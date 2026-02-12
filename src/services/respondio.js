@@ -1,10 +1,18 @@
 import axios from 'axios';
 
 const RESPOND_API_BASE = 'https://api.respond.io/v2';
+const REQUEST_DELAY_MS = 1200;
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 3000;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 class RespondioService {
   constructor(apiToken) {
     this.apiToken = apiToken;
+    this.lastRequestTime = 0;
     this.client = axios.create({
       baseURL: RESPOND_API_BASE,
       headers: {
@@ -13,6 +21,45 @@ class RespondioService {
         'Accept': 'application/json'
       }
     });
+  }
+
+  async throttle() {
+    const now = Date.now();
+    const elapsed = now - this.lastRequestTime;
+    if (elapsed < REQUEST_DELAY_MS) {
+      await sleep(REQUEST_DELAY_MS - elapsed);
+    }
+    this.lastRequestTime = Date.now();
+  }
+
+  async requestWithRetry(method, url, data = null, config = {}) {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await this.throttle();
+        let response;
+        if (method === 'get') {
+          response = await this.client.get(url, config);
+        } else if (method === 'post') {
+          response = await this.client.post(url, data, config);
+        } else if (method === 'patch') {
+          response = await this.client.patch(url, data, config);
+        } else if (method === 'put') {
+          response = await this.client.put(url, data, config);
+        } else if (method === 'delete') {
+          response = await this.client.delete(url, config);
+        }
+        return response;
+      } catch (error) {
+        const status = error.response?.status;
+        if ((status === 403 || status === 429) && attempt < MAX_RETRIES) {
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+          console.log(`[Respond.io] Rate limited (${status}), reintentando en ${delay/1000}s (intento ${attempt + 1}/${MAX_RETRIES})...`);
+          await sleep(delay);
+          continue;
+        }
+        throw error;
+      }
+    }
   }
 
   async sendMessage(contactIdentifier, text, channelId = null) {
@@ -35,7 +82,7 @@ class RespondioService {
         payload.channelId = channelId;
       }
 
-      const response = await this.client.post(`/contact/${identifier}/message`, payload);
+      const response = await this.requestWithRetry('post', `/contact/${identifier}/message`, payload);
       return {
         success: true,
         messageId: response.data?.messageId,
@@ -77,7 +124,7 @@ class RespondioService {
         };
       }
 
-      const response = await this.client.post('/contact/list', body, { params });
+      const response = await this.requestWithRetry('post', '/contact/list', body, { params });
       return {
         success: true,
         items: response.data?.items || [],
@@ -115,7 +162,7 @@ class RespondioService {
       };
 
       console.log('[Respond.io] Buscando conversaciones abiertas...');
-      const response = await this.client.post('/contact/list', body, { params });
+      const response = await this.requestWithRetry('post', '/contact/list', body, { params });
       console.log(`[Respond.io] Encontradas ${response.data?.items?.length || 0} conversaciones abiertas`);
       
       return {
@@ -154,7 +201,7 @@ class RespondioService {
         }
       };
 
-      const response = await this.client.post('/contact/list', body, { params });
+      const response = await this.requestWithRetry('post', '/contact/list', body, { params });
       
       return {
         success: true,
@@ -192,7 +239,7 @@ class RespondioService {
         }
       };
 
-      const response = await this.client.post('/contact/list', body, { params });
+      const response = await this.requestWithRetry('post', '/contact/list', body, { params });
       return {
         success: true,
         items: response.data?.items || [],
@@ -228,7 +275,7 @@ class RespondioService {
         }
       };
 
-      const response = await this.client.post('/contact/list', body, { params });
+      const response = await this.requestWithRetry('post', '/contact/list', body, { params });
       return {
         success: true,
         items: response.data?.items || [],
@@ -250,7 +297,7 @@ class RespondioService {
         ? `id:${contactIdentifier}` 
         : contactIdentifier;
 
-      const response = await this.client.get(`/contact/${identifier}`);
+      const response = await this.requestWithRetry('get', `/contact/${identifier}`);
       return {
         success: true,
         data: response.data
@@ -270,7 +317,7 @@ class RespondioService {
         ? `id:${contactIdentifier}` 
         : contactIdentifier;
 
-      const response = await this.client.patch(`/contact/${identifier}`, {
+      const response = await this.requestWithRetry('patch', `/contact/${identifier}`, {
         customFields
       });
       return {
@@ -298,7 +345,7 @@ class RespondioService {
       if (limit) params.limit = Math.min(limit, 50);
       if (cursorId) params.cursorId = cursorId;
 
-      const response = await this.client.get(`/contact/${identifier}/message/list`, { params });
+      const response = await this.requestWithRetry('get', `/contact/${identifier}/message/list`, null, { params });
       return {
         success: true,
         items: response.data?.items || [],
@@ -320,7 +367,7 @@ class RespondioService {
         ? `id:${contactIdentifier}` 
         : contactIdentifier;
 
-      const response = await this.client.get(`/contact/${identifier}/message/${messageId}`);
+      const response = await this.requestWithRetry('get', `/contact/${identifier}/message/${messageId}`);
       return {
         success: true,
         data: response.data
@@ -336,7 +383,7 @@ class RespondioService {
 
   async testConnection() {
     try {
-      const response = await this.client.post('/contact/list', {
+      const response = await this.requestWithRetry('post', '/contact/list', {
         search: '',
         filter: { $and: [] },
         timezone: 'America/Mexico_City'

@@ -17,6 +17,14 @@ class PollingService {
     this.processedMessages = new Map();
     this.addressScannedContacts = new Set();
     this.lastFullAddressScan = null;
+    this.respondioInstances = new Map();
+  }
+
+  getRespondioInstance(apiToken) {
+    if (!this.respondioInstances.has(apiToken)) {
+      this.respondioInstances.set(apiToken, new RespondioService(apiToken));
+    }
+    return this.respondioInstances.get(apiToken);
   }
 
   async startPolling(userId, intervalSeconds = 30) {
@@ -51,13 +59,19 @@ class PollingService {
       intervalMs: intervalSeconds * 1000,
       lastPoll: null,
       isRunning: true,
+      pollInProgress: false,
       processedMessageIds: new Set(),
       intervalId: null
     };
 
     const pollFn = async () => {
       if (!poller.isRunning) return;
+      if (poller.pollInProgress) {
+        console.log(`[Polling] Poll anterior aun en curso para usuario ${userId}, saltando este ciclo`);
+        return;
+      }
       
+      poller.pollInProgress = true;
       try {
         console.log(`[Polling] Ejecutando poll para usuario ${userId}...`);
         await this.pollForNewMessages(userId, settings.respond_api_token, poller);
@@ -66,6 +80,8 @@ class PollingService {
       } catch (error) {
         console.error(`[Polling] ERROR en poll para usuario ${userId}:`, error.message);
         console.error(error.stack);
+      } finally {
+        poller.pollInProgress = false;
       }
     };
 
@@ -104,7 +120,7 @@ class PollingService {
       const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
       if (!settings?.respond_api_token) return;
 
-      const respondio = new RespondioService(settings.respond_api_token);
+      const respondio = this.getRespondioInstance(settings.respond_api_token);
       const messagesResult = await respondio.listMessages(contactId, { limit: settings.message_history_limit || 50 });
       
       if (messagesResult.success && messagesResult.items) {
@@ -137,7 +153,7 @@ class PollingService {
 
   async pollForNewMessages(userId, apiToken, poller) {
     console.log(`[Polling] Conectando a Respond.io API...`);
-    const respondio = new RespondioService(apiToken);
+    const respondio = this.getRespondioInstance(apiToken);
     
     const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
     const messageLimit = settings?.message_history_limit || 50;
@@ -288,7 +304,7 @@ class PollingService {
 
     console.log(`[Followup] Encontradas ${pendingConversations.length} conversaciones sin respuesta (timeout: ${timeoutMinutes} min)`);
     
-    const respondio = new RespondioService(apiToken);
+    const respondio = this.getRespondioInstance(apiToken);
     const chatbot = new ChatbotService(userId, settings);
 
     for (const conv of pendingConversations) {
@@ -436,7 +452,7 @@ class PollingService {
   async initializeConversationSnapshot(userId, apiToken) {
     try {
       console.log(`[Polling] === SINCRONIZACION INICIAL: Escaneando TODAS las conversaciones ===`);
-      const respondio = new RespondioService(apiToken);
+      const respondio = this.getRespondioInstance(apiToken);
       const now = new Date();
 
       let allOpenContacts = [];
@@ -769,8 +785,9 @@ class PollingService {
     try {
       const extractor = new AddressExtractorService();
       let updatedCount = 0;
-      const MAX_CONTACTS_PER_SCAN = 15;
+      const MAX_CONTACTS_PER_SCAN = 8;
       const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
+      const DELAY_BETWEEN_CONTACTS_MS = 2000;
 
       let contactsToScan = allContacts.filter((contact, index, self) =>
         index === self.findIndex(c => c.id === contact.id)
@@ -793,9 +810,14 @@ class PollingService {
 
       const batch = contactsToScan.slice(0, MAX_CONTACTS_PER_SCAN);
 
-      for (const contact of batch) {
+      for (let i = 0; i < batch.length; i++) {
+        const contact = batch[i];
         const contactIdStr = contact.id.toString();
         this.addressScannedContacts.add(contactIdStr);
+
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CONTACTS_MS));
+        }
 
         try {
           const contactDetail = await respondio.getContact(contact.id);

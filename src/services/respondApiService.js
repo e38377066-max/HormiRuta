@@ -8,15 +8,21 @@ import axios from 'axios';
 import MessagingSettings from '../models/MessagingSettings.js';
 
 const API_BASE_URL = 'https://api.respond.io/v2';
+const REQUEST_DELAY_MS = 1200;
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 3000;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 class RespondApiService {
   constructor() {
-    // Per-user token cache: Map<userId, {token, timestamp}>
     this.tokenCache = new Map();
-    this.CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
-    // Current context for singleton usage
+    this.CACHE_TTL = 5 * 60 * 1000;
     this.currentUserId = null;
     this.currentToken = null;
+    this.lastRequestTime = 0;
   }
 
   /**
@@ -90,6 +96,15 @@ class RespondApiService {
    * @param {object} params - Query parameters
    * @param {number} userId - User ID for token lookup
    */
+  async throttle() {
+    const now = Date.now();
+    const elapsed = now - this.lastRequestTime;
+    if (elapsed < REQUEST_DELAY_MS) {
+      await sleep(REQUEST_DELAY_MS - elapsed);
+    }
+    this.lastRequestTime = Date.now();
+  }
+
   async request(method, endpoint, data = null, params = null, userId = null) {
     const token = await this.getToken(userId);
     
@@ -106,12 +121,22 @@ class RespondApiService {
     if (data) config.data = data;
     if (params) config.params = params;
 
-    try {
-      const response = await axios(config);
-      return response.data;
-    } catch (error) {
-      console.error(`Respond.io API Error [${method} ${endpoint}]:`, error.response?.data || error.message);
-      throw error;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await this.throttle();
+        const response = await axios(config);
+        return response.data;
+      } catch (error) {
+        const status = error.response?.status;
+        if ((status === 403 || status === 429) && attempt < MAX_RETRIES) {
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+          console.log(`[Respond.io API] Rate limited (${status}) on ${method} ${endpoint}, reintentando en ${delay/1000}s (intento ${attempt + 1}/${MAX_RETRIES})...`);
+          await sleep(delay);
+          continue;
+        }
+        console.error(`Respond.io API Error [${method} ${endpoint}]:`, error.response?.data || error.message);
+        throw error;
+      }
     }
   }
 
