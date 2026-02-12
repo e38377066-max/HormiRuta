@@ -267,7 +267,8 @@ class PollingService {
 
     await this.checkFollowups(userId, apiToken, settings);
 
-    await this.scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings);
+    const contactsForScan = isTestMode ? uniqueContacts : allContacts;
+    await this.scanAddressesInConversations(userId, apiToken, contactsForScan, respondio, messageLimit, settings);
   }
 
   async checkFollowups(userId, apiToken, settings) {
