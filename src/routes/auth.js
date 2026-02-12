@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { User } from '../models/index.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, generateToken, removeToken } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -39,10 +39,12 @@ router.post('/register', async (req, res) => {
     await user.save();
     
     req.session.userId = user.id;
+    const token = generateToken(user.id);
     
     res.status(201).json({
       success: true,
       message: 'Usuario registrado exitosamente',
+      token,
       user: user.toDict()
     });
   } catch (error) {
@@ -76,10 +78,12 @@ router.post('/login', async (req, res) => {
     }
     
     req.session.userId = user.id;
+    const token = generateToken(user.id);
     
     res.json({
       success: true,
       message: 'Inicio de sesión exitoso',
+      token,
       user: user.toDict()
     });
   } catch (error) {
@@ -89,6 +93,10 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/logout', requireAuth, (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    removeToken(authHeader.slice(7));
+  }
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).json({ error: 'Error al cerrar sesión' });
