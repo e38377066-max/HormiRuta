@@ -1,9 +1,10 @@
 import axios from 'axios';
 
 const RESPOND_API_BASE = 'https://api.respond.io/v2';
-const REQUEST_DELAY_MS = 1200;
+const REQUEST_DELAY_MS = 2000;
 const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 3000;
+const RETRY_BASE_DELAY_MS = 5000;
+let cloudFrontCooldown = 0;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -25,11 +26,24 @@ class RespondioService {
 
   async throttle() {
     const now = Date.now();
-    const elapsed = now - this.lastRequestTime;
+    if (cloudFrontCooldown > now) {
+      const cooldownWait = cloudFrontCooldown - now;
+      console.log(`[Respond.io] CloudFront cooldown activo, esperando ${Math.round(cooldownWait/1000)}s...`);
+      await sleep(cooldownWait);
+    }
+    const elapsed = Date.now() - this.lastRequestTime;
     if (elapsed < REQUEST_DELAY_MS) {
       await sleep(REQUEST_DELAY_MS - elapsed);
     }
     this.lastRequestTime = Date.now();
+  }
+
+  isCloudFrontBlock(error) {
+    const responseData = error.response?.data;
+    if (typeof responseData === 'string' && responseData.includes('cloudfront')) {
+      return true;
+    }
+    return false;
   }
 
   async requestWithRetry(method, url, data = null, config = {}) {
@@ -51,7 +65,14 @@ class RespondioService {
         return response;
       } catch (error) {
         const status = error.response?.status;
-        if ((status === 403 || status === 429) && attempt < MAX_RETRIES) {
+
+        if (this.isCloudFrontBlock(error)) {
+          cloudFrontCooldown = Date.now() + 30000;
+          console.log(`[Respond.io] CloudFront bloqueó la petición (${method} ${url}). Cooldown 30s, sin reintentos.`);
+          throw error;
+        }
+
+        if ((status === 429) && attempt < MAX_RETRIES) {
           const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
           console.log(`[Respond.io] Rate limited (${status}), reintentando en ${delay/1000}s (intento ${attempt + 1}/${MAX_RETRIES})...`);
           await sleep(delay);

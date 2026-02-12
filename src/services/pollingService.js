@@ -85,16 +85,21 @@ class PollingService {
       }
     };
 
-    console.log(`[Polling] Ejecutando sincronizacion inicial...`);
-    await this.initializeConversationSnapshot(userId, settings.respond_api_token);
-
-    console.log(`[Polling] Ejecutando primer poll...`);
-    await pollFn();
-    
-    poller.intervalId = setInterval(pollFn, poller.intervalMs);
     this.activePollers.set(userId, poller);
 
-    console.log(`[Polling] ACTIVO para usuario ${userId} cada ${intervalSeconds}s`);
+    (async () => {
+      try {
+        console.log(`[Polling] Ejecutando sincronizacion inicial...`);
+        await this.initializeConversationSnapshot(userId, settings.respond_api_token);
+        console.log(`[Polling] Ejecutando primer poll...`);
+        await pollFn();
+      } catch (err) {
+        console.error(`[Polling] Error en inicializacion:`, err.message);
+      }
+      poller.intervalId = setInterval(pollFn, poller.intervalMs);
+      console.log(`[Polling] ACTIVO para usuario ${userId} cada ${intervalSeconds}s`);
+    })();
+
     return { success: true, message: `Polling iniciado cada ${intervalSeconds} segundos` };
   }
 
@@ -742,7 +747,13 @@ class PollingService {
           customFieldsUpdate.zip_code = finalZip;
         }
 
-        const updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
+        let updateResult;
+        try {
+          updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
+        } catch (updateErr) {
+          console.log(`[AddressScan-Agent] No se pudo actualizar ${contactName} (${contact.id}), se reintentará después`);
+          break;
+        }
         if (updateResult.success) {
           console.log(`[AddressScan-Agent] Campos actualizados para ${contactName} (${contact.id}): Address="${finalAddress}"${finalZip ? ` ZIP: ${finalZip}` : ''}`);
         } else {
@@ -751,11 +762,15 @@ class PollingService {
           if (finalZip) {
             altFieldsUpdate['Zip Code'] = finalZip;
           }
-          const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
-          if (altResult.success) {
-            console.log(`[AddressScan-Agent] Campos actualizados (nombres alternativos) para ${contactName} (${contact.id}): Address="${finalAddress}"`);
-          } else {
-            console.error(`[AddressScan-Agent] Error actualizando campos para ${contactName} (${contact.id}):`, altResult.error);
+          try {
+            const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
+            if (altResult.success) {
+              console.log(`[AddressScan-Agent] Campos actualizados (nombres alternativos) para ${contactName} (${contact.id}): Address="${finalAddress}"`);
+            } else {
+              console.error(`[AddressScan-Agent] Error actualizando campos para ${contactName} (${contact.id}):`, altResult.error);
+            }
+          } catch (altErr) {
+            console.log(`[AddressScan-Agent] No se pudo actualizar (alt) ${contactName} (${contact.id}), se reintentará después`);
           }
         }
 
@@ -785,9 +800,9 @@ class PollingService {
     try {
       const extractor = new AddressExtractorService();
       let updatedCount = 0;
-      const MAX_CONTACTS_PER_SCAN = 8;
-      const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
-      const DELAY_BETWEEN_CONTACTS_MS = 2000;
+      const MAX_CONTACTS_PER_SCAN = 3;
+      const RESCAN_INTERVAL_MS = 15 * 60 * 1000;
+      const DELAY_BETWEEN_CONTACTS_MS = 5000;
 
       let contactsToScan = allContacts.filter((contact, index, self) =>
         index === self.findIndex(c => c.id === contact.id)
@@ -888,7 +903,14 @@ class PollingService {
               customFieldsUpdate.zip_code = finalZip;
             }
 
-            const updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
+            let updateResult;
+            try {
+              updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
+            } catch (updateErr) {
+              console.log(`[AddressScan] No se pudo actualizar ${contactName} (${contact.id}), se reintentará después`);
+              this.addressScannedContacts.delete(contactIdStr);
+              continue;
+            }
 
             if (updateResult.success) {
               updatedCount++;
@@ -900,12 +922,17 @@ class PollingService {
                 altFieldsUpdate['Zip Code'] = finalZip;
               }
 
-              const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
-              if (altResult.success) {
-                updatedCount++;
-                console.log(`[AddressScan] Direccion actualizada (alt) para ${contactName} (${contact.id}): "${finalAddress}"`);
-              } else {
-                console.error(`[AddressScan] Error actualizando direccion de ${contactName} (${contact.id}):`, updateResult.error);
+              try {
+                const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
+                if (altResult.success) {
+                  updatedCount++;
+                  console.log(`[AddressScan] Direccion actualizada (alt) para ${contactName} (${contact.id}): "${finalAddress}"`);
+                } else {
+                  console.error(`[AddressScan] Error actualizando direccion de ${contactName} (${contact.id}):`, updateResult.error);
+                }
+              } catch (altErr) {
+                console.log(`[AddressScan] No se pudo actualizar (alt) ${contactName} (${contact.id}), se reintentará después`);
+                this.addressScannedContacts.delete(contactIdStr);
               }
             }
           }
