@@ -338,8 +338,13 @@ class RespondioService {
         ? `id:${contactIdentifier}` 
         : contactIdentifier;
 
-      const response = await this.requestWithRetry('patch', `/contact/${identifier}`, {
-        customFields
+      const custom_fields = Object.entries(customFields).map(([name, value]) => ({
+        name,
+        value: value != null ? String(value) : null
+      }));
+
+      const response = await this.requestWithRetry('put', `/contact/${identifier}`, {
+        custom_fields
       });
       return {
         success: true,
