@@ -36,9 +36,9 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["npm", "run", "build"]
+build = ["bash", "-c", "npx vite build"]
 publicDir = "dist/spa"
-run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
+run = ["node", "src/index.js"]
 
 [userenv]
 
