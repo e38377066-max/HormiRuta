@@ -718,7 +718,6 @@ class PollingService {
       const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
 
       let latestAddress = null;
-      let latestMsg = null;
       for (const msg of messages) {
         const text = msg.message?.text || '';
         if (!text || text.length < 5) continue;
@@ -726,7 +725,7 @@ class PollingService {
         const extractedAddress = extractor.extractAddressFromMessage(text);
         if (extractedAddress) {
           latestAddress = extractedAddress;
-          latestMsg = msg;
+          break;
         }
       }
 
@@ -878,7 +877,10 @@ class PollingService {
             const text = msg.message?.text || '';
             if (!text || text.length < 5) continue;
             const addr = extractor.extractAddressFromMessage(text);
-            if (addr) latestExtracted = addr;
+            if (addr) {
+              latestExtracted = addr;
+              break;
+            }
           }
 
           const result = latestExtracted ? { address: latestExtracted } : extractor.extractAddressFromConversation(messagesResult.items);
