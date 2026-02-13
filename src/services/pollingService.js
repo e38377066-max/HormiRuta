@@ -717,67 +717,73 @@ class PollingService {
       const extractor = new AddressExtractorService();
       const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
 
+      let latestAddress = null;
+      let latestMsg = null;
       for (const msg of messages) {
         const text = msg.message?.text || '';
         if (!text || text.length < 5) continue;
 
         const extractedAddress = extractor.extractAddressFromMessage(text);
-        if (!extractedAddress) continue;
-
-        console.log(`[AddressScan-Agent] Direccion detectada en mensaje de ${contactName} (${contact.id}): "${extractedAddress}"`);
-
-        let finalAddress = extractedAddress;
-        let finalZip = null;
-
-        try {
-          const geocoded = await geocodingService.geocodeAddress(extractedAddress);
-          if (geocoded.success) {
-            finalAddress = geocoded.fullAddress;
-            finalZip = geocoded.zip || finalZip;
-            if (geocoded.wasChanged) {
-              console.log(`[AddressScan-Agent] Geocoding corrigio: "${extractedAddress}" -> "${finalAddress}"`);
-            }
-          }
-        } catch (geoError) {
-          console.error(`[AddressScan-Agent] Error geocoding:`, geoError.message);
+        if (extractedAddress) {
+          latestAddress = extractedAddress;
+          latestMsg = msg;
         }
-
-        const customFieldsUpdate = {};
-        customFieldsUpdate.address = finalAddress;
-        if (finalZip) {
-          customFieldsUpdate.zip_code = finalZip;
-        }
-
-        let updateResult;
-        try {
-          updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
-        } catch (updateErr) {
-          console.log(`[AddressScan-Agent] No se pudo actualizar ${contactName} (${contact.id}), se reintentará después`);
-          break;
-        }
-        if (updateResult.success) {
-          console.log(`[AddressScan-Agent] Campos actualizados para ${contactName} (${contact.id}): Address="${finalAddress}"${finalZip ? ` ZIP: ${finalZip}` : ''}`);
-        } else {
-          const altFieldsUpdate = {};
-          altFieldsUpdate['Address'] = finalAddress;
-          if (finalZip) {
-            altFieldsUpdate['Zip Code'] = finalZip;
-          }
-          try {
-            const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
-            if (altResult.success) {
-              console.log(`[AddressScan-Agent] Campos actualizados (nombres alternativos) para ${contactName} (${contact.id}): Address="${finalAddress}"`);
-            } else {
-              console.error(`[AddressScan-Agent] Error actualizando campos para ${contactName} (${contact.id}):`, altResult.error);
-            }
-          } catch (altErr) {
-            console.log(`[AddressScan-Agent] No se pudo actualizar (alt) ${contactName} (${contact.id}), se reintentará después`);
-          }
-        }
-
-        this.addressScannedContacts.delete(contact.id.toString());
-        break;
       }
+
+      if (!latestAddress) return;
+
+      console.log(`[AddressScan-Agent] Direccion mas reciente de ${contactName} (${contact.id}): "${latestAddress}"`);
+
+      let finalAddress = latestAddress;
+      let finalZip = null;
+
+      try {
+        const geocoded = await geocodingService.geocodeAddress(latestAddress);
+        if (geocoded.success) {
+          finalAddress = geocoded.fullAddress;
+          finalZip = geocoded.zip || finalZip;
+          if (geocoded.wasChanged) {
+            console.log(`[AddressScan-Agent] Geocoding corrigio: "${latestAddress}" -> "${finalAddress}"`);
+          }
+        }
+      } catch (geoError) {
+        console.error(`[AddressScan-Agent] Error geocoding:`, geoError.message);
+      }
+
+      const customFieldsUpdate = {};
+      customFieldsUpdate.address = finalAddress;
+      if (finalZip) {
+        customFieldsUpdate.zip_code = finalZip;
+      }
+
+      let updateResult;
+      try {
+        updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
+      } catch (updateErr) {
+        console.log(`[AddressScan-Agent] No se pudo actualizar ${contactName} (${contact.id}), se reintentará después`);
+        return;
+      }
+      if (updateResult.success) {
+        console.log(`[AddressScan-Agent] Campos actualizados para ${contactName} (${contact.id}): Address="${finalAddress}"${finalZip ? ` ZIP: ${finalZip}` : ''}`);
+      } else {
+        const altFieldsUpdate = {};
+        altFieldsUpdate['Address'] = finalAddress;
+        if (finalZip) {
+          altFieldsUpdate['Zip Code'] = finalZip;
+        }
+        try {
+          const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
+          if (altResult.success) {
+            console.log(`[AddressScan-Agent] Campos actualizados (nombres alternativos) para ${contactName} (${contact.id}): Address="${finalAddress}"`);
+          } else {
+            console.error(`[AddressScan-Agent] Error actualizando campos para ${contactName} (${contact.id}):`, altResult.error);
+          }
+        } catch (altErr) {
+          console.log(`[AddressScan-Agent] No se pudo actualizar (alt) ${contactName} (${contact.id}), se reintentará después`);
+        }
+      }
+
+      this.addressScannedContacts.delete(contact.id.toString());
     } catch (error) {
       console.error(`[AddressScan-Agent] Error extrayendo direccion:`, error.message);
     }
@@ -862,17 +868,20 @@ class PollingService {
           if (!contactDetail.success) continue;
 
           const contactData = contactDetail.data;
-          const customFields = contactData?.customFields || {};
-          const currentAddress = customFields?.address || customFields?.Address || '';
-
-          if (currentAddress && currentAddress.trim().length > 5) {
-            continue;
-          }
 
           const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
           if (!messagesResult.success || !messagesResult.items) continue;
 
-          const result = extractor.extractAddressFromConversation(messagesResult.items);
+          const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
+          let latestExtracted = null;
+          for (const msg of incomingMessages) {
+            const text = msg.message?.text || '';
+            if (!text || text.length < 5) continue;
+            const addr = extractor.extractAddressFromMessage(text);
+            if (addr) latestExtracted = addr;
+          }
+
+          const result = latestExtracted ? { address: latestExtracted } : extractor.extractAddressFromConversation(messagesResult.items);
 
           if (result && result.address) {
             const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
