@@ -30,6 +30,11 @@ Area 862 System es una aplicacion de planificacion y optimizacion de rutas de en
 ```
 
 ## Recent Changes
+- 2026-02-16: Sistema de evidencia por parada: chofer debe tomar foto (firma/comprobante) para confirmar cada parada, solo puede finalizar ruta cuando todas tienen evidencia
+- 2026-02-16: Historial de rutas admin (/admin/routes): revisar rutas completadas/en curso con evidencias subidas por parada, visor de fotos
+- 2026-02-16: Backend: multer para uploads de fotos, endpoints POST /api/dispatch/stops/:id/evidence, PUT /api/dispatch/routes/:id/complete, GET /api/dispatch/routes/history, GET /api/dispatch/routes/:id/detail
+- 2026-02-16: Planner: boton "Confirmar parada" con camara en vez de "Finalizar ruta", "Finalizar ruta" solo aparece cuando todas las paradas tienen evidencia
+- 2026-02-16: Colores de navegacion cambiados de verde a azul (#4285F4 linea, #5b8def UI)
 - 2026-02-16: Sistema de Despacho completo: mapa admin con ordenes por color/estado, creacion de rutas desde mapa, asignacion a choferes, vista chofer para marcar entregado
 - 2026-02-16: Nuevos campos en MessagingOrder: order_status (flujo produccion), amount (monto a cobrar), delivered_at, driver_name
 - 2026-02-16: API dispatch: /api/dispatch/orders, /api/dispatch/routes, /api/dispatch/drivers, cambio de estados, asignacion masiva

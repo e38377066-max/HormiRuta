@@ -11,6 +11,7 @@ import OrdersPage from './pages/Messaging/OrdersPage'
 
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import AdminUsers from './pages/Admin/AdminUsers'
+import RouteHistory from './pages/Admin/RouteHistory'
 
 import CoveragePage from './pages/Messaging/CoveragePage'
 import SettingsPage from './pages/Messaging/SettingsPage'
@@ -60,6 +61,7 @@ export default function App() {
         
         <Route path="admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
         <Route path="admin/users" element={<ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>} />
+        <Route path="admin/routes" element={<ProtectedRoute adminOnly><RouteHistory /></ProtectedRoute>} />
         <Route path="dispatch" element={<ProtectedRoute allowedRoles={['admin', 'driver']}><DispatchMap /></ProtectedRoute>} />
       </Route>
       
