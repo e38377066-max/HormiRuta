@@ -45,5 +45,9 @@
         </array>
         <key>UIViewControllerBasedStatusBarAppearance</key>
         <true/>
+        <key>NSLocationWhenInUseUsageDescription</key>
+        <string>Area 862 necesita acceso a tu ubicación para mostrar tu posición en el mapa y optimizar tus rutas de entrega.</string>
+        <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+        <string>Area 862 necesita acceso a tu ubicación para seguimiento de rutas en tiempo real.</string>
 </dict>
 </plist>

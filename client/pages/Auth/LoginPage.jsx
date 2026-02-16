@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Capacitor } from '@capacitor/core'
-import api from '../../api'
 import './AuthPages.css'
 
 export default function LoginPage() {
@@ -12,28 +10,17 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [showTerms, setShowTerms] = useState(false)
   const [showPrivacy, setShowPrivacy] = useState(false)
-  const [debugLog, setDebugLog] = useState('')
   const { login, loading, error } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const baseURL = api.defaults.baseURL || '(relative)'
-    const platform = Capacitor.isNativePlatform() ? 'NATIVE' : 'WEB'
-    setDebugLog(`[${platform}] URL: ${baseURL}/api/auth/login\nConectando...`)
-    try {
-      const result = await login(email, password)
-      if (result.success) {
-        setDebugLog(prev => prev + '\nLogin OK!')
-        if (rememberMe) {
-          localStorage.setItem('rememberedEmail', email)
-        }
-        navigate('/planner')
-      } else {
-        setDebugLog(prev => prev + `\nError: ${result.error}`)
+    const result = await login(email, password)
+    if (result.success) {
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', email)
       }
-    } catch (err) {
-      setDebugLog(prev => prev + `\nCatch: ${err.message}\n${err.code || ''}\n${JSON.stringify(err.response?.data || {})}`)
+      navigate('/planner')
     }
   }
 
@@ -54,7 +41,6 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="login-form">
           {error && <div className="alert alert-error">{error}</div>}
-          {debugLog && <div style={{background:'#1a1a2e',color:'#0f0',padding:'8px',borderRadius:'6px',fontSize:'11px',whiteSpace:'pre-wrap',marginBottom:'10px',maxHeight:'120px',overflow:'auto',fontFamily:'monospace'}}>{debugLog}</div>}
 
           <div className="input-group">
             <span className="material-icons input-icon">email</span>
