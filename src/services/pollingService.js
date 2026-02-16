@@ -867,7 +867,22 @@ class PollingService {
 
       if (!latestAddress) return;
 
-      console.log(`[AddressScan-Agent] Direccion mas reciente de ${contactName} (${contact.id}): "${latestAddress}"`);
+      const existingAddr = await ValidatedAddress.findOne({
+        where: { user_id: userId, respond_contact_id: contact.id.toString() },
+        order: [['created_at', 'DESC']]
+      });
+
+      if (existingAddr) {
+        const newNorm = latestAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const origNorm = (existingAddr.original_address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const validNorm = (existingAddr.validated_address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (newNorm === origNorm || newNorm === validNorm) {
+          return;
+        }
+        console.log(`[AddressScan-Agent] Nueva direccion de ${contactName} (${contact.id}): "${latestAddress}" (anterior: "${existingAddr.validated_address}")`);
+      } else {
+        console.log(`[AddressScan-Agent] Direccion de ${contactName} (${contact.id}): "${latestAddress}"`);
+      }
 
       let finalAddress = latestAddress;
       let finalZip = null;
@@ -1015,6 +1030,21 @@ class PollingService {
 
       const batch = contactsToScan.slice(0, MAX_CONTACTS_PER_SCAN);
 
+      const batchContactIds = batch.map(c => c.id.toString());
+      const existingAddresses = await ValidatedAddress.findAll({
+        where: {
+          user_id: userId,
+          respond_contact_id: { [Op.in]: batchContactIds }
+        }
+      });
+      const addressMap = new Map();
+      for (const va of existingAddresses) {
+        addressMap.set(va.respond_contact_id, {
+          validated: va.validated_address,
+          original: va.original_address
+        });
+      }
+
       for (let i = 0; i < batch.length; i++) {
         const contact = batch[i];
         const contactIdStr = contact.id.toString();
@@ -1025,11 +1055,6 @@ class PollingService {
         }
 
         try {
-          const contactDetail = await respondio.getContact(contact.id);
-          if (!contactDetail.success) continue;
-
-          const contactData = contactDetail.data;
-
           const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
           if (!messagesResult.success || !messagesResult.items) continue;
 
@@ -1049,6 +1074,19 @@ class PollingService {
 
           if (result && result.address) {
             const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+            const existing = addressMap.get(contactIdStr);
+
+            if (existing) {
+              const newAddrNorm = result.address.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+              if (newAddrNorm === existOrigNorm || newAddrNorm === existValidNorm) {
+                continue;
+              }
+              console.log(`[AddressScan] Nueva direccion detectada para ${contactName} (${contact.id}): "${result.address}" (anterior: "${existing.validated}")`);
+            }
+
             let finalAddress = result.address;
             let finalZip = null;
 
