@@ -97,17 +97,16 @@ router.post('/logout', requireAuth, (req, res) => {
   if (authHeader?.startsWith('Bearer ')) {
     removeToken(authHeader.slice(7));
   }
-  req.session.destroy((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Error al cerrar sesión' });
-    }
-    res.json({ success: true, message: 'Sesión cerrada' });
-  });
+  if (req.session?.destroy) {
+    req.session.destroy(() => {});
+  }
+  res.json({ success: true, message: 'Sesión cerrada' });
 });
 
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const user = await User.findByPk(req.session.userId);
+    const userId = req.userId || req.session?.userId;
+    const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
@@ -119,7 +118,8 @@ router.get('/me', requireAuth, async (req, res) => {
 
 router.put('/update', requireAuth, async (req, res) => {
   try {
-    const user = await User.findByPk(req.session.userId);
+    const userId = req.userId || req.session?.userId;
+    const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
