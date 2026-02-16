@@ -13,6 +13,20 @@ const STATUS_CONFIG = {
   delivered: { label: 'Entregada', color: '#ff6d00', icon: 'done_all' }
 }
 
+const DRIVER_COLORS = [
+  '#6200ea', '#e91e63', '#00897b', '#ff6f00', '#1565c0',
+  '#6a1b9a', '#2e7d32', '#c62828', '#00838f', '#ef6c00',
+  '#4527a0', '#ad1457', '#00695c', '#d84315', '#283593'
+]
+
+function createNumberedIcon(number, color) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44">
+    <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26s18-12.5 18-26C36 8.06 27.94 0 18 0z" fill="${color}" stroke="#fff" stroke-width="2"/>
+    <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="Arial">${number}</text>
+  </svg>`
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
+}
+
 export default function DispatchMap() {
   const { isAdmin, isDriver } = useAuth()
   const mapRef = useRef(null)
@@ -112,19 +126,31 @@ export default function DispatchMap() {
 
     ordersToShow.forEach(order => {
       const config = STATUS_CONFIG[order.order_status] || STATUS_CONFIG.approved
-      const isSelected = selectedOrders.includes(order.id)
+      const selIndex = selectedOrders.indexOf(order.id)
+      const isSelected = selIndex !== -1
+
+      let icon
+      if (isSelected) {
+        icon = {
+          url: createNumberedIcon(selIndex + 1, '#6200ea'),
+          scaledSize: new window.google.maps.Size(36, 44),
+          anchor: new window.google.maps.Point(18, 44)
+        }
+      } else {
+        icon = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          fillColor: config.color,
+          fillOpacity: 1,
+          strokeColor: '#333',
+          strokeWeight: 1.5,
+          scale: 10
+        }
+      }
 
       const marker = new window.google.maps.Marker({
         position: { lat: order.address_lat, lng: order.address_lng },
         map: mapInstance.current,
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          fillColor: isSelected ? '#6200ea' : config.color,
-          fillOpacity: 1,
-          strokeColor: isSelected ? '#fff' : '#333',
-          strokeWeight: isSelected ? 3 : 1.5,
-          scale: isSelected ? 14 : 10
-        },
+        icon,
         title: `${order.customer_name || 'Sin nombre'} - ${order.address}`,
         zIndex: isSelected ? 100 : 1
       })
@@ -246,11 +272,38 @@ export default function DispatchMap() {
     }
   }, [selectedOrders, orders])
 
+  const [dragIdx, setDragIdx] = useState(null)
+
   const toggleOrderSelection = (orderId) => {
     setSelectedOrders(prev =>
       prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
     )
   }
+
+  const [manualReorder, setManualReorder] = useState(false)
+
+  const moveOrderInSelection = (fromIdx, toIdx) => {
+    if (toIdx < 0 || toIdx >= selectedOrders.length) return
+    setManualReorder(true)
+    setRouteInfo(null)
+    setSelectedOrders(prev => {
+      const arr = [...prev]
+      const [item] = arr.splice(fromIdx, 1)
+      arr.splice(toIdx, 0, item)
+      return arr
+    })
+  }
+
+  const handleDragStart = (idx) => setDragIdx(idx)
+  const handleDragOver = (e) => e.preventDefault()
+  const handleDrop = (targetIdx) => {
+    if (dragIdx !== null && dragIdx !== targetIdx) {
+      moveOrderInSelection(dragIdx, targetIdx)
+    }
+    setDragIdx(null)
+  }
+
+  const getDriverColor = (driverIdx) => DRIVER_COLORS[driverIdx % DRIVER_COLORS.length]
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
@@ -279,7 +332,7 @@ export default function DispatchMap() {
       let orderedIds = [...selectedOrders]
       let isPreOptimized = false
 
-      if (routeInfo?.optimizedOrder && routeInfo.optimizedOrder.length === selectedOrders.length) {
+      if (!manualReorder && routeInfo?.optimizedOrder && routeInfo.optimizedOrder.length === selectedOrders.length) {
         orderedIds = routeInfo.optimizedOrder
         isPreOptimized = true
       }
@@ -293,6 +346,7 @@ export default function DispatchMap() {
       setShowCreateRoute(false)
       setRouteName('')
       setRouteInfo(null)
+      setManualReorder(false)
       fetchData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al crear ruta')
@@ -478,34 +532,94 @@ export default function DispatchMap() {
         )}
 
         {isAdmin && selectedOrders.length > 0 && (
-          <div className="dispatch-actions">
-            <div className="selected-count">
-              <span className="material-icons">check_circle</span>
-              {selectedOrders.length} seleccionada{selectedOrders.length > 1 ? 's' : ''}
-              {optimizingLive && <span className="route-calc"> calculando ruta...</span>}
-              {routeInfo && !optimizingLive && (
-                <span className="route-info-inline">
-                  <span className="material-icons">directions_car</span>
-                  {routeInfo.distance} km - {routeInfo.duration} min
-                </span>
-              )}
+          <div className="dispatch-selection-panel">
+            <div className="selection-header">
+              <div className="selected-count">
+                <span className="material-icons">check_circle</span>
+                {selectedOrders.length} seleccionada{selectedOrders.length > 1 ? 's' : ''}
+                {optimizingLive && <span className="route-calc"> calculando...</span>}
+                {routeInfo && !optimizingLive && (
+                  <span className="route-info-inline">
+                    <span className="material-icons">directions_car</span>
+                    {routeInfo.distance} km - {routeInfo.duration} min
+                  </span>
+                )}
+              </div>
+              <button className="sel-clear-btn" onClick={() => { setSelectedOrders([]); setShowCreateRoute(false); setRouteName('') }} title="Limpiar">
+                <span className="material-icons">close</span>
+              </button>
             </div>
-            <div className="action-buttons">
-              <button className="dbtn red" onClick={() => handleBulkStatus('on_production')} title="En Produccion">
-                <span className="material-icons">precision_manufacturing</span>
-              </button>
-              <button className="dbtn blue" onClick={() => handleBulkStatus('production_finished')} title="Produccion Lista">
-                <span className="material-icons">inventory_2</span>
-              </button>
-              <button className="dbtn green" onClick={() => handleBulkStatus('order_picked_up')} title="Recogida">
-                <span className="material-icons">local_shipping</span>
-              </button>
-              <button className="dbtn purple" onClick={() => setShowCreateRoute(true)} title="Crear Ruta">
-                <span className="material-icons">route</span>
-              </button>
-              <button className="dbtn outline" onClick={() => setSelectedOrders([])} title="Deseleccionar">
-                <span className="material-icons">deselect</span>
-              </button>
+
+            <div className="selection-stops-list">
+              {selectedOrders.map((id, idx) => {
+                const o = orders.find(x => x.id === id)
+                if (!o) return null
+                return (
+                  <div
+                    key={id}
+                    className={`sel-stop-item ${dragIdx === idx ? 'dragging' : ''}`}
+                    draggable
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop(idx)}
+                  >
+                    <span className="sel-stop-number">{idx + 1}</span>
+                    <div className="sel-stop-info">
+                      <span className="sel-stop-name">{o.customer_name || 'Sin nombre'}</span>
+                      <span className="sel-stop-addr">{o.address || ''}</span>
+                    </div>
+                    <div className="sel-stop-actions">
+                      <button onClick={(e) => { e.stopPropagation(); moveOrderInSelection(idx, idx - 1) }} disabled={idx === 0} className="sel-move-btn">
+                        <span className="material-icons">arrow_upward</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); moveOrderInSelection(idx, idx + 1) }} disabled={idx === selectedOrders.length - 1} className="sel-move-btn">
+                        <span className="material-icons">arrow_downward</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); toggleOrderSelection(id) }} className="sel-remove-btn">
+                        <span className="material-icons">remove_circle_outline</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="selection-bottom-actions">
+              <div className="status-btns-row">
+                <button className="dbtn red" onClick={() => handleBulkStatus('on_production')} title="En Produccion">
+                  <span className="material-icons">precision_manufacturing</span>
+                </button>
+                <button className="dbtn blue" onClick={() => handleBulkStatus('production_finished')} title="Produccion Lista">
+                  <span className="material-icons">inventory_2</span>
+                </button>
+                <button className="dbtn green" onClick={() => handleBulkStatus('order_picked_up')} title="Recogida">
+                  <span className="material-icons">local_shipping</span>
+                </button>
+              </div>
+
+              {!showCreateRoute ? (
+                <button className="create-route-btn" onClick={() => setShowCreateRoute(true)}>
+                  <span className="material-icons">add_road</span>
+                  Crear Ruta con {selectedOrders.length} parada{selectedOrders.length > 1 ? 's' : ''}
+                </button>
+              ) : (
+                <div className="create-route-inline">
+                  <input
+                    type="text"
+                    value={routeName}
+                    onChange={e => setRouteName(e.target.value)}
+                    placeholder="Nombre de la ruta..."
+                    className="route-name-input"
+                    autoFocus
+                  />
+                  <div className="create-route-btns">
+                    <button className="dbtn outline" onClick={() => { setShowCreateRoute(false); setRouteName('') }}>Cancelar</button>
+                    <button className="dbtn purple" onClick={handleCreateRoute}>
+                      <span className="material-icons">check</span> Crear
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -619,10 +733,17 @@ export default function DispatchMap() {
                 <p>No hay rutas creadas</p>
               </div>
             ) : (
-              routes.map(route => (
-                <div key={route.id} className="dispatch-route-card">
+              routes.map((route) => {
+                const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name ? route.orders[0].driver_name : null
+                const driverColorIdx = driverName ? Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0)) : 0
+                const driverColor = driverName ? getDriverColor(driverColorIdx) : '#999'
+                return (
+                <div key={route.id} className="dispatch-route-card" style={{ borderLeftColor: driverColor }}>
                   <div className="dr-header">
-                    <span className="dr-name">{route.name}</span>
+                    <span className="dr-name">
+                      {route.status === 'assigned' && <span className="dr-color-dot" style={{ backgroundColor: driverColor }}></span>}
+                      {route.name}
+                    </span>
                     <span className={`dr-status ${route.status}`}>{route.status === 'assigned' ? 'Asignada' : route.status === 'draft' ? 'Borrador' : route.status}</span>
                   </div>
                   <div className="dr-info">
@@ -668,7 +789,7 @@ export default function DispatchMap() {
                     </div>
                   )}
                 </div>
-              ))
+              )})
             )
           ) : activeTab === 'drivers' ? (
             <div className="drivers-tab">
@@ -779,40 +900,6 @@ export default function DispatchMap() {
           ))}
         </div>
       </div>
-
-      {showCreateRoute && (
-        <div className="modal-backdrop" onClick={() => setShowCreateRoute(false)}>
-          <div className="dispatch-modal" onClick={e => e.stopPropagation()}>
-            <h3>Crear Ruta de Entrega</h3>
-            <p>{selectedOrders.length} ordenes seleccionadas</p>
-            <div className="dm-field">
-              <label>Nombre de la ruta (opcional)</label>
-              <input
-                type="text"
-                value={routeName}
-                onChange={e => setRouteName(e.target.value)}
-                placeholder="Ej: Ruta Dallas Norte"
-              />
-            </div>
-            <div className="dm-selected-list">
-              {selectedOrders.map(id => {
-                const o = orders.find(x => x.id === id)
-                if (!o) return null
-                return (
-                  <div key={id} className="dm-selected-item">
-                    <span>{o.customer_name || 'Sin nombre'}</span>
-                    <span className="dm-addr">{o.address}</span>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="dm-actions">
-              <button className="dbtn outline" onClick={() => setShowCreateRoute(false)}>Cancelar</button>
-              <button className="dbtn purple" onClick={handleCreateRoute}>Crear Ruta</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showAssignDriver && (
         <div className="modal-backdrop" onClick={() => setShowAssignDriver(null)}>
