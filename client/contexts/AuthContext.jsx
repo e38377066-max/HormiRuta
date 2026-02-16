@@ -27,7 +27,14 @@ export function AuthProvider({ children }) {
       }
       return { success: true, user: response.data.user }
     } catch (err) {
-      const errorMsg = err.response?.data?.error || 'Error al iniciar sesion'
+      let errorMsg = err.response?.data?.error || ''
+      if (!errorMsg) {
+        if (err.code === 'ERR_NETWORK') {
+          errorMsg = `No se pudo conectar al servidor: ${api.defaults.baseURL || 'local'} - Verifica tu conexión a internet`
+        } else {
+          errorMsg = `${err.message} [${err.code || 'UNKNOWN'}]`
+        }
+      }
       setError(errorMsg)
       return { success: false, error: errorMsg }
     } finally {
