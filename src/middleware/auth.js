@@ -39,7 +39,8 @@ export const requireAuth = (req, res, next) => {
   if (!userId) {
     return res.status(401).json({ error: 'No autorizado' });
   }
-  req.session.userId = userId;
+  if (req.session) req.session.userId = userId;
+  req.userId = userId;
   next();
 };
 
@@ -49,7 +50,8 @@ export const requireRole = (...roles) => {
     if (!userId) {
       return res.status(401).json({ error: 'No autorizado' });
     }
-    req.session.userId = userId;
+    if (req.session) req.session.userId = userId;
+    req.userId = userId;
 
     try {
       const user = await User.findByPk(userId);
