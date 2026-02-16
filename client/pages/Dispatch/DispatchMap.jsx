@@ -574,11 +574,11 @@ export default function DispatchMap() {
                       {respondUsers.map(u => (
                         <div
                           key={u.respond_id || u.email}
-                          className={`respond-user-card ${u.already_synced ? 'synced' : ''} ${selectedRespondUsers.includes(u.email) ? 'selected' : ''}`}
-                          onClick={() => !u.already_synced && u.email && toggleRespondUser(u.email)}
+                          className={`respond-user-card ${u.already_exists ? 'synced' : ''} ${selectedRespondUsers.includes(u.email) ? 'selected' : ''}`}
+                          onClick={() => !u.already_exists && u.email && toggleRespondUser(u.email)}
                         >
                           <div className="ru-check">
-                            {u.already_synced ? (
+                            {u.already_exists ? (
                               <span className="material-icons" style={{ color: '#4caf50' }}>check_circle</span>
                             ) : (
                               <span className="material-icons">{selectedRespondUsers.includes(u.email) ? 'check_box' : 'check_box_outline_blank'}</span>
@@ -589,7 +589,7 @@ export default function DispatchMap() {
                             <span>{u.email || 'Sin email'}</span>
                             {u.role && <span className="ru-role">{u.role}</span>}
                           </div>
-                          {u.already_synced && <span className="driver-badge synced">Ya sincronizado</span>}
+                          {u.already_exists && <span className="driver-badge synced">Ya registrado ({u.existing_role})</span>}
                         </div>
                       ))}
                     </div>
