@@ -30,6 +30,8 @@ Area 862 System es una aplicacion de planificacion y optimizacion de rutas de en
 ```
 
 ## Recent Changes
+- 2026-02-16: Capacitor Camera plugin: permisos nativos de camara Android/iOS, retoma de foto si salio mal, captura nativa en app movil con fallback a file input en web
+- 2026-02-16: Android: permisos CAMERA, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_MEDIA_IMAGES; iOS: NSCameraUsageDescription, NSPhotoLibraryUsageDescription
 - 2026-02-16: Sistema de evidencia por parada: chofer debe tomar foto (firma/comprobante) para confirmar cada parada, solo puede finalizar ruta cuando todas tienen evidencia
 - 2026-02-16: Historial de rutas admin (/admin/routes): revisar rutas completadas/en curso con evidencias subidas por parada, visor de fotos
 - 2026-02-16: Backend: multer para uploads de fotos, endpoints POST /api/dispatch/stops/:id/evidence, PUT /api/dispatch/routes/:id/complete, GET /api/dispatch/routes/history, GET /api/dispatch/routes/:id/detail
