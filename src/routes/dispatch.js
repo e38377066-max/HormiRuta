@@ -35,6 +35,9 @@ router.get('/orders', requireAuth, async (req, res) => {
       if (req.query.status) {
         where.order_status = req.query.status;
       }
+      if (req.query.available === 'true') {
+        where.route_id = { [Op.is]: null };
+      }
     } else {
       return res.status(403).json({ error: 'No tienes permisos' });
     }

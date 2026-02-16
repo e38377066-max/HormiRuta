@@ -61,8 +61,10 @@ export default function DispatchMap() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
+      const params = { available: 'true' }
+      if (filterStatus) params.status = filterStatus
       const [ordersRes, routesRes] = await Promise.all([
-        api.get('/api/dispatch/orders', { params: filterStatus ? { status: filterStatus } : {} }),
+        api.get('/api/dispatch/orders', { params }),
         api.get('/api/dispatch/routes')
       ])
       setOrders(ordersRes.data.orders || [])
@@ -173,7 +175,45 @@ export default function DispatchMap() {
 
       markersRef.current.push(marker)
     })
-  }, [orders, selectedOrders])
+
+    routes.forEach(route => {
+      if (route.status !== 'assigned' || !route.orders?.length) return
+      const driverName = route.orders[0]?.driver_name
+      if (!driverName) return
+      const colorIdx = Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0))
+      const color = getDriverColor(colorIdx)
+
+      route.orders.forEach((order, stopIdx) => {
+        if (!order.address_lat || !order.address_lng) return
+
+        const marker = new window.google.maps.Marker({
+          position: { lat: order.address_lat, lng: order.address_lng },
+          map: mapInstance.current,
+          icon: {
+            url: createNumberedIcon(stopIdx + 1, color),
+            scaledSize: new window.google.maps.Size(36, 44),
+            anchor: new window.google.maps.Point(18, 44)
+          },
+          title: `${driverName} - ${order.customer_name || 'Sin nombre'}`,
+          zIndex: 50
+        })
+
+        const infoContent = `
+          <div style="font-family:sans-serif;min-width:200px">
+            <strong>${order.customer_name || 'Sin nombre'}</strong><br/>
+            <span style="color:#666">${order.address || ''}</span><br/>
+            <span style="background:${color};color:white;padding:2px 8px;border-radius:4px;font-size:12px">
+              ${driverName} - Parada ${stopIdx + 1}
+            </span>
+          </div>
+        `
+        const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
+        marker.addListener('click', () => infoWindow.open(mapInstance.current, marker))
+
+        markersRef.current.push(marker)
+      })
+    })
+  }, [orders, selectedOrders, routes])
 
   useEffect(() => {
     if (directionsRendererRef.current) {
