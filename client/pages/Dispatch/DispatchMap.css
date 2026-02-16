@@ -807,3 +807,20 @@
   font-size: 20px;
   color: #4caf50;
 }
+
+.role-select {
+  padding: 5px 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  outline: none;
+  min-width: 90px;
+}
+
+.role-select:focus {
+  border-color: #6200ea;
+  box-shadow: 0 0 0 2px rgba(98, 0, 234, 0.15);
+}

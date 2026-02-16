@@ -37,6 +37,8 @@ export default function DispatchMap() {
   const [selectedRespondUsers, setSelectedRespondUsers] = useState([])
   const [loadingRespondUsers, setLoadingRespondUsers] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
+  const [allUsers, setAllUsers] = useState([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -242,6 +244,28 @@ export default function DispatchMap() {
     }
   }
 
+  const fetchAllUsers = async () => {
+    try {
+      setLoadingUsers(true)
+      const res = await api.get('/api/admin/users', { params: { limit: 200 } })
+      setAllUsers(res.data.users || [])
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  const handleChangeRole = async (userId, newRole) => {
+    try {
+      await api.put(`/api/admin/users/${userId}/role`, { role: newRole })
+      fetchAllUsers()
+      fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al cambiar rol')
+    }
+  }
+
   const fetchRespondUsers = async () => {
     try {
       setLoadingRespondUsers(true)
@@ -333,7 +357,7 @@ export default function DispatchMap() {
             <button className={`dtab ${activeTab === 'routes' ? 'active' : ''}`} onClick={() => setActiveTab('routes')}>
               <span className="material-icons">route</span> Rutas
             </button>
-            <button className={`dtab ${activeTab === 'drivers' ? 'active' : ''}`} onClick={() => { setActiveTab('drivers'); if (respondUsers.length === 0) fetchRespondUsers() }}>
+            <button className={`dtab ${activeTab === 'drivers' ? 'active' : ''}`} onClick={() => { setActiveTab('drivers'); if (allUsers.length === 0) fetchAllUsers() }}>
               <span className="material-icons">people</span> Choferes
             </button>
           </div>
@@ -528,20 +552,33 @@ export default function DispatchMap() {
             <div className="drivers-tab">
               <div className="drivers-section">
                 <div className="drivers-section-header">
-                  <h3><span className="material-icons">people</span> Choferes Registrados</h3>
+                  <h3><span className="material-icons">manage_accounts</span> Usuarios del Sistema</h3>
+                  <button className="dbtn outline small" onClick={fetchAllUsers} disabled={loadingUsers}>
+                    <span className="material-icons">{loadingUsers ? 'hourglass_empty' : 'refresh'}</span>
+                  </button>
                 </div>
-                {drivers.length === 0 ? (
-                  <p className="drivers-empty">No hay choferes registrados</p>
+                {loadingUsers ? (
+                  <div className="loading-center"><div className="spinner"></div></div>
+                ) : allUsers.length === 0 ? (
+                  <p className="drivers-empty">No hay usuarios registrados</p>
                 ) : (
                   <div className="drivers-list">
-                    {drivers.map(d => (
-                      <div key={d.id} className="driver-card">
-                        <span className="material-icons driver-icon">person</span>
+                    {allUsers.map(u => (
+                      <div key={u.id} className="driver-card">
+                        <span className="material-icons driver-icon">{u.role === 'admin' ? 'admin_panel_settings' : u.role === 'driver' ? 'local_shipping' : 'person'}</span>
                         <div className="driver-info">
-                          <strong>{d.username}</strong>
-                          <span>{d.email}</span>
+                          <strong>{u.username}</strong>
+                          <span>{u.email}</span>
                         </div>
-                        <span className="driver-badge active">Activo</span>
+                        <select
+                          className="role-select"
+                          value={u.role}
+                          onChange={e => handleChangeRole(u.id, e.target.value)}
+                        >
+                          <option value="admin">Admin</option>
+                          <option value="driver">Chofer</option>
+                          <option value="client">Cliente</option>
+                        </select>
                       </div>
                     ))}
                   </div>
