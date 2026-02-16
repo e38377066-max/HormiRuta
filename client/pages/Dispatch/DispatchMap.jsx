@@ -214,6 +214,21 @@ export default function DispatchMap() {
     }
   }
 
+  const [optimizing, setOptimizing] = useState(null)
+
+  const handleOptimizeRoute = async (routeId) => {
+    try {
+      setOptimizing(routeId)
+      const res = await api.post(`/api/dispatch/routes/${routeId}/optimize`)
+      alert(`Ruta optimizada: ${res.data.total_distance} km, ~${res.data.total_duration} min`)
+      fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al optimizar ruta')
+    } finally {
+      setOptimizing(null)
+    }
+  }
+
   const handleAssignDriver = async (routeId, driverId) => {
     try {
       await api.put(`/api/dispatch/routes/${routeId}/assign`, { driver_id: driverId })
@@ -533,8 +548,23 @@ export default function DispatchMap() {
                       ))}
                     </div>
                   )}
+                  {route.is_optimized && (
+                    <div className="dr-optimized">
+                      <span className="material-icons">check_circle</span> Optimizada
+                      {route.total_distance > 0 && <span> - {route.total_distance} km</span>}
+                      {route.total_duration > 0 && <span> - ~{route.total_duration} min</span>}
+                    </div>
+                  )}
                   {isAdmin && route.status === 'draft' && (
                     <div className="dr-actions">
+                      <button
+                        className="dbtn blue full"
+                        onClick={() => handleOptimizeRoute(route.id)}
+                        disabled={optimizing === route.id || route.is_optimized}
+                      >
+                        <span className="material-icons">{optimizing === route.id ? 'hourglass_empty' : 'route'}</span>
+                        {optimizing === route.id ? 'Optimizando...' : route.is_optimized ? 'Ya Optimizada' : 'Optimizar Ruta'}
+                      </button>
                       <button className="dbtn purple full" onClick={() => setShowAssignDriver(route.id)}>
                         <span className="material-icons">person_add</span> Asignar Chofer
                       </button>

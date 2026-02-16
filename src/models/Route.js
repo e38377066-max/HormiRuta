@@ -82,6 +82,14 @@ const Route = sequelize.define('Route', {
   completed_at: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  assigned_driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
   }
 }, {
   tableName: 'routes',
