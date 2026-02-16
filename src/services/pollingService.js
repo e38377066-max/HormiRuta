@@ -369,24 +369,35 @@ class PollingService {
         .filter(msg => !poller.processedMessageIds.has(`out_${msg.messageId}`));
       
       if (outgoingAgentMessages.length > 0) {
-        await this.markAgentActivity(userId, contact.id);
-        for (const msg of outgoingAgentMessages) {
-          poller.processedMessageIds.add(`out_${msg.messageId}`);
+        const latestAgentMsg = outgoingAgentMessages[0];
+        const latestAgentTime = new Date(latestAgentMsg.createdAt || latestAgentMsg.timestamp || 0);
+        const hasCloseAfterAgent = this.detectCloseReopenInMessages(messages, latestAgentTime);
+        
+        if (!hasCloseAfterAgent) {
+          await this.markAgentActivity(userId, contact.id);
+          for (const msg of outgoingAgentMessages) {
+            poller.processedMessageIds.add(`out_${msg.messageId}`);
+          }
+
+          const newIncomingMessages = messages
+            .filter(m => m.traffic === 'incoming')
+            .filter(m => !poller.processedMessageIds.has(m.messageId));
+
+          for (const msg of messages.filter(m => m.traffic === 'incoming')) {
+            poller.processedMessageIds.add(msg.messageId);
+          }
+
+          if (newIncomingMessages.length > 0) {
+            await this.extractAndSaveAddressFromMessages(userId, contact, newIncomingMessages, respondio);
+          }
+
+          return;
+        } else {
+          console.log(`[Polling] Mensajes de agente detectados para ${contact.id} pero hubo cierre posterior, no se marca agent_active`);
+          for (const msg of outgoingAgentMessages) {
+            poller.processedMessageIds.add(`out_${msg.messageId}`);
+          }
         }
-
-        const newIncomingMessages = messages
-          .filter(m => m.traffic === 'incoming')
-          .filter(m => !poller.processedMessageIds.has(m.messageId));
-
-        for (const msg of messages.filter(m => m.traffic === 'incoming')) {
-          poller.processedMessageIds.add(msg.messageId);
-        }
-
-        if (newIncomingMessages.length > 0) {
-          await this.extractAndSaveAddressFromMessages(userId, contact, newIncomingMessages, respondio);
-        }
-
-        return;
       }
     } else {
       for (const msg of messages.filter(m => m.traffic === 'outgoing')) {
@@ -416,13 +427,33 @@ class PollingService {
         where: { user_id: userId, contact_id: contact.id.toString() }
       });
       if (convState && convState.agent_active) {
-        console.log(`[Polling] Contacto ${contact.id} tiene agent_active=true, extrayendo direcciones sin procesar con bot`);
-        for (const msg of incomingMessages) {
-          poller.processedMessageIds.add(msg.messageId);
+        const wasClosedAndReopened = this.detectCloseReopenInMessages(messages, convState.last_agent_message_at);
+        if (wasClosedAndReopened) {
+          console.log(`[Polling] Contacto ${contact.id} tenia agent_active=true PERO se detecto cierre+reapertura en mensajes, reseteando estado`);
+          await convState.update({
+            agent_active: false,
+            bot_paused: false,
+            state: 'initial',
+            conversation_closed_at: null,
+            out_of_hours_notified: false,
+            greeting_sent: false,
+            awaiting_response: null,
+            has_prior_info: true,
+            is_existing_customer: true,
+            is_reopened: true,
+            selected_product: null,
+            followup_count: 0,
+            followup_last_sent_at: null
+          });
+        } else {
+          console.log(`[Polling] Contacto ${contact.id} tiene agent_active=true, extrayendo direcciones sin procesar con bot`);
+          for (const msg of incomingMessages) {
+            poller.processedMessageIds.add(msg.messageId);
+          }
+          await this.extractAndSaveAddressFromMessages(userId, contact, incomingMessages, respondio);
+          this.addressScannedContacts.delete(contact.id.toString());
+          return;
         }
-        await this.extractAndSaveAddressFromMessages(userId, contact, incomingMessages, respondio);
-        this.addressScannedContacts.delete(contact.id.toString());
-        return;
       }
     }
 
@@ -544,6 +575,50 @@ class PollingService {
     }
   }
 
+  detectCloseReopenInMessages(messages, lastAgentMessageAt) {
+    try {
+      const agentTime = lastAgentMessageAt ? new Date(lastAgentMessageAt).getTime() : 0;
+      
+      for (const msg of messages) {
+        const msgTime = new Date(msg.createdAt || msg.timestamp || 0).getTime();
+        if (agentTime > 0 && msgTime < agentTime) continue;
+
+        const msgType = msg.message?.type || msg.type || '';
+        const msgText = msg.message?.text || '';
+        const traffic = msg.traffic || '';
+
+        if (msgType === 'event' || traffic === 'event') {
+          const eventType = msg.message?.event?.type || msg.event?.type || '';
+          if (eventType === 'conversation_closed' || 
+              eventType === 'close' || 
+              msgText.toLowerCase().includes('conversation closed') ||
+              msgText.toLowerCase().includes('conversación cerrada') ||
+              msgText.toLowerCase().includes('cerrada por')) {
+            console.log(`[Polling] Evento de cierre detectado en mensajes (msgId: ${msg.messageId}, time: ${msg.createdAt})`);
+            return true;
+          }
+        }
+
+        if (msgType === 'assign' || msgType === 'unassign') {
+          continue;
+        }
+
+        if (traffic === 'outgoing' && msg.sender?.source === 'system') {
+          const text = (msg.message?.text || '').toLowerCase();
+          if (text.includes('cerrada') || text.includes('closed') || text.includes('conversation close')) {
+            console.log(`[Polling] Mensaje de sistema indicando cierre detectado (msgId: ${msg.messageId})`);
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error(`[Polling] Error detectando cierre/reapertura en mensajes:`, error.message);
+      return false;
+    }
+  }
+
   async detectConversationStateChanges(userId, openContacts) {
     try {
       const openContactIds = new Set(openContacts.map(c => c.id.toString()));
@@ -560,8 +635,26 @@ class PollingService {
         if (openContactIds.has(convState.contact_id)) {
           if (convState.conversation_closed_at) {
             console.log(`[Polling] REAPERTURA detectada: contacto ${convState.contact_id} estaba CERRADA (${convState.conversation_closed_at.toISOString()}) y ahora esta ABIERTA`);
+            await convState.update({
+              last_seen_open_at: now,
+              agent_active: false,
+              bot_paused: false,
+              state: 'initial',
+              conversation_closed_at: null,
+              out_of_hours_notified: false,
+              greeting_sent: false,
+              awaiting_response: null,
+              has_prior_info: true,
+              is_existing_customer: true,
+              is_reopened: true,
+              selected_product: null,
+              followup_count: 0,
+              followup_last_sent_at: null
+            });
+            console.log(`[Polling] Estado reseteado para contacto ${convState.contact_id} por reapertura`);
+          } else {
+            await convState.update({ last_seen_open_at: now });
           }
-          await convState.update({ last_seen_open_at: now });
         } else {
           if (!convState.conversation_closed_at) {
             await convState.update({ conversation_closed_at: now });
