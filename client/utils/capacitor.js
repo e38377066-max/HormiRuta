@@ -17,17 +17,37 @@ export const setupStatusBar = async () => {
   }
 }
 
+export const requestLocationPermission = async () => {
+  if (!isNative) return true
+  try {
+    const permission = await Geolocation.checkPermissions()
+    if (permission.location === 'granted') return true
+    const result = await Geolocation.requestPermissions()
+    return result.location === 'granted'
+  } catch (e) {
+    console.error('Permission error:', e)
+    return false
+  }
+}
+
 export const getCurrentPosition = async (options = {}) => {
   if (isNative) {
-    const permission = await Geolocation.checkPermissions()
-    if (permission.location !== 'granted') {
-      await Geolocation.requestPermissions()
+    const granted = await requestLocationPermission()
+    if (!granted) {
+      throw new Error('Permiso de ubicación denegado. Actívalo en Configuración > Aplicaciones > Area 862 > Permisos')
     }
-    return await Geolocation.getCurrentPosition({
-      enableHighAccuracy: true,
-      timeout: 10000,
-      ...options
-    })
+    try {
+      return await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 10000,
+        ...options
+      })
+    } catch (e) {
+      if (e.message?.includes('location disabled') || e.message?.includes('Location services')) {
+        throw new Error('GPS desactivado. Por favor activa la ubicación en tu dispositivo')
+      }
+      throw e
+    }
   } else {
     return new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(
@@ -48,29 +68,38 @@ export const getCurrentPosition = async (options = {}) => {
 export const watchPosition = (callback, errorCallback, options = {}) => {
   if (isNative) {
     let watchId
-    Geolocation.watchPosition(
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        ...options
-      },
-      (position, err) => {
-        if (err) {
-          errorCallback && errorCallback(err)
-        } else {
-          callback({
-            coords: {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracy: position.coords.accuracy
-            }
-          })
-        }
+    const startWatch = async () => {
+      const granted = await requestLocationPermission()
+      if (!granted) {
+        errorCallback && errorCallback(new Error('Permiso de ubicación denegado. Actívalo en Configuración > Aplicaciones > Area 862 > Permisos'))
+        return
       }
-    ).then(id => {
-      watchId = id
-    })
-    
+      watchId = await Geolocation.watchPosition(
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          ...options
+        },
+        (position, err) => {
+          if (err) {
+            if (err.message?.includes('location disabled') || err.message?.includes('Location services')) {
+              errorCallback && errorCallback(new Error('GPS desactivado. Activa la ubicación en tu dispositivo'))
+            } else {
+              errorCallback && errorCallback(err)
+            }
+          } else {
+            callback({
+              coords: {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+              }
+            })
+          }
+        }
+      )
+    }
+    startWatch()
     return () => {
       if (watchId) {
         Geolocation.clearWatch({ id: watchId })
