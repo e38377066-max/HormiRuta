@@ -307,19 +307,23 @@ router.get('/respond-users', requireAdmin, async (req, res) => {
       return res.status(500).json({ error: result.error || 'Error al conectar con Respond.io' });
     }
 
-    const existingDrivers = await User.findAll({
-      where: { role: 'driver' },
-      attributes: ['email']
+    const existingUsers = await User.findAll({
+      attributes: ['email', 'role']
     });
-    const existingEmails = new Set(existingDrivers.map(d => d.email.toLowerCase()));
+    const existingByEmail = new Map(existingUsers.map(u => [u.email.toLowerCase(), u.role]));
 
-    const users = (Array.isArray(result.users) ? result.users : []).map(u => ({
-      respond_id: u.id,
-      name: u.name || u.firstName || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
-      email: u.email || '',
-      role: u.role || u.accessLevel || '',
-      already_synced: u.email ? existingEmails.has(u.email.toLowerCase()) : false
-    }));
+    const users = (Array.isArray(result.users) ? result.users : []).map(u => {
+      const email = (u.email || '').toLowerCase();
+      const existingRole = email ? existingByEmail.get(email) : null;
+      return {
+        respond_id: u.id,
+        name: u.name || u.firstName || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+        email: u.email || '',
+        role: u.role || u.accessLevel || '',
+        already_exists: !!existingRole,
+        existing_role: existingRole || null
+      };
+    });
 
     res.json({ users });
   } catch (error) {
@@ -347,14 +351,7 @@ router.post('/sync-drivers', requireAdmin, async (req, res) => {
 
       const existing = await User.findOne({ where: { email } });
       if (existing) {
-        if (existing.role !== 'driver') {
-          existing.role = 'driver';
-          existing.active = true;
-          await existing.save();
-          created.push({ name: userData.name, email, action: 'updated_to_driver' });
-        } else {
-          skipped.push({ name: userData.name, reason: 'Ya existe como chofer' });
-        }
+        skipped.push({ name: userData.name, reason: `Ya existe como ${existing.role}` });
         continue;
       }
 
