@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core'
 import { Geolocation } from '@capacitor/geolocation'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { StatusBar, Style } from '@capacitor/status-bar'
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 
 export const isNative = Capacitor.isNativePlatform()
 export const platform = Capacitor.getPlatform()
@@ -119,6 +120,54 @@ export const watchPosition = (callback, errorCallback, options = {}) => {
     )
     return () => navigator.geolocation.clearWatch(id)
   }
+}
+
+export const requestCameraPermission = async () => {
+  if (!isNative) return true
+  try {
+    const permission = await Camera.checkPermissions()
+    if (permission.camera === 'granted' && permission.photos === 'granted') return true
+    const result = await Camera.requestPermissions({ permissions: ['camera', 'photos'] })
+    return result.camera === 'granted'
+  } catch (e) {
+    console.error('Camera permission error:', e)
+    return false
+  }
+}
+
+export const takePhoto = async () => {
+  if (isNative) {
+    const granted = await requestCameraPermission()
+    if (!granted) {
+      throw new Error('Permiso de cámara denegado. Actívalo en Configuración > Aplicaciones > Area 862 > Permisos')
+    }
+    const photo = await Camera.getPhoto({
+      resultType: CameraResultType.DataUrl,
+      source: CameraSource.Camera,
+      quality: 80,
+      width: 1280,
+      height: 1280,
+      allowEditing: false,
+      correctOrientation: true,
+      promptLabelHeader: 'Evidencia de entrega',
+      promptLabelPhoto: 'Elegir de galería',
+      promptLabelPicture: 'Tomar foto'
+    })
+    return photo
+  }
+  return null
+}
+
+export const dataUrlToFile = (dataUrl, filename) => {
+  const arr = dataUrl.split(',')
+  const mime = arr[0].match(/:(.*?);/)[1]
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new File([u8arr], filename, { type: mime })
 }
 
 export const vibrate = async (style = 'medium') => {

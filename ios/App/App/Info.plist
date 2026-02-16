@@ -49,5 +49,11 @@
         <string>Area 862 necesita acceso a tu ubicación para mostrar tu posición en el mapa y optimizar tus rutas de entrega.</string>
         <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
         <string>Area 862 necesita acceso a tu ubicación para seguimiento de rutas en tiempo real.</string>
+        <key>NSCameraUsageDescription</key>
+        <string>Area 862 necesita acceso a la cámara para tomar fotos de evidencia de entrega (firma, comprobante).</string>
+        <key>NSPhotoLibraryUsageDescription</key>
+        <string>Area 862 necesita acceso a tu galería para seleccionar fotos de evidencia de entrega.</string>
+        <key>NSPhotoLibraryAddUsageDescription</key>
+        <string>Area 862 necesita guardar fotos de evidencia de entrega en tu galería.</string>
 </dict>
 </plist>
