@@ -49,6 +49,9 @@ User.hasMany(ValidatedAddress, { foreignKey: 'user_id', as: 'validatedAddresses'
 ValidatedAddress.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 ValidatedAddress.belongsTo(User, { foreignKey: 'assigned_driver_id', as: 'driver' });
 
+Route.belongsTo(User, { foreignKey: 'assigned_driver_id', as: 'assignedDriver' });
+User.hasMany(Route, { foreignKey: 'assigned_driver_id', as: 'assignedRoutes' });
+
 Route.prototype.toDict = async function() {
   const stops = await Stop.findAll({
     where: { route_id: this.id },
@@ -63,6 +66,7 @@ Route.prototype.toDict = async function() {
     total_distance: this.total_distance,
     total_duration: this.total_duration,
     status: this.status,
+    assigned_driver_id: this.assigned_driver_id,
     start_address: this.start_address,
     start_lat: this.start_lat,
     start_lng: this.start_lng,

@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import RespondioService from '../services/respondio.js';
+import { optimizeRouteOrder } from '../services/optimization.js';
 
 const router = Router();
 
@@ -211,12 +212,7 @@ router.get('/routes', requireAuth, async (req, res) => {
 
     let where = {};
     if (user.role === 'driver') {
-      const driverOrders = await ValidatedAddress.findAll({
-        where: { assigned_driver_id: user.id },
-        attributes: ['route_id']
-      });
-      const routeIds = [...new Set(driverOrders.map(o => o.route_id).filter(Boolean))];
-      where.id = { [Op.in]: routeIds };
+      where.assigned_driver_id = user.id;
     } else if (user.role === 'admin') {
     } else {
       return res.status(403).json({ error: 'No tienes permisos' });
@@ -244,6 +240,55 @@ router.get('/routes', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/routes/:id/optimize', requireAdmin, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    const stops = await Stop.findAll({
+      where: { route_id: route.id },
+      order: [['order', 'ASC']]
+    });
+
+    if (stops.length < 2) {
+      return res.status(400).json({ error: 'Se necesitan al menos 2 paradas para optimizar' });
+    }
+
+    const startLocation = route.start_lat && route.start_lng
+      ? { lat: route.start_lat, lng: route.start_lng }
+      : null;
+
+    const result = await optimizeRouteOrder(stops, startLocation, route.return_to_start);
+
+    for (const optimizedStop of result.optimizedStops) {
+      await Stop.update(
+        {
+          order: optimizedStop.order,
+          original_order: optimizedStop.original_order ?? optimizedStop.order,
+          distance_from_prev: optimizedStop.distance_from_prev,
+          duration_from_prev: optimizedStop.duration_from_prev
+        },
+        { where: { id: optimizedStop.id } }
+      );
+    }
+
+    route.is_optimized = true;
+    route.total_distance = result.totalDistance;
+    route.total_duration = result.totalDuration;
+    await route.save();
+
+    res.json({
+      success: true,
+      route: await route.toDict(),
+      total_distance: result.totalDistance,
+      total_duration: result.totalDuration
+    });
+  } catch (error) {
+    console.error('Error optimizing route:', error);
+    res.status(500).json({ error: 'Error al optimizar ruta' });
+  }
+});
+
 router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
   try {
     const { driver_id } = req.body;
@@ -256,6 +301,7 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
 
     route.status = 'assigned';
+    route.assigned_driver_id = driver_id;
     await route.save();
 
     const orders = await ValidatedAddress.findAll({

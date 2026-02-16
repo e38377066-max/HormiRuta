@@ -49,6 +49,9 @@ export default function TripPlannerPage() {
   const [currentRouteId, setCurrentRouteId] = useState(null)
   const [panelHeight, setPanelHeight] = useState(45)
   const [panelSnap, setPanelSnap] = useState('mid')
+  const [dispatchRoutes, setDispatchRoutes] = useState([])
+  const [loadingDispatch, setLoadingDispatch] = useState(false)
+  const [showDispatchRoutes, setShowDispatchRoutes] = useState(true)
   const isDragging = useRef(false)
   const startY = useRef(0)
   const startHeight = useRef(0)
@@ -56,7 +59,46 @@ export default function TripPlannerPage() {
 
   useEffect(() => {
     initMap()
+    loadDispatchRoutes()
   }, [])
+
+  const loadDispatchRoutes = async () => {
+    try {
+      setLoadingDispatch(true)
+      const res = await api.get('/api/dispatch/routes')
+      const assigned = (res.data.routes || []).filter(r => r.status === 'assigned')
+      setDispatchRoutes(assigned)
+    } catch (err) {
+      console.error('Error loading dispatch routes:', err)
+    } finally {
+      setLoadingDispatch(false)
+    }
+  }
+
+  const loadDispatchRoute = (route) => {
+    const routeStops = (route.stops || [])
+      .sort((a, b) => a.order - b.order)
+      .map((s, i) => ({
+        id: i + 1,
+        address: s.address,
+        latitude: s.lat,
+        longitude: s.lng,
+        name: s.customer_name || '',
+        phone: s.phone || '',
+        note: s.note || '',
+        completed: s.status === 'completed',
+        color: '#EA4335'
+      }))
+
+    setStops(routeStops)
+    setRouteName(route.name || 'Ruta Asignada')
+    setIsOptimized(route.is_optimized || false)
+    setTotalDistance(route.total_distance || 0)
+    setTotalDuration(route.total_duration || 0)
+    setCurrentRouteId(route.id)
+    setShowDispatchRoutes(false)
+    updateMapMarkers(routeStops)
+  }
 
   useEffect(() => {
     const handleMouseMove = (e) => {
@@ -732,6 +774,32 @@ export default function TripPlannerPage() {
         </div>
         
         <div className="panel-scrollable">
+          {showDispatchRoutes && dispatchRoutes.length > 0 && stops.length === 0 && (
+            <div className="dispatch-routes-section">
+              <div className="dispatch-routes-header">
+                <span className="material-icons">assignment</span>
+                <span>Rutas Asignadas</span>
+              </div>
+              {loadingDispatch ? (
+                <div className="dispatch-loading">Cargando...</div>
+              ) : (
+                dispatchRoutes.map(dr => (
+                  <div key={dr.id} className="dispatch-route-item" onClick={() => loadDispatchRoute(dr)}>
+                    <div className="dispatch-route-top">
+                      <span className="dispatch-route-name">{dr.name}</span>
+                      {dr.is_optimized && <span className="dispatch-badge-opt">Optimizada</span>}
+                    </div>
+                    <div className="dispatch-route-meta">
+                      <span>{dr.stops_count} parada{dr.stops_count !== 1 ? 's' : ''}</span>
+                      {dr.total_distance > 0 && <span> - {dr.total_distance} km</span>}
+                      {dr.total_duration > 0 && <span> - ~{dr.total_duration} min</span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
           <div className="route-name-section" onClick={() => setShowRouteNameDialog(true)}>
             <h2 className="route-name">{routeName}</h2>
           </div>
