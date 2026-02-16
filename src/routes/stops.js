@@ -11,7 +11,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       include: [{ model: Route, as: 'route' }]
     });
     
-    if (!stop || stop.route.user_id !== req.session.userId) {
+    if (!stop || stop.route.user_id !== req.userId) {
       return res.status(404).json({ error: 'Parada no encontrada' });
     }
     
@@ -46,7 +46,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
       include: [{ model: Route, as: 'route' }]
     });
     
-    if (!stop || stop.route.user_id !== req.session.userId) {
+    if (!stop || stop.route.user_id !== req.userId) {
       return res.status(404).json({ error: 'Parada no encontrada' });
     }
     
@@ -72,7 +72,7 @@ router.post('/:id/complete', requireAuth, async (req, res) => {
       include: [{ model: Route, as: 'route' }]
     });
     
-    if (!stop || stop.route.user_id !== req.session.userId) {
+    if (!stop || stop.route.user_id !== req.userId) {
       return res.status(404).json({ error: 'Parada no encontrada' });
     }
     
@@ -101,7 +101,7 @@ router.post('/:id/fail', requireAuth, async (req, res) => {
       include: [{ model: Route, as: 'route' }]
     });
     
-    if (!stop || stop.route.user_id !== req.session.userId) {
+    if (!stop || stop.route.user_id !== req.userId) {
       return res.status(404).json({ error: 'Parada no encontrada' });
     }
     

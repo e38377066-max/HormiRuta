@@ -23,7 +23,7 @@ const VALID_TRANSITIONS = {
 
 router.get('/orders', requireAuth, async (req, res) => {
   try {
-    const user = await User.findByPk(req.session.userId);
+    const user = await User.findByPk(req.userId);
     if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
 
     let where = {};
@@ -81,7 +81,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
 
 router.put('/orders/:id/status', requireAuth, async (req, res) => {
   try {
-    const user = await User.findByPk(req.session.userId);
+    const user = await User.findByPk(req.userId);
     if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
 
     const order = await ValidatedAddress.findByPk(req.params.id);
@@ -178,7 +178,7 @@ router.post('/routes', requireAdmin, async (req, res) => {
     }
 
     const route = await Route.create({
-      user_id: req.session.userId,
+      user_id: req.userId,
       name: name || `Ruta ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'short' })} - ${ordersMap.size} paradas`,
       status: 'draft',
       is_optimized: !!pre_optimized
@@ -215,7 +215,7 @@ router.post('/routes', requireAdmin, async (req, res) => {
 
 router.get('/routes', requireAuth, async (req, res) => {
   try {
-    const user = await User.findByPk(req.session.userId);
+    const user = await User.findByPk(req.userId);
     if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
 
     let where = {};
@@ -349,7 +349,7 @@ router.get('/drivers', requireAdmin, async (req, res) => {
 
 router.get('/respond-users', requireAdmin, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({ where: { user_id: req.session.userId } });
+    const settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay token de API de Respond.io configurado' });
     }
@@ -439,7 +439,7 @@ router.post('/sync-drivers', requireAdmin, async (req, res) => {
 
 router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
   try {
-    const user = await User.findByPk(req.session.userId);
+    const user = await User.findByPk(req.userId);
     if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
 
     const order = await ValidatedAddress.findByPk(req.params.id);

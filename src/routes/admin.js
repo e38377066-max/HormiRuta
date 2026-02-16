@@ -139,7 +139,7 @@ router.delete('/users/:id', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    if (user.id === req.session.userId) {
+    if (user.id === req.userId) {
       return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
     }
 
