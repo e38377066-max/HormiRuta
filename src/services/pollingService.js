@@ -61,8 +61,10 @@ class PollingService {
       lastPoll: null,
       isRunning: true,
       pollInProgress: false,
+      scanInProgress: false,
       processedMessageIds: new Set(),
-      intervalId: null
+      intervalId: null,
+      scanIntervalId: null
     };
 
     const pollFn = async () => {
@@ -86,6 +88,20 @@ class PollingService {
       }
     };
 
+    const scanFn = async () => {
+      if (!poller.isRunning) return;
+      if (poller.scanInProgress) return;
+      
+      poller.scanInProgress = true;
+      try {
+        await this.runAddressScanCycle(userId, settings.respond_api_token, settings);
+      } catch (error) {
+        console.error(`[AddressScan] ERROR en ciclo de escaneo:`, error.message);
+      } finally {
+        poller.scanInProgress = false;
+      }
+    };
+
     this.activePollers.set(userId, poller);
 
     (async () => {
@@ -98,7 +114,11 @@ class PollingService {
         console.error(`[Polling] Error en inicializacion:`, err.message);
       }
       poller.intervalId = setInterval(pollFn, poller.intervalMs);
-      console.log(`[Polling] ACTIVO para usuario ${userId} cada ${intervalSeconds}s`);
+      console.log(`[Polling] Bot ACTIVO para usuario ${userId} cada ${intervalSeconds}s`);
+
+      setTimeout(() => scanFn(), 5000);
+      poller.scanIntervalId = setInterval(scanFn, 20000);
+      console.log(`[AddressScan] Scanner ACTIVO para usuario ${userId} cada 20s (independiente del bot)`);
     })();
 
     return { success: true, message: `Polling iniciado cada ${intervalSeconds} segundos` };
@@ -111,8 +131,11 @@ class PollingService {
       if (poller.intervalId) {
         clearInterval(poller.intervalId);
       }
+      if (poller.scanIntervalId) {
+        clearInterval(poller.scanIntervalId);
+      }
       this.activePollers.delete(userId);
-      console.log(`Stopped polling for user ${userId}`);
+      console.log(`Stopped polling and address scanner for user ${userId}`);
       return { success: true, message: 'Polling detenido' };
     }
     return { success: false, error: 'No hay polling activo para este usuario' };
@@ -267,9 +290,6 @@ class PollingService {
     }
 
     await this.checkFollowups(userId, apiToken, settings);
-
-    const contactsForScan = isTestMode ? uniqueContacts : allContacts;
-    await this.scanAddressesInConversations(userId, apiToken, contactsForScan, respondio, messageLimit, settings);
   }
 
   async checkFollowups(userId, apiToken, settings) {
@@ -899,13 +919,36 @@ class PollingService {
     });
   }
 
+  async runAddressScanCycle(userId, apiToken, settings) {
+    try {
+      const respondio = this.getRespondioInstance(apiToken);
+      const messageLimit = settings?.message_history_limit || 50;
+
+      let allContacts = [];
+      let cursorId = null;
+      while (true) {
+        const result = await respondio.listOpenConversations({ limit: 99, cursorId });
+        if (!result.success) break;
+        allContacts = [...allContacts, ...(result.items || [])];
+        if (!result.pagination?.nextCursor || (result.items || []).length < 99) break;
+        cursorId = result.pagination.nextCursor;
+      }
+
+      if (allContacts.length === 0) return;
+
+      await this.scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings);
+    } catch (error) {
+      console.error(`[AddressScan] Error en ciclo independiente:`, error.message);
+    }
+  }
+
   async scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings) {
     try {
       const extractor = new AddressExtractorService();
       let updatedCount = 0;
-      const MAX_CONTACTS_PER_SCAN = 10;
+      const MAX_CONTACTS_PER_SCAN = 15;
       const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
-      const DELAY_BETWEEN_CONTACTS_MS = 2000;
+      const DELAY_BETWEEN_CONTACTS_MS = 500;
 
       let contactsToScan = allContacts.filter((contact, index, self) =>
         index === self.findIndex(c => c.id === contact.id)
