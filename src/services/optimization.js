@@ -44,41 +44,37 @@ async function buildDistanceTable(points) {
   const durTable = Array.from({ length: n }, () => Array(n).fill(0));
 
   const MAX_ELEMENTS = 25;
-  const originsPerBatch = Math.max(1, Math.floor(MAX_ELEMENTS / n));
 
-  for (let i = 0; i < n; i += originsPerBatch) {
-    const batchEnd = Math.min(i + originsPerBatch, n);
-    const originBatch = points.slice(i, batchEnd);
-    const originIndices = [];
-    for (let k = i; k < batchEnd; k++) originIndices.push(k);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j += MAX_ELEMENTS) {
+      const destEnd = Math.min(j + MAX_ELEMENTS, n);
+      const destBatch = points.slice(j, destEnd);
 
-    const matrix = await getDistanceMatrix(originBatch, points);
+      const matrix = await getDistanceMatrix([points[i]], destBatch);
 
-    if (!matrix || !matrix.rows) {
-      for (let oi = 0; oi < originBatch.length; oi++) {
-        for (let di = 0; di < n; di++) {
-          const dist = haversineDistance(originBatch[oi].lat, originBatch[oi].lng, points[di].lat, points[di].lng);
-          distTable[originIndices[oi]][di] = dist;
-          durTable[originIndices[oi]][di] = (dist / 30) * 60;
+      if (!matrix || !matrix.rows?.[0]) {
+        for (let di = j; di < destEnd; di++) {
+          const dist = haversineDistance(points[i].lat, points[i].lng, points[di].lat, points[di].lng);
+          distTable[i][di] = dist;
+          durTable[i][di] = (dist / 30) * 60;
         }
+        continue;
       }
-      continue;
-    }
 
-    for (let oi = 0; oi < matrix.rows.length; oi++) {
-      const row = matrix.rows[oi];
+      const row = matrix.rows[0];
       for (let di = 0; di < row.elements.length; di++) {
         const element = row.elements[di];
+        const globalIdx = j + di;
         if (element.status === 'OK') {
-          distTable[originIndices[oi]][di] = element.distance.value / 1000;
+          distTable[i][globalIdx] = element.distance.value / 1000;
           const durationVal = element.duration_in_traffic
             ? element.duration_in_traffic.value
             : element.duration.value;
-          durTable[originIndices[oi]][di] = durationVal / 60;
+          durTable[i][globalIdx] = durationVal / 60;
         } else {
-          const dist = haversineDistance(originBatch[oi].lat, originBatch[oi].lng, points[di].lat, points[di].lng);
-          distTable[originIndices[oi]][di] = dist;
-          durTable[originIndices[oi]][di] = (dist / 30) * 60;
+          const dist = haversineDistance(points[i].lat, points[i].lng, points[globalIdx].lat, points[globalIdx].lng);
+          distTable[i][globalIdx] = dist;
+          durTable[i][globalIdx] = (dist / 30) * 60;
         }
       }
     }
