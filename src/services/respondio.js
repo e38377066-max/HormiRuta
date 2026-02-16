@@ -429,7 +429,7 @@ class RespondioService {
   }
   async listUsers() {
     try {
-      const response = await this.requestWithRetry('get', '/user');
+      const response = await this.requestWithRetry('get', '/users');
       return {
         success: true,
         users: response.data?.data || response.data || []
