@@ -16,6 +16,7 @@ export default function TripPlannerPage() {
   const userLocationMarkerRef = useRef(null)
   const watchIdRef = useRef(null)
   const selectedMarkerRef = useRef(null)
+  const navLineRef = useRef(null)
   const [userLocation, setUserLocation] = useState(null)
   const [selectedPoint, setSelectedPoint] = useState(null)
   
@@ -52,6 +53,9 @@ export default function TripPlannerPage() {
   const [dispatchRoutes, setDispatchRoutes] = useState([])
   const [loadingDispatch, setLoadingDispatch] = useState(false)
   const [showDispatchRoutes, setShowDispatchRoutes] = useState(true)
+  const [autoFollow, setAutoFollow] = useState(true)
+  const [navEta, setNavEta] = useState('')
+  const [navDistance, setNavDistance] = useState('')
   const isDragging = useRef(false)
   const startY = useRef(0)
   const startHeight = useRef(0)
@@ -194,6 +198,12 @@ export default function TripPlannerPage() {
 
     mapInstanceRef.current.addListener('click', handleMapClick)
 
+    mapInstanceRef.current.addListener('dragstart', () => {
+      if (navigationMode) {
+        setAutoFollow(false)
+      }
+    })
+
     startLocationTracking()
   }
 
@@ -224,6 +234,68 @@ export default function TripPlannerPage() {
     )
     
     watchIdRef.current = clearWatch
+  }
+
+  useEffect(() => {
+    if (navigationMode && autoFollow && userLocation && mapInstanceRef.current) {
+      mapInstanceRef.current.panTo(userLocation)
+    }
+  }, [userLocation, navigationMode, autoFollow])
+
+  useEffect(() => {
+    if (navigationMode && userLocation) {
+      const pending = stops.find(s => !s.completed)
+      if (pending && pending.latitude && pending.longitude) {
+        updateNavLine(userLocation, { lat: pending.latitude, lng: pending.longitude })
+        calculateNavEta(userLocation, { lat: pending.latitude, lng: pending.longitude })
+      } else {
+        if (navLineRef.current) {
+          navLineRef.current.setMap(null)
+          navLineRef.current = null
+        }
+        setNavEta('')
+        setNavDistance('')
+      }
+    } else {
+      if (navLineRef.current) {
+        navLineRef.current.setMap(null)
+        navLineRef.current = null
+      }
+      setNavEta('')
+      setNavDistance('')
+    }
+  }, [userLocation, navigationMode, stops])
+
+  const updateNavLine = (from, to) => {
+    if (navLineRef.current) {
+      navLineRef.current.setPath([from, to])
+    } else if (mapInstanceRef.current) {
+      navLineRef.current = new window.google.maps.Polyline({
+        path: [from, to],
+        geodesic: true,
+        strokeColor: '#22c55e',
+        strokeOpacity: 0.8,
+        strokeWeight: 4,
+        map: mapInstanceRef.current
+      })
+    }
+  }
+
+  const calculateNavEta = async (from, to) => {
+    try {
+      const service = new window.google.maps.DistanceMatrixService()
+      const result = await service.getDistanceMatrix({
+        origins: [from],
+        destinations: [to],
+        travelMode: window.google.maps.TravelMode[travelMode]
+      })
+      if (result.rows[0]?.elements[0]?.status === 'OK') {
+        setNavDistance(result.rows[0].elements[0].distance.text)
+        setNavEta(result.rows[0].elements[0].duration.text)
+      }
+    } catch (err) {
+      console.log('ETA calc error:', err)
+    }
   }
 
   const updateUserLocationMarker = (location, accuracy = 30) => {
@@ -432,7 +504,6 @@ export default function TripPlannerPage() {
     try {
       const oldDistance = totalDistance
       
-      // Intentar usar el backend primero
       try {
         let routeId = currentRouteId
         
@@ -484,7 +555,6 @@ export default function TripPlannerPage() {
         console.log('Backend not available, using Google Maps optimization')
       }
 
-      // Fallback: usar Google Maps directamente
       if (stops.length === 2) {
         await calculateRoute(stops)
         setIsOptimized(true)
@@ -653,12 +723,28 @@ export default function TripPlannerPage() {
     }
   }
 
-  const confirmRoute = () => {
+  const startRoute = () => {
     setNavigationMode(true)
+    setAutoFollow(true)
+    if (userLocation && mapInstanceRef.current) {
+      mapInstanceRef.current.panTo(userLocation)
+      mapInstanceRef.current.setZoom(16)
+    }
   }
 
   const exitNavigation = () => {
     setNavigationMode(false)
+    setAutoFollow(false)
+    if (navLineRef.current) {
+      navLineRef.current.setMap(null)
+      navLineRef.current = null
+    }
+  }
+
+  const reOptimize = () => {
+    setIsOptimized(false)
+    setShowRouteMenu(false)
+    setTimeout(() => optimizeRoute(), 100)
   }
 
   const clearRoute = () => {
@@ -669,10 +755,15 @@ export default function TripPlannerPage() {
     setTotalDistance(0)
     setTotalDuration(0)
     setSavedDistance(0)
+    setAutoFollow(false)
     markersRef.current.forEach(m => m.setMap(null))
     markersRef.current = []
     if (directionsRendererRef.current) {
       directionsRendererRef.current.setDirections({ routes: [] })
+    }
+    if (navLineRef.current) {
+      navLineRef.current.setMap(null)
+      navLineRef.current = null
     }
   }
 
@@ -687,6 +778,7 @@ export default function TripPlannerPage() {
       mapInstanceRef.current?.setCenter(userLocation)
       mapInstanceRef.current?.setZoom(16)
       vibrate('light')
+      if (navigationMode) setAutoFollow(true)
     } else {
       try {
         const pos = await getCurrentPosition()
@@ -696,6 +788,7 @@ export default function TripPlannerPage() {
         mapInstanceRef.current?.setZoom(16)
         updateUserLocationMarker(loc)
         vibrate('light')
+        if (navigationMode) setAutoFollow(true)
       } catch (err) {
         console.error('Could not get location:', err)
       }
@@ -720,6 +813,7 @@ export default function TripPlannerPage() {
   }
 
   const nextPendingStop = stops.find(s => !s.completed)
+  const nextPendingIndex = stops.findIndex(s => !s.completed)
 
   return (
     <div className="trip-planner-page">
@@ -729,6 +823,28 @@ export default function TripPlannerPage() {
         <button className="menu-fab" onClick={onToggleDrawer}>
           <span className="material-icons">menu</span>
         </button>
+
+        {navigationMode && nextPendingStop && (
+          <div className="nav-bar">
+            <div className="nav-bar-stop">
+              <span className="nav-bar-number">{nextPendingIndex + 1}</span>
+              <div className="nav-bar-info">
+                <div className="nav-bar-address">{nextPendingStop.name || nextPendingStop.address?.split(',')[0] || 'Siguiente parada'}</div>
+                <div className="nav-bar-eta">
+                  {navDistance && <span>{navDistance}</span>}
+                  {navEta && <span> · {navEta}</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {navigationMode && !autoFollow && (
+          <button className="auto-follow-btn" onClick={() => { setAutoFollow(true); if (userLocation) mapInstanceRef.current?.panTo(userLocation); }}>
+            <span className="material-icons">my_location</span>
+            <span>Centrar</span>
+          </button>
+        )}
         
         {savedDistance > 0 && (
           <div className="savings-banner">
@@ -803,107 +919,33 @@ export default function TripPlannerPage() {
           <div className="route-name-section" onClick={() => setShowRouteNameDialog(true)}>
             <h2 className="route-name">{routeName}</h2>
           </div>
-          
-          <div className="config-section">
-            <div className="config-label">Configuración de ruta</div>
-            
-            <div className="config-item" onClick={() => setUseCurrentLocation(!useCurrentLocation)}>
-              <div className="config-item-left">
-                <span className="config-time">{startTime ? new Date(startTime).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : 'Ahora'}</span>
-                <div className="config-content">
-                  <div className="config-title">{useCurrentLocation ? 'Empezar desde la ubicación actual' : 'Empezar desde primera parada'}</div>
-                  <div className="config-subtitle">{useCurrentLocation ? 'Utiliza la posición del GPS al optimizar' : 'Inicia desde la primera parada de la lista'}</div>
-                </div>
+
+          {isOptimized && totalDistance > 0 && (
+            <div className="route-stats">
+              <div className="route-stat">
+                <span className="material-icons">straighten</span>
+                <span>{totalDistance.toFixed(1)} km</span>
               </div>
-              <span className="material-icons config-icon" style={{ color: useCurrentLocation ? '#5b8def' : '#666' }}>
-                {useCurrentLocation ? 'gps_fixed' : 'location_off'}
-              </span>
-            </div>
-            
-            <div className="config-item" onClick={() => setRoundTrip(!roundTrip)}>
-              <div className="config-item-left">
-                <span className="config-time">•</span>
-                <div className="config-content">
-                  <div className="config-title">Viaje de ida y vuelta</div>
-                  <div className="config-subtitle">{roundTrip ? 'Regresa al punto de inicio' : 'Termina en la última parada'}</div>
-                </div>
+              <div className="route-stat">
+                <span className="material-icons">schedule</span>
+                <span>{formatDuration(totalDuration)}</span>
               </div>
-              <span className="material-icons config-icon" style={{ color: roundTrip ? '#22c55e' : '#666' }}>
-                {roundTrip ? 'check_box' : 'check_box_outline_blank'}
-              </span>
             </div>
-            
-            <div className="config-item" onClick={() => setShowConfigModal('break')}>
-              <div className="config-item-left">
-                <span className="config-time">•</span>
-                <div className="config-content">
-                  <div className="config-title">{breakTime ? `Descanso a las ${breakTime}` : 'Sin descanso'}</div>
-                  <div className="config-subtitle">{breakTime ? 'Pulsa para editar' : 'Pulsa para planificar un descanso'}</div>
-                </div>
-              </div>
-              <span className="material-icons config-icon" style={{ color: breakTime ? '#f59e0b' : '#666' }}>
-                {breakTime ? 'coffee' : 'free_breakfast'}
-              </span>
-            </div>
-            
-            <div className="config-item" onClick={() => setShowConfigModal('duration')}>
-              <div className="config-item-left">
-                <span className="config-time">•</span>
-                <div className="config-content">
-                  <div className="config-title">{stopDuration} min por parada</div>
-                  <div className="config-subtitle">Tiempo estimado en cada entrega</div>
-                </div>
-              </div>
-              <span className="material-icons config-icon" style={{ color: '#666' }}>timer</span>
-            </div>
-            
-            <div className="config-item" onClick={() => setShowConfigModal('vehicle')}>
-              <div className="config-item-left">
-                <span className="config-time">•</span>
-                <div className="config-content">
-                  <div className="config-title">{travelMode === 'DRIVING' ? 'Carro/Moto' : travelMode === 'BICYCLING' ? 'Bicicleta' : 'A pie'}</div>
-                  <div className="config-subtitle">Tipo de vehículo para la ruta</div>
-                </div>
-              </div>
-              <span className="material-icons config-icon" style={{ color: '#666' }}>
-                {travelMode === 'DRIVING' ? 'directions_car' : travelMode === 'BICYCLING' ? 'pedal_bike' : 'directions_walk'}
-              </span>
-            </div>
-            
-            <div className="config-item" onClick={() => setAvoidTolls(!avoidTolls)}>
-              <div className="config-item-left">
-                <span className="config-time">•</span>
-                <div className="config-content">
-                  <div className="config-title">Evitar peajes</div>
-                  <div className="config-subtitle">{avoidTolls ? 'Activado' : 'Desactivado'}</div>
-                </div>
-              </div>
-              <span className="material-icons config-icon" style={{ color: avoidTolls ? '#22c55e' : '#666' }}>
-                {avoidTolls ? 'check_box' : 'check_box_outline_blank'}
-              </span>
-            </div>
-            
-            <div className="config-item" onClick={() => setAvoidHighways(!avoidHighways)}>
-              <div className="config-item-left">
-                <span className="config-time">•</span>
-                <div className="config-content">
-                  <div className="config-title">Evitar autopistas</div>
-                  <div className="config-subtitle">{avoidHighways ? 'Activado' : 'Desactivado'}</div>
-                </div>
-              </div>
-              <span className="material-icons config-icon" style={{ color: avoidHighways ? '#22c55e' : '#666' }}>
-                {avoidHighways ? 'check_box' : 'check_box_outline_blank'}
-              </span>
-            </div>
-          </div>
+          )}
           
           {stops.length > 0 && (
             <>
               <div className="stops-section-header">Parada</div>
               {stops.map((stop, index) => (
                 <div key={stop.id} className="stop-row" onClick={() => navigationMode && toggleStopComplete(index)}>
-                  <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="stop-name">{stop.name || stop.address?.split(',')[0] || 'Lugar sin nombre'}</span>
+                  {navigationMode ? (
+                    <span className="material-icons stop-checkbox" style={{ color: stop.completed ? '#22c55e' : '#666', fontSize: 22 }}>
+                      {stop.completed ? 'check_box' : 'check_box_outline_blank'}
+                    </span>
+                  ) : (
+                    <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
+                  )}
+                  <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Lugar sin nombre'}</span>
                   {!navigationMode && (
                     <button 
                       className="header-btn" 
@@ -913,7 +955,7 @@ export default function TripPlannerPage() {
                       <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
                     </button>
                   )}
-                  <div className={`stop-indicator ${stop.completed ? 'completed' : ''}`}></div>
+                  {!navigationMode && <div className={`stop-indicator ${stop.completed ? 'completed' : ''}`}></div>}
                 </div>
               ))}
             </>
@@ -937,6 +979,16 @@ export default function TripPlannerPage() {
                 </button>
               </div>
             </div>
+          ) : navigationMode ? (
+            <button className="btn-end-route" onClick={exitNavigation}>
+              <span className="material-icons">stop</span>
+              Finalizar ruta
+            </button>
+          ) : isOptimized ? (
+            <button className="btn-start-route" onClick={startRoute}>
+              <span className="material-icons">navigation</span>
+              Iniciar ruta
+            </button>
           ) : (
             <button 
               className="btn-optimize" 
@@ -980,6 +1032,16 @@ export default function TripPlannerPage() {
       {showRouteMenu && (
         <div className="modal-overlay" onClick={() => setShowRouteMenu(false)}>
           <div className="modal-bottom" onClick={e => e.stopPropagation()}>
+            <div className="menu-item" onClick={() => { setShowConfigModal('settings'); setShowRouteMenu(false) }}>
+              <span className="material-icons">settings</span>
+              <span>Ajustes de ruta</span>
+            </div>
+            {isOptimized && !navigationMode && (
+              <div className="menu-item" onClick={reOptimize}>
+                <span className="material-icons">autorenew</span>
+                <span>Re-optimizar ruta</span>
+              </div>
+            )}
             <div className="menu-item" onClick={() => { setRoundTrip(!roundTrip); setShowRouteMenu(false) }}>
               <span className="material-icons">replay</span>
               <span>{roundTrip ? 'Solo ida' : 'Ida y vuelta'}</span>
@@ -1011,6 +1073,109 @@ export default function TripPlannerPage() {
             <div className="modal-actions">
               <button className="btn-flat" onClick={() => setShowRouteNameDialog(false)}>Cancelar</button>
               <button className="btn-primary" onClick={() => setShowRouteNameDialog(false)}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfigModal === 'settings' && (
+        <div className="modal-overlay" onClick={() => setShowConfigModal(null)}>
+          <div className="settings-modal" onClick={e => e.stopPropagation()}>
+            <div className="settings-modal-header">
+              <h3>Ajustes de ruta</h3>
+              <button className="header-btn" onClick={() => setShowConfigModal(null)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="settings-modal-body">
+              <div className="config-item" onClick={() => setUseCurrentLocation(!useCurrentLocation)}>
+                <div className="config-item-left">
+                  <span className="config-time">{startTime ? new Date(startTime).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : 'Ahora'}</span>
+                  <div className="config-content">
+                    <div className="config-title">{useCurrentLocation ? 'Empezar desde la ubicación actual' : 'Empezar desde primera parada'}</div>
+                    <div className="config-subtitle">{useCurrentLocation ? 'Utiliza la posición del GPS al optimizar' : 'Inicia desde la primera parada de la lista'}</div>
+                  </div>
+                </div>
+                <span className="material-icons config-icon" style={{ color: useCurrentLocation ? '#5b8def' : '#666' }}>
+                  {useCurrentLocation ? 'gps_fixed' : 'location_off'}
+                </span>
+              </div>
+              
+              <div className="config-item" onClick={() => setRoundTrip(!roundTrip)}>
+                <div className="config-item-left">
+                  <span className="config-time">•</span>
+                  <div className="config-content">
+                    <div className="config-title">Viaje de ida y vuelta</div>
+                    <div className="config-subtitle">{roundTrip ? 'Regresa al punto de inicio' : 'Termina en la última parada'}</div>
+                  </div>
+                </div>
+                <span className="material-icons config-icon" style={{ color: roundTrip ? '#22c55e' : '#666' }}>
+                  {roundTrip ? 'check_box' : 'check_box_outline_blank'}
+                </span>
+              </div>
+              
+              <div className="config-item" onClick={() => setShowConfigModal('break')}>
+                <div className="config-item-left">
+                  <span className="config-time">•</span>
+                  <div className="config-content">
+                    <div className="config-title">{breakTime ? `Descanso a las ${breakTime}` : 'Sin descanso'}</div>
+                    <div className="config-subtitle">{breakTime ? 'Pulsa para editar' : 'Pulsa para planificar un descanso'}</div>
+                  </div>
+                </div>
+                <span className="material-icons config-icon" style={{ color: breakTime ? '#f59e0b' : '#666' }}>
+                  {breakTime ? 'coffee' : 'free_breakfast'}
+                </span>
+              </div>
+              
+              <div className="config-item" onClick={() => setShowConfigModal('duration')}>
+                <div className="config-item-left">
+                  <span className="config-time">•</span>
+                  <div className="config-content">
+                    <div className="config-title">{stopDuration} min por parada</div>
+                    <div className="config-subtitle">Tiempo estimado en cada entrega</div>
+                  </div>
+                </div>
+                <span className="material-icons config-icon" style={{ color: '#666' }}>timer</span>
+              </div>
+              
+              <div className="config-item" onClick={() => setShowConfigModal('vehicle')}>
+                <div className="config-item-left">
+                  <span className="config-time">•</span>
+                  <div className="config-content">
+                    <div className="config-title">{travelMode === 'DRIVING' ? 'Carro/Moto' : travelMode === 'BICYCLING' ? 'Bicicleta' : 'A pie'}</div>
+                    <div className="config-subtitle">Tipo de vehículo para la ruta</div>
+                  </div>
+                </div>
+                <span className="material-icons config-icon" style={{ color: '#666' }}>
+                  {travelMode === 'DRIVING' ? 'directions_car' : travelMode === 'BICYCLING' ? 'pedal_bike' : 'directions_walk'}
+                </span>
+              </div>
+              
+              <div className="config-item" onClick={() => setAvoidTolls(!avoidTolls)}>
+                <div className="config-item-left">
+                  <span className="config-time">•</span>
+                  <div className="config-content">
+                    <div className="config-title">Evitar peajes</div>
+                    <div className="config-subtitle">{avoidTolls ? 'Activado' : 'Desactivado'}</div>
+                  </div>
+                </div>
+                <span className="material-icons config-icon" style={{ color: avoidTolls ? '#22c55e' : '#666' }}>
+                  {avoidTolls ? 'check_box' : 'check_box_outline_blank'}
+                </span>
+              </div>
+              
+              <div className="config-item" onClick={() => setAvoidHighways(!avoidHighways)}>
+                <div className="config-item-left">
+                  <span className="config-time">•</span>
+                  <div className="config-content">
+                    <div className="config-title">Evitar autopistas</div>
+                    <div className="config-subtitle">{avoidHighways ? 'Activado' : 'Desactivado'}</div>
+                  </div>
+                </div>
+                <span className="material-icons config-icon" style={{ color: avoidHighways ? '#22c55e' : '#666' }}>
+                  {avoidHighways ? 'check_box' : 'check_box_outline_blank'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
