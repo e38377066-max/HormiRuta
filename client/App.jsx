@@ -16,16 +16,21 @@ import CoveragePage from './pages/Messaging/CoveragePage'
 import SettingsPage from './pages/Messaging/SettingsPage'
 
 import TripPlannerPage from './pages/Planner/TripPlannerPage'
+import DispatchMap from './pages/Dispatch/DispatchMap'
 
-function ProtectedRoute({ children, adminOnly = false }) {
-  const { isAuthenticated, isAdmin } = useAuth()
+function ProtectedRoute({ children, adminOnly = false, allowedRoles = null }) {
+  const { isAuthenticated, isAdmin, user } = useAuth()
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
   
+  if (allowedRoles && !allowedRoles.includes(user?.role)) {
+    return <Navigate to="/messaging" replace />
+  }
+  
   if (adminOnly && !isAdmin) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to="/messaging" replace />
   }
   
   return children
@@ -55,6 +60,7 @@ export default function App() {
         
         <Route path="admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
         <Route path="admin/users" element={<ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>} />
+        <Route path="dispatch" element={<ProtectedRoute allowedRoles={['admin', 'driver']}><DispatchMap /></ProtectedRoute>} />
       </Route>
       
       <Route path="/planner" element={<ProtectedRoute><PlannerLayout /></ProtectedRoute>}>

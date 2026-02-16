@@ -36,6 +36,11 @@ export default function DashboardLayout() {
         <nav className="q-drawer-content">
           <div className="q-item-label">Menu Principal</div>
           
+          <NavLink to="/dispatch" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
+            <span className="material-icons q-item-icon" style={{color: '#6200ea'}}>local_shipping</span>
+            <span>Despacho</span>
+          </NavLink>
+
           <NavLink to="/planner" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
             <span className="material-icons q-item-icon" style={{color: '#1976d2'}}>map</span>
             <span>Planificar Ruta</span>

@@ -1,0 +1,322 @@
+import { Router } from 'express';
+import { MessagingOrder, Route, Stop, User } from '../models/index.js';
+import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
+import { Op } from 'sequelize';
+
+const router = Router();
+
+const VALID_ORDER_STATUSES = ['approved', 'on_production', 'production_finished', 'order_picked_up', 'on_delivery', 'delivered'];
+const ADMIN_STATUSES = ['on_production', 'production_finished', 'order_picked_up'];
+const DRIVER_STATUSES = ['delivered'];
+
+const VALID_TRANSITIONS = {
+  approved: ['on_production'],
+  on_production: ['production_finished'],
+  production_finished: ['order_picked_up'],
+  order_picked_up: ['on_delivery'],
+  on_delivery: ['delivered'],
+  delivered: []
+};
+
+router.get('/orders', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
+    let where = {};
+
+    if (user.role === 'driver') {
+      where.assigned_driver_id = user.id;
+      where.order_status = { [Op.in]: ['on_delivery', 'delivered'] };
+    } else if (user.role === 'admin') {
+      where.address = { [Op.ne]: null };
+      where.address_lat = { [Op.ne]: null };
+      if (req.query.status) {
+        where.order_status = req.query.status;
+      }
+    } else {
+      return res.status(403).json({ error: 'No tienes permisos' });
+    }
+
+    const orders = await MessagingOrder.findAll({
+      where,
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json({ orders: orders.map(o => o.toDict()) });
+  } catch (error) {
+    console.error('Error fetching dispatch orders:', error);
+    res.status(500).json({ error: 'Error al cargar ordenes' });
+  }
+});
+
+router.get('/stats', requireAdmin, async (req, res) => {
+  try {
+    const where = { address: { [Op.ne]: null }, address_lat: { [Op.ne]: null } };
+    
+    const [total, onProduction, productionFinished, pickedUp, onDelivery, delivered] = await Promise.all([
+      MessagingOrder.count({ where }),
+      MessagingOrder.count({ where: { ...where, order_status: 'on_production' } }),
+      MessagingOrder.count({ where: { ...where, order_status: 'production_finished' } }),
+      MessagingOrder.count({ where: { ...where, order_status: 'order_picked_up' } }),
+      MessagingOrder.count({ where: { ...where, order_status: 'on_delivery' } }),
+      MessagingOrder.count({ where: { ...where, order_status: 'delivered' } })
+    ]);
+
+    res.json({
+      total,
+      on_production: onProduction,
+      production_finished: productionFinished,
+      order_picked_up: pickedUp,
+      on_delivery: onDelivery,
+      delivered
+    });
+  } catch (error) {
+    console.error('Error fetching dispatch stats:', error);
+    res.status(500).json({ error: 'Error al cargar estadisticas' });
+  }
+});
+
+router.put('/orders/:id/status', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
+    const order = await MessagingOrder.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    const { order_status } = req.body;
+    if (!VALID_ORDER_STATUSES.includes(order_status)) {
+      return res.status(400).json({ error: 'Estado no valido' });
+    }
+
+    const currentStatus = order.order_status || 'approved';
+    const allowedNext = VALID_TRANSITIONS[currentStatus] || [];
+    if (!allowedNext.includes(order_status)) {
+      return res.status(400).json({ error: `No se puede cambiar de "${currentStatus}" a "${order_status}"` });
+    }
+
+    if (user.role === 'admin') {
+      if (!ADMIN_STATUSES.includes(order_status)) {
+        return res.status(403).json({ error: 'No puedes cambiar a ese estado' });
+      }
+    } else if (user.role === 'driver') {
+      if (!DRIVER_STATUSES.includes(order_status)) {
+        return res.status(403).json({ error: 'Solo puedes marcar como entregado' });
+      }
+      if (order.assigned_driver_id !== user.id) {
+        return res.status(403).json({ error: 'Esta orden no te fue asignada' });
+      }
+    } else {
+      return res.status(403).json({ error: 'No tienes permisos' });
+    }
+
+    order.order_status = order_status;
+    if (order_status === 'delivered') {
+      order.delivered_at = new Date();
+    }
+    await order.save();
+
+    res.json({ success: true, order: order.toDict() });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    res.status(500).json({ error: 'Error al actualizar estado' });
+  }
+});
+
+router.put('/orders/:id/amount', requireAdmin, async (req, res) => {
+  try {
+    const order = await MessagingOrder.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    order.amount = req.body.amount || 0;
+    await order.save();
+
+    res.json({ success: true, order: order.toDict() });
+  } catch (error) {
+    console.error('Error updating order amount:', error);
+    res.status(500).json({ error: 'Error al actualizar monto' });
+  }
+});
+
+router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
+  try {
+    const { order_ids, order_status } = req.body;
+    if (!order_ids?.length || !ADMIN_STATUSES.includes(order_status)) {
+      return res.status(400).json({ error: 'Datos invalidos' });
+    }
+
+    await MessagingOrder.update(
+      { order_status },
+      { where: { id: { [Op.in]: order_ids } } }
+    );
+
+    res.json({ success: true, updated: order_ids.length });
+  } catch (error) {
+    console.error('Error bulk updating:', error);
+    res.status(500).json({ error: 'Error al actualizar ordenes' });
+  }
+});
+
+router.post('/routes', requireAdmin, async (req, res) => {
+  try {
+    const { name, order_ids } = req.body;
+    if (!order_ids?.length) {
+      return res.status(400).json({ error: 'Selecciona al menos una orden' });
+    }
+
+    const orders = await MessagingOrder.findAll({
+      where: { id: { [Op.in]: order_ids }, address_lat: { [Op.ne]: null } }
+    });
+
+    if (orders.length === 0) {
+      return res.status(400).json({ error: 'No se encontraron ordenes con direccion' });
+    }
+
+    const route = await Route.create({
+      user_id: req.session.userId,
+      name: name || `Ruta ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'short' })} - ${orders.length} paradas`,
+      status: 'draft'
+    });
+
+    for (let i = 0; i < orders.length; i++) {
+      const order = orders[i];
+      const stop = await Stop.create({
+        route_id: route.id,
+        address: order.address,
+        lat: order.address_lat,
+        lng: order.address_lng,
+        order: i,
+        customer_name: order.customer_name,
+        phone: order.customer_phone,
+        note: order.notes
+      });
+
+      order.route_id = route.id;
+      order.stop_id = stop.id;
+      await order.save();
+    }
+
+    res.status(201).json({
+      success: true,
+      route: await route.toDict()
+    });
+  } catch (error) {
+    console.error('Error creating dispatch route:', error);
+    res.status(500).json({ error: 'Error al crear ruta' });
+  }
+});
+
+router.get('/routes', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
+    let where = {};
+    if (user.role === 'driver') {
+      const driverOrders = await MessagingOrder.findAll({
+        where: { assigned_driver_id: user.id },
+        attributes: ['route_id']
+      });
+      const routeIds = [...new Set(driverOrders.map(o => o.route_id).filter(Boolean))];
+      where.id = { [Op.in]: routeIds };
+    } else if (user.role === 'admin') {
+    } else {
+      return res.status(403).json({ error: 'No tienes permisos' });
+    }
+
+    const routes = await Route.findAll({
+      where,
+      order: [['created_at', 'DESC']]
+    });
+
+    const routesWithDetails = await Promise.all(routes.map(async (r) => {
+      const routeDict = await r.toDict();
+      const routeOrders = await MessagingOrder.findAll({
+        where: { route_id: r.id }
+      });
+      routeDict.orders = routeOrders.map(o => o.toDict());
+      routeDict.total_amount = routeOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
+      return routeDict;
+    }));
+
+    res.json({ routes: routesWithDetails });
+  } catch (error) {
+    console.error('Error fetching dispatch routes:', error);
+    res.status(500).json({ error: 'Error al cargar rutas' });
+  }
+});
+
+router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
+  try {
+    const { driver_id } = req.body;
+    if (!driver_id) return res.status(400).json({ error: 'Selecciona un chofer' });
+
+    const driver = await User.findByPk(driver_id);
+    if (!driver) return res.status(404).json({ error: 'Chofer no encontrado' });
+
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    route.status = 'assigned';
+    await route.save();
+
+    const orders = await MessagingOrder.findAll({
+      where: { route_id: route.id }
+    });
+
+    for (const order of orders) {
+      order.assigned_driver_id = driver_id;
+      order.driver_name = driver.username;
+      order.order_status = 'on_delivery';
+      await order.save();
+    }
+
+    res.json({
+      success: true,
+      route: await route.toDict(),
+      message: `Ruta asignada a ${driver.username}`
+    });
+  } catch (error) {
+    console.error('Error assigning route:', error);
+    res.status(500).json({ error: 'Error al asignar ruta' });
+  }
+});
+
+router.get('/drivers', requireAdmin, async (req, res) => {
+  try {
+    const drivers = await User.findAll({
+      where: { role: 'driver', active: true },
+      attributes: ['id', 'username', 'email', 'phone']
+    });
+    res.json({ drivers: drivers.map(d => d.toDict()) });
+  } catch (error) {
+    console.error('Error fetching drivers:', error);
+    res.status(500).json({ error: 'Error al cargar choferes' });
+  }
+});
+
+router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
+    const order = await MessagingOrder.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    if (user.role === 'driver' && order.assigned_driver_id !== user.id) {
+      return res.status(403).json({ error: 'Esta orden no te fue asignada' });
+    }
+
+    order.order_status = 'delivered';
+    order.delivered_at = new Date();
+    await order.save();
+
+    res.json({ success: true, order: order.toDict() });
+  } catch (error) {
+    console.error('Error marking delivered:', error);
+    res.status(500).json({ error: 'Error al marcar como entregado' });
+  }
+});
+
+export default router;

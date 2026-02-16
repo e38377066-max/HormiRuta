@@ -138,6 +138,23 @@ const MessagingOrder = sequelize.define('MessagingOrder', {
   lifecycle: {
     type: DataTypes.STRING(50),
     allowNull: true
+  },
+  order_status: {
+    type: DataTypes.STRING(30),
+    defaultValue: 'approved'
+  },
+  amount: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: 0
+  },
+  delivered_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  driver_name: {
+    type: DataTypes.STRING(100),
+    allowNull: true
   }
 }, {
   tableName: 'messaging_orders',
@@ -178,6 +195,10 @@ MessagingOrder.prototype.toDict = function() {
     cancelled_at: this.cancelled_at,
     cancel_reason: this.cancel_reason,
     lifecycle: this.lifecycle,
+    order_status: this.order_status,
+    amount: this.amount,
+    delivered_at: this.delivered_at,
+    driver_name: this.driver_name,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

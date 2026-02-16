@@ -24,6 +24,7 @@ import stopsRoutes from './routes/stops.js';
 import historyRoutes from './routes/history.js';
 import messagingRoutes from './routes/messaging.js';
 import adminRoutes from './routes/admin.js';
+import dispatchRoutes from './routes/dispatch.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,6 +79,7 @@ app.use('/api/stops', stopsRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/messaging', messagingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/dispatch', dispatchRoutes);
 
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath, { 

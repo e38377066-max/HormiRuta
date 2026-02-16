@@ -30,6 +30,10 @@ Area 862 System es una aplicacion de planificacion y optimizacion de rutas de en
 ```
 
 ## Recent Changes
+- 2026-02-16: Sistema de Despacho completo: mapa admin con ordenes por color/estado, creacion de rutas desde mapa, asignacion a choferes, vista chofer para marcar entregado
+- 2026-02-16: Nuevos campos en MessagingOrder: order_status (flujo produccion), amount (monto a cobrar), delivered_at, driver_name
+- 2026-02-16: API dispatch: /api/dispatch/orders, /api/dispatch/routes, /api/dispatch/drivers, cambio de estados, asignacion masiva
+- 2026-02-16: Flujo de estados: approved → on_production (rojo) → production_finished (azul) → order_picked_up (verde) → on_delivery (naranja) → delivered
 - 2026-02-12: Fix: Address scanner no se ejecuta sobre contactos con flujo de chatbot activo (estados awaiting_*) para evitar interferencia entre servicios
 - 2026-02-12: Fix critico: Bot no interfiere cuando agente humano ya respondio - validacion ZIP/ciudad no se ejecuta en estado 'assigned' ni cuando agent_active=true
 - 2026-02-12: Fix: Extraccion automatica de direcciones cuando agente esta activo - si cliente envia direccion y agente ya controla, se guarda Address y Zip Code en Respond.io sin enviar mensajes del bot
