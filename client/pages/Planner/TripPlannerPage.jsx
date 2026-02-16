@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { usePlanner } from '../../layouts/PlannerLayout'
-import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform } from '../../utils/capacitor'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 export default function TripPlannerPage() {
@@ -551,6 +551,39 @@ export default function TripPlannerPage() {
     const reader = new FileReader()
     reader.onload = (ev) => setEvidencePreview(ev.target.result)
     reader.readAsDataURL(file)
+  }
+
+  const captureEvidenceNative = async () => {
+    try {
+      const photo = await takePhoto()
+      if (photo && photo.dataUrl) {
+        setEvidencePreview(photo.dataUrl)
+        const file = dataUrlToFile(photo.dataUrl, `evidence_${Date.now()}.${photo.format || 'jpeg'}`)
+        setEvidenceFile(file)
+      }
+    } catch (err) {
+      if (err.message?.includes('cancelled') || err.message?.includes('User cancelled')) return
+      console.error('Camera error:', err)
+      alert(err.message || 'Error al abrir la cámara')
+    }
+  }
+
+  const openEvidenceCapture = () => {
+    if (isNative) {
+      captureEvidenceNative()
+    } else {
+      fileInputRef.current?.click()
+    }
+  }
+
+  const retakeEvidence = () => {
+    setEvidencePreview(null)
+    setEvidenceFile(null)
+    if (isNative) {
+      captureEvidenceNative()
+    } else {
+      fileInputRef.current?.click()
+    }
   }
 
   const confirmStopWithEvidence = async () => {
@@ -1403,13 +1436,13 @@ export default function TripPlannerPage() {
               {evidencePreview ? (
                 <div className="evidence-preview-container">
                   <img src={evidencePreview} alt="Evidencia" className="evidence-preview-img" />
-                  <button className="evidence-retake-btn" onClick={() => { setEvidencePreview(null); setEvidenceFile(null); fileInputRef.current?.click(); }}>
+                  <button className="evidence-retake-btn" onClick={retakeEvidence}>
                     <span className="material-icons">refresh</span>
                     Tomar otra
                   </button>
                 </div>
               ) : (
-                <div className="evidence-capture-area" onClick={() => fileInputRef.current?.click()}>
+                <div className="evidence-capture-area" onClick={openEvidenceCapture}>
                   <span className="material-icons" style={{ fontSize: 48, color: '#5b8def' }}>camera_alt</span>
                   <p>Toca para tomar foto de evidencia</p>
                   <p className="evidence-hint">Firma, comprobante, o foto de entrega</p>
