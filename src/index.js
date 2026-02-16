@@ -81,6 +81,9 @@ app.use('/api/messaging', messagingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/dispatch', dispatchRoutes);
 
+const uploadsPath = path.join(__dirname, '..', 'uploads');
+app.use('/uploads', express.static(uploadsPath));
+
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath, { 
   setHeaders: (res) => {

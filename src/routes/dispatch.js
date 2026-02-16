@@ -1,10 +1,38 @@
 import { Router } from 'express';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ValidatedAddress, Route, Stop, User, MessagingSettings } from '../models/index.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import RespondioService from '../services/respondio.js';
 import { optimizeRouteOrder } from '../services/optimization.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '..', '..', 'uploads', 'evidence'));
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `stop_${req.params.id}_${Date.now()}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten imagenes'), false);
+    }
+  }
+});
 
 const router = Router();
 
@@ -434,6 +462,121 @@ router.post('/sync-drivers', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error syncing drivers:', error);
     res.status(500).json({ error: 'Error al sincronizar choferes' });
+  }
+});
+
+router.post('/stops/:id/evidence', requireAuth, upload.single('photo'), async (req, res) => {
+  try {
+    const stop = await Stop.findByPk(req.params.id);
+    if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+
+    const route = await Route.findByPk(stop.route_id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    if (route.assigned_driver_id !== req.userId) {
+      const user = await User.findByPk(req.userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: 'No tienes permisos para esta parada' });
+      }
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Se requiere una foto de evidencia' });
+    }
+
+    stop.photo_url = `/uploads/evidence/${req.file.filename}`;
+    stop.status = 'completed';
+    stop.completed_at = new Date();
+    await stop.save();
+
+    res.json({ success: true, stop: stop.toDict() });
+  } catch (error) {
+    console.error('Error uploading evidence:', error);
+    res.status(500).json({ error: 'Error al subir evidencia' });
+  }
+});
+
+router.put('/routes/:id/complete', requireAuth, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    if (route.assigned_driver_id !== req.userId) {
+      const user = await User.findByPk(req.userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: 'No tienes permisos' });
+      }
+    }
+
+    const allStops = await Stop.findAll({ where: { route_id: route.id } });
+    const allCompleted = allStops.every(s => s.status === 'completed' && s.photo_url);
+    if (!allCompleted) {
+      return res.status(400).json({ error: 'Todas las paradas deben tener evidencia antes de finalizar' });
+    }
+
+    route.status = 'completed';
+    route.completed_at = new Date();
+    await route.save();
+
+    const orders = await ValidatedAddress.findAll({ where: { route_id: route.id } });
+    for (const order of orders) {
+      order.order_status = 'delivered';
+      order.delivered_at = new Date();
+      await order.save();
+    }
+
+    res.json({ success: true, route: await route.toDict() });
+  } catch (error) {
+    console.error('Error completing route:', error);
+    res.status(500).json({ error: 'Error al finalizar ruta' });
+  }
+});
+
+router.get('/routes/:id/detail', requireAuth, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    const routeDict = await route.toDict();
+    const driver = route.assigned_driver_id ? await User.findByPk(route.assigned_driver_id) : null;
+    routeDict.driver_name = driver?.username || null;
+
+    const orders = await ValidatedAddress.findAll({ where: { route_id: route.id } });
+    routeDict.orders = orders.map(o => o.toDict());
+    routeDict.total_amount = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
+
+    res.json({ route: routeDict });
+  } catch (error) {
+    console.error('Error fetching route detail:', error);
+    res.status(500).json({ error: 'Error al cargar detalle' });
+  }
+});
+
+router.get('/routes/history', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.userId);
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'No tienes permisos' });
+    }
+
+    const routes = await Route.findAll({
+      where: { status: { [Op.in]: ['completed', 'assigned'] } },
+      order: [['completed_at', 'DESC'], ['created_at', 'DESC']]
+    });
+
+    const routesWithDetails = await Promise.all(routes.map(async (r) => {
+      const routeDict = await r.toDict();
+      const driver = r.assigned_driver_id ? await User.findByPk(r.assigned_driver_id) : null;
+      routeDict.driver_name = driver?.username || null;
+      const orders = await ValidatedAddress.findAll({ where: { route_id: r.id } });
+      routeDict.total_amount = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
+      return routeDict;
+    }));
+
+    res.json({ routes: routesWithDetails });
+  } catch (error) {
+    console.error('Error fetching route history:', error);
+    res.status(500).json({ error: 'Error al cargar historial' });
   }
 });
 

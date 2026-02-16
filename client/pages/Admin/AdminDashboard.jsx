@@ -115,6 +115,35 @@ export default function AdminDashboard() {
 
         <div className="admin-section">
           <div className="section-header">
+            <span className="material-icons">route</span>
+            <h3>Rutas y Entregas</h3>
+          </div>
+          <div className="section-items">
+            <Link to="/admin/routes" className="section-item">
+              <div className="item-icon blue">
+                <span className="material-icons">history</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Historial de Rutas</div>
+                <div className="item-subtitle">Revisar entregas y evidencias</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+            <Link to="/dispatch" className="section-item">
+              <div className="item-icon green">
+                <span className="material-icons">map</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Mapa de Despacho</div>
+                <div className="item-subtitle">Crear y asignar rutas</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="admin-section">
+          <div className="section-header">
             <span className="material-icons">settings</span>
             <h3>Configuracion</h3>
           </div>

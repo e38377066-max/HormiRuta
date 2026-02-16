@@ -57,6 +57,11 @@ export default function TripPlannerPage() {
   const [autoFollow, setAutoFollow] = useState(true)
   const [navEta, setNavEta] = useState('')
   const [navDistance, setNavDistance] = useState('')
+  const [showEvidenceModal, setShowEvidenceModal] = useState(null)
+  const [evidencePreview, setEvidencePreview] = useState(null)
+  const [evidenceFile, setEvidenceFile] = useState(null)
+  const [uploadingEvidence, setUploadingEvidence] = useState(false)
+  const fileInputRef = useRef(null)
   const isDragging = useRef(false)
   const startY = useRef(0)
   const startHeight = useRef(0)
@@ -85,6 +90,7 @@ export default function TripPlannerPage() {
       .sort((a, b) => a.order - b.order)
       .map((s, i) => ({
         id: i + 1,
+        dbId: s.id,
         address: s.address,
         latitude: s.lat,
         longitude: s.lng,
@@ -92,6 +98,7 @@ export default function TripPlannerPage() {
         phone: s.phone || '',
         note: s.note || '',
         completed: s.status === 'completed',
+        photo_url: s.photo_url || null,
         color: '#EA4335'
       }))
 
@@ -297,7 +304,7 @@ export default function TripPlannerPage() {
         navRendererRef.current = new window.google.maps.DirectionsRenderer({
           map: mapInstanceRef.current,
           suppressMarkers: true,
-          polylineOptions: { strokeColor: '#22c55e', strokeWeight: 5, strokeOpacity: 0.9 },
+          polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5, strokeOpacity: 0.9 },
           preserveViewport: true
         })
       }
@@ -311,7 +318,7 @@ export default function TripPlannerPage() {
         navLineRef.current = new window.google.maps.Polyline({
           path: [from, to],
           geodesic: true,
-          strokeColor: '#22c55e',
+          strokeColor: '#4285F4',
           strokeOpacity: 0.8,
           strokeWeight: 4,
           map: mapInstanceRef.current
@@ -530,10 +537,68 @@ export default function TripPlannerPage() {
   }
 
   const toggleStopComplete = (index) => {
-    const updatedStops = stops.map((stop, i) => 
-      i === index ? { ...stop, completed: !stop.completed } : stop
-    )
-    setStops(updatedStops)
+    const stop = stops[index]
+    if (stop.completed) return
+    setShowEvidenceModal(index)
+    setEvidencePreview(null)
+    setEvidenceFile(null)
+  }
+
+  const handleEvidencePhoto = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setEvidenceFile(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => setEvidencePreview(ev.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  const confirmStopWithEvidence = async () => {
+    if (showEvidenceModal === null || !evidenceFile) return
+    setUploadingEvidence(true)
+    try {
+      const stop = stops[showEvidenceModal]
+      const stopDbId = stop.dbId || stop.id
+
+      const formData = new FormData()
+      formData.append('photo', evidenceFile)
+      
+      const res = await api.post(`/api/dispatch/stops/${stopDbId}/evidence`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      if (res.data.success) {
+        const updatedStops = stops.map((s, i) => 
+          i === showEvidenceModal ? { ...s, completed: true, photo_url: res.data.stop.photo_url } : s
+        )
+        setStops(updatedStops)
+        updateMapMarkers(updatedStops)
+      }
+    } catch (err) {
+      console.error('Error uploading evidence:', err)
+      alert('Error al subir la evidencia. Intenta de nuevo.')
+    } finally {
+      setUploadingEvidence(false)
+      setShowEvidenceModal(null)
+      setEvidencePreview(null)
+      setEvidenceFile(null)
+    }
+  }
+
+  const finishRoute = async () => {
+    if (!currentRouteId) {
+      exitNavigation()
+      return
+    }
+    try {
+      await api.put(`/api/dispatch/routes/${currentRouteId}/complete`)
+      exitNavigation()
+      clearRoute()
+      loadDispatchRoutes()
+    } catch (err) {
+      console.error('Error completing route:', err)
+      alert(err.response?.data?.error || 'Error al finalizar ruta')
+    }
   }
 
   const optimizeRoute = async () => {
@@ -990,10 +1055,10 @@ export default function TripPlannerPage() {
             <>
               <div className="stops-section-header">Parada</div>
               {stops.map((stop, index) => (
-                <div key={stop.id} className="stop-row" onClick={() => navigationMode && toggleStopComplete(index)}>
+                <div key={stop.id} className="stop-row" onClick={() => navigationMode && !stop.completed && toggleStopComplete(index)}>
                   {navigationMode ? (
-                    <span className="material-icons stop-checkbox" style={{ color: stop.completed ? '#22c55e' : '#666', fontSize: 22 }}>
-                      {stop.completed ? 'check_box' : 'check_box_outline_blank'}
+                    <span className="material-icons stop-checkbox" style={{ color: stop.completed ? '#22c55e' : '#5b8def', fontSize: 22 }}>
+                      {stop.completed ? 'check_circle' : 'camera_alt'}
                     </span>
                   ) : (
                     <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
@@ -1033,10 +1098,17 @@ export default function TripPlannerPage() {
               </div>
             </div>
           ) : navigationMode ? (
-            <button className="btn-end-route" onClick={exitNavigation}>
-              <span className="material-icons">stop</span>
-              Finalizar ruta
-            </button>
+            stops.every(s => s.completed) ? (
+              <button className="btn-optimize" onClick={finishRoute}>
+                <span className="material-icons">check_circle</span>
+                Finalizar ruta
+              </button>
+            ) : (
+              <button className="btn-start-route" onClick={() => toggleStopComplete(nextPendingIndex)}>
+                <span className="material-icons">camera_alt</span>
+                Confirmar parada {nextPendingIndex + 1}
+              </button>
+            )
           ) : isOptimized ? (
             <button className="btn-start-route" onClick={startRoute}>
               <span className="material-icons">navigation</span>
@@ -1314,6 +1386,62 @@ export default function TripPlannerPage() {
           </div>
         </div>
       )}
+      {showEvidenceModal !== null && (
+        <div className="modal-overlay" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); }}>
+          <div className="evidence-modal" onClick={e => e.stopPropagation()}>
+            <div className="evidence-modal-header">
+              <h3>Confirmar parada {showEvidenceModal + 1}</h3>
+              <button className="header-btn" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); }}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="evidence-modal-address">
+              <span className="material-icons">place</span>
+              <span>{stops[showEvidenceModal]?.name || stops[showEvidenceModal]?.address?.split(',')[0] || 'Parada'}</span>
+            </div>
+            <div className="evidence-modal-body">
+              {evidencePreview ? (
+                <div className="evidence-preview-container">
+                  <img src={evidencePreview} alt="Evidencia" className="evidence-preview-img" />
+                  <button className="evidence-retake-btn" onClick={() => { setEvidencePreview(null); setEvidenceFile(null); fileInputRef.current?.click(); }}>
+                    <span className="material-icons">refresh</span>
+                    Tomar otra
+                  </button>
+                </div>
+              ) : (
+                <div className="evidence-capture-area" onClick={() => fileInputRef.current?.click()}>
+                  <span className="material-icons" style={{ fontSize: 48, color: '#5b8def' }}>camera_alt</span>
+                  <p>Toca para tomar foto de evidencia</p>
+                  <p className="evidence-hint">Firma, comprobante, o foto de entrega</p>
+                </div>
+              )}
+            </div>
+            <div className="evidence-modal-footer">
+              <button className="btn-cancel" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); }}>
+                Cancelar
+              </button>
+              <button 
+                className="btn-optimize" 
+                onClick={confirmStopWithEvidence} 
+                disabled={!evidenceFile || uploadingEvidence}
+                style={{ flex: 1, opacity: !evidenceFile ? 0.5 : 1 }}
+              >
+                <span className="material-icons">{uploadingEvidence ? 'hourglass_empty' : 'check'}</span>
+                {uploadingEvidence ? 'Subiendo...' : 'Confirmar entrega'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <input 
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={handleEvidencePhoto}
+      />
     </div>
   )
 }
