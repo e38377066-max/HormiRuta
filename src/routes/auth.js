@@ -38,7 +38,7 @@ router.post('/register', async (req, res) => {
     await user.setPassword(password);
     await user.save();
     
-    req.session.userId = user.id;
+    if (req.session) req.session.userId = user.id;
     const token = generateToken(user.id);
     
     res.status(201).json({
@@ -77,7 +77,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Esta cuenta está desactivada' });
     }
     
-    req.session.userId = user.id;
+    if (req.session) req.session.userId = user.id;
     const token = generateToken(user.id);
     
     res.json({

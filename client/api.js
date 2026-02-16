@@ -8,9 +8,11 @@ const getBaseURL = () => {
   return ''
 }
 
+const isNative = Capacitor.isNativePlatform()
+
 const api = axios.create({ 
   baseURL: getBaseURL(),
-  withCredentials: true,
+  withCredentials: !isNative,
   headers: {
     'Content-Type': 'application/json'
   }
