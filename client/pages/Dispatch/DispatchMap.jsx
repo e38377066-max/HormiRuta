@@ -33,6 +33,10 @@ export default function DispatchMap() {
   const [activeTab, setActiveTab] = useState('orders')
   const [editingAmount, setEditingAmount] = useState(null)
   const [amountValue, setAmountValue] = useState('')
+  const [respondUsers, setRespondUsers] = useState([])
+  const [selectedRespondUsers, setSelectedRespondUsers] = useState([])
+  const [loadingRespondUsers, setLoadingRespondUsers] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -238,6 +242,42 @@ export default function DispatchMap() {
     }
   }
 
+  const fetchRespondUsers = async () => {
+    try {
+      setLoadingRespondUsers(true)
+      setSyncResult(null)
+      const res = await api.get('/api/dispatch/respond-users')
+      setRespondUsers(res.data.users || [])
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al cargar miembros de Respond.io')
+    } finally {
+      setLoadingRespondUsers(false)
+    }
+  }
+
+  const toggleRespondUser = (email) => {
+    setSelectedRespondUsers(prev =>
+      prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email]
+    )
+  }
+
+  const handleSyncDrivers = async () => {
+    if (!selectedRespondUsers.length) return
+    try {
+      const usersToSync = respondUsers
+        .filter(u => selectedRespondUsers.includes(u.email))
+        .map(u => ({ name: u.name, email: u.email }))
+      const res = await api.post('/api/dispatch/sync-drivers', { users: usersToSync })
+      setSyncResult(res.data)
+      setSelectedRespondUsers([])
+      fetchData()
+      const updatedUsers = await api.get('/api/dispatch/respond-users')
+      setRespondUsers(updatedUsers.data.users || [])
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al sincronizar choferes')
+    }
+  }
+
   const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.approved
 
   const ADMIN_TRANSITIONS = {
@@ -292,6 +332,9 @@ export default function DispatchMap() {
             </button>
             <button className={`dtab ${activeTab === 'routes' ? 'active' : ''}`} onClick={() => setActiveTab('routes')}>
               <span className="material-icons">route</span> Rutas
+            </button>
+            <button className={`dtab ${activeTab === 'drivers' ? 'active' : ''}`} onClick={() => { setActiveTab('drivers'); if (respondUsers.length === 0) fetchRespondUsers() }}>
+              <span className="material-icons">people</span> Choferes
             </button>
           </div>
         )}
@@ -438,7 +481,7 @@ export default function DispatchMap() {
                 )
               })
             )
-          ) : (
+          ) : activeTab === 'routes' ? (
             routes.length === 0 ? (
               <div className="empty-dispatch">
                 <span className="material-icons">route</span>
@@ -481,7 +524,88 @@ export default function DispatchMap() {
                 </div>
               ))
             )
-          )}
+          ) : activeTab === 'drivers' ? (
+            <div className="drivers-tab">
+              <div className="drivers-section">
+                <div className="drivers-section-header">
+                  <h3><span className="material-icons">people</span> Choferes Registrados</h3>
+                </div>
+                {drivers.length === 0 ? (
+                  <p className="drivers-empty">No hay choferes registrados</p>
+                ) : (
+                  <div className="drivers-list">
+                    {drivers.map(d => (
+                      <div key={d.id} className="driver-card">
+                        <span className="material-icons driver-icon">person</span>
+                        <div className="driver-info">
+                          <strong>{d.username}</strong>
+                          <span>{d.email}</span>
+                        </div>
+                        <span className="driver-badge active">Activo</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="drivers-section">
+                <div className="drivers-section-header">
+                  <h3><span className="material-icons">sync</span> Importar desde Respond.io</h3>
+                  <button className="dbtn outline small" onClick={fetchRespondUsers} disabled={loadingRespondUsers}>
+                    <span className="material-icons">{loadingRespondUsers ? 'hourglass_empty' : 'refresh'}</span>
+                    {loadingRespondUsers ? 'Cargando...' : 'Actualizar'}
+                  </button>
+                </div>
+
+                {syncResult && (
+                  <div className="sync-result">
+                    <span className="material-icons">check_circle</span>
+                    <span>{syncResult.message}</span>
+                  </div>
+                )}
+
+                {loadingRespondUsers ? (
+                  <div className="loading-center"><div className="spinner"></div></div>
+                ) : respondUsers.length === 0 ? (
+                  <p className="drivers-empty">Presiona "Actualizar" para cargar miembros del equipo</p>
+                ) : (
+                  <>
+                    <div className="respond-users-list">
+                      {respondUsers.map(u => (
+                        <div
+                          key={u.respond_id || u.email}
+                          className={`respond-user-card ${u.already_synced ? 'synced' : ''} ${selectedRespondUsers.includes(u.email) ? 'selected' : ''}`}
+                          onClick={() => !u.already_synced && u.email && toggleRespondUser(u.email)}
+                        >
+                          <div className="ru-check">
+                            {u.already_synced ? (
+                              <span className="material-icons" style={{ color: '#4caf50' }}>check_circle</span>
+                            ) : (
+                              <span className="material-icons">{selectedRespondUsers.includes(u.email) ? 'check_box' : 'check_box_outline_blank'}</span>
+                            )}
+                          </div>
+                          <div className="ru-info">
+                            <strong>{u.name}</strong>
+                            <span>{u.email || 'Sin email'}</span>
+                            {u.role && <span className="ru-role">{u.role}</span>}
+                          </div>
+                          {u.already_synced && <span className="driver-badge synced">Ya sincronizado</span>}
+                        </div>
+                      ))}
+                    </div>
+                    {selectedRespondUsers.length > 0 && (
+                      <div className="sync-actions">
+                        <button className="dbtn purple full" onClick={handleSyncDrivers}>
+                          <span className="material-icons">person_add</span>
+                          Importar {selectedRespondUsers.length} chofer{selectedRespondUsers.length > 1 ? 'es' : ''}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
