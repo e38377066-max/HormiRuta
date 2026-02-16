@@ -310,7 +310,7 @@
   gap: 10px;
   width: 100%;
   padding: 16px 24px;
-  background: #22c55e;
+  background: #5b8def;
   border: none;
   border-radius: 14px;
   color: white;
@@ -321,7 +321,7 @@
 }
 
 .btn-start-route:hover {
-  background: #1db954;
+  background: #4a7de0;
 }
 
 .btn-start-route:active {
@@ -339,10 +339,10 @@
   gap: 10px;
   width: 100%;
   padding: 16px 24px;
-  background: #ef4444;
-  border: none;
+  background: #3a3a5e;
+  border: 1px solid rgba(91, 141, 239, 0.3);
   border-radius: 14px;
-  color: white;
+  color: #5b8def;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -350,7 +350,7 @@
 }
 
 .btn-end-route:hover {
-  background: #dc2626;
+  background: #4a4a6e;
 }
 
 .btn-end-route:active {

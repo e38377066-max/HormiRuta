@@ -17,6 +17,7 @@ export default function TripPlannerPage() {
   const watchIdRef = useRef(null)
   const selectedMarkerRef = useRef(null)
   const navLineRef = useRef(null)
+  const navRendererRef = useRef(null)
   const [userLocation, setUserLocation] = useState(null)
   const [selectedPoint, setSelectedPoint] = useState(null)
   
@@ -96,12 +97,15 @@ export default function TripPlannerPage() {
 
     setStops(routeStops)
     setRouteName(route.name || 'Ruta Asignada')
-    setIsOptimized(route.is_optimized || false)
+    setIsOptimized(false)
     setTotalDistance(route.total_distance || 0)
     setTotalDuration(route.total_duration || 0)
     setCurrentRouteId(route.id)
     setShowDispatchRoutes(false)
     updateMapMarkers(routeStops)
+    if (routeStops.length >= 2) {
+      setTimeout(() => calculateRoute(routeStops), 500)
+    }
   }
 
   useEffect(() => {
@@ -192,8 +196,8 @@ export default function TripPlannerPage() {
 
     directionsRendererRef.current = new google.maps.DirectionsRenderer({
       map: mapInstanceRef.current,
-      suppressMarkers: false,
-      polylineOptions: { strokeColor: '#5b8def', strokeWeight: 5 }
+      suppressMarkers: true,
+      polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5, strokeOpacity: 0.8 }
     })
 
     mapInstanceRef.current.addListener('click', handleMapClick)
@@ -253,6 +257,10 @@ export default function TripPlannerPage() {
           navLineRef.current.setMap(null)
           navLineRef.current = null
         }
+        if (navRendererRef.current) {
+          navRendererRef.current.setMap(null)
+          navRendererRef.current = null
+        }
         setNavEta('')
         setNavDistance('')
       }
@@ -261,23 +269,54 @@ export default function TripPlannerPage() {
         navLineRef.current.setMap(null)
         navLineRef.current = null
       }
+      if (navRendererRef.current) {
+        navRendererRef.current.setMap(null)
+        navRendererRef.current = null
+      }
       setNavEta('')
       setNavDistance('')
     }
   }, [userLocation, navigationMode, stops])
 
-  const updateNavLine = (from, to) => {
-    if (navLineRef.current) {
-      navLineRef.current.setPath([from, to])
-    } else if (mapInstanceRef.current) {
-      navLineRef.current = new window.google.maps.Polyline({
-        path: [from, to],
-        geodesic: true,
-        strokeColor: '#22c55e',
-        strokeOpacity: 0.8,
-        strokeWeight: 4,
-        map: mapInstanceRef.current
+  const navLastUpdateRef = useRef(0)
+
+  const updateNavLine = async (from, to) => {
+    const now = Date.now()
+    const hasRenderer = !!navRendererRef.current
+    if (hasRenderer && now - navLastUpdateRef.current < 10000) return
+    navLastUpdateRef.current = now
+    try {
+      const directionsService = new window.google.maps.DirectionsService()
+      const result = await directionsService.route({
+        origin: from,
+        destination: to,
+        travelMode: window.google.maps.TravelMode[travelMode]
       })
+
+      if (!navRendererRef.current && mapInstanceRef.current) {
+        navRendererRef.current = new window.google.maps.DirectionsRenderer({
+          map: mapInstanceRef.current,
+          suppressMarkers: true,
+          polylineOptions: { strokeColor: '#22c55e', strokeWeight: 5, strokeOpacity: 0.9 },
+          preserveViewport: true
+        })
+      }
+      if (navRendererRef.current) {
+        navRendererRef.current.setDirections(result)
+      }
+    } catch (err) {
+      if (navLineRef.current) {
+        navLineRef.current.setPath([from, to])
+      } else if (mapInstanceRef.current) {
+        navLineRef.current = new window.google.maps.Polyline({
+          path: [from, to],
+          geodesic: true,
+          strokeColor: '#22c55e',
+          strokeOpacity: 0.8,
+          strokeWeight: 4,
+          map: mapInstanceRef.current
+        })
+      }
     }
   }
 
@@ -706,7 +745,13 @@ export default function TripPlannerPage() {
         origin: { lat: stopsList[0].latitude, lng: stopsList[0].longitude },
         destination: { lat: stopsList[stopsList.length - 1].latitude, lng: stopsList[stopsList.length - 1].longitude },
         waypoints,
-        travelMode: window.google.maps.TravelMode.DRIVING
+        travelMode: window.google.maps.TravelMode[travelMode],
+        avoidHighways,
+        avoidTolls,
+        drivingOptions: travelMode === 'DRIVING' ? {
+          departureTime: new Date(),
+          trafficModel: window.google.maps.TrafficModel.BEST_GUESS
+        } : undefined
       })
 
       directionsRendererRef.current.setDirections(result)
@@ -739,6 +784,10 @@ export default function TripPlannerPage() {
       navLineRef.current.setMap(null)
       navLineRef.current = null
     }
+    if (navRendererRef.current) {
+      navRendererRef.current.setMap(null)
+      navRendererRef.current = null
+    }
   }
 
   const reOptimize = () => {
@@ -764,6 +813,10 @@ export default function TripPlannerPage() {
     if (navLineRef.current) {
       navLineRef.current.setMap(null)
       navLineRef.current = null
+    }
+    if (navRendererRef.current) {
+      navRendererRef.current.setMap(null)
+      navRendererRef.current = null
     }
   }
 
