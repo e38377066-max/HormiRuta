@@ -369,11 +369,13 @@ router.get('/respond-users', requireAdmin, async (req, res) => {
     const users = (Array.isArray(result.users) ? result.users : []).map(u => {
       const email = (u.email || '').toLowerCase();
       const existingRole = email ? existingByEmail.get(email) : null;
+      const fullName = u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Sin nombre';
       return {
         respond_id: u.id,
-        name: u.name || u.firstName || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+        name: fullName,
         email: u.email || '',
-        role: u.role || u.accessLevel || '',
+        role: u.role || '',
+        team: u.team?.name || null,
         already_exists: !!existingRole,
         existing_role: existingRole || null
       };
