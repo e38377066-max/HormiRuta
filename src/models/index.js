@@ -9,6 +9,7 @@ import MessageLog from './MessageLog.js';
 import MessagingSettings from './MessagingSettings.js';
 import ConversationState from './ConversationState.js';
 import ServiceAgent from './ServiceAgent.js';
+import ValidatedAddress from './ValidatedAddress.js';
 
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
 Route.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -43,6 +44,10 @@ ConversationState.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 User.hasMany(ServiceAgent, { foreignKey: 'user_id', as: 'serviceAgents', onDelete: 'CASCADE' });
 ServiceAgent.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+User.hasMany(ValidatedAddress, { foreignKey: 'user_id', as: 'validatedAddresses', onDelete: 'CASCADE' });
+ValidatedAddress.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+ValidatedAddress.belongsTo(User, { foreignKey: 'assigned_driver_id', as: 'driver' });
 
 Route.prototype.toDict = async function() {
   const stops = await Stop.findAll({
@@ -89,5 +94,6 @@ export {
   MessageLog,
   MessagingSettings,
   ConversationState,
-  ServiceAgent
+  ServiceAgent,
+  ValidatedAddress
 };
