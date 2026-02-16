@@ -8,7 +8,7 @@ const router = Router();
 router.get('/', requireAuth, async (req, res) => {
   try {
     const routes = await Route.findAll({
-      where: { user_id: req.session.userId },
+      where: { user_id: req.userId },
       order: [['created_at', 'DESC']]
     });
     
@@ -25,7 +25,7 @@ router.post('/', requireAuth, async (req, res) => {
     const { name, stops: stopsData = [] } = req.body;
     
     const route = await Route.create({
-      user_id: req.session.userId,
+      user_id: req.userId,
       name: name || `Ruta ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`
     });
     
@@ -60,7 +60,7 @@ router.post('/', requireAuth, async (req, res) => {
 router.get('/:id', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {
@@ -76,7 +76,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.put('/:id', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {
@@ -101,7 +101,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {
@@ -118,7 +118,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
 router.post('/:id/stops', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {
@@ -151,7 +151,7 @@ router.post('/:id/stops', requireAuth, async (req, res) => {
 router.post('/:id/reorder', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {
@@ -176,7 +176,7 @@ router.post('/:id/reorder', requireAuth, async (req, res) => {
 router.post('/:id/optimize', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {
@@ -250,7 +250,7 @@ router.post('/:id/optimize', requireAuth, async (req, res) => {
 router.post('/:id/start', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {
@@ -273,7 +273,7 @@ router.post('/:id/start', requireAuth, async (req, res) => {
 router.post('/:id/complete', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {
@@ -287,7 +287,7 @@ router.post('/:id/complete', requireAuth, async (req, res) => {
     const stops = await Stop.findAll({ where: { route_id: route.id } });
     
     const history = await RouteHistory.create({
-      user_id: req.session.userId,
+      user_id: req.userId,
       route_name: route.name,
       total_stops: stops.length,
       completed_stops: stops.filter(s => s.status === 'completed').length,
@@ -312,7 +312,7 @@ router.post('/:id/complete', requireAuth, async (req, res) => {
 router.post('/:id/import-text', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!route) {

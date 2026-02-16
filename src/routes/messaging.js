@@ -21,12 +21,12 @@ const router = express.Router();
 router.get('/settings', requireAuth, async (req, res) => {
   try {
     let settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings) {
       settings = await MessagingSettings.create({
-        user_id: req.session.userId
+        user_id: req.userId
       });
     }
 
@@ -40,12 +40,12 @@ router.get('/settings', requireAuth, async (req, res) => {
 router.put('/settings', requireAuth, async (req, res) => {
   try {
     let settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings) {
       settings = await MessagingSettings.create({
-        user_id: req.session.userId
+        user_id: req.userId
       });
     }
 
@@ -74,7 +74,7 @@ router.put('/settings', requireAuth, async (req, res) => {
     await settings.save();
     
     // Clear API token cache when settings are updated
-    respondApiService.clearTokenCache(req.session.userId);
+    respondApiService.clearTokenCache(req.userId);
     
     res.json(settings.toDict());
   } catch (error) {
@@ -88,7 +88,7 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
     console.log('[Test Connection] Iniciando prueba de conexión...');
     
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.respond_api_token) {
@@ -113,7 +113,7 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
 router.post('/settings/reset-test', requireAuth, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.test_contact_id) {
@@ -133,7 +133,7 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
     // Borrar el estado de conversación
     await ConversationState.destroy({
       where: { 
-        user_id: req.session.userId,
+        user_id: req.userId,
         contact_id: contact.id.toString() 
       }
     });
@@ -141,7 +141,7 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
     // Borrar pedidos del contacto de prueba (para que no lo detecte como cliente existente)
     await MessagingOrder.destroy({
       where: { 
-        user_id: req.session.userId,
+        user_id: req.userId,
         respond_contact_id: contact.id.toString() 
       }
     });
@@ -149,14 +149,14 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
     // Borrar logs de mensajes del contacto
     await MessageLog.destroy({
       where: { 
-        user_id: req.session.userId,
+        user_id: req.userId,
         respond_contact_id: contact.id.toString() 
       }
     });
 
     console.log(`[Reset Test] Datos eliminados para contacto: ${contact.id} (${contact.firstName} ${contact.lastName})`);
     
-    await pollingService.preloadContactMessages(req.session.userId, contact.id);
+    await pollingService.preloadContactMessages(req.userId, contact.id);
     
     res.json({ 
       success: true, 
@@ -174,7 +174,7 @@ router.get('/orders', requireAuth, async (req, res) => {
   try {
     const { status, limit = 50, offset = 0 } = req.query;
     
-    const where = { user_id: req.session.userId };
+    const where = { user_id: req.userId };
     if (status) where.status = status;
 
     const orders = await MessagingOrder.findAll({
@@ -201,7 +201,7 @@ router.get('/orders/:id', requireAuth, async (req, res) => {
     const order = await MessagingOrder.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -233,11 +233,11 @@ router.post('/orders', requireAuth, async (req, res) => {
       channel_id, channel_type
     } = req.body;
 
-    const validationService = new AddressValidationService(req.session.userId);
+    const validationService = new AddressValidationService(req.userId);
     const validation = await validationService.validateAddress(address || '');
 
     const order = await MessagingOrder.create({
-      user_id: req.session.userId,
+      user_id: req.userId,
       customer_name,
       customer_phone,
       customer_email,
@@ -269,7 +269,7 @@ router.put('/orders/:id', requireAuth, async (req, res) => {
     const order = await MessagingOrder.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -291,7 +291,7 @@ router.put('/orders/:id', requireAuth, async (req, res) => {
     }
 
     if (req.body.address && req.body.address !== order.address) {
-      const validationService = new AddressValidationService(req.session.userId);
+      const validationService = new AddressValidationService(req.userId);
       const validation = await validationService.validateAddress(req.body.address);
       order.zip_code = validation.zipCode;
       order.address_type = validation.addressType;
@@ -312,7 +312,7 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
     const order = await MessagingOrder.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -325,7 +325,7 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
     console.log(`[Confirm] Orden #${order.id} confirmada - Contact: ${order.respond_contact_id}, Channel: ${order.channel_id || 'N/A'}`);
 
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (settings?.respond_api_token && order.respond_contact_id) {
@@ -356,7 +356,7 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
 
       if (result.success) {
         await MessageLog.create({
-          user_id: req.session.userId,
+          user_id: req.userId,
           order_id: order.id,
           respond_contact_id: order.respond_contact_id,
           respond_message_id: result.messageId,
@@ -387,7 +387,7 @@ router.post('/orders/:id/cancel', requireAuth, async (req, res) => {
     const order = await MessagingOrder.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -412,7 +412,7 @@ router.post('/orders/:id/complete', requireAuth, async (req, res) => {
     const order = await MessagingOrder.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -425,7 +425,7 @@ router.post('/orders/:id/complete', requireAuth, async (req, res) => {
     await order.save();
 
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (settings?.respond_api_token && order.respond_contact_id) {
@@ -439,7 +439,7 @@ router.post('/orders/:id/complete', requireAuth, async (req, res) => {
 
       if (result.success) {
         await MessageLog.create({
-          user_id: req.session.userId,
+          user_id: req.userId,
           order_id: order.id,
           respond_contact_id: order.respond_contact_id,
           respond_message_id: result.messageId,
@@ -465,7 +465,7 @@ router.delete('/orders/:id', requireAuth, async (req, res) => {
     const order = await MessagingOrder.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -486,7 +486,7 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
     const order = await MessagingOrder.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -495,7 +495,7 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
     }
 
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.respond_api_token) {
@@ -519,7 +519,7 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
     }
 
     const log = await MessageLog.create({
-      user_id: req.session.userId,
+      user_id: req.userId,
       order_id: order.id,
       respond_contact_id: order.respond_contact_id,
       respond_message_id: result.messageId,
@@ -543,7 +543,7 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
 router.get('/coverage-zones', requireAuth, async (req, res) => {
   try {
     const zones = await CoverageZone.findAll({
-      where: { user_id: req.session.userId },
+      where: { user_id: req.userId },
       order: [['zip_code', 'ASC']]
     });
 
@@ -561,7 +561,7 @@ router.post('/coverage-zones', requireAuth, async (req, res) => {
 
     const existing = await CoverageZone.findOne({
       where: {
-        user_id: req.session.userId,
+        user_id: req.userId,
         zip_code
       }
     });
@@ -571,7 +571,7 @@ router.post('/coverage-zones', requireAuth, async (req, res) => {
     }
 
     const zone = await CoverageZone.create({
-      user_id: req.session.userId,
+      user_id: req.userId,
       zip_code,
       zone_name: zone_name || '',
       city: city || '',
@@ -605,7 +605,7 @@ router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
     for (const zip_code of zip_codes) {
       const existing = await CoverageZone.findOne({
         where: {
-          user_id: req.session.userId,
+          user_id: req.userId,
           zip_code: zip_code.trim()
         }
       });
@@ -616,7 +616,7 @@ router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
       }
 
       const zone = await CoverageZone.create({
-        user_id: req.session.userId,
+        user_id: req.userId,
         zip_code: zip_code.trim(),
         zone_name,
         city,
@@ -642,7 +642,7 @@ router.put('/coverage-zones/:id', requireAuth, async (req, res) => {
     const zone = await CoverageZone.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -674,7 +674,7 @@ router.delete('/coverage-zones/:id', requireAuth, async (req, res) => {
     const zone = await CoverageZone.findOne({
       where: { 
         id: req.params.id,
-        user_id: req.session.userId 
+        user_id: req.userId 
       }
     });
 
@@ -819,7 +819,7 @@ router.post('/validate-address', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Se requiere una direccion' });
     }
 
-    const validationService = new AddressValidationService(req.session.userId);
+    const validationService = new AddressValidationService(req.userId);
     const result = await validationService.validateAddress(address);
 
     res.json(result);
@@ -843,7 +843,7 @@ router.post('/webhook', async (req, res) => {
 
 router.get('/stats', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = req.userId;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -880,7 +880,7 @@ router.get('/stats', requireAuth, async (req, res) => {
 
 router.get('/polling/status', requireAuth, async (req, res) => {
   try {
-    const status = pollingService.getPollingStatus(req.session.userId);
+    const status = pollingService.getPollingStatus(req.userId);
     res.json(status);
   } catch (error) {
     console.error('Get polling status error:', error);
@@ -891,7 +891,7 @@ router.get('/polling/status', requireAuth, async (req, res) => {
 router.post('/polling/start', requireAuth, async (req, res) => {
   try {
     const intervalSeconds = req.body.interval || 30;
-    const result = await pollingService.startPolling(req.session.userId, intervalSeconds);
+    const result = await pollingService.startPolling(req.userId, intervalSeconds);
     
     if (!result.success) {
       return res.status(400).json({ error: result.error });
@@ -906,7 +906,7 @@ router.post('/polling/start', requireAuth, async (req, res) => {
 
 router.post('/polling/stop', requireAuth, async (req, res) => {
   try {
-    const result = pollingService.stopPolling(req.session.userId);
+    const result = pollingService.stopPolling(req.userId);
     
     if (!result.success) {
       return res.status(400).json({ error: result.error });
@@ -922,7 +922,7 @@ router.post('/polling/stop', requireAuth, async (req, res) => {
 router.post('/polling/sync', requireAuth, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.respond_api_token) {
@@ -950,7 +950,7 @@ router.post('/polling/sync', requireAuth, async (req, res) => {
 router.get('/contacts', requireAuth, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.respond_api_token) {
@@ -980,7 +980,7 @@ router.get('/contacts', requireAuth, async (req, res) => {
 router.get('/contacts/:contactId/messages', requireAuth, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.respond_api_token) {
@@ -1009,7 +1009,7 @@ router.get('/contacts/:contactId/messages', requireAuth, async (req, res) => {
 router.get('/chatbot/states', requireAuth, async (req, res) => {
   try {
     const states = await ConversationState.findAll({
-      where: { user_id: req.session.userId },
+      where: { user_id: req.userId },
       order: [['last_interaction', 'DESC']],
       limit: parseInt(req.query.limit) || 50
     });
@@ -1025,7 +1025,7 @@ router.get('/chatbot/state/:contactId', requireAuth, async (req, res) => {
   try {
     const state = await ConversationState.findOne({
       where: {
-        user_id: req.session.userId,
+        user_id: req.userId,
         contact_id: req.params.contactId
       }
     });
@@ -1044,14 +1044,14 @@ router.get('/chatbot/state/:contactId', requireAuth, async (req, res) => {
 router.post('/chatbot/pause/:contactId', requireAuth, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
     }
 
-    const chatbot = new ChatbotService(req.session.userId, settings);
+    const chatbot = new ChatbotService(req.userId, settings);
     const result = await chatbot.pauseBot(req.params.contactId);
 
     res.json(result);
@@ -1064,14 +1064,14 @@ router.post('/chatbot/pause/:contactId', requireAuth, async (req, res) => {
 router.post('/chatbot/resume/:contactId', requireAuth, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
     }
 
-    const chatbot = new ChatbotService(req.session.userId, settings);
+    const chatbot = new ChatbotService(req.userId, settings);
     const result = await chatbot.resumeBot(req.params.contactId);
 
     res.json(result);
@@ -1084,14 +1084,14 @@ router.post('/chatbot/resume/:contactId', requireAuth, async (req, res) => {
 router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({
-      where: { user_id: req.session.userId }
+      where: { user_id: req.userId }
     });
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
     }
 
-    const chatbot = new ChatbotService(req.session.userId, settings);
+    const chatbot = new ChatbotService(req.userId, settings);
     const result = await chatbot.resetConversation(req.params.contactId);
 
     res.json(result);
@@ -1104,7 +1104,7 @@ router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
 router.get('/agents', requireAuth, async (req, res) => {
   try {
     const agents = await ServiceAgent.findAll({
-      where: { user_id: req.session.userId },
+      where: { user_id: req.userId },
       order: [['service_name', 'ASC'], ['agent_name', 'ASC']]
     });
     res.json(agents.map(a => a.toDict()));
@@ -1125,12 +1125,12 @@ router.post('/agents', requireAuth, async (req, res) => {
     if (is_default) {
       await ServiceAgent.update(
         { is_default: false },
-        { where: { user_id: req.session.userId, service_name } }
+        { where: { user_id: req.userId, service_name } }
       );
     }
 
     const agent = await ServiceAgent.create({
-      user_id: req.session.userId,
+      user_id: req.userId,
       agent_id: agent_id || null,
       agent_name,
       agent_email: agent_email || null,
@@ -1150,7 +1150,7 @@ router.post('/agents', requireAuth, async (req, res) => {
 router.put('/agents/:id', requireAuth, async (req, res) => {
   try {
     const agent = await ServiceAgent.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
 
     if (!agent) {
@@ -1162,7 +1162,7 @@ router.put('/agents/:id', requireAuth, async (req, res) => {
     if (is_default) {
       await ServiceAgent.update(
         { is_default: false },
-        { where: { user_id: req.session.userId, service_name: service_name || agent.service_name } }
+        { where: { user_id: req.userId, service_name: service_name || agent.service_name } }
       );
     }
 
@@ -1186,7 +1186,7 @@ router.put('/agents/:id', requireAuth, async (req, res) => {
 router.delete('/agents/:id', requireAuth, async (req, res) => {
   try {
     const agent = await ServiceAgent.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
 
     if (!agent) {
@@ -1205,7 +1205,7 @@ router.get('/agents/by-service/:serviceName', requireAuth, async (req, res) => {
   try {
     const agents = await ServiceAgent.findAll({
       where: { 
-        user_id: req.session.userId,
+        user_id: req.userId,
         service_name: req.params.serviceName,
         is_active: true
       },
@@ -1222,7 +1222,7 @@ router.get('/agents/by-product/:productName', requireAuth, async (req, res) => {
   try {
     const agents = await ServiceAgent.findAll({
       where: { 
-        user_id: req.session.userId,
+        user_id: req.userId,
         is_active: true
       }
     });

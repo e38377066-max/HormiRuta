@@ -11,7 +11,7 @@ router.get('/', requireAuth, async (req, res) => {
     const offset = (page - 1) * perPage;
     
     const { count, rows } = await RouteHistory.findAndCountAll({
-      where: { user_id: req.session.userId },
+      where: { user_id: req.userId },
       order: [['created_at', 'DESC']],
       limit: perPage,
       offset
@@ -32,7 +32,7 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/:id', requireAuth, async (req, res) => {
   try {
     const history = await RouteHistory.findOne({
-      where: { id: req.params.id, user_id: req.session.userId }
+      where: { id: req.params.id, user_id: req.userId }
     });
     
     if (!history) {
