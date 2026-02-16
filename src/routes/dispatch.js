@@ -1,7 +1,9 @@
 import { Router } from 'express';
-import { ValidatedAddress, Route, Stop, User } from '../models/index.js';
+import { ValidatedAddress, Route, Stop, User, MessagingSettings } from '../models/index.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op } from 'sequelize';
+import bcrypt from 'bcryptjs';
+import RespondioService from '../services/respondio.js';
 
 const router = Router();
 
@@ -288,6 +290,97 @@ router.get('/drivers', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching drivers:', error);
     res.status(500).json({ error: 'Error al cargar choferes' });
+  }
+});
+
+router.get('/respond-users', requireAdmin, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({ where: { user_id: req.session.userId } });
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay token de API de Respond.io configurado' });
+    }
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const result = await respondio.listUsers();
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error || 'Error al conectar con Respond.io' });
+    }
+
+    const existingDrivers = await User.findAll({
+      where: { role: 'driver' },
+      attributes: ['email']
+    });
+    const existingEmails = new Set(existingDrivers.map(d => d.email.toLowerCase()));
+
+    const users = (Array.isArray(result.users) ? result.users : []).map(u => ({
+      respond_id: u.id,
+      name: u.name || u.firstName || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+      email: u.email || '',
+      role: u.role || u.accessLevel || '',
+      already_synced: u.email ? existingEmails.has(u.email.toLowerCase()) : false
+    }));
+
+    res.json({ users });
+  } catch (error) {
+    console.error('Error fetching Respond.io users:', error);
+    res.status(500).json({ error: 'Error al cargar miembros de Respond.io' });
+  }
+});
+
+router.post('/sync-drivers', requireAdmin, async (req, res) => {
+  try {
+    const { users } = req.body;
+    if (!users?.length) {
+      return res.status(400).json({ error: 'Selecciona al menos un miembro' });
+    }
+
+    const created = [];
+    const skipped = [];
+
+    for (const userData of users) {
+      const email = (userData.email || '').toLowerCase().trim();
+      if (!email) {
+        skipped.push({ name: userData.name, reason: 'Sin email' });
+        continue;
+      }
+
+      const existing = await User.findOne({ where: { email } });
+      if (existing) {
+        if (existing.role !== 'driver') {
+          existing.role = 'driver';
+          existing.active = true;
+          await existing.save();
+          created.push({ name: userData.name, email, action: 'updated_to_driver' });
+        } else {
+          skipped.push({ name: userData.name, reason: 'Ya existe como chofer' });
+        }
+        continue;
+      }
+
+      const tempPassword = `driver_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+      await User.create({
+        username: userData.name || email.split('@')[0],
+        email,
+        password_hash: passwordHash,
+        role: 'driver',
+        active: true
+      });
+
+      created.push({ name: userData.name, email, action: 'created' });
+    }
+
+    res.json({
+      success: true,
+      created,
+      skipped,
+      message: `${created.length} chofer(es) sincronizado(s), ${skipped.length} omitido(s)`
+    });
+  } catch (error) {
+    console.error('Error syncing drivers:', error);
+    res.status(500).json({ error: 'Error al sincronizar choferes' });
   }
 });
 
