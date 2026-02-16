@@ -427,6 +427,22 @@ class RespondioService {
       };
     }
   }
+  async listUsers() {
+    try {
+      const response = await this.requestWithRetry('get', '/user');
+      return {
+        success: true,
+        users: response.data?.data || response.data || []
+      };
+    } catch (error) {
+      console.error('Respond.io list users error:', error.response?.data || error.message);
+      return {
+        success: false,
+        users: [],
+        error: error.response?.data?.message || error.message
+      };
+    }
+  }
 }
 
 export default RespondioService;
