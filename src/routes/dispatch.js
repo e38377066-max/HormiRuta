@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { MessagingOrder, Route, Stop, User } from '../models/index.js';
+import { ValidatedAddress, Route, Stop, User } from '../models/index.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 
@@ -29,8 +29,6 @@ router.get('/orders', requireAuth, async (req, res) => {
       where.assigned_driver_id = user.id;
       where.order_status = { [Op.in]: ['on_delivery', 'delivered'] };
     } else if (user.role === 'admin') {
-      where.address = { [Op.ne]: null };
-      where.address_lat = { [Op.ne]: null };
       if (req.query.status) {
         where.order_status = req.query.status;
       }
@@ -38,7 +36,7 @@ router.get('/orders', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permisos' });
     }
 
-    const orders = await MessagingOrder.findAll({
+    const orders = await ValidatedAddress.findAll({
       where,
       order: [['created_at', 'DESC']]
     });
@@ -52,15 +50,13 @@ router.get('/orders', requireAuth, async (req, res) => {
 
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
-    const where = { address: { [Op.ne]: null }, address_lat: { [Op.ne]: null } };
-    
     const [total, onProduction, productionFinished, pickedUp, onDelivery, delivered] = await Promise.all([
-      MessagingOrder.count({ where }),
-      MessagingOrder.count({ where: { ...where, order_status: 'on_production' } }),
-      MessagingOrder.count({ where: { ...where, order_status: 'production_finished' } }),
-      MessagingOrder.count({ where: { ...where, order_status: 'order_picked_up' } }),
-      MessagingOrder.count({ where: { ...where, order_status: 'on_delivery' } }),
-      MessagingOrder.count({ where: { ...where, order_status: 'delivered' } })
+      ValidatedAddress.count(),
+      ValidatedAddress.count({ where: { order_status: 'on_production' } }),
+      ValidatedAddress.count({ where: { order_status: 'production_finished' } }),
+      ValidatedAddress.count({ where: { order_status: 'order_picked_up' } }),
+      ValidatedAddress.count({ where: { order_status: 'on_delivery' } }),
+      ValidatedAddress.count({ where: { order_status: 'delivered' } })
     ]);
 
     res.json({
@@ -82,7 +78,7 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
     const user = await User.findByPk(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
 
-    const order = await MessagingOrder.findByPk(req.params.id);
+    const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
 
     const { order_status } = req.body;
@@ -126,7 +122,7 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
 
 router.put('/orders/:id/amount', requireAdmin, async (req, res) => {
   try {
-    const order = await MessagingOrder.findByPk(req.params.id);
+    const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
 
     order.amount = req.body.amount || 0;
@@ -146,7 +142,7 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Datos invalidos' });
     }
 
-    await MessagingOrder.update(
+    await ValidatedAddress.update(
       { order_status },
       { where: { id: { [Op.in]: order_ids } } }
     );
@@ -165,8 +161,8 @@ router.post('/routes', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Selecciona al menos una orden' });
     }
 
-    const orders = await MessagingOrder.findAll({
-      where: { id: { [Op.in]: order_ids }, address_lat: { [Op.ne]: null } }
+    const orders = await ValidatedAddress.findAll({
+      where: { id: { [Op.in]: order_ids } }
     });
 
     if (orders.length === 0) {
@@ -181,9 +177,9 @@ router.post('/routes', requireAdmin, async (req, res) => {
 
     for (let i = 0; i < orders.length; i++) {
       const order = orders[i];
-      const stop = await Stop.create({
+      await Stop.create({
         route_id: route.id,
-        address: order.address,
+        address: order.validated_address,
         lat: order.address_lat,
         lng: order.address_lng,
         order: i,
@@ -193,7 +189,6 @@ router.post('/routes', requireAdmin, async (req, res) => {
       });
 
       order.route_id = route.id;
-      order.stop_id = stop.id;
       await order.save();
     }
 
@@ -214,7 +209,7 @@ router.get('/routes', requireAuth, async (req, res) => {
 
     let where = {};
     if (user.role === 'driver') {
-      const driverOrders = await MessagingOrder.findAll({
+      const driverOrders = await ValidatedAddress.findAll({
         where: { assigned_driver_id: user.id },
         attributes: ['route_id']
       });
@@ -232,7 +227,7 @@ router.get('/routes', requireAuth, async (req, res) => {
 
     const routesWithDetails = await Promise.all(routes.map(async (r) => {
       const routeDict = await r.toDict();
-      const routeOrders = await MessagingOrder.findAll({
+      const routeOrders = await ValidatedAddress.findAll({
         where: { route_id: r.id }
       });
       routeDict.orders = routeOrders.map(o => o.toDict());
@@ -261,7 +256,7 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
     route.status = 'assigned';
     await route.save();
 
-    const orders = await MessagingOrder.findAll({
+    const orders = await ValidatedAddress.findAll({
       where: { route_id: route.id }
     });
 
@@ -301,7 +296,7 @@ router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
     const user = await User.findByPk(req.session.userId);
     if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
 
-    const order = await MessagingOrder.findByPk(req.params.id);
+    const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
 
     if (user.role === 'driver' && order.assigned_driver_id !== user.id) {

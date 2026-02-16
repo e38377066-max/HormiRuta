@@ -10,6 +10,7 @@ import MessagingOrder from '../models/MessagingOrder.js';
 import MessageLog from '../models/MessageLog.js';
 import CoverageZone from '../models/CoverageZone.js';
 import ConversationState from '../models/ConversationState.js';
+import ValidatedAddress from '../models/ValidatedAddress.js';
 
 class PollingService {
   constructor() {
@@ -735,9 +736,10 @@ class PollingService {
 
       let finalAddress = latestAddress;
       let finalZip = null;
+      let geocoded = { success: false };
 
       try {
-        const geocoded = await geocodingService.geocodeAddress(latestAddress);
+        geocoded = await geocodingService.geocodeAddress(latestAddress);
         if (geocoded.success) {
           finalAddress = geocoded.fullAddress;
           finalZip = geocoded.zip || finalZip;
@@ -781,6 +783,8 @@ class PollingService {
           console.log(`[AddressScan-Agent] No se pudo actualizar (alt) ${contactName} (${contact.id}), se reintentará después`);
         }
       }
+
+      await this.saveValidatedAddress(userId, contact, finalAddress, latestAddress, finalZip, geocoded);
 
       this.addressScannedContacts.delete(contact.id.toString());
     } catch (error) {
@@ -947,6 +951,8 @@ class PollingService {
                 this.addressScannedContacts.delete(contactIdStr);
               }
             }
+
+            await this.saveValidatedAddress(userId, contact, finalAddress, result.address, finalZip, geocoded);
           }
         } catch (contactError) {
           console.error(`[AddressScan] Error procesando contacto ${contact.id}:`, contactError.message);
@@ -963,6 +969,62 @@ class PollingService {
       }
     } catch (error) {
       console.error(`[AddressScan] Error general en escaneo de direcciones:`, error.message);
+    }
+  }
+
+  async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded) {
+    try {
+      const contactIdStr = contact.id.toString();
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+      const lat = geocoded?.success ? geocoded.latitude : null;
+      const lng = geocoded?.success ? geocoded.longitude : null;
+
+      if (!lat || !lng) {
+        return;
+      }
+
+      const existing = await ValidatedAddress.findOne({
+        where: {
+          user_id: userId,
+          respond_contact_id: contactIdStr
+        },
+        order: [['created_at', 'DESC']]
+      });
+
+      if (existing) {
+        await existing.update({
+          validated_address: finalAddress,
+          original_address: originalAddress,
+          address_lat: lat,
+          address_lng: lng,
+          zip_code: finalZip || existing.zip_code,
+          city: geocoded.city || existing.city,
+          state: geocoded.stateShort || geocoded.state || existing.state,
+          confidence: geocoded.confidence || existing.confidence,
+          customer_name: customerName,
+          customer_phone: contact.phone || existing.customer_phone
+        });
+        console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})`);
+      } else {
+        await ValidatedAddress.create({
+          user_id: userId,
+          respond_contact_id: contactIdStr,
+          customer_name: customerName,
+          customer_phone: contact.phone || null,
+          original_address: originalAddress,
+          validated_address: finalAddress,
+          address_lat: lat,
+          address_lng: lng,
+          zip_code: finalZip,
+          city: geocoded.city || null,
+          state: geocoded.stateShort || geocoded.state || null,
+          confidence: geocoded.confidence || null,
+          source: 'scanner'
+        });
+        console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng})`);
+      }
+    } catch (error) {
+      console.error(`[ValidatedAddr] Error guardando direccion validada:`, error.message);
     }
   }
 }
