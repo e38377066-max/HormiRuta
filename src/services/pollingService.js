@@ -903,9 +903,9 @@ class PollingService {
     try {
       const extractor = new AddressExtractorService();
       let updatedCount = 0;
-      const MAX_CONTACTS_PER_SCAN = 3;
-      const RESCAN_INTERVAL_MS = 15 * 60 * 1000;
-      const DELAY_BETWEEN_CONTACTS_MS = 5000;
+      const MAX_CONTACTS_PER_SCAN = 10;
+      const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
+      const DELAY_BETWEEN_CONTACTS_MS = 2000;
 
       let contactsToScan = allContacts.filter((contact, index, self) =>
         index === self.findIndex(c => c.id === contact.id)
