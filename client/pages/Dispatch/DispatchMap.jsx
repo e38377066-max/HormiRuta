@@ -19,6 +19,8 @@ export default function DispatchMap() {
   const mapInstance = useRef(null)
   const markersRef = useRef([])
   const polylineRef = useRef(null)
+  const directionsRendererRef = useRef(null)
+  const optimizeTimerRef = useRef(null)
 
   const [orders, setOrders] = useState([])
   const [stats, setStats] = useState({})
@@ -39,6 +41,8 @@ export default function DispatchMap() {
   const [syncResult, setSyncResult] = useState(null)
   const [allUsers, setAllUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
+  const [routeInfo, setRouteInfo] = useState(null)
+  const [optimizingLive, setOptimizingLive] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -146,29 +150,100 @@ export default function DispatchMap() {
   }, [orders, selectedOrders])
 
   useEffect(() => {
-    if (!mapInstance.current || !window.google?.maps) return
+    if (directionsRendererRef.current) {
+      directionsRendererRef.current.setMap(null)
+      directionsRendererRef.current = null
+    }
     if (polylineRef.current) {
       polylineRef.current.setMap(null)
       polylineRef.current = null
     }
 
-    if (selectedOrders.length < 2) return
+    if (!mapInstance.current || !window.google?.maps) return
 
-    const selectedCoords = selectedOrders
+    const selectedData = selectedOrders
       .map(id => orders.find(o => o.id === id))
       .filter(o => o?.address_lat && o?.address_lng)
-      .map(o => ({ lat: o.address_lat, lng: o.address_lng }))
 
-    if (selectedCoords.length < 2) return
+    if (selectedData.length < 2) {
+      setRouteInfo(null)
+      return
+    }
 
-    polylineRef.current = new window.google.maps.Polyline({
-      path: selectedCoords,
-      geodesic: true,
-      strokeColor: '#6200ea',
-      strokeOpacity: 0.8,
-      strokeWeight: 3,
-      map: mapInstance.current
-    })
+    if (optimizeTimerRef.current) clearTimeout(optimizeTimerRef.current)
+
+    setOptimizingLive(true)
+
+    optimizeTimerRef.current = setTimeout(() => {
+      const directionsService = new window.google.maps.DirectionsService()
+      const renderer = new window.google.maps.DirectionsRenderer({
+        map: mapInstance.current,
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: '#6200ea',
+          strokeOpacity: 0.85,
+          strokeWeight: 4
+        }
+      })
+      directionsRendererRef.current = renderer
+
+      const origin = { lat: selectedData[0].address_lat, lng: selectedData[0].address_lng }
+      const destination = { lat: selectedData[selectedData.length - 1].address_lat, lng: selectedData[selectedData.length - 1].address_lng }
+      const waypoints = selectedData.slice(1, -1).map(o => ({
+        location: { lat: o.address_lat, lng: o.address_lng },
+        stopover: true
+      }))
+
+      directionsService.route({
+        origin,
+        destination,
+        waypoints,
+        optimizeWaypoints: true,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+        drivingOptions: {
+          departureTime: new Date(),
+          trafficModel: window.google.maps.TrafficModel.BEST_GUESS
+        }
+      }, (result, status) => {
+        setOptimizingLive(false)
+        if (status === 'OK') {
+          renderer.setDirections(result)
+
+          const route = result.routes[0]
+          let totalDist = 0
+          let totalDur = 0
+          route.legs.forEach(leg => {
+            totalDist += leg.distance.value
+            totalDur += leg.duration.value
+          })
+
+          const selectedIds = selectedData.map(o => o.id)
+          let optimizedOrder
+          if (route.waypoint_order && route.waypoint_order.length > 0) {
+            const firstId = selectedIds[0]
+            const lastId = selectedIds[selectedIds.length - 1]
+            const middleIds = selectedIds.slice(1, -1)
+            const reorderedMiddle = route.waypoint_order.map(i => middleIds[i])
+            optimizedOrder = [firstId, ...reorderedMiddle, lastId]
+          } else {
+            optimizedOrder = selectedIds
+          }
+
+          setRouteInfo({
+            distance: (totalDist / 1000).toFixed(1),
+            duration: Math.round(totalDur / 60),
+            optimizedOrder
+          })
+        } else {
+          console.error('Directions request failed:', status)
+          setRouteInfo(null)
+        }
+      })
+    }, 500)
+
+    return () => {
+      if (optimizeTimerRef.current) clearTimeout(optimizeTimerRef.current)
+    }
   }, [selectedOrders, orders])
 
   const toggleOrderSelection = (orderId) => {
@@ -201,13 +276,23 @@ export default function DispatchMap() {
   const handleCreateRoute = async () => {
     if (!selectedOrders.length) return
     try {
+      let orderedIds = [...selectedOrders]
+      let isPreOptimized = false
+
+      if (routeInfo?.optimizedOrder && routeInfo.optimizedOrder.length === selectedOrders.length) {
+        orderedIds = routeInfo.optimizedOrder
+        isPreOptimized = true
+      }
+
       await api.post('/api/dispatch/routes', {
         name: routeName || undefined,
-        order_ids: selectedOrders
+        order_ids: orderedIds,
+        pre_optimized: isPreOptimized
       })
       setSelectedOrders([])
       setShowCreateRoute(false)
       setRouteName('')
+      setRouteInfo(null)
       fetchData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al crear ruta')
@@ -397,6 +482,13 @@ export default function DispatchMap() {
             <div className="selected-count">
               <span className="material-icons">check_circle</span>
               {selectedOrders.length} seleccionada{selectedOrders.length > 1 ? 's' : ''}
+              {optimizingLive && <span className="route-calc"> calculando ruta...</span>}
+              {routeInfo && !optimizingLive && (
+                <span className="route-info-inline">
+                  <span className="material-icons">directions_car</span>
+                  {routeInfo.distance} km - {routeInfo.duration} min
+                </span>
+              )}
             </div>
             <div className="action-buttons">
               <button className="dbtn red" onClick={() => handleBulkStatus('on_production')} title="En Produccion">

@@ -126,6 +126,30 @@
   font-size: 18px;
 }
 
+.route-calc {
+  color: #ff9800;
+  font-weight: 400;
+  font-size: 0.8rem;
+  margin-left: 4px;
+}
+
+.route-info-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+.route-info-inline .material-icons {
+  font-size: 14px;
+}
+
 .action-buttons {
   display: flex;
   gap: 4px;

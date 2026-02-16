@@ -159,27 +159,32 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
 
 router.post('/routes', requireAdmin, async (req, res) => {
   try {
-    const { name, order_ids } = req.body;
+    const { name, order_ids, pre_optimized } = req.body;
     if (!order_ids?.length) {
       return res.status(400).json({ error: 'Selecciona al menos una orden' });
     }
 
-    const orders = await ValidatedAddress.findAll({
+    const ordersMap = new Map();
+    const dbOrders = await ValidatedAddress.findAll({
       where: { id: { [Op.in]: order_ids } }
     });
+    dbOrders.forEach(o => ordersMap.set(o.id, o));
 
-    if (orders.length === 0) {
+    if (ordersMap.size === 0) {
       return res.status(400).json({ error: 'No se encontraron ordenes con direccion' });
     }
 
     const route = await Route.create({
       user_id: req.session.userId,
-      name: name || `Ruta ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'short' })} - ${orders.length} paradas`,
-      status: 'draft'
+      name: name || `Ruta ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'short' })} - ${ordersMap.size} paradas`,
+      status: 'draft',
+      is_optimized: !!pre_optimized
     });
 
-    for (let i = 0; i < orders.length; i++) {
-      const order = orders[i];
+    for (let i = 0; i < order_ids.length; i++) {
+      const order = ordersMap.get(order_ids[i]);
+      if (!order) continue;
+
       await Stop.create({
         route_id: route.id,
         address: order.validated_address,
