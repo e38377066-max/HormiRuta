@@ -563,6 +563,7 @@ class PollingService {
           state: { [Op.notIn]: ['completed'] }
         }
       });
+      const trackedContactIds = new Set(trackedStates.map(s => s.contact_id));
 
       let openCount = 0, closedCount = 0, unknownCount = 0;
 
@@ -571,25 +572,46 @@ class PollingService {
 
         if (openContactIds.has(contactId)) {
           await convState.update({ last_seen_open_at: now, conversation_closed_at: null });
-          console.log(`[Polling] Sync inicial: contacto ${contactId} -> ABIERTA`);
           openCount++;
         } else if (closedContactIds.has(contactId)) {
           if (!convState.conversation_closed_at) {
             await convState.update({ conversation_closed_at: now });
           }
-          console.log(`[Polling] Sync inicial: contacto ${contactId} -> CERRADA`);
           closedCount++;
         } else if (closedFetchComplete) {
           if (!convState.conversation_closed_at) {
             await convState.update({ conversation_closed_at: now });
           }
-          console.log(`[Polling] Sync inicial: contacto ${contactId} -> NO ENCONTRADO, asumido CERRADA`);
           unknownCount++;
         }
       }
 
+      let newClosedRegistered = 0;
+      for (const contact of allClosedContacts) {
+        const contactId = contact.id.toString();
+        if (!trackedContactIds.has(contactId)) {
+          await ConversationState.findOrCreate({
+            where: { user_id: userId, contact_id: contactId },
+            defaults: {
+              user_id: userId,
+              contact_id: contactId,
+              state: 'completed',
+              conversation_closed_at: now,
+              agent_active: false,
+              bot_paused: true,
+              is_existing_customer: true
+            }
+          });
+          newClosedRegistered++;
+        }
+      }
+
+      const totalClosed = closedCount + unknownCount + newClosedRegistered;
       console.log(`[Polling] === SINCRONIZACION COMPLETA ===`);
-      console.log(`[Polling] Contactos rastreados: ${trackedStates.length} | Abiertos: ${openCount} | Cerrados: ${closedCount} | No encontrados: ${unknownCount}`);
+      console.log(`[Polling] Respond.io: ${allOpenContacts.length} abiertas, ${allClosedContacts.length} cerradas`);
+      console.log(`[Polling] Rastreados previos: ${trackedStates.length} (${openCount} abiertos, ${closedCount + unknownCount} cerrados)`);
+      console.log(`[Polling] Nuevos cerrados registrados: ${newClosedRegistered}`);
+      console.log(`[Polling] Total rastreados: ${trackedStates.length + newClosedRegistered} | Abiertos: ${openCount} | Cerrados: ${totalClosed}`);
     } catch (error) {
       console.error(`[Polling] Error en sincronizacion inicial:`, error.message);
     }
