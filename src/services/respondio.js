@@ -429,37 +429,38 @@ class RespondioService {
   }
   async listUsers() {
     try {
-      const response = await this.requestWithRetry('get', '/user');
-      const users = response.data?.data || response.data || [];
-      return {
-        success: true,
-        users: Array.isArray(users) ? users : [users]
-      };
-    } catch (error) {
-      if (error.response?.status === 404) {
-        try {
-          const response2 = await this.requestWithRetry('get', '/users');
-          const users2 = response2.data?.data || response2.data || [];
-          return {
-            success: true,
-            users: Array.isArray(users2) ? users2 : [users2]
-          };
-        } catch (error2) {
-          console.error('Respond.io list users fallback error:', error2.response?.data || error2.message);
+      let allUsers = [];
+      let cursorId = null;
+      let hasMore = true;
+
+      while (hasMore) {
+        const params = { limit: 100 };
+        if (cursorId) params.cursorId = cursorId;
+
+        const response = await this.requestWithRetry('get', '/space/user', null, { params });
+        const items = response.data?.items || [];
+        allUsers = allUsers.concat(items);
+
+        const nextUrl = response.data?.pagination?.next;
+        if (nextUrl && items.length > 0) {
+          const match = nextUrl.match(/cursorId=(-?\d+)/);
+          cursorId = match ? parseInt(match[1]) : null;
+          hasMore = !!cursorId;
+        } else {
+          hasMore = false;
         }
       }
+
+      return {
+        success: true,
+        users: allUsers
+      };
+    } catch (error) {
       console.error('Respond.io list users error:', error.response?.status, error.response?.data || error.message);
-      const statusCode = error.response?.status;
-      let errorMsg = error.response?.data?.message || error.message;
-      if (statusCode === 404) {
-        errorMsg = 'El endpoint de usuarios no esta disponible. Verifica que tu plan de Respond.io soporte la API de usuarios.';
-      } else if (statusCode === 403) {
-        errorMsg = 'Tu token de API no tiene permisos para listar usuarios.';
-      }
       return {
         success: false,
         users: [],
-        error: errorMsg
+        error: error.response?.data?.message || error.message
       };
     }
   }
