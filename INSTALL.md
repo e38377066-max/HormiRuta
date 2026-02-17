@@ -1,34 +1,35 @@
 # Guia de Instalacion - Area 862 System
 
-Guia completa para instalar Area 862 System en un servidor Ubuntu (VPS) y compilar las apps moviles Android/iOS.
+Guia paso a paso para instalar Area 862 System en una PC con Ubuntu. Solo copia y pega cada comando.
 
 ---
 
-## PARTE 1: SERVIDOR DE PRODUCCION (Ubuntu)
+## PARTE 1: SERVIDOR DE PRODUCCION
 
 ---
 
-### Requisitos del Servidor
+### Requisitos
 
-- Ubuntu Server 22.04 LTS o superior
+- PC o servidor con Ubuntu 22.04 LTS o superior
 - Minimo 1GB RAM (recomendado 2GB)
 - 10GB de disco minimo
-- IP publica o dominio
-- Puertos 80, 443 y 22 abiertos
+- Conexion a internet
+- Si vas a usar dominio: puertos 80, 443 y 22 abiertos
 
 ---
 
-### Paso 1: Preparar el Servidor
+### Paso 1: Actualizar el Sistema
+
+Abre la terminal y ejecuta:
 
 ```bash
-# Conectar al servidor por SSH
-ssh tu-usuario@tu-ip-del-servidor
-
-# Actualizar el sistema
 sudo apt update && sudo apt upgrade -y
+```
 
-# Instalar dependencias del sistema
-sudo apt install -y curl git build-essential nginx certbot python3-certbot-nginx
+Instalar las herramientas necesarias:
+
+```bash
+sudo apt install -y curl git build-essential
 ```
 
 ---
@@ -36,15 +37,20 @@ sudo apt install -y curl git build-essential nginx certbot python3-certbot-nginx
 ### Paso 2: Instalar Node.js 20
 
 ```bash
-# Instalar Node.js 20.x
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
+```
 
-# Verificar
-node --version   # v20.x.x
-npm --version    # 10.x.x
+Verificar que se instalo correctamente:
 
-# Instalar PM2 (administrador de procesos)
+```bash
+node --version
+npm --version
+```
+
+Instalar PM2 (mantiene la app corriendo aunque cierres la terminal):
+
+```bash
 sudo npm install -g pm2
 ```
 
@@ -53,38 +59,41 @@ sudo npm install -g pm2
 ### Paso 3: Instalar PostgreSQL
 
 ```bash
-# Instalar PostgreSQL
 sudo apt install -y postgresql postgresql-contrib
-
-# Iniciar y habilitar
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-
-# Crear usuario y base de datos
-sudo -u postgres psql <<EOF
-CREATE USER area862 WITH PASSWORD 'tu_password_seguro_aqui';
-CREATE DATABASE area862 OWNER area862;
-GRANT ALL PRIVILEGES ON DATABASE area862 TO area862;
-\q
-EOF
 ```
 
-> Cambia `tu_password_seguro_aqui` por una contraseña segura. La usaras en el archivo .env.
+Iniciar PostgreSQL y que arranque automaticamente con el sistema:
+
+```bash
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+Crear la base de datos y el usuario. **IMPORTANTE: cambia `Area862Pass2024!` por tu propia contraseña segura** y anotala porque la necesitaras despues:
+
+```bash
+sudo -u postgres psql -c "CREATE USER area862 WITH PASSWORD 'Area862Pass2024!';"
+sudo -u postgres psql -c "CREATE DATABASE area862 OWNER area862;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE area862 TO area862;"
+```
+
+Verificar que funciona la conexion:
+
+```bash
+PGPASSWORD='Area862Pass2024!' psql -U area862 -d area862 -h localhost -c "SELECT 'Conexion exitosa' AS resultado;"
+```
+
+Si ves `Conexion exitosa`, la base de datos esta lista.
 
 ---
 
-### Paso 4: Clonar el Proyecto
+### Paso 4: Descargar el Proyecto
 
 ```bash
-# Crear directorio
 sudo mkdir -p /var/www
 cd /var/www
-
-# Clonar repositorio (reemplaza con tu URL de Git)
-sudo git clone https://tu-repositorio.git area862
+sudo git clone https://gitlab.com/AdminArea862/area-routes.git area862
 cd area862
-
-# Dar permisos
 sudo chown -R $USER:$USER /var/www/area862
 ```
 
@@ -92,99 +101,147 @@ sudo chown -R $USER:$USER /var/www/area862
 
 ### Paso 5: Configurar Variables de Entorno
 
-```bash
-# Copiar plantilla
-cp .env.example .env
+Crear el archivo de configuracion a partir de la plantilla:
 
-# Editar
+```bash
+cp .env.example .env
+```
+
+Generar un secreto de sesion aleatorio (copia el resultado que aparece):
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Ahora editar el archivo .env con todos los valores:
+
+```bash
 nano .env
 ```
 
-Configura estos valores:
+Dentro del archivo, configura estos valores (los que dicen CAMBIAR debes reemplazarlos con tus datos reales):
 
-```bash
-# Base de datos local
-DATABASE_URL=postgresql://area862:tu_password_seguro_aqui@localhost:5432/area862
-
-# Genera el secreto con este comando y pega el resultado:
-# node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-SESSION_SECRET=pega_aqui_el_secreto_generado
-
-# Entorno
+```
+DATABASE_URL=postgresql://area862:Area862Pass2024!@localhost:5432/area862
+SESSION_SECRET=PEGA_AQUI_EL_SECRETO_QUE_GENERASTE_ARRIBA
 NODE_ENV=production
 PORT=5000
-
-# Tu dominio (sin https://)
-SERVER_DOMAIN=tu-dominio.com
-
-# Google Maps - misma key para ambos
-VITE_GOOGLE_MAPS_API_KEY=AIzaSy...tu-key
-GOOGLE_MAPS_API_KEY=AIzaSy...tu-key
-
-# URL para apps moviles
-VITE_API_URL=https://tu-dominio.com
+SERVER_DOMAIN=CAMBIAR_POR_TU_DOMINIO_O_IP
+VITE_GOOGLE_MAPS_API_KEY=CAMBIAR_POR_TU_API_KEY_DE_GOOGLE_MAPS
+GOOGLE_MAPS_API_KEY=CAMBIAR_POR_TU_API_KEY_DE_GOOGLE_MAPS
+VITE_API_URL=https://CAMBIAR_POR_TU_DOMINIO
 ```
 
-Guardar: `Ctrl+O`, `Enter`, `Ctrl+X`
+Para guardar en nano: presiona `Ctrl+O`, luego `Enter`, luego `Ctrl+X`.
+
+> **Nota sobre Google Maps**: Necesitas una API Key de Google Cloud. Ve a https://console.cloud.google.com/apis/credentials y crea una. Habilita estas dos APIs: **Maps JavaScript API** y **Geocoding API**. Puedes usar la misma key para VITE_GOOGLE_MAPS_API_KEY y GOOGLE_MAPS_API_KEY.
+
+> **Si no tienes dominio**: pon la IP de tu PC en SERVER_DOMAIN (ejemplo: `192.168.1.100`) y en VITE_API_URL pon `http://TU_IP:5000`.
 
 ---
 
 ### Paso 6: Instalar Dependencias y Compilar
 
 ```bash
-# Instalar dependencias
+cd /var/www/area862
 npm install
+```
 
-# Compilar el frontend
+Compilar el frontend:
+
+```bash
 npm run build
+```
 
-# Crear directorio de logs
+Crear las carpetas necesarias:
+
+```bash
 sudo mkdir -p /var/log/area862
 sudo chown $USER:$USER /var/log/area862
-
-# Crear directorio de uploads (evidencias de entrega)
 mkdir -p uploads/evidence
 ```
 
 ---
 
-### Paso 7: Iniciar con PM2
+### Paso 7: Probar que Funciona
+
+Primero prueba que arranca correctamente:
 
 ```bash
-# Iniciar la aplicacion
+node src/index.js
+```
+
+Debes ver algo como:
+
+```
+===========================================
+Area 862 System - Iniciando servidor...
+===========================================
+Database connection established successfully.
+Database tables synchronized.
+Area 862 System API running on port 5000
+```
+
+Si lo ves, funciona. Detén el servidor con `Ctrl+C`.
+
+Si da error de base de datos, revisa que el password en DATABASE_URL sea el mismo que usaste al crear el usuario PostgreSQL.
+
+---
+
+### Paso 8: Iniciar con PM2
+
+PM2 mantiene la app corriendo en segundo plano y la reinicia si se cae:
+
+```bash
+cd /var/www/area862
 pm2 start ecosystem.config.cjs
+```
 
-# Verificar que esta corriendo
+Verificar que esta corriendo:
+
+```bash
 pm2 status
+```
 
-# Ver los logs
-pm2 logs area862
+Debe mostrar `area862` con status `online`.
 
-# Probar que responde
+Probar que responde:
+
+```bash
 curl http://localhost:5000/api/health
-# Debe responder: {"status":"ok","message":"Area 862 System API funcionando (Node.js)"}
+```
 
-# Configurar inicio automatico con el sistema
+Debe responder: `{"status":"ok","message":"Area 862 System API funcionando (Node.js)"}`
+
+Configurar que arranque automaticamente cuando se reinicie la PC:
+
+```bash
 pm2 startup systemd
-# PM2 te mostrara un comando sudo - copialo y ejecutalo
+```
+
+PM2 te va a mostrar un comando que empieza con `sudo`. Copia ese comando completo y ejecutalo. Despues:
+
+```bash
 pm2 save
 ```
 
 ---
 
-### Paso 8: Configurar Nginx (Proxy + HTTPS)
+### Paso 9: Configurar Nginx (para acceder desde otros dispositivos)
+
+Si quieres acceder desde otros dispositivos en la red o desde internet, necesitas Nginx:
 
 ```bash
-# Crear configuracion
-sudo nano /etc/nginx/sites-available/area862
+sudo apt install -y nginx
 ```
 
-Pega este contenido (cambia `tu-dominio.com` por tu dominio real):
+Crear la configuracion. **Cambia `tu-dominio.com` por tu dominio real, o borralo si solo usas IP**:
 
-```nginx
+```bash
+sudo tee /etc/nginx/sites-available/area862 > /dev/null << 'NGINX'
 server {
     listen 80;
-    server_name tu-dominio.com www.tu-dominio.com;
+    server_name _;
 
     client_max_body_size 10M;
 
@@ -202,384 +259,378 @@ server {
         proxy_connect_timeout 75s;
     }
 }
+NGINX
 ```
+
+Activar el sitio:
 
 ```bash
-# Activar el sitio
-sudo ln -s /etc/nginx/sites-available/area862 /etc/nginx/sites-enabled/
-
-# Eliminar sitio por defecto
+sudo ln -sf /etc/nginx/sites-available/area862 /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
-
-# Verificar configuracion
 sudo nginx -t
-
-# Reiniciar Nginx
 sudo systemctl restart nginx
+sudo systemctl enable nginx
 ```
+
+Ahora puedes acceder desde cualquier dispositivo en la misma red usando la IP de tu PC: `http://TU_IP`
 
 ---
 
-### Paso 9: Activar HTTPS con Let's Encrypt
+### Paso 10: HTTPS con Dominio (Opcional - solo si tienes dominio)
 
-> Tu dominio debe apuntar a la IP del servidor antes de este paso.
+Si tienes un dominio apuntando a tu IP publica:
+
+Primero edita la config de Nginx para poner tu dominio:
 
 ```bash
-# Obtener certificado SSL
+sudo sed -i 's/server_name _;/server_name tu-dominio.com www.tu-dominio.com;/' /etc/nginx/sites-available/area862
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+Instalar certificado SSL:
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d tu-dominio.com -d www.tu-dominio.com
+```
 
-# Seguir las instrucciones (pide un email)
-# Seleccionar opcion 2: Redirect HTTP to HTTPS
+Sigue las instrucciones (te pide un email). Selecciona la opcion de redirigir HTTP a HTTPS.
 
-# Los certificados se renuevan automaticamente
-# Para verificar la renovacion:
+Verificar que la renovacion automatica funciona:
+
+```bash
 sudo certbot renew --dry-run
 ```
 
 ---
 
-### Paso 10: Firewall
+### Paso 11: Firewall (Recomendado)
 
 ```bash
 sudo ufw allow ssh
 sudo ufw allow 'Nginx Full'
-sudo ufw enable
+sudo ufw --force enable
 ```
 
 ---
 
-### Paso 11: Crear Usuario Administrador
+### Paso 12: Crear el Primer Usuario Administrador
 
-1. Abre tu navegador en `https://tu-dominio.com`
-2. Registrate con tu email y contraseña
-3. Luego en el servidor, promueve tu usuario a admin:
+1. Abre tu navegador y ve a `http://TU_IP` (o `https://tu-dominio.com` si configuraste HTTPS)
+2. Haz click en "Registrarse"
+3. Crea tu cuenta con tu email y contraseña
+4. Regresa a la terminal y promueve tu usuario a administrador:
 
 ```bash
-sudo -u postgres psql area862 -c "UPDATE users SET role = 'admin' WHERE email = 'tu-email@ejemplo.com';"
+sudo -u postgres psql area862 -c "UPDATE users SET role = 'admin' WHERE email = 'TU_EMAIL_AQUI';"
 ```
+
+Cambia `TU_EMAIL_AQUI` por el email con el que te registraste. Despues cierra sesion y vuelve a entrar para ver el panel de administracion.
 
 ---
 
-### Verificacion Final del Servidor
+### Verificacion Final
+
+Ejecuta estos comandos para verificar que todo esta funcionando:
 
 ```bash
-# Estado de la app
+echo "=== Estado de la App ==="
 pm2 status
 
-# Logs en tiempo real
-pm2 logs area862
+echo "=== Estado de PostgreSQL ==="
+sudo systemctl status postgresql --no-pager -l
 
-# Estado de Nginx
-sudo systemctl status nginx
+echo "=== Estado de Nginx ==="
+sudo systemctl status nginx --no-pager -l
 
-# Estado de PostgreSQL
-sudo systemctl status postgresql
+echo "=== Prueba de API ==="
+curl -s http://localhost:5000/api/health
 
-# Probar desde fuera
-# En tu navegador: https://tu-dominio.com
-# Debe cargar la pagina de login de Area 862
+echo ""
+echo "=== Todo listo ==="
 ```
 
 ---
 
-### Comandos Utiles
+## COMANDOS DEL DIA A DIA
+
+### Ver logs de la app
 
 ```bash
-# Reiniciar la app
-pm2 restart area862
-
-# Ver logs
-pm2 logs area862 --lines 100
-
-# Detener
-pm2 stop area862
-
-# Ver uso de memoria/CPU
-pm2 monit
-
-# Reiniciar Nginx
-sudo systemctl restart nginx
-
-# Ver logs de Nginx
-sudo tail -f /var/log/nginx/error.log
+pm2 logs area862
 ```
 
----
+Ver ultimas 100 lineas:
 
-### Actualizar la App
+```bash
+pm2 logs area862 --lines 100
+```
 
-Cuando haya cambios nuevos:
+### Reiniciar la app
+
+```bash
+pm2 restart area862
+```
+
+### Detener la app
+
+```bash
+pm2 stop area862
+```
+
+### Ver uso de memoria y CPU
+
+```bash
+pm2 monit
+```
+
+### Actualizar cuando haya cambios nuevos
 
 ```bash
 cd /var/www/area862
-git pull
+git pull origin main
 npm install
 npm run build
 pm2 restart area862
+```
+
+### Reiniciar todo (PostgreSQL + Nginx + App)
+
+```bash
+sudo systemctl restart postgresql
+sudo systemctl restart nginx
+pm2 restart area862
+```
+
+### Ver logs de Nginx (errores de conexion)
+
+```bash
+sudo tail -f /var/log/nginx/error.log
+```
+
+### Backup de la base de datos
+
+```bash
+PGPASSWORD='Area862Pass2024!' pg_dump -U area862 -h localhost area862 > /var/www/area862/backup_$(date +%Y%m%d).sql
+```
+
+### Restaurar un backup
+
+```bash
+PGPASSWORD='Area862Pass2024!' psql -U area862 -h localhost area862 < backup_FECHA.sql
 ```
 
 ---
 
 ## PARTE 2: COMPILAR APP ANDROID
 
----
+Esto se hace en tu computadora personal, no en el servidor.
 
-### Requisitos (en tu computadora local, no en el servidor)
+### Requisitos
 
-- Node.js 20 instalado
+- Node.js 20 instalado en tu computadora
 - Android Studio instalado (descargar de https://developer.android.com/studio)
-- Java JDK 17 (viene con Android Studio)
-- El codigo fuente del proyecto
+- Java JDK 17 (viene incluido con Android Studio)
 
----
-
-### Paso 1: Preparar el Proyecto
+### Pasos
 
 ```bash
-# Clonar el proyecto en tu computadora
-git clone https://tu-repositorio.git area862
+git clone https://gitlab.com/AdminArea862/area-routes.git area862
 cd area862
-
-# Instalar dependencias
 npm install
 ```
 
----
-
-### Paso 2: Configurar la URL del Servidor
-
-Edita el archivo `.env` en tu computadora local:
+Crear archivo .env con la URL de tu servidor:
 
 ```bash
-# URL de tu servidor de produccion
-VITE_API_URL=https://tu-dominio.com
+echo "VITE_API_URL=https://tu-dominio.com" > .env
 ```
 
-> Esta es la URL de tu servidor Ubuntu. La app movil se conectara a esta direccion.
-
----
-
-### Paso 3: Compilar y Sincronizar
+Compilar y sincronizar:
 
 ```bash
-# Compilar el frontend apuntando al servidor
 npm run build
-
-# Sincronizar con Android
 npx cap sync android
 ```
 
----
-
-### Paso 4: Abrir en Android Studio
+Abrir en Android Studio:
 
 ```bash
-# Abrir el proyecto Android
 npx cap open android
 ```
 
-Esto abre Android Studio con el proyecto.
-
----
-
-### Paso 5: Compilar el APK
-
 En Android Studio:
-
-1. Espera a que termine de sincronizar Gradle (puede tardar unos minutos la primera vez)
+1. Espera a que Gradle sincronice (puede tardar unos minutos la primera vez)
 2. Menu: **Build > Build Bundle(s) / APK(s) > Build APK(s)**
 3. El APK se genera en: `android/app/build/outputs/apk/debug/app-debug.apk`
 
-Para APK de produccion (firmado):
-
+Para APK firmado (tienda):
 1. Menu: **Build > Generate Signed Bundle / APK**
 2. Selecciona **APK**
-3. Crea o selecciona un Keystore (guardalo seguro, lo necesitaras para updates)
+3. Crea un Keystore nuevo (guardalo seguro)
 4. Selecciona **release**
-5. El APK firmado se genera en: `android/app/build/outputs/apk/release/`
+5. El APK firmado queda en: `android/app/build/outputs/apk/release/`
 
----
+### Instalar en telefono
 
-### Paso 6: Instalar en un Telefono
-
-**Opcion A - Por cable USB:**
-1. Activa "Opciones de desarrollador" en tu telefono Android
+**Por cable USB:**
+1. Activa "Opciones de desarrollador" en el telefono (toca 7 veces "Numero de compilacion" en Ajustes > Acerca del telefono)
 2. Activa "Depuracion USB"
 3. Conecta el telefono al computador
-4. En Android Studio haz click en "Run" (triangulo verde)
+4. En Android Studio click en Run (triangulo verde)
 
-**Opcion B - Enviar el APK:**
+**Enviar el APK:**
 1. Busca el archivo APK generado
-2. Envialo por email, WhatsApp, Google Drive, etc.
-3. En el telefono, abre el APK e instala
+2. Envialo por WhatsApp, email, Google Drive, etc.
+3. Abre el APK en el telefono e instala
 4. Si pide permiso de "fuentes desconocidas", activalo
 
 ---
 
-## PARTE 3: COMPILAR APP iOS (Solo Mac)
-
----
+## PARTE 3: COMPILAR APP iOS (Solo en Mac)
 
 ### Requisitos
 
 - Mac con macOS 13 o superior
 - Xcode 15+ (descargar del App Store)
-- Cuenta de Apple Developer ($99/año - solo para publicar en App Store)
-- CocoaPods: `sudo gem install cocoapods`
+- CocoaPods instalado
+- Cuenta de Apple Developer ($99/año para publicar en App Store)
 
----
-
-### Paso 1: Preparar (igual que Android)
+### Pasos
 
 ```bash
+sudo gem install cocoapods
+git clone https://gitlab.com/AdminArea862/area-routes.git area862
 cd area862
 npm install
-
-# Configurar .env con la URL del servidor
-# VITE_API_URL=https://tu-dominio.com
-
-# Compilar
+echo "VITE_API_URL=https://tu-dominio.com" > .env
 npm run build
-
-# Sincronizar con iOS
 npx cap sync ios
-```
-
----
-
-### Paso 2: Instalar Dependencias iOS
-
-```bash
-cd ios/App
-pod install
-cd ../..
-```
-
----
-
-### Paso 3: Abrir en Xcode
-
-```bash
+cd ios/App && pod install && cd ../..
 npx cap open ios
 ```
 
----
-
-### Paso 4: Configurar en Xcode
-
+En Xcode:
 1. Selecciona el proyecto "App" en el panel izquierdo
-2. En "Signing & Capabilities":
-   - Selecciona tu Team (tu cuenta de Apple Developer)
-   - Cambia el Bundle Identifier si es necesario
+2. En "Signing & Capabilities" selecciona tu Team (cuenta Apple Developer)
 3. Selecciona tu dispositivo o simulador
-4. Click en "Run" (triangulo)
+4. Click en Run (triangulo)
 
----
-
-### Paso 5: Compilar para App Store
-
+Para publicar en App Store:
 1. Menu: **Product > Archive**
-2. Espera a que termine
-3. En el Organizer, click en **Distribute App**
-4. Sigue los pasos para subir a App Store Connect
+2. En el Organizer click en **Distribute App**
+3. Sigue los pasos para subir a App Store Connect
 
 ---
 
-## PARTE 4: CAMBIAR LA URL DEL SERVIDOR EN LAS APPS
+## PARTE 4: CAMBIAR SERVIDOR O DOMINIO
 
-Si cambias de servidor o dominio, necesitas recompilar las apps:
-
-### Opcion A: Recompilar (recomendado)
+Si cambias de servidor o dominio, necesitas recompilar las apps moviles:
 
 ```bash
-# 1. Editar .env con la nueva URL
+cd area862
 nano .env
-# Cambiar: VITE_API_URL=https://nuevo-dominio.com
-
-# 2. Recompilar
+# Cambiar VITE_API_URL=https://nuevo-dominio.com
 npm run build
-
-# 3. Sincronizar
-npx cap sync android   # Para Android
-npx cap sync ios       # Para iOS
-
-# 4. Generar nuevo APK/IPA en Android Studio o Xcode
+npx cap sync android
+npx cap sync ios
 ```
 
-### Opcion B: Editar capacitor.config.ts
-
-Si quieres que la app cargue directamente desde el servidor (sin archivos locales):
-
-```typescript
-// En capacitor.config.ts, agregar la URL del servidor:
-server: {
-  url: 'https://tu-dominio.com',
-  cleartext: true
-}
-```
-
-Luego recompilar con `npx cap sync`.
-
-> Con esta opcion la app siempre carga desde el servidor, asi que no necesitas recompilar para cambios del frontend. Pero requiere internet para funcionar.
+Luego genera un nuevo APK/IPA desde Android Studio o Xcode.
 
 ---
 
-## ESTRUCTURA DE LA BASE DE DATOS
+## BASE DE DATOS
 
-Las tablas se crean automaticamente al iniciar el servidor:
+Las tablas se crean automaticamente al iniciar el servidor por primera vez. No necesitas crear nada manualmente:
 
-| Tabla | Descripcion |
+| Tabla | Que guarda |
 |---|---|
-| users | Usuarios del sistema (admin, client, driver) |
-| routes | Rutas de entrega con estado y chofer asignado |
-| stops | Paradas de cada ruta con evidencia (foto) |
-| route_histories | Historial de rutas |
-| messaging_settings | Configuracion de mensajeria/chatbot |
+| users | Usuarios del sistema (admin, chofer, cliente) |
+| routes | Rutas de entrega con chofer asignado |
+| stops | Paradas de cada ruta con foto de evidencia |
+| validated_addresses | Ordenes de despacho con estado y monto |
+| messaging_settings | Configuracion del chatbot |
 | messaging_orders | Ordenes recibidas por mensajeria |
-| validated_addresses | Direcciones validadas (ordenes de despacho) |
-| message_logs | Historial de mensajes |
-| conversation_states | Estado de cada conversacion del bot |
-| coverage_zones | Zonas de cobertura (ZIP codes) |
+| conversation_states | Estado de conversaciones del bot |
+| coverage_zones | Zonas de cobertura (codigos ZIP) |
 | service_agents | Agentes asignables por producto |
+| message_logs | Historial de mensajes |
+| route_histories | Historial de rutas |
 
 ---
 
 ## SOLUCION DE PROBLEMAS
 
-### El servidor no inicia
+### El servidor no arranca
+
 ```bash
 pm2 logs area862 --lines 50
-# Busca el error en los logs
 ```
 
-### "Cannot connect to database"
-- Verifica que PostgreSQL esta corriendo: `sudo systemctl status postgresql`
-- Verifica el DATABASE_URL en .env
-- Verifica el password del usuario de BD
+Busca el error en los logs. Los mas comunes:
 
-### "Session secret required"
-- Asegurate de tener SESSION_SECRET en .env
+### "ERROR: DATABASE_URL no esta configurada"
+- Verifica que el archivo `.env` existe en `/var/www/area862/`
+- Verifica que DATABASE_URL tiene la URL correcta
 
-### El frontend no carga
+### "Cannot connect to database" o "ECONNREFUSED"
+- Verifica que PostgreSQL esta corriendo:
+```bash
+sudo systemctl status postgresql
+```
+- Si no esta corriendo:
+```bash
+sudo systemctl start postgresql
+```
+- Verifica que el password es correcto probando la conexion:
+```bash
+PGPASSWORD='Area862Pass2024!' psql -U area862 -d area862 -h localhost -c "SELECT 1;"
+```
+
+### "SESSION_SECRET is required in production"
+- Verifica que SESSION_SECRET esta en el archivo .env
+- Genera uno nuevo si es necesario:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### La pagina web no carga
 - Verifica que ejecutaste `npm run build`
-- Verifica que la carpeta `dist/` existe y tiene archivos
+- Verifica que la carpeta `dist/` existe:
+```bash
+ls /var/www/area862/dist/
+```
+- Si no existe, compilar de nuevo:
+```bash
+cd /var/www/area862 && npm run build
+```
 
 ### La app movil no conecta al servidor
-- Verifica que VITE_API_URL tiene `https://` al inicio
-- Verifica que el servidor tiene HTTPS activo (certificado SSL)
-- Verifica que el dominio esta bien escrito
+- Verifica que VITE_API_URL en .env tiene `https://` al inicio
+- Verifica que el servidor tiene HTTPS (certificado SSL)
 - Prueba la URL en el navegador del telefono primero
 
-### Error de CORS en la app movil
-- Verifica que SERVER_DOMAIN en .env es correcto
-- El servidor ya acepta peticiones de `capacitor://localhost`
-
-### Google Maps no funciona
+### Google Maps no aparece
 - Verifica que la API key es correcta
-- En Google Cloud Console, habilita: Maps JavaScript API + Geocoding API
-- Si usas restriccion de key, agrega tu dominio y la IP del servidor
+- En Google Cloud Console habilita: **Maps JavaScript API** y **Geocoding API**
+- Si usas restriccion de key, agrega tu dominio
 
 ### El chatbot no responde
-- Verifica que el token de Respond.io esta configurado en la interfaz web
-- Verifica que el polling esta activado
-- Revisa logs: `pm2 logs area862 | grep Bot`
+- El token de Respond.io se configura desde la interfaz web (Panel Admin > Mensajeria > Configuracion)
+- Verifica que el polling esta activado en la misma pantalla
+- Revisa logs:
+```bash
+pm2 logs area862 | grep -i bot
+```
+
+### Quiero empezar la base de datos desde cero
+
+```bash
+sudo -u postgres psql -c "DROP DATABASE area862;"
+sudo -u postgres psql -c "CREATE DATABASE area862 OWNER area862;"
+pm2 restart area862
+```
+
+Las tablas se recrean automaticamente al reiniciar.
