@@ -21,32 +21,49 @@ Documentacion detallada de la arquitectura, estructura de codigo y funcionamient
    - [Contextos (Estado Global)](#contextos-estado-global)
    - [Paginas y Componentes](#paginas-y-componentes)
    - [Layouts](#layouts)
-6. [Sistema de Chatbot](#sistema-de-chatbot)
+6. [Sistema de Despacho](#sistema-de-despacho)
+   - [Flujo de Estados de Ordenes](#flujo-de-estados-de-ordenes)
+   - [Mapa de Despacho (Admin)](#mapa-de-despacho-admin)
+   - [Creacion de Rutas desde Despacho](#creacion-de-rutas-desde-despacho)
+   - [Asignacion a Choferes](#asignacion-a-choferes)
+   - [Sincronizacion de Choferes desde Respond.io](#sincronizacion-de-choferes-desde-respondio)
+7. [Sistema de Evidencia por Parada](#sistema-de-evidencia-por-parada)
+   - [Captura de Foto (Capacitor Camera)](#captura-de-foto-capacitor-camera)
+   - [Subida de Evidencia](#subida-de-evidencia)
+   - [Validacion de Finalizacion](#validacion-de-finalizacion)
+8. [Sistema de Chatbot](#sistema-de-chatbot)
    - [Flujo de Conversacion](#flujo-de-conversacion)
    - [Polling de Mensajes](#polling-de-mensajes)
    - [Proteccion de Conversaciones](#proteccion-de-conversaciones)
    - [Escaneo de Direcciones](#escaneo-de-direcciones)
    - [Geocodificacion](#geocodificacion)
    - [Seguimiento Automatico](#seguimiento-automatico)
-7. [Sistema de Rutas](#sistema-de-rutas)
+9. [Planificador de Rutas (Chofer)](#planificador-de-rutas-chofer)
    - [Optimizacion de Rutas](#optimizacion-de-rutas)
+   - [Navegacion GPS](#navegacion-gps)
    - [Calculo de ETAs](#calculo-de-etas)
-8. [Compilacion Mobile](#compilacion-mobile)
-9. [Variables de Entorno](#variables-de-entorno)
-10. [Base de Datos](#base-de-datos)
-11. [API Endpoints - Referencia Completa](#api-endpoints---referencia-completa)
+10. [Historial de Rutas (Admin)](#historial-de-rutas-admin)
+11. [Compilacion Mobile](#compilacion-mobile)
+    - [Capacitor Camera Plugin](#capacitor-camera-plugin)
+    - [Permisos Nativos](#permisos-nativos)
+12. [Variables de Entorno](#variables-de-entorno)
+13. [Base de Datos](#base-de-datos)
+14. [API Endpoints - Referencia Completa](#api-endpoints---referencia-completa)
 
 ---
 
 ## Descripcion General
 
-Area 862 System es una plataforma de logistica de entregas que combina:
+Area 862 System es una plataforma de logistica de entregas para el area metropolitana de Dallas que combina:
 
-- **Planificacion de rutas**: Crear y optimizar rutas de entrega con multiples paradas
+- **Sistema de despacho**: Gestion completa de ordenes desde produccion hasta entrega, con mapa interactivo, colores por estado y creacion de rutas
+- **Evidencia por parada**: Los choferes deben tomar foto de cada entrega (firma/comprobante) antes de poder finalizar la ruta
+- **Planificacion de rutas**: Crear y optimizar rutas de entrega con multiples paradas, drag-to-reorder, navegacion GPS
 - **Chatbot inteligente**: Atencion automatizada de clientes via Respond.io (WhatsApp, Facebook, etc.)
 - **Validacion de cobertura**: Verificacion automatica de zonas de servicio por codigo postal
-- **Gestion de ordenes**: Seguimiento completo de pedidos desde la recepcion hasta la entrega
-- **Panel de administracion**: Gestion de usuarios, roles y estadisticas
+- **Historial de rutas**: Panel admin para revisar rutas completadas con evidencias fotograficas
+- **Panel de administracion**: Gestion de usuarios, roles, estadisticas y configuracion
+- **App mobile**: Compilacion nativa para Android/iOS via Capacitor con camara nativa
 
 El sistema es una aplicacion full-stack con un solo servidor que maneja tanto la API REST como el frontend compilado.
 
@@ -77,12 +94,17 @@ El sistema es una aplicacion full-stack con un solo servidor que maneja tanto la
 │  │  │  Sequelize   │  │ Polling Service   │   │  │
 │  │  │  ORM         │  │ (cada 30 seg)     │   │  │
 │  │  └──────┬───────┘  └────────┬──────────┘   │  │
-│  └─────────┼───────────────────┼──────────────┘  │
-│            │                   │                  │
-│  ┌─────────▼───────┐  ┌───────▼──────────────┐  │
-│  │  PostgreSQL     │  │   APIs Externas       │  │
-│  │  Base de Datos  │  │  - Respond.io API v2  │  │
-│  │                 │  │  - Google Maps API     │  │
+│  │         │                   │               │  │
+│  │  ┌──────▼───────┐  ┌───────▼──────────┐   │  │
+│  │  │  Multer      │  │   APIs Externas   │   │  │
+│  │  │  (uploads)   │  │  - Respond.io v2  │   │  │
+│  │  │  evidencias  │  │  - Google Maps    │   │  │
+│  │  └──────────────┘  └──────────────────┘   │  │
+│  └────────────────────────────────────────────┘  │
+│                                                  │
+│  ┌─────────────────┐  ┌──────────────────────┐  │
+│  │  PostgreSQL     │  │  uploads/evidence/   │  │
+│  │  Base de Datos  │  │  Fotos de entregas   │  │
 │  └─────────────────┘  └──────────────────────┘  │
 └──────────────────────────────────────────────────┘
 ```
@@ -95,6 +117,8 @@ El sistema es una aplicacion full-stack con un solo servidor que maneja tanto la
 4. El **servicio de polling** consulta Respond.io cada 30 segundos buscando nuevos mensajes
 5. El **chatbot** procesa mensajes entrantes y responde automaticamente
 6. El **geocodificador** corrige direcciones usando Google Maps API
+7. **Multer** maneja la subida de fotos de evidencia al directorio `uploads/evidence/`
+8. Las **fotos de evidencia** se sirven como archivos estaticos desde `/uploads/evidence/`
 
 ---
 
@@ -109,10 +133,11 @@ area862/
 │   ├── middleware/
 │   │   └── auth.js                # Autenticacion y control de roles
 │   ├── models/                    # Modelos de base de datos
-│   │   ├── index.js               # Registro de modelos y relaciones
+│   │   ├── index.js               # Registro de modelos, relaciones y Route.toDict()
 │   │   ├── User.js                # Usuarios del sistema
-│   │   ├── Route.js               # Rutas de entrega
-│   │   ├── Stop.js                # Paradas de cada ruta
+│   │   ├── Route.js               # Rutas de entrega (con assigned_driver_id)
+│   │   ├── Stop.js                # Paradas de cada ruta (con photo_url para evidencia)
+│   │   ├── ValidatedAddress.js    # Ordenes de despacho (con order_status, amount, driver)
 │   │   ├── RouteHistory.js        # Historial de rutas completadas
 │   │   ├── MessagingSettings.js   # Configuracion del chatbot
 │   │   ├── MessagingOrder.js      # Ordenes recibidas por chat
@@ -126,7 +151,8 @@ area862/
 │   │   ├── routes.js              # CRUD de rutas de entrega
 │   │   ├── stops.js               # CRUD de paradas
 │   │   ├── history.js             # Historial de rutas
-│   │   └── messaging.js           # Mensajeria, zonas, agentes, ordenes
+│   │   ├── messaging.js           # Mensajeria, zonas, agentes, ordenes
+│   │   └── dispatch.js            # Sistema de despacho, evidencia, rutas de despacho
 │   └── services/                  # Logica de negocio
 │       ├── chatbotService.js      # Motor del chatbot inteligente
 │       ├── pollingService.js      # Polling de Respond.io
@@ -145,19 +171,35 @@ area862/
 │   │   ├── AuthContext.jsx        # Autenticacion
 │   │   └── MessagingContext.jsx   # Estado de mensajeria
 │   ├── layouts/                   # Layouts de pagina
-│   │   ├── DashboardLayout.jsx    # Layout principal con menu
+│   │   ├── DashboardLayout.jsx    # Layout principal con menu lateral
 │   │   ├── DashboardLayout.css
 │   │   ├── PlannerLayout.jsx      # Layout del planificador de rutas
 │   │   └── PlannerLayout.css
 │   ├── pages/                     # Paginas
 │   │   ├── Auth/                  # Login y registro
+│   │   │   ├── LoginPage.jsx
+│   │   │   └── RegisterPage.jsx
 │   │   ├── Dashboard/             # Dashboard principal
 │   │   ├── Messaging/             # Ordenes, cobertura, configuracion
-│   │   ├── Planner/               # Planificador de rutas con mapa
+│   │   │   ├── OrdersPage.jsx
+│   │   │   ├── CoveragePage.jsx
+│   │   │   └── SettingsPage.jsx
+│   │   ├── Planner/               # Planificador de rutas con mapa GPS
+│   │   │   ├── TripPlannerPage.jsx    # Mapa, paradas numeradas, evidencia, drag-to-reorder
+│   │   │   └── TripPlannerPage.css
+│   │   ├── Dispatch/              # Sistema de despacho
+│   │   │   ├── DispatchMap.jsx    # Mapa admin con ordenes por color/estado
+│   │   │   └── DispatchMap.css
 │   │   └── Admin/                 # Panel de administracion
+│   │       ├── AdminDashboard.jsx
+│   │       ├── AdminUsers.jsx
+│   │       ├── AdminPages.css
+│   │       └── RouteHistory.jsx   # Historial de rutas con evidencias
 │   ├── utils/
-│   │   └── capacitor.js           # Utilidades para app mobile
+│   │   └── capacitor.js           # Utilidades mobile: GPS, camara, haptics, status bar
 │   └── assets/                    # Imagenes y recursos
+├── uploads/                       # Archivos subidos
+│   └── evidence/                  # Fotos de evidencia de entrega
 ├── public/                        # Archivos estaticos publicos
 ├── dist/                          # Frontend compilado (generado por npm run build)
 ├── android/                       # Proyecto Android (Capacitor)
@@ -182,16 +224,15 @@ area862/
 El servidor Express es el corazon de la aplicacion. Maneja:
 
 - **Carga de variables de entorno** via `dotenv`
-- **Configuracion CORS**: Usa `origin: true` (acepta cualquier origen) con `credentials: true` para cookies. Nota: la lista `allowedOrigins` esta definida pero no se aplica como filtro activo; actualmente se permite cualquier origen para compatibilidad con apps mobile (Capacitor) y multiples entornos de desarrollo
+- **Configuracion CORS**: Usa `origin: true` (acepta cualquier origen) con `credentials: true` para cookies. Permite compatibilidad con apps mobile (Capacitor) y multiples entornos
 - **Sesiones**: Usa `express-session` con cookies HTTP-only y duracion de 7 dias
 - **Rutas API**: Todas bajo el prefijo `/api/`
-- **Frontend estatico**: Sirve los archivos compilados desde `dist/`
+- **Archivos estaticos**: Sirve `uploads/` para fotos de evidencia y `dist/` para el frontend
 - **SPA fallback**: Todas las rutas no-API redirigen a `index.html` para React Router
 - **Cache-Control**: Headers `no-cache` para evitar problemas con proxies
 
 ```javascript
 // Seguridad: En produccion, SESSION_SECRET es obligatorio
-// En desarrollo, usa un fallback automatico ('area862-dev-secret-change-in-production')
 if (!sessionSecret && process.env.NODE_ENV === 'production') {
   throw new Error('SESSION_SECRET is required in production');
 }
@@ -222,9 +263,9 @@ Para PostgreSQL instalado localmente en Ubuntu, no se necesita SSL.
 
 **Archivo**: `src/middleware/auth.js`
 
-Dos middlewares principales:
+Tres middlewares principales:
 
-1. **`requireAuth`**: Verifica que el usuario tiene una sesion activa (cookie de sesion). Retorna 401 si no esta autenticado.
+1. **`requireAuth`**: Verifica que el usuario tiene una sesion activa. Establece `req.userId` para uso en las rutas. Retorna 401 si no esta autenticado.
 
 2. **`requireRole(...roles)`**: Verifica que el usuario tiene un rol especifico. Acepta multiples roles como argumento.
 
@@ -234,6 +275,9 @@ Dos middlewares principales:
 // Ejemplo de uso en rutas:
 router.get('/stats', requireAdmin, async (req, res) => { ... });
 router.get('/routes', requireAuth, async (req, res) => { ... });
+
+// IMPORTANTE: Siempre usar req.userId (establecido por requireAuth)
+// NUNCA usar req.session.userId directamente en las rutas
 ```
 
 ### Modelos de Datos (ORM)
@@ -279,7 +323,7 @@ Todos los modelos usan **Sequelize ORM** con PostgreSQL.
 | is_optimized | BOOLEAN | Si fue optimizada (default: false) |
 | total_distance | FLOAT | Distancia total en km |
 | total_duration | INTEGER | Duracion total en minutos |
-| status | STRING(20) | 'draft', 'in_progress', 'completed' |
+| status | STRING(20) | 'draft', 'assigned', 'in_progress', 'completed' |
 | start_address | STRING(300) | Direccion de inicio |
 | start_lat / start_lng | FLOAT | Coordenadas de inicio |
 | end_address | STRING(300) | Direccion de fin |
@@ -290,6 +334,11 @@ Todos los modelos usan **Sequelize ORM** con PostgreSQL.
 | scheduled_date | DATEONLY | Fecha programada |
 | started_at | DATE | Fecha/hora de inicio real |
 | completed_at | DATE | Fecha/hora de finalizacion |
+| assigned_driver_id | INTEGER (FK → users) | **Chofer asignado** (nuevo campo para despacho) |
+
+**Metodo `toDict()`** (definido en `src/models/index.js`):
+- Carga automaticamente todas las paradas de la ruta (`stops`)
+- Incluye `stops_count` y `completed_stops` para tracking de progreso
 
 #### Stop (Paradas)
 
@@ -322,7 +371,37 @@ Todos los modelos usan **Sequelize ORM** con PostgreSQL.
 | arrived_at | DATE | Hora real de llegada |
 | completed_at | DATE | Hora de completar la entrega |
 | signature_url | STRING(500) | URL de firma digital |
-| photo_url | STRING(500) | URL de foto de prueba de entrega |
+| **photo_url** | **STRING(500)** | **URL de foto de evidencia de entrega** |
+
+#### ValidatedAddress (Ordenes de Despacho)
+
+**Archivo**: `src/models/ValidatedAddress.js` | **Tabla**: `validated_addresses`
+
+Este modelo almacena las ordenes del sistema de despacho. Se alimenta automaticamente del escaneo de direcciones del chatbot o se crea manualmente.
+
+| Campo | Tipo | Descripcion |
+|---|---|---|
+| id | INTEGER (PK, auto) | ID unico |
+| user_id | INTEGER (FK → users) | Usuario propietario |
+| respond_contact_id | STRING(100) | ID del contacto en Respond.io |
+| customer_name | STRING(200) | Nombre del cliente |
+| customer_phone | STRING(50) | Telefono del cliente |
+| original_address | STRING(500) | Direccion original (con posibles errores) |
+| validated_address | STRING(500) | Direccion corregida por Google Maps |
+| address_lat / address_lng | FLOAT | Coordenadas GPS |
+| zip_code | STRING(20) | Codigo postal |
+| city | STRING(100) | Ciudad |
+| state | STRING(50) | Estado |
+| confidence | STRING(20) | Nivel de confianza de la geocodificacion |
+| source | STRING(30) | Origen: 'scanner', 'manual' (default: 'scanner') |
+| **dispatch_status** | **STRING(30)** | **'available', 'assigned'** (si esta en una ruta) |
+| **order_status** | **STRING(30)** | **Estado del flujo: 'approved', 'on_production', 'production_finished', 'order_picked_up', 'on_delivery', 'delivered'** |
+| **amount** | **FLOAT** | **Monto a cobrar por la orden** (default: 0) |
+| **assigned_driver_id** | **INTEGER (FK → users)** | **Chofer asignado** |
+| **driver_name** | **STRING(100)** | **Nombre del chofer asignado** |
+| **route_id** | **INTEGER** | **ID de la ruta asignada** |
+| **delivered_at** | **DATE** | **Fecha/hora de entrega** |
+| notes | TEXT | Notas adicionales |
 
 #### MessagingSettings (Configuracion del Chatbot)
 
@@ -450,8 +529,12 @@ User ──1:N──> CoverageZone
 User ──1:1──> MessagingSettings
 User ──1:N──> ConversationState
 User ──1:N──> ServiceAgent
+User ──1:N──> ValidatedAddress
+User (as driver) ──1:N──> Route (via assigned_driver_id)
+User (as driver) ──1:N──> ValidatedAddress (via assigned_driver_id)
 MessagingOrder ──N:1──> Route
 MessagingOrder ──N:1──> Stop
+MessagingOrder ──N:1──> User (via assigned_driver_id)
 ```
 
 Todas las relaciones usan `onDelete: 'CASCADE'` excepto MessageLog → MessagingOrder que usa `SET NULL`.
@@ -505,6 +588,47 @@ Todas requieren autenticacion. Solo acceden a sus propias rutas.
 | POST | `/api/routes/:id/start` | Marcar ruta como "en progreso" |
 | POST | `/api/routes/:id/complete` | Marcar ruta como "completada" (guarda en historial) |
 | POST | `/api/routes/:id/import-text` | Importar direcciones desde texto (una por linea) |
+
+#### Despacho (`src/routes/dispatch.js`)
+
+Archivo de rutas para el sistema de despacho completo. Maneja ordenes, rutas de despacho, asignacion de choferes y evidencia.
+
+**Ordenes de Despacho**:
+
+| Metodo | Ruta | Autenticacion | Descripcion |
+|---|---|---|---|
+| GET | `/api/dispatch/orders` | Auth | Listar ordenes (admin: todas, driver: solo asignadas) |
+| PUT | `/api/dispatch/orders/:id/status` | Auth | Cambiar estado de orden (con validacion de transiciones) |
+| PUT | `/api/dispatch/orders/:id/amount` | Admin | Actualizar monto de una orden |
+| PUT | `/api/dispatch/orders/:id/delivered` | Auth | Marcar orden como entregada |
+| PUT | `/api/dispatch/orders/bulk-status` | Admin | Cambiar estado de multiples ordenes a la vez |
+| GET | `/api/dispatch/stats` | Admin | Estadisticas de ordenes por estado |
+
+**Rutas de Despacho**:
+
+| Metodo | Ruta | Autenticacion | Descripcion |
+|---|---|---|---|
+| POST | `/api/dispatch/routes` | Admin | Crear ruta desde ordenes seleccionadas |
+| GET | `/api/dispatch/routes` | Auth | Listar rutas (admin: todas, driver: asignadas) |
+| POST | `/api/dispatch/routes/:id/optimize` | Admin | Optimizar orden de paradas |
+| PUT | `/api/dispatch/routes/:id/assign` | Admin | Asignar ruta a un chofer |
+| PUT | `/api/dispatch/routes/:id/complete` | Auth | Finalizar ruta (requiere evidencia en todas las paradas) |
+| GET | `/api/dispatch/routes/:id/detail` | Auth | Detalle de ruta con ordenes y monto total |
+| GET | `/api/dispatch/routes/history` | Admin | Historial de rutas completadas/asignadas |
+
+**Evidencia**:
+
+| Metodo | Ruta | Autenticacion | Descripcion |
+|---|---|---|---|
+| POST | `/api/dispatch/stops/:id/evidence` | Auth | Subir foto de evidencia (multipart/form-data) |
+
+**Choferes**:
+
+| Metodo | Ruta | Autenticacion | Descripcion |
+|---|---|---|---|
+| GET | `/api/dispatch/drivers` | Admin | Listar choferes activos |
+| GET | `/api/dispatch/respond-users` | Admin | Listar miembros del workspace de Respond.io |
+| POST | `/api/dispatch/sync-drivers` | Admin | Crear choferes desde miembros de Respond.io |
 
 #### Mensajeria (`src/routes/messaging.js`)
 
@@ -614,6 +738,8 @@ Servicio singleton que gestiona el polling de Respond.io.
 
 **Sincronizacion inicial** (`initializeConversationSnapshot()`): Al iniciar el polling, escanea TODAS las conversaciones abiertas y cerradas para establecer el estado base.
 
+**Proteccion contra interferencia con chatbot**: El escaneo de direcciones NO se ejecuta sobre contactos con flujo de chatbot activo (estados `awaiting_*`) para evitar que el scanner envie mensajes que interfieran con el flujo del bot.
+
 #### RespondioService (`src/services/respondio.js`)
 
 Cliente HTTP basico para la API v2 de Respond.io. Usa Axios con autenticacion Bearer.
@@ -626,6 +752,7 @@ Cliente HTTP basico para la API v2 de Respond.io. Usa Axios con autenticacion Be
 - `getContact()`: Obtener un contacto por ID
 - `updateContactCustomFields()`: Actualizar campos personalizados
 - `listMessages()`: Listar mensajes de un contacto
+- `listUsers()`: Listar miembros del workspace de Respond.io
 - `testConnection()`: Probar la conexion a la API
 
 #### RespondApiService (`src/services/respondApiService.js`)
@@ -659,6 +786,8 @@ Extrae direcciones fisicas de los mensajes de chat.
 3. Filtra falsos positivos (saludos, preguntas, URLs, etc.)
 4. Reconoce ciudades del area de Dallas
 5. Extrae componentes: numero, calle, ciudad, estado, ZIP
+
+**Cache de escaneo**: Se limpia cuando un contacto envia un nuevo mensaje, permitiendo detectar nuevas direcciones en la misma conversacion.
 
 #### GeocodingService (`src/services/geocodingService.js`)
 
@@ -703,9 +832,9 @@ Cliente HTTP centralizado usando Axios.
 ```javascript
 const getBaseURL = () => {
   if (Capacitor.isNativePlatform()) {
-    return import.meta.env.VITE_API_URL || 'https://api.area862.com'
+    return import.meta.env.VITE_API_URL || ''
   }
-  return '' // Mismo servidor
+  return ''
 }
 ```
 
@@ -730,16 +859,18 @@ const getBaseURL = () => {
 | Ordenes | `client/pages/Messaging/OrdersPage.jsx` | Lista de ordenes de mensajeria |
 | Cobertura | `client/pages/Messaging/CoveragePage.jsx` | Gestion de zonas de cobertura |
 | Configuracion | `client/pages/Messaging/SettingsPage.jsx` | Configuracion del chatbot |
-| Planificador | `client/pages/Planner/TripPlannerPage.jsx` | Planificador de rutas con Google Maps |
+| **Mapa Despacho** | **`client/pages/Dispatch/DispatchMap.jsx`** | **Mapa admin con ordenes por color/estado, creacion de rutas, asignacion a choferes** |
+| Planificador | `client/pages/Planner/TripPlannerPage.jsx` | Planificador GPS con paradas numeradas, drag-to-reorder, evidencia por parada |
 | Admin Dashboard | `client/pages/Admin/AdminDashboard.jsx` | Estadisticas de administrador |
 | Admin Usuarios | `client/pages/Admin/AdminUsers.jsx` | Gestion de usuarios |
+| **Historial Rutas** | **`client/pages/Admin/RouteHistory.jsx`** | **Historial de rutas completadas/en curso con evidencias** |
 
 ### Layouts
 
 **DashboardLayout** (`client/layouts/DashboardLayout.jsx`):
-- Menu lateral con navegacion principal
+- Menu lateral con navegacion principal (colores azules: #4285F4, #5b8def)
 - Muestra el nombre del usuario
-- Opciones: Mensajeria, Cobertura, Configuracion, Planificador, Admin (si es admin), Cerrar sesion
+- Opciones: Mensajeria, Cobertura, Configuracion, Despacho, Planificador, Admin (si es admin), Historial de Rutas, Cerrar sesion
 
 **PlannerLayout** (`client/layouts/PlannerLayout.jsx`):
 - Layout de pantalla completa para el planificador de rutas
@@ -758,6 +889,8 @@ const getBaseURL = () => {
 /messaging/settings     → Configuracion del chatbot
 /admin                  → Dashboard admin (solo admin)
 /admin/users            → Gestion de usuarios (solo admin)
+/admin/routes           → Historial de rutas (solo admin)
+/dispatch               → Mapa de despacho (admin y driver)
 /planner                → Planificador de rutas
 *                       → Redirige a /messaging
 ```
@@ -765,6 +898,164 @@ const getBaseURL = () => {
 Componentes de proteccion:
 - `ProtectedRoute`: Redirige a `/login` si no esta autenticado
 - `PublicRoute`: Redirige a `/dashboard` si ya esta autenticado
+- `allowedRoles`: Restringe acceso a roles especificos (ej: dispatch para admin y driver)
+
+---
+
+## Sistema de Despacho
+
+El sistema de despacho es el modulo central para la gestion de ordenes de entrega. Solo accesible para admin y driver.
+
+### Flujo de Estados de Ordenes
+
+Las ordenes siguen un flujo lineal estricto con validacion de transiciones:
+
+```
+approved (aprobada) ──→ on_production (en produccion, ROJO)
+         │
+         ▼
+on_production ──→ production_finished (produccion terminada, AZUL)
+         │
+         ▼
+production_finished ──→ order_picked_up (recogida, VERDE)
+         │
+         ▼
+order_picked_up ──→ on_delivery (en camino, NARANJA)
+         │
+         ▼
+on_delivery ──→ delivered (entregada)
+```
+
+**Permisos de cambio de estado**:
+- **Admin**: Puede cambiar a `on_production`, `production_finished`, `order_picked_up`
+- **Driver**: Solo puede marcar como `delivered` (y solo sus ordenes asignadas)
+
+**Colores en el mapa**:
+- Rojo: `on_production`
+- Azul: `production_finished`
+- Verde: `order_picked_up`
+- Naranja: `on_delivery`
+
+### Mapa de Despacho (Admin)
+
+**Archivo**: `client/pages/Dispatch/DispatchMap.jsx`
+
+Pagina principal del despacho con mapa interactivo de Google Maps:
+
+- Muestra todas las ordenes como marcadores coloreados segun su estado
+- Panel lateral con lista de ordenes filtrable por estado
+- Edicion de monto por orden
+- Cambio de estado individual y masivo (bulk)
+- Seleccion de ordenes para crear rutas
+- Boton para crear ruta con las ordenes seleccionadas
+- Panel de rutas creadas con opcion de optimizar y asignar chofer
+- Sincronizacion de choferes desde Respond.io
+
+### Creacion de Rutas desde Despacho
+
+Cuando el admin selecciona ordenes y crea una ruta:
+
+1. Se crea un registro `Route` con estado 'draft'
+2. Se crean `Stop` (paradas) automaticamente a partir de las ordenes seleccionadas
+3. Las ordenes (`ValidatedAddress`) se vinculan a la ruta via `route_id`
+4. El admin puede optimizar el orden de las paradas
+5. El admin asigna la ruta a un chofer disponible
+
+### Asignacion a Choferes
+
+Cuando se asigna una ruta a un chofer:
+
+1. La ruta cambia a estado `assigned`
+2. El campo `assigned_driver_id` se establece en la ruta
+3. Todas las ordenes de la ruta se actualizan:
+   - `assigned_driver_id` = ID del chofer
+   - `driver_name` = nombre del chofer
+   - `order_status` = 'on_delivery'
+
+El chofer ve la ruta en su planificador y puede navegar a cada parada.
+
+### Sincronizacion de Choferes desde Respond.io
+
+El admin puede importar miembros del workspace de Respond.io como choferes:
+
+1. `GET /api/dispatch/respond-users`: Lee los miembros del workspace
+2. Muestra los que NO tienen cuenta en el sistema
+3. `POST /api/dispatch/sync-drivers`: Crea usuarios con rol 'driver' y contraseña temporal
+4. Los choferes pueden luego iniciar sesion y cambiar su contraseña
+
+---
+
+## Sistema de Evidencia por Parada
+
+### Captura de Foto (Capacitor Camera)
+
+**Archivo**: `client/utils/capacitor.js`
+
+El sistema usa el plugin `@capacitor/camera` para captura de fotos:
+
+**En app mobile (Capacitor nativo)**:
+- `takePhoto()`: Abre la camara nativa del dispositivo
+- Calidad: 80%, resolucion maxima: 1280x1280
+- Opciones: tomar foto o elegir de galeria
+- Devuelve `DataUrl` (base64)
+- `dataUrlToFile()`: Convierte DataUrl a objeto File para subir al servidor
+- Si la foto sale mal, el chofer puede retomar la foto antes de confirmar
+
+**En navegador web (fallback)**:
+- Usa `<input type="file" accept="image/*" capture="environment">`
+- Permite seleccionar foto de galeria o tomar con webcam
+
+**Permisos requeridos**:
+
+Android (`android/app/src/main/AndroidManifest.xml`):
+```xml
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+```
+
+iOS (`ios/App/App/Info.plist`):
+```xml
+<key>NSCameraUsageDescription</key>
+<string>Area 862 necesita acceso a la camara para tomar fotos de evidencia de entrega</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>Area 862 necesita acceso a tus fotos para seleccionar evidencia de entrega</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>Area 862 necesita guardar fotos de evidencia de entrega</string>
+```
+
+### Subida de Evidencia
+
+**Backend**: `POST /api/dispatch/stops/:id/evidence`
+
+- Usa **multer** para procesar la subida de archivos
+- Solo acepta imagenes (filtro por mimetype)
+- Limite: 10MB por foto
+- Almacenamiento: `uploads/evidence/stop_{id}_{timestamp}.{ext}`
+- Al subir, marca la parada como `completed` con timestamp
+- Guarda la URL relativa en `Stop.photo_url`
+
+**Frontend** (TripPlannerPage.jsx):
+1. Chofer presiona "Confirmar parada" en cada parada
+2. Se abre la camara (nativa en mobile, file input en web)
+3. Si la foto sale bien, se sube al servidor
+4. La parada se marca como completada con icono de verificacion
+5. El boton "Finalizar ruta" solo aparece cuando TODAS las paradas tienen evidencia
+
+### Validacion de Finalizacion
+
+**Backend**: `PUT /api/dispatch/routes/:id/complete`
+
+Antes de permitir finalizar una ruta, el backend valida:
+1. Todas las paradas deben tener `status = 'completed'`
+2. Todas las paradas deben tener `photo_url` (foto de evidencia)
+3. Si alguna parada no cumple, retorna error 400
+
+Al finalizar:
+- La ruta cambia a `status = 'completed'`
+- Se registra `completed_at`
+- Todas las ordenes vinculadas cambian a `order_status = 'delivered'`
 
 ---
 
@@ -780,11 +1071,11 @@ Mensaje entrante del cliente
         │ NO
         ▼
   ¿Agente humano activo? ──SI──> NO INTERFERIR
-        │ NO
-        ▼
-  ¿Dentro de horario? ──NO──> Enviar mensaje fuera de horario
-        │ SI                    (solo una vez)
-        ▼
+        │ NO                     (pero si envia direccion y
+        ▼                        agent_active=true, guarda
+  ¿Dentro de horario? ──NO──>    Address y Zip en Respond.io
+        │ SI              Enviar mensaje fuera de horario
+        ▼                 (solo una vez)
   ¿Es cliente existente con
    conversacion abierta? ──SI──> ¿Fue reabierta? ──NO──> NO INTERFERIR
         │ NO                          │ SI
@@ -833,17 +1124,19 @@ El sistema NO usa webhooks. En su lugar, usa **polling activo** cada 30 segundos
 
 1. **`bot_paused` flag** (`ConversationState.bot_paused`): Si es `true`, el bot esta completamente deshabilitado para ese contacto. Se activa despues de 2 seguimientos sin respuesta o manualmente.
 
-2. **`agent_active` flag** (`ConversationState.agent_active`): Si es `true`, el bot no responde bajo ninguna circunstancia. Se activa cuando se detecta un mensaje saliente de un agente humano.
+2. **`agent_active` flag** (`ConversationState.agent_active`): Si es `true`, el bot no responde bajo ninguna circunstancia. Se activa cuando se detecta un mensaje saliente de un agente humano. **Sin embargo**, si el cliente envia una direccion mientras `agent_active=true`, el escaneo de direcciones la guarda en Respond.io sin enviar mensajes del bot.
 
 3. **Tags excluidos** (`MessagingSettings.excluded_tags`): Si el contacto tiene alguno de los tags configurados (ej: "Personal", "ClientesArea"), el bot lo ignora completamente.
 
 4. **Deteccion de agentes en polling** (`pollingService.js`): Antes de procesar mensajes de un contacto, revisa los mensajes salientes recientes. Si encuentra un mensaje con `sender.source === 'user'` (agente humano, no bot), marca `agent_active = true` en `ConversationState` y no procesa ningun mensaje.
 
-5. **Verificacion de historial** (`chatbotService.hasAgentAlreadyResponded()`): Antes de enviar cualquier respuesta, revisa los ultimos 50 mensajes del contacto en Respond.io. Si detecta mensajes salientes de tipo 'user' (agente humano), marca `agent_active = true` y aborta.
+5. **Verificacion de historial** (`chatbotService.hasAgentAlreadyResponded()`): Antes de enviar cualquier respuesta, revisa los ultimos 50 mensajes del contacto en Respond.io. Si detecta mensajes salientes de tipo 'user' (agente humano), marca `agent_active = true` y aborta. Usa el timestamp de cierre real de la conversacion como cutoff (no 10 min fijo) para conversaciones reabierta.
 
 6. **Cliente existente con conversacion abierta**: Si un contacto ya tiene una `MessagingOrder` en la base de datos y la conversacion sigue abierta (no fue cerrada y reabierta), el bot NO interfiere. Solo actua si la conversacion fue cerrada (`conversation_closed_at` tiene fecha) y luego reabierta por el cliente.
 
-7. **Timestamps de control** (`ConversationState`):
+7. **Proteccion del scanner**: El escaneo de direcciones NO se ejecuta sobre contactos con estados `awaiting_*` (flujo del chatbot activo) ni en estado `assigned` para evitar interferencia entre servicios.
+
+8. **Timestamps de control** (`ConversationState`):
    - `last_agent_message_at`: Timestamp del ultimo mensaje de un agente humano
    - `last_bot_message_at`: Timestamp del ultimo mensaje del bot
    - `last_customer_message_at`: Timestamp del ultimo mensaje del cliente
@@ -853,7 +1146,7 @@ El sistema NO usa webhooks. En su lugar, usa **polling activo** cada 30 segundos
 ```
 ¿bot_paused? ──SI──> IGNORAR
      │ NO
-¿agent_active? ──SI──> IGNORAR
+¿agent_active? ──SI──> IGNORAR (pero scanner puede guardar direccion)
      │ NO
 ¿Tiene tag excluido? ──SI──> IGNORAR
      │ NO
@@ -872,7 +1165,11 @@ El polling incluye un escaneo automatico de direcciones en TODAS las conversacio
 1. Lee mensajes de cada contacto
 2. `AddressExtractorService` busca patrones de direccion (numero + calle + sufijo)
 3. Si encuentra una direccion, la envia a `GeocodingService` para correccion
-4. La direccion corregida y el ZIP se guardan como campos personalizados en Respond.io
+4. La direccion corregida y el ZIP se guardan como campos personalizados en Respond.io (Address, Zip Code)
+5. Se crea un registro `ValidatedAddress` con los datos corregidos
+6. La cache del scanner se limpia cuando un contacto envia un nuevo mensaje
+
+**Proteccion**: No se ejecuta sobre contactos con flujo de chatbot activo (`awaiting_*`) ni cuando `agent_active=true` con estado `assigned`.
 
 ### Geocodificacion
 
@@ -891,6 +1188,10 @@ Cuando se detecta una direccion en un chat:
   Actualizar campos en Respond.io:
   - Address: "1234 Main St, Dallas, TX 75208"
   - Zip Code: "75208"
+        │
+        ▼
+  Crear ValidatedAddress en BD
+  (disponible para despacho)
 ```
 
 ### Seguimiento Automatico
@@ -909,7 +1210,23 @@ Condiciones:
 
 ---
 
-## Sistema de Rutas
+## Planificador de Rutas (Chofer)
+
+**Archivo**: `client/pages/Planner/TripPlannerPage.jsx`
+
+El planificador es la vista principal del chofer para ejecutar entregas:
+
+### Funcionalidades
+
+1. **Mapa interactivo**: Google Maps con marcadores numerados por cada parada
+2. **Lista de paradas**: Panel lateral con todas las paradas ordenadas
+3. **Drag-to-reorder**: El chofer puede arrastrar paradas para cambiar el orden manualmente
+4. **Navegacion GPS**: Boton para abrir la navegacion a cada parada (Google Maps nativo en mobile, link en web)
+5. **Linea de navegacion**: Linea azul (#4285F4) conectando las paradas en orden
+6. **Confirmar parada**: Boton por parada que activa la camara para tomar foto de evidencia
+7. **Retomar foto**: Si la foto no sale bien, puede tomarla de nuevo
+8. **Indicador de progreso**: Muestra cuantas paradas estan completadas
+9. **Finalizar ruta**: Solo aparece cuando TODAS las paradas tienen evidencia fotografica
 
 ### Optimizacion de Rutas
 
@@ -926,6 +1243,13 @@ Algoritmo: **Nearest Neighbor** (vecino mas cercano)
 
 **Velocidad estimada**: 30 km/h (promedio urbano)
 
+### Navegacion GPS
+
+Utilidades en `client/utils/capacitor.js`:
+- `getCurrentPosition()`: Obtiene ubicacion actual con GPS de alta precision
+- `watchPosition()`: Rastreo continuo de ubicacion para actualizar posicion en el mapa
+- `requestLocationPermission()`: Solicita permiso de GPS en dispositivos nativos
+
 ### Calculo de ETAs
 
 Basado en hora de inicio configurable:
@@ -937,6 +1261,22 @@ ETA_parada_n = hora_inicio + Σ(tiempo_viaje_i + tiempo_en_parada_i) para i = 1.
 Donde:
 - `tiempo_viaje_i` = distancia / velocidad_promedio
 - `tiempo_en_parada_i` = duracion configurada (default: 5 minutos)
+
+---
+
+## Historial de Rutas (Admin)
+
+**Archivo**: `client/pages/Admin/RouteHistory.jsx`
+
+Pagina de administracion para revisar rutas completadas y en curso:
+
+1. Lista de rutas con estado (completada/en curso), chofer asignado, fecha, monto total
+2. Al hacer clic en una ruta, muestra detalle con:
+   - Informacion general de la ruta
+   - Lista de paradas con estado
+   - Fotos de evidencia subidas por el chofer en cada parada
+   - Visor de fotos ampliadas
+3. **API**: `GET /api/dispatch/routes/history` + `GET /api/dispatch/routes/:id/detail`
 
 ---
 
@@ -956,6 +1296,57 @@ Donde:
 - **server.url**: Si `VITE_API_URL` esta configurado, la app carga desde el servidor remoto
 - **android.allowMixedContent**: Permite HTTP y HTTPS
 - **SplashScreen**: 2 segundos, fondo oscuro (#0d1b2a)
+
+### Capacitor Camera Plugin
+
+**Paquete**: `@capacitor/camera` v6.1.3
+
+Integrado para captura de fotos de evidencia en entregas:
+
+```javascript
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+
+const photo = await Camera.getPhoto({
+  resultType: CameraResultType.DataUrl,
+  source: CameraSource.Camera,
+  quality: 80,
+  width: 1280,
+  height: 1280,
+  correctOrientation: true,
+  promptLabelHeader: 'Evidencia de entrega',
+  promptLabelPhoto: 'Elegir de galería',
+  promptLabelPicture: 'Tomar foto'
+})
+```
+
+### Permisos Nativos
+
+**Android** (`AndroidManifest.xml`):
+- `CAMERA`: Acceso a la camara
+- `READ_EXTERNAL_STORAGE`: Leer galeria (Android < 13)
+- `WRITE_EXTERNAL_STORAGE`: Escribir galeria (Android < 13)
+- `READ_MEDIA_IMAGES`: Leer imagenes (Android 13+)
+- `ACCESS_FINE_LOCATION`: GPS de alta precision
+- `ACCESS_COARSE_LOCATION`: GPS aproximado
+
+**iOS** (`Info.plist`):
+- `NSCameraUsageDescription`: Permiso de camara
+- `NSPhotoLibraryUsageDescription`: Permiso de galeria (lectura)
+- `NSPhotoLibraryAddUsageDescription`: Permiso de galeria (escritura)
+- `NSLocationWhenInUseUsageDescription`: Permiso de GPS
+
+### Otros Plugins de Capacitor
+
+| Plugin | Version | Uso |
+|---|---|---|
+| `@capacitor/core` | ^6.2.1 | Framework base |
+| `@capacitor/android` | ^6.2.1 | Plataforma Android |
+| `@capacitor/ios` | ^6.2.1 | Plataforma iOS |
+| `@capacitor/camera` | ^6.1.3 | Captura de fotos de evidencia |
+| `@capacitor/geolocation` | ^6.1.1 | GPS y rastreo de ubicacion |
+| `@capacitor/haptics` | ^6.0.3 | Vibracion tactil |
+| `@capacitor/status-bar` | ^6.0.3 | Control de barra de estado |
+| `@capacitor/splash-screen` | ^6.0.4 | Pantalla de carga |
 
 ### Proceso de Compilacion
 
@@ -1009,9 +1400,10 @@ Las tablas se crean **automaticamente** al iniciar el servidor gracias a `sequel
 
 | Tabla | Modelo | Descripcion |
 |---|---|---|
-| `users` | User | Usuarios del sistema |
-| `routes` | Route | Rutas de entrega |
-| `stops` | Stop | Paradas de cada ruta |
+| `users` | User | Usuarios del sistema (admin, client, driver) |
+| `routes` | Route | Rutas de entrega con chofer asignado |
+| `stops` | Stop | Paradas de cada ruta con foto de evidencia |
+| `validated_addresses` | ValidatedAddress | Ordenes de despacho con estado, monto, chofer |
 | `route_histories` | RouteHistory | Historial de rutas completadas |
 | `messaging_settings` | MessagingSettings | Configuracion del chatbot (1 por usuario) |
 | `messaging_orders` | MessagingOrder | Ordenes recibidas por mensajeria |
@@ -1111,6 +1503,69 @@ POST /api/routes/:id/import-text
 Body: { text: "direccion 1\ndireccion 2\ndireccion 3" }
 ```
 
+### Despacho
+
+```
+GET /api/dispatch/orders
+Query: { status?, available? }
+Respuesta: { orders }
+
+GET /api/dispatch/stats
+Respuesta: { total, on_production, production_finished, order_picked_up, on_delivery, delivered }
+
+PUT /api/dispatch/orders/:id/status
+Body: { order_status: 'on_production'|'production_finished'|'order_picked_up'|'on_delivery'|'delivered' }
+Respuesta: { success, order }
+
+PUT /api/dispatch/orders/:id/amount
+Body: { amount: 25.50 }
+Respuesta: { success, order }
+
+PUT /api/dispatch/orders/:id/delivered
+Respuesta: { success, order }
+
+PUT /api/dispatch/orders/bulk-status
+Body: { order_ids: [1, 2, 3], order_status: 'on_production' }
+Respuesta: { success, updated }
+
+POST /api/dispatch/routes
+Body: { name?, order_ids: [1, 2, 3], pre_optimized? }
+Respuesta: { success, route }
+
+GET /api/dispatch/routes
+Respuesta: { routes }
+
+POST /api/dispatch/routes/:id/optimize
+Respuesta: { success, route, total_distance, total_duration }
+
+PUT /api/dispatch/routes/:id/assign
+Body: { driver_id: 5 }
+Respuesta: { success, route, message }
+
+PUT /api/dispatch/routes/:id/complete
+Respuesta: { success, route }
+
+GET /api/dispatch/routes/:id/detail
+Respuesta: { route (con orders y total_amount) }
+
+GET /api/dispatch/routes/history
+Respuesta: { routes }
+
+POST /api/dispatch/stops/:id/evidence
+Body: multipart/form-data con campo 'photo' (imagen)
+Respuesta: { success, stop }
+
+GET /api/dispatch/drivers
+Respuesta: { drivers }
+
+GET /api/dispatch/respond-users
+Respuesta: { users }
+
+POST /api/dispatch/sync-drivers
+Body: { users: [{ name, email }] }
+Respuesta: { success, created, skipped, message }
+```
+
 ### Mensajeria - Configuracion
 
 ```
@@ -1189,9 +1644,10 @@ Respuesta: { active, lastPoll?, intervalMs?, processedCount? }
 | bcryptjs | ^2.4 | Hash de contraseñas |
 | express-session | ^1.19 | Manejo de sesiones |
 | cors | ^2.8 | Control de origenes cruzados |
-| dotenv | ^17.2 | Variables de entorno |
+| dotenv | ^17.3 | Variables de entorno |
 | axios | ^1.13 | Cliente HTTP (Respond.io, Google Maps) |
 | uuid | ^9.0 | Generacion de IDs unicos |
+| **multer** | **^2.0** | **Subida de archivos (fotos de evidencia)** |
 | react | ^18.3 | Framework de UI |
 | react-dom | ^18.3 | Renderizado de React |
 | react-router-dom | ^6.30 | Enrutamiento del frontend |
@@ -1199,6 +1655,11 @@ Respuesta: { active, lastPoll?, intervalMs?, processedCount? }
 | @capacitor/core | ^6.2 | Framework mobile |
 | @capacitor/android | ^6.2 | Plataforma Android |
 | @capacitor/ios | ^6.2 | Plataforma iOS |
+| **@capacitor/camera** | **^6.1** | **Captura de fotos nativa** |
+| @capacitor/geolocation | ^6.1 | GPS y ubicacion |
+| @capacitor/haptics | ^6.0 | Vibracion tactil |
+| @capacitor/status-bar | ^6.0 | Control de barra de estado |
+| @capacitor/splash-screen | ^6.0 | Pantalla de carga |
 
 ### Desarrollo
 
@@ -1229,8 +1690,11 @@ npm run cap:ios        # Abrir Xcode (solo Mac)
 1. **Contraseñas**: Hash bcrypt con factor 10, nunca se almacena texto plano
 2. **Sesiones**: Cookies HTTP-only, secure en produccion, SameSite configurado
 3. **CORS**: Actualmente usa `origin: true` (acepta cualquier origen) para compatibilidad con Capacitor y multiples entornos. En produccion, se recomienda restringir a origenes especificos editando la configuracion en `src/index.js`
-4. **Roles**: Middleware que verifica rol antes de acceder a rutas administrativas
+4. **Roles**: Middleware que verifica rol antes de acceder a rutas administrativas. Despacho restringido a admin y driver.
 5. **Validacion de entrada**: Email normalizado, contraseña minimo 6 caracteres
 6. **API tokens**: El token de Respond.io se almacena en BD y nunca se expone al frontend (se muestra solo `has_api_token: true/false`)
 7. **SESSION_SECRET**: Obligatorio en produccion, genera error si no esta configurado
 8. **Inyeccion SQL**: Prevenida por Sequelize ORM (consultas parametrizadas)
+9. **Subida de archivos**: Multer valida tipo MIME (solo imagenes) y limita tamaño a 10MB
+10. **Permisos de evidencia**: Solo el chofer asignado o un admin puede subir evidencia a una parada
+11. **Transiciones de estado**: Validacion estricta de que cada cambio de estado sigue el flujo permitido
