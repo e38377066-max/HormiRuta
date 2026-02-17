@@ -141,6 +141,9 @@ npm run build
 # Crear directorio de logs
 sudo mkdir -p /var/log/area862
 sudo chown $USER:$USER /var/log/area862
+
+# Crear directorio de uploads (evidencias de entrega)
+mkdir -p uploads/evidence
 ```
 
 ---
@@ -527,12 +530,13 @@ Las tablas se crean automaticamente al iniciar el servidor:
 
 | Tabla | Descripcion |
 |---|---|
-| users | Usuarios del sistema |
-| routes | Rutas de entrega |
-| stops | Paradas de cada ruta |
+| users | Usuarios del sistema (admin, client, driver) |
+| routes | Rutas de entrega con estado y chofer asignado |
+| stops | Paradas de cada ruta con evidencia (foto) |
 | route_histories | Historial de rutas |
 | messaging_settings | Configuracion de mensajeria/chatbot |
 | messaging_orders | Ordenes recibidas por mensajeria |
+| validated_addresses | Direcciones validadas (ordenes de despacho) |
 | message_logs | Historial de mensajes |
 | conversation_states | Estado de cada conversacion del bot |
 | coverage_zones | Zonas de cobertura (ZIP codes) |
