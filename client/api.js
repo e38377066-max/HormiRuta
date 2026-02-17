@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core'
 
 const getBaseURL = () => {
   if (Capacitor.isNativePlatform()) {
-    return import.meta.env.VITE_API_URL || 'https://11aa88d0-3b3d-43c0-9df1-20bd487f29f3-00-2vkz69t7qrm1y.janeway.replit.dev'
+    return import.meta.env.VITE_API_URL || ''
   }
   return ''
 }
