@@ -95,6 +95,8 @@ cd /var/www
 sudo git clone https://gitlab.com/AdminArea862/area-routes.git area862
 cd area862
 sudo chown -R $USER:$USER /var/www/area862
+
+# IMPORTANTE: El dominio oficial del proyecto es mapas.iprintpos.com
 ```
 
 ---
@@ -126,10 +128,10 @@ DATABASE_URL=postgresql://area862:Area862Pass2024!@localhost:5432/area862
 SESSION_SECRET=PEGA_AQUI_EL_SECRETO_QUE_GENERASTE_ARRIBA
 NODE_ENV=production
 PORT=5000
-SERVER_DOMAIN=CAMBIAR_POR_TU_DOMINIO_O_IP
+SERVER_DOMAIN=mapas.iprintpos.com
 VITE_GOOGLE_MAPS_API_KEY=CAMBIAR_POR_TU_API_KEY_DE_GOOGLE_MAPS
 GOOGLE_MAPS_API_KEY=CAMBIAR_POR_TU_API_KEY_DE_GOOGLE_MAPS
-VITE_API_URL=https://CAMBIAR_POR_TU_DOMINIO
+VITE_API_URL=https://mapas.iprintpos.com
 ```
 
 Para guardar en nano: presiona `Ctrl+O`, luego `Enter`, luego `Ctrl+X`.
@@ -283,7 +285,7 @@ Si tienes un dominio apuntando a tu IP publica:
 Primero edita la config de Nginx para poner tu dominio:
 
 ```bash
-sudo sed -i 's/server_name _;/server_name tu-dominio.com www.tu-dominio.com;/' /etc/nginx/sites-available/area862
+sudo sed -i 's/server_name _;/server_name mapas.iprintpos.com;/' /etc/nginx/sites-available/area862
 sudo nginx -t
 sudo systemctl restart nginx
 ```
@@ -292,7 +294,7 @@ Instalar certificado SSL:
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d tu-dominio.com -d www.tu-dominio.com
+sudo certbot --nginx -d mapas.iprintpos.com
 ```
 
 Sigue las instrucciones (te pide un email). Selecciona la opcion de redirigir HTTP a HTTPS.
@@ -441,10 +443,10 @@ cd area862
 npm install
 ```
 
-Crear archivo .env con la URL de tu servidor:
+Crear archivo .env con la URL del servidor:
 
 ```bash
-echo "VITE_API_URL=https://tu-dominio.com" > .env
+echo "VITE_API_URL=https://mapas.iprintpos.com" > .env
 ```
 
 Compilar y sincronizar:
@@ -504,7 +506,7 @@ sudo gem install cocoapods
 git clone https://gitlab.com/AdminArea862/area-routes.git area862
 cd area862
 npm install
-echo "VITE_API_URL=https://tu-dominio.com" > .env
+echo "VITE_API_URL=https://mapas.iprintpos.com" > .env
 npm run build
 npx cap sync ios
 cd ios/App && pod install && cd ../..
@@ -531,7 +533,7 @@ Si cambias de servidor o dominio, necesitas recompilar las apps moviles:
 ```bash
 cd area862
 nano .env
-# Cambiar VITE_API_URL=https://nuevo-dominio.com
+# Cambiar VITE_API_URL=https://mapas.iprintpos.com
 npm run build
 npx cap sync android
 npx cap sync ios
