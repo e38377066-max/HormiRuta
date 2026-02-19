@@ -1,7 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
-const serverUrl = process.env.VITE_API_URL || '';
-
 const config: CapacitorConfig = {
   appId: 'com.area862.app',
   appName: 'Area 862',
@@ -9,7 +7,7 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
     cleartext: true,
-    ...(serverUrl ? { url: serverUrl } : {})
+    url: 'https://area862system.com'
   },
   plugins: {
     SplashScreen: {
