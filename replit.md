@@ -3,7 +3,7 @@
 ## Overview
 Area 862 System es una aplicacion de planificacion y optimizacion de rutas de entrega construida con React + Vite y Node.js/Express. Servidor unificado que sirve tanto la API como el frontend desde el mismo puerto. Diseñada para conductores y empresas de logistica en el area metropolitana de Dallas.
 
-**Dominio oficial de produccion**: https://mapas.iprintpos.com
+**Dominio oficial de produccion**: https://area862system.com
 **Repositorio GitLab**: https://gitlab.com/AdminArea862/area-routes.git
 
 ## Project Structure
