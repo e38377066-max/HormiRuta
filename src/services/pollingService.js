@@ -971,7 +971,7 @@ class PollingService {
         cursorId = result.pagination.nextCursor;
       }
 
-      const excludedLifecycles = ['UPS Shipped', 'Delivered'];
+      const excludedLifecycles = ['UPS Shipped'];
       allContacts = allContacts.filter(contact => {
         if (contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
           return false;
