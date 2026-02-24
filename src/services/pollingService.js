@@ -971,20 +971,13 @@ class PollingService {
         cursorId = result.pagination.nextCursor;
       }
 
-      const additionalLifecycles = ['UPS Shipped', 'Approved', 'Ordered', 'On Delivery'];
-      for (const lifecycle of additionalLifecycles) {
-        let lcCursor = null;
-        while (true) {
-          const lcResult = await respondio.listContactsByLifecycle({ lifecycleStage: lifecycle, limit: 99, cursorId: lcCursor });
-          if (!lcResult.success) break;
-          const items = lcResult.items || [];
-          const existingIds = new Set(allContacts.map(c => c.id));
-          const newContacts = items.filter(c => !existingIds.has(c.id));
-          allContacts = [...allContacts, ...newContacts];
-          if (!lcResult.pagination?.nextCursor || items.length < 99) break;
-          lcCursor = lcResult.pagination.nextCursor;
+      const excludedLifecycles = ['UPS Shipped', 'Delivered'];
+      allContacts = allContacts.filter(contact => {
+        if (contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
+          return false;
         }
-      }
+        return true;
+      });
 
       if (allContacts.length === 0) return;
 
