@@ -144,6 +144,25 @@ export default function AdminDashboard() {
 
         <div className="admin-section">
           <div className="section-header">
+            <span className="material-icons">monitor_heart</span>
+            <h3>Sistema</h3>
+          </div>
+          <div className="section-items">
+            <Link to="/admin/logs" className="section-item">
+              <div className="item-icon purple">
+                <span className="material-icons">terminal</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Logs del Sistema</div>
+                <div className="item-subtitle">Ver logs del servidor en tiempo real</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="admin-section">
+          <div className="section-header">
             <span className="material-icons">settings</span>
             <h3>Configuracion</h3>
           </div>
@@ -165,16 +184,6 @@ export default function AdminDashboard() {
               <div className="item-content">
                 <div className="item-title">Integracion Respond.io</div>
                 <div className="item-subtitle">Configurar mensajeria</div>
-              </div>
-              <span className="material-icons item-arrow">chevron_right</span>
-            </Link>
-            <Link to="/admin/logs" className="section-item">
-              <div className="item-icon purple">
-                <span className="material-icons">terminal</span>
-              </div>
-              <div className="item-content">
-                <div className="item-title">Logs del Sistema</div>
-                <div className="item-subtitle">Ver logs del servidor en tiempo real</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
