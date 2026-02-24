@@ -2,6 +2,7 @@ import express from 'express';
 import { Op } from 'sequelize';
 import { User, Route, MessagingOrder } from '../models/index.js';
 import { requireAdmin } from '../middleware/auth.js';
+import logBuffer from '../services/logService.js';
 
 const router = express.Router();
 
@@ -148,6 +149,27 @@ router.delete('/users/:id', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Delete user error:', error);
     res.status(500).json({ error: 'Error al eliminar usuario' });
+  }
+});
+
+router.get('/logs', requireAdmin, async (req, res) => {
+  try {
+    const { level, search, limit = 100, offset = 0 } = req.query;
+    const result = logBuffer.getLogs({ level, search, limit, offset });
+    res.json(result);
+  } catch (error) {
+    console.error('Get logs error:', error);
+    res.status(500).json({ error: 'Error al obtener logs' });
+  }
+});
+
+router.delete('/logs', requireAdmin, async (req, res) => {
+  try {
+    logBuffer.clear();
+    res.json({ message: 'Logs eliminados' });
+  } catch (error) {
+    console.error('Clear logs error:', error);
+    res.status(500).json({ error: 'Error al limpiar logs' });
   }
 });
 
