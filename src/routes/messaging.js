@@ -542,8 +542,11 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
 
 router.get('/coverage-zones', requireAuth, async (req, res) => {
   try {
+    const user = await User.findByPk(req.userId);
+    const where = user?.role === 'admin' ? {} : { user_id: req.userId };
+
     const zones = await CoverageZone.findAll({
-      where: { user_id: req.userId },
+      where,
       order: [['zip_code', 'ASC']]
     });
 
@@ -639,12 +642,10 @@ router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
 
 router.put('/coverage-zones/:id', requireAuth, async (req, res) => {
   try {
-    const zone = await CoverageZone.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const user = await User.findByPk(req.userId);
+    const where = user?.role === 'admin' ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+
+    const zone = await CoverageZone.findOne({ where });
 
     if (!zone) {
       return res.status(404).json({ error: 'Zona no encontrada' });
@@ -671,12 +672,10 @@ router.put('/coverage-zones/:id', requireAuth, async (req, res) => {
 
 router.delete('/coverage-zones/:id', requireAuth, async (req, res) => {
   try {
-    const zone = await CoverageZone.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const user = await User.findByPk(req.userId);
+    const where = user?.role === 'admin' ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+
+    const zone = await CoverageZone.findOne({ where });
 
     if (!zone) {
       return res.status(404).json({ error: 'Zona no encontrada' });
@@ -687,6 +686,37 @@ router.delete('/coverage-zones/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Delete coverage zone error:', error);
     res.status(500).json({ error: 'Error al eliminar zona' });
+  }
+});
+
+router.post('/geocode-address', requireAuth, async (req, res) => {
+  try {
+    const { address } = req.body;
+
+    if (!address || !address.trim()) {
+      return res.status(400).json({ error: 'Direccion requerida' });
+    }
+
+    const geocodingService = (await import('../services/geocodingService.js')).default;
+    const result = await geocodingService.geocodeAddress(address.trim());
+
+    if (!result.success) {
+      return res.status(404).json({ error: result.error || 'Direccion no encontrada' });
+    }
+
+    res.json({
+      success: true,
+      address: result.fullAddress || result.corrected,
+      zip: result.zip || '',
+      city: result.city || '',
+      state: result.state || '',
+      latitude: result.latitude,
+      longitude: result.longitude,
+      confidence: result.confidence
+    });
+  } catch (error) {
+    console.error('Geocode address error:', error);
+    res.status(500).json({ error: 'Error al geocodificar direccion' });
   }
 });
 

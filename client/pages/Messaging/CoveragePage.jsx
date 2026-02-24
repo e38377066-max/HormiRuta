@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMessaging } from '../../contexts/MessagingContext'
+import api from '../../api'
 import './MessagingPages.css'
 
 export default function CoveragePage() {
@@ -14,6 +15,14 @@ export default function CoveragePage() {
   const [editingZone, setEditingZone] = useState(null)
   const [bulkZipCodes, setBulkZipCodes] = useState('')
   const [bulkZoneName, setBulkZoneName] = useState('')
+  const [addressSearch, setAddressSearch] = useState('')
+  const [addressSearching, setAddressSearching] = useState(false)
+  const [addressResult, setAddressResult] = useState(null)
+  const [addressError, setAddressError] = useState('')
+  const [bulkAddressSearch, setBulkAddressSearch] = useState('')
+  const [bulkAddressSearching, setBulkAddressSearching] = useState(false)
+  const [bulkAddressResults, setBulkAddressResults] = useState([])
+  const [bulkAddressError, setBulkAddressError] = useState('')
   const [zoneForm, setZoneForm] = useState({
     zip_code: '',
     zone_name: '',
@@ -28,6 +37,73 @@ export default function CoveragePage() {
   useEffect(() => {
     loadZones()
   }, [])
+
+  const geocodeAddress = async (address) => {
+    const response = await api.post('/api/messaging/geocode-address', { address })
+    return response.data
+  }
+
+  const handleAddressSearch = async () => {
+    if (!addressSearch.trim()) return
+    setAddressSearching(true)
+    setAddressError('')
+    setAddressResult(null)
+    try {
+      const result = await geocodeAddress(addressSearch)
+      setAddressResult(result)
+    } catch (err) {
+      setAddressError(err.response?.data?.error || 'Direccion no encontrada')
+    } finally {
+      setAddressSearching(false)
+    }
+  }
+
+  const applyAddressResult = () => {
+    if (!addressResult) return
+    setZoneForm(prev => ({
+      ...prev,
+      zip_code: addressResult.zip || prev.zip_code,
+      city: addressResult.city || prev.city,
+      state: addressResult.state || prev.state,
+      zone_name: prev.zone_name || addressResult.city || ''
+    }))
+    setAddressResult(null)
+    setAddressSearch('')
+  }
+
+  const handleBulkAddressSearch = async () => {
+    if (!bulkAddressSearch.trim()) return
+    setBulkAddressSearching(true)
+    setBulkAddressError('')
+    try {
+      const result = await geocodeAddress(bulkAddressSearch)
+      if (result.zip) {
+        const alreadyAdded = bulkAddressResults.some(r => r.zip === result.zip)
+        if (!alreadyAdded) {
+          setBulkAddressResults(prev => [...prev, result])
+          const currentZips = bulkZipCodes.split(/[,\n]/).map(z => z.trim()).filter(z => z.length > 0)
+          if (!currentZips.includes(result.zip)) {
+            setBulkZipCodes(prev => prev ? prev + '\n' + result.zip : result.zip)
+          }
+        } else {
+          setBulkAddressError('Este ZIP ya fue agregado')
+        }
+      } else {
+        setBulkAddressError('No se encontro ZIP code para esta direccion')
+      }
+      setBulkAddressSearch('')
+    } catch (err) {
+      setBulkAddressError(err.response?.data?.error || 'Direccion no encontrada')
+    } finally {
+      setBulkAddressSearching(false)
+    }
+  }
+
+  const removeBulkAddressResult = (zip) => {
+    setBulkAddressResults(prev => prev.filter(r => r.zip !== zip))
+    const currentZips = bulkZipCodes.split(/[,\n]/).map(z => z.trim()).filter(z => z.length > 0 && z !== zip)
+    setBulkZipCodes(currentZips.join('\n'))
+  }
 
   const fetchZipInfo = async (zipCode) => {
     if (!zipCode || zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) return
@@ -90,6 +166,9 @@ export default function CoveragePage() {
       estimated_delivery_time: '',
       notes: ''
     })
+    setAddressSearch('')
+    setAddressResult(null)
+    setAddressError('')
   }
 
   const editZone = (zone) => {
@@ -163,6 +242,9 @@ export default function CoveragePage() {
       setShowBulkDialog(false)
       setBulkZipCodes('')
       setBulkZoneName('')
+      setBulkAddressResults([])
+      setBulkAddressSearch('')
+      setBulkAddressError('')
     } catch (err) {
       alert('Error al crear zonas')
     } finally {
@@ -267,6 +349,46 @@ export default function CoveragePage() {
               </button>
             </div>
             <div className="modal-body">
+              {!editingZone && (
+                <div className="field-group" style={{background: '#f0f4ff', padding: '12px', borderRadius: '8px', marginBottom: '16px'}}>
+                  <label style={{fontWeight: 600}}>
+                    <span className="material-icons" style={{fontSize: '16px', verticalAlign: 'middle', marginRight: '4px'}}>search</span>
+                    Buscar por direccion
+                  </label>
+                  <div style={{display: 'flex', gap: '8px', marginTop: '6px'}}>
+                    <input
+                      type="text"
+                      value={addressSearch}
+                      onChange={(e) => setAddressSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
+                      placeholder="Ej: 1234 Main St, Miami FL"
+                      style={{flex: 1}}
+                    />
+                    <button className="btn-primary" onClick={handleAddressSearch} disabled={addressSearching} style={{whiteSpace: 'nowrap'}}>
+                      {addressSearching ? 'Buscando...' : 'Buscar'}
+                    </button>
+                  </div>
+                  {addressError && (
+                    <p style={{color: '#f44336', fontSize: '12px', marginTop: '6px', marginBottom: 0}}>{addressError}</p>
+                  )}
+                  {addressResult && (
+                    <div style={{marginTop: '8px', padding: '10px', background: '#fff', borderRadius: '6px', border: '1px solid #c8d6e5'}}>
+                      <div style={{fontSize: '13px', marginBottom: '6px'}}>
+                        <strong>{addressResult.address}</strong>
+                      </div>
+                      <div style={{fontSize: '12px', color: '#555', display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
+                        <span>ZIP: <strong>{addressResult.zip}</strong></span>
+                        <span>Ciudad: <strong>{addressResult.city}</strong></span>
+                        <span>Estado: <strong>{addressResult.state}</strong></span>
+                      </div>
+                      <button className="btn-success" onClick={applyAddressResult} style={{marginTop: '8px', padding: '6px 14px', fontSize: '12px'}}>
+                        <span className="material-icons" style={{fontSize: '14px'}}>check</span>
+                        Usar estos datos
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="field-group">
                 <label>Codigo Postal (ZIP) {loadingZipInfo && <span style={{fontSize: '12px', color: '#6366f1'}}>(buscando...)</span>}</label>
                 <input
@@ -350,6 +472,42 @@ export default function CoveragePage() {
               </button>
             </div>
             <div className="modal-body">
+              <div className="field-group" style={{background: '#f0f4ff', padding: '12px', borderRadius: '8px', marginBottom: '16px'}}>
+                <label style={{fontWeight: 600}}>
+                  <span className="material-icons" style={{fontSize: '16px', verticalAlign: 'middle', marginRight: '4px'}}>search</span>
+                  Buscar direccion para obtener ZIP
+                </label>
+                <div style={{display: 'flex', gap: '8px', marginTop: '6px'}}>
+                  <input
+                    type="text"
+                    value={bulkAddressSearch}
+                    onChange={(e) => setBulkAddressSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleBulkAddressSearch()}
+                    placeholder="Ej: 1234 Main St, Miami FL"
+                    style={{flex: 1}}
+                  />
+                  <button className="btn-primary" onClick={handleBulkAddressSearch} disabled={bulkAddressSearching} style={{whiteSpace: 'nowrap'}}>
+                    {bulkAddressSearching ? 'Buscando...' : 'Buscar'}
+                  </button>
+                </div>
+                {bulkAddressError && (
+                  <p style={{color: '#f44336', fontSize: '12px', marginTop: '6px', marginBottom: 0}}>{bulkAddressError}</p>
+                )}
+                {bulkAddressResults.length > 0 && (
+                  <div style={{marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                    {bulkAddressResults.map((r, i) => (
+                      <div key={i} style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: '#fff', borderRadius: '6px', border: '1px solid #c8d6e5', fontSize: '12px'}}>
+                        <span style={{flex: 1}}>
+                          <strong>{r.zip}</strong> - {r.city}, {r.state}
+                        </span>
+                        <button onClick={() => removeBulkAddressResult(r.zip)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#f44336', padding: '2px'}}>
+                          <span className="material-icons" style={{fontSize: '16px'}}>close</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="field-group">
                 <label>ZIP Codes (uno por linea o separados por coma)</label>
                 <textarea

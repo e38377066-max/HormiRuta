@@ -78,6 +78,11 @@ export default function DashboardLayout() {
                 <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>people</span>
                 <span>Usuarios</span>
               </NavLink>
+
+              <NavLink to="/admin/logs" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
+                <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>terminal</span>
+                <span>Logs del Sistema</span>
+              </NavLink>
             </>
           )}
 

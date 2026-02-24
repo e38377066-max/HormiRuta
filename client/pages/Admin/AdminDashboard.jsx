@@ -168,6 +168,16 @@ export default function AdminDashboard() {
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
+            <Link to="/admin/logs" className="section-item">
+              <div className="item-icon purple">
+                <span className="material-icons">terminal</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Logs del Sistema</div>
+                <div className="item-subtitle">Ver logs del servidor en tiempo real</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
           </div>
         </div>
       </div>
