@@ -18,18 +18,33 @@ import pollingService from '../services/pollingService.js';
 
 const router = express.Router();
 
+async function getSettingsForUser(userId) {
+  const user = await User.findByPk(userId);
+  if (user?.role === 'admin') {
+    let settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+    if (!settings) {
+      settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
+    }
+    if (!settings) {
+      settings = await MessagingSettings.create({ user_id: userId });
+    }
+    return { settings, isAdmin: true };
+  }
+  let settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+  if (!settings) {
+    settings = await MessagingSettings.create({ user_id: userId });
+  }
+  return { settings, isAdmin: false };
+}
+
+async function isAdminUser(userId) {
+  const user = await User.findByPk(userId);
+  return user?.role === 'admin';
+}
+
 router.get('/settings', requireAuth, async (req, res) => {
   try {
-    let settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
-
-    if (!settings) {
-      settings = await MessagingSettings.create({
-        user_id: req.userId
-      });
-    }
-
+    const { settings } = await getSettingsForUser(req.userId);
     res.json(settings.toDict());
   } catch (error) {
     console.error('Get messaging settings error:', error);
@@ -39,15 +54,7 @@ router.get('/settings', requireAuth, async (req, res) => {
 
 router.put('/settings', requireAuth, async (req, res) => {
   try {
-    let settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
-
-    if (!settings) {
-      settings = await MessagingSettings.create({
-        user_id: req.userId
-      });
-    }
+    const { settings } = await getSettingsForUser(req.userId);
 
     const allowedFields = [
       'respond_api_token', 'is_active', 'auto_validate_addresses',
@@ -87,9 +94,7 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
   try {
     console.log('[Test Connection] Iniciando prueba de conexión...');
     
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.respond_api_token) {
       console.log('[Test Connection] ERROR: No hay token configurado');
@@ -112,9 +117,7 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
 // Reiniciar historial de prueba
 router.post('/settings/reset-test', requireAuth, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.test_contact_id) {
       return res.status(400).json({ error: 'No hay contacto de prueba configurado' });
@@ -173,8 +176,9 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const { status, limit = 50, offset = 0 } = req.query;
+    const admin = await isAdminUser(req.userId);
     
-    const where = { user_id: req.userId };
+    const where = admin ? {} : { user_id: req.userId };
     if (status) where.status = status;
 
     const orders = await MessagingOrder.findAll({
@@ -198,12 +202,9 @@ router.get('/orders', requireAuth, async (req, res) => {
 
 router.get('/orders/:id', requireAuth, async (req, res) => {
   try {
-    const order = await MessagingOrder.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const order = await MessagingOrder.findOne({ where });
 
     if (!order) {
       return res.status(404).json({ error: 'Orden no encontrada' });
@@ -266,12 +267,9 @@ router.post('/orders', requireAuth, async (req, res) => {
 
 router.put('/orders/:id', requireAuth, async (req, res) => {
   try {
-    const order = await MessagingOrder.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const order = await MessagingOrder.findOne({ where });
 
     if (!order) {
       return res.status(404).json({ error: 'Orden no encontrada' });
@@ -309,12 +307,9 @@ router.put('/orders/:id', requireAuth, async (req, res) => {
 
 router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
   try {
-    const order = await MessagingOrder.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const order = await MessagingOrder.findOne({ where });
 
     if (!order) {
       return res.status(404).json({ error: 'Orden no encontrada' });
@@ -324,9 +319,7 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
     await order.save();
     console.log(`[Confirm] Orden #${order.id} confirmada - Contact: ${order.respond_contact_id}, Channel: ${order.channel_id || 'N/A'}`);
 
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (settings?.respond_api_token && order.respond_contact_id) {
       // Seleccionar mensaje basado en estado de cobertura
@@ -384,12 +377,9 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
 
 router.post('/orders/:id/cancel', requireAuth, async (req, res) => {
   try {
-    const order = await MessagingOrder.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const order = await MessagingOrder.findOne({ where });
 
     if (!order) {
       return res.status(404).json({ error: 'Orden no encontrada' });
@@ -409,12 +399,9 @@ router.post('/orders/:id/cancel', requireAuth, async (req, res) => {
 
 router.post('/orders/:id/complete', requireAuth, async (req, res) => {
   try {
-    const order = await MessagingOrder.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const order = await MessagingOrder.findOne({ where });
 
     if (!order) {
       return res.status(404).json({ error: 'Orden no encontrada' });
@@ -424,9 +411,7 @@ router.post('/orders/:id/complete', requireAuth, async (req, res) => {
     order.completed_at = new Date();
     await order.save();
 
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (settings?.respond_api_token && order.respond_contact_id) {
       const service = new RespondioService(settings.respond_api_token);
@@ -462,12 +447,9 @@ router.post('/orders/:id/complete', requireAuth, async (req, res) => {
 
 router.delete('/orders/:id', requireAuth, async (req, res) => {
   try {
-    const order = await MessagingOrder.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const order = await MessagingOrder.findOne({ where });
 
     if (!order) {
       return res.status(404).json({ error: 'Orden no encontrada' });
@@ -483,20 +465,15 @@ router.delete('/orders/:id', requireAuth, async (req, res) => {
 
 router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
   try {
-    const order = await MessagingOrder.findOne({
-      where: { 
-        id: req.params.id,
-        user_id: req.userId 
-      }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const order = await MessagingOrder.findOne({ where });
 
     if (!order) {
       return res.status(404).json({ error: 'Orden no encontrada' });
     }
 
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay API token configurado' });
@@ -951,9 +928,7 @@ router.post('/polling/stop', requireAuth, async (req, res) => {
 
 router.post('/polling/sync', requireAuth, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay API token configurado' });
@@ -979,9 +954,7 @@ router.post('/polling/sync', requireAuth, async (req, res) => {
 
 router.get('/contacts', requireAuth, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay API token configurado' });
@@ -1009,9 +982,7 @@ router.get('/contacts', requireAuth, async (req, res) => {
 
 router.get('/contacts/:contactId/messages', requireAuth, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay API token configurado' });
@@ -1038,8 +1009,10 @@ router.get('/contacts/:contactId/messages', requireAuth, async (req, res) => {
 
 router.get('/chatbot/states', requireAuth, async (req, res) => {
   try {
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? {} : { user_id: req.userId };
     const states = await ConversationState.findAll({
-      where: { user_id: req.userId },
+      where,
       order: [['last_interaction', 'DESC']],
       limit: parseInt(req.query.limit) || 50
     });
@@ -1073,9 +1046,7 @@ router.get('/chatbot/state/:contactId', requireAuth, async (req, res) => {
 
 router.post('/chatbot/pause/:contactId', requireAuth, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
@@ -1093,9 +1064,7 @@ router.post('/chatbot/pause/:contactId', requireAuth, async (req, res) => {
 
 router.post('/chatbot/resume/:contactId', requireAuth, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
@@ -1113,9 +1082,7 @@ router.post('/chatbot/resume/:contactId', requireAuth, async (req, res) => {
 
 router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({
-      where: { user_id: req.userId }
-    });
+    const { settings } = await getSettingsForUser(req.userId);
 
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay configuracion de mensajeria' });
@@ -1133,8 +1100,10 @@ router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
 
 router.get('/agents', requireAuth, async (req, res) => {
   try {
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? {} : { user_id: req.userId };
     const agents = await ServiceAgent.findAll({
-      where: { user_id: req.userId },
+      where,
       order: [['service_name', 'ASC'], ['agent_name', 'ASC']]
     });
     res.json(agents.map(a => a.toDict()));
@@ -1179,9 +1148,9 @@ router.post('/agents', requireAuth, async (req, res) => {
 
 router.put('/agents/:id', requireAuth, async (req, res) => {
   try {
-    const agent = await ServiceAgent.findOne({
-      where: { id: req.params.id, user_id: req.userId }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const agent = await ServiceAgent.findOne({ where });
 
     if (!agent) {
       return res.status(404).json({ error: 'Agente no encontrado' });
@@ -1215,9 +1184,9 @@ router.put('/agents/:id', requireAuth, async (req, res) => {
 
 router.delete('/agents/:id', requireAuth, async (req, res) => {
   try {
-    const agent = await ServiceAgent.findOne({
-      where: { id: req.params.id, user_id: req.userId }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { id: req.params.id } : { id: req.params.id, user_id: req.userId };
+    const agent = await ServiceAgent.findOne({ where });
 
     if (!agent) {
       return res.status(404).json({ error: 'Agente no encontrado' });
@@ -1233,12 +1202,12 @@ router.delete('/agents/:id', requireAuth, async (req, res) => {
 
 router.get('/agents/by-service/:serviceName', requireAuth, async (req, res) => {
   try {
+    const admin = await isAdminUser(req.userId);
+    const where = admin
+      ? { service_name: req.params.serviceName, is_active: true }
+      : { user_id: req.userId, service_name: req.params.serviceName, is_active: true };
     const agents = await ServiceAgent.findAll({
-      where: { 
-        user_id: req.userId,
-        service_name: req.params.serviceName,
-        is_active: true
-      },
+      where,
       order: [['is_default', 'DESC'], ['agent_name', 'ASC']]
     });
     res.json(agents.map(a => a.toDict()));
@@ -1250,12 +1219,9 @@ router.get('/agents/by-service/:serviceName', requireAuth, async (req, res) => {
 
 router.get('/agents/by-product/:productName', requireAuth, async (req, res) => {
   try {
-    const agents = await ServiceAgent.findAll({
-      where: { 
-        user_id: req.userId,
-        is_active: true
-      }
-    });
+    const admin = await isAdminUser(req.userId);
+    const where = admin ? { is_active: true } : { user_id: req.userId, is_active: true };
+    const agents = await ServiceAgent.findAll({ where });
 
     const productName = req.params.productName.toLowerCase();
     const matchingAgents = agents.filter(a => {
