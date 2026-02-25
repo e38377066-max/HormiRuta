@@ -21,10 +21,7 @@ const router = express.Router();
 async function getSettingsForUser(userId) {
   const user = await User.findByPk(userId);
   if (user?.role === 'admin') {
-    let settings = await MessagingSettings.findOne({ where: { user_id: userId } });
-    if (!settings) {
-      settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
-    }
+    let settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
     if (!settings) {
       settings = await MessagingSettings.create({ user_id: userId });
     }
