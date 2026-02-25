@@ -36,16 +36,15 @@ const upload = multer({
 
 const router = Router();
 
-const VALID_ORDER_STATUSES = ['approved', 'on_production', 'production_finished', 'order_picked_up', 'on_delivery', 'delivered'];
-const ADMIN_STATUSES = ['on_production', 'production_finished', 'order_picked_up'];
+const VALID_ORDER_STATUSES = ['approved', 'ordered', 'on_delivery', 'ups_shipped', 'delivered'];
+const ADMIN_STATUSES = ['approved', 'ordered', 'on_delivery', 'ups_shipped', 'delivered'];
 const DRIVER_STATUSES = ['delivered'];
 
 const VALID_TRANSITIONS = {
-  approved: ['on_production'],
-  on_production: ['production_finished'],
-  production_finished: ['order_picked_up'],
-  order_picked_up: ['on_delivery'],
-  on_delivery: ['delivered'],
+  approved: ['ordered'],
+  ordered: ['on_delivery'],
+  on_delivery: ['ups_shipped', 'delivered'],
+  ups_shipped: ['delivered'],
   delivered: []
 };
 
@@ -84,21 +83,21 @@ router.get('/orders', requireAuth, async (req, res) => {
 
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
-    const [total, onProduction, productionFinished, pickedUp, onDelivery, delivered] = await Promise.all([
+    const [total, approved, ordered, onDelivery, upsShipped, delivered] = await Promise.all([
       ValidatedAddress.count(),
-      ValidatedAddress.count({ where: { order_status: 'on_production' } }),
-      ValidatedAddress.count({ where: { order_status: 'production_finished' } }),
-      ValidatedAddress.count({ where: { order_status: 'order_picked_up' } }),
+      ValidatedAddress.count({ where: { order_status: 'approved' } }),
+      ValidatedAddress.count({ where: { order_status: 'ordered' } }),
       ValidatedAddress.count({ where: { order_status: 'on_delivery' } }),
+      ValidatedAddress.count({ where: { order_status: 'ups_shipped' } }),
       ValidatedAddress.count({ where: { order_status: 'delivered' } })
     ]);
 
     res.json({
       total,
-      on_production: onProduction,
-      production_finished: productionFinished,
-      order_picked_up: pickedUp,
+      approved,
+      ordered,
       on_delivery: onDelivery,
+      ups_shipped: upsShipped,
       delivered
     });
   } catch (error) {
@@ -347,7 +346,9 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
     for (const order of orders) {
       order.assigned_driver_id = driver_id;
       order.driver_name = driver.username;
-      order.order_status = 'on_delivery';
+      if (order.order_status !== 'ups_shipped') {
+        order.order_status = 'on_delivery';
+      }
       await order.save();
     }
 
