@@ -1213,12 +1213,24 @@ class PollingService {
     }
   }
 
+  lifecycleToOrderStatus(lifecycle) {
+    const map = {
+      'Approved': 'approved',
+      'Ordered': 'ordered',
+      'On Delivery': 'on_delivery',
+      'UPS Shipped': 'ups_shipped',
+      'Delivered': 'delivered'
+    };
+    return map[lifecycle] || 'approved';
+  }
+
   async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded) {
     try {
       const contactIdStr = contact.id.toString();
       const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
       const lat = geocoded?.success ? geocoded.latitude : null;
       const lng = geocoded?.success ? geocoded.longitude : null;
+      const orderStatus = this.lifecycleToOrderStatus(contact.lifecycle);
 
       if (!lat || !lng) {
         return;
@@ -1233,7 +1245,7 @@ class PollingService {
       });
 
       if (existing) {
-        await existing.update({
+        const updateData = {
           validated_address: finalAddress,
           original_address: originalAddress,
           address_lat: lat,
@@ -1244,7 +1256,12 @@ class PollingService {
           confidence: geocoded.confidence || existing.confidence,
           customer_name: customerName,
           customer_phone: contact.phone || existing.customer_phone
-        });
+        };
+        if (orderStatus && existing.order_status !== orderStatus) {
+          updateData.order_status = orderStatus;
+          console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${existing.order_status} -> ${orderStatus}`);
+        }
+        await existing.update(updateData);
         console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})`);
       } else {
         await ValidatedAddress.create({
@@ -1260,9 +1277,10 @@ class PollingService {
           city: geocoded.city || null,
           state: geocoded.stateShort || geocoded.state || null,
           confidence: geocoded.confidence || null,
-          source: 'scanner'
+          source: 'scanner',
+          order_status: orderStatus || 'approved'
         });
-        console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng})`);
+        console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus}]`);
       }
     } catch (error) {
       console.error(`[ValidatedAddr] Error guardando direccion validada:`, error.message);

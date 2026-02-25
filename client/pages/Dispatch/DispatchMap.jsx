@@ -5,11 +5,10 @@ import api from '../../api'
 import './DispatchMap.css'
 
 const STATUS_CONFIG = {
-  approved: { label: 'Aprobada', color: '#9e9e9e', icon: 'check_circle' },
-  on_production: { label: 'En Produccion', color: '#f44336', icon: 'precision_manufacturing' },
-  production_finished: { label: 'Produccion Lista', color: '#03a9f4', icon: 'inventory_2' },
-  order_picked_up: { label: 'Recogida', color: '#4caf50', icon: 'local_shipping' },
+  approved: { label: 'Aprobada', color: '#4caf50', icon: 'check_circle' },
+  ordered: { label: 'Ordenada', color: '#2196f3', icon: 'shopping_cart' },
   on_delivery: { label: 'En Entrega', color: '#ff9800', icon: 'delivery_dining' },
+  ups_shipped: { label: 'UPS Shipped', color: '#9c27b0', icon: 'local_shipping' },
   delivered: { label: 'Entregada', color: '#ff6d00', icon: 'done_all' }
 }
 
@@ -499,9 +498,9 @@ export default function DispatchMap() {
   const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.approved
 
   const ADMIN_TRANSITIONS = {
-    approved: 'on_production',
-    on_production: 'production_finished',
-    production_finished: 'order_picked_up'
+    approved: 'ordered',
+    ordered: 'on_delivery',
+    on_delivery: 'delivered'
   }
 
   const getNextStatus = (currentStatus) => ADMIN_TRANSITIONS[currentStatus] || null
@@ -520,21 +519,21 @@ export default function DispatchMap() {
 
         {isAdmin && (
           <div className="dispatch-stats">
-            <div className="dstat" style={{ borderColor: '#f44336' }}>
-              <span className="dstat-val">{stats.on_production || 0}</span>
-              <span className="dstat-label">Produccion</span>
-            </div>
-            <div className="dstat" style={{ borderColor: '#03a9f4' }}>
-              <span className="dstat-val">{stats.production_finished || 0}</span>
-              <span className="dstat-label">Listas</span>
-            </div>
             <div className="dstat" style={{ borderColor: '#4caf50' }}>
-              <span className="dstat-val">{stats.order_picked_up || 0}</span>
-              <span className="dstat-label">Recogidas</span>
+              <span className="dstat-val">{stats.approved || 0}</span>
+              <span className="dstat-label">Aprobadas</span>
+            </div>
+            <div className="dstat" style={{ borderColor: '#2196f3' }}>
+              <span className="dstat-val">{stats.ordered || 0}</span>
+              <span className="dstat-label">Ordenadas</span>
             </div>
             <div className="dstat" style={{ borderColor: '#ff9800' }}>
               <span className="dstat-val">{stats.on_delivery || 0}</span>
               <span className="dstat-label">En Entrega</span>
+            </div>
+            <div className="dstat" style={{ borderColor: '#9c27b0' }}>
+              <span className="dstat-val">{stats.ups_shipped || 0}</span>
+              <span className="dstat-label">UPS</span>
             </div>
             <div className="dstat" style={{ borderColor: '#ff6d00' }}>
               <span className="dstat-val">{stats.delivered || 0}</span>
@@ -562,10 +561,9 @@ export default function DispatchMap() {
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">Todos los estados</option>
               <option value="approved">Aprobadas</option>
-              <option value="on_production">En Produccion</option>
-              <option value="production_finished">Produccion Lista</option>
-              <option value="order_picked_up">Recogidas</option>
+              <option value="ordered">Ordenadas</option>
               <option value="on_delivery">En Entrega</option>
+              <option value="ups_shipped">UPS Shipped</option>
               <option value="delivered">Entregadas</option>
             </select>
           </div>
@@ -626,14 +624,14 @@ export default function DispatchMap() {
 
             <div className="selection-bottom-actions">
               <div className="status-btns-row">
-                <button className="dbtn red" onClick={() => handleBulkStatus('on_production')} title="En Produccion">
-                  <span className="material-icons">precision_manufacturing</span>
+                <button className="dbtn blue" onClick={() => handleBulkStatus('ordered')} title="Ordenada">
+                  <span className="material-icons">shopping_cart</span>
                 </button>
-                <button className="dbtn blue" onClick={() => handleBulkStatus('production_finished')} title="Produccion Lista">
-                  <span className="material-icons">inventory_2</span>
+                <button className="dbtn orange" onClick={() => handleBulkStatus('on_delivery')} title="En Entrega">
+                  <span className="material-icons">delivery_dining</span>
                 </button>
-                <button className="dbtn green" onClick={() => handleBulkStatus('order_picked_up')} title="Recogida">
-                  <span className="material-icons">local_shipping</span>
+                <button className="dbtn green" onClick={() => handleBulkStatus('delivered')} title="Entregada">
+                  <span className="material-icons">done_all</span>
                 </button>
               </div>
 
