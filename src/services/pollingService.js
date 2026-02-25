@@ -891,9 +891,23 @@ class PollingService {
       const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
 
       let latestAddress = null;
+      let mapsLink = null;
+      let locationCoords = null;
+
       for (const msg of messages) {
+        if (msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
+          locationCoords = { lat: msg.message.latitude, lng: msg.message.longitude };
+          break;
+        }
+
         const text = msg.message?.text || '';
         if (!text || text.length < 5) continue;
+
+        const gLink = extractor.extractGoogleMapsLink(text);
+        if (gLink) {
+          mapsLink = gLink;
+          break;
+        }
 
         const extractedAddress = extractor.extractAddressFromMessage(text);
         if (extractedAddress) {
@@ -902,7 +916,48 @@ class PollingService {
         }
       }
 
-      if (!latestAddress) return;
+      if (!latestAddress && !mapsLink && !locationCoords) return;
+
+      let finalAddress = latestAddress;
+      let finalZip = null;
+      let geocoded = { success: false };
+
+      if (locationCoords) {
+        try {
+          geocoded = await geocodingService.reverseGeocode(locationCoords.lat, locationCoords.lng);
+          if (geocoded.success) {
+            finalAddress = geocoded.fullAddress;
+            finalZip = geocoded.zip;
+            latestAddress = `Location: ${locationCoords.lat}, ${locationCoords.lng}`;
+            console.log(`[AddressScan-Agent] Ubicacion de ${contactName}: ${finalAddress}`);
+          }
+        } catch (err) {
+          console.error(`[AddressScan-Agent] Error reverse geocoding location:`, err.message);
+          return;
+        }
+      } else if (mapsLink) {
+        try {
+          const resolved = await geocodingService.resolveGoogleMapsLink(mapsLink);
+          if (resolved.success) {
+            if (resolved.lat && resolved.lng) {
+              geocoded = await geocodingService.reverseGeocode(resolved.lat, resolved.lng);
+            } else if (resolved.address) {
+              geocoded = await geocodingService.geocodeAddress(resolved.address);
+            }
+            if (geocoded.success) {
+              finalAddress = geocoded.fullAddress;
+              finalZip = geocoded.zip;
+              latestAddress = mapsLink;
+              console.log(`[AddressScan-Agent] Google Maps de ${contactName}: ${finalAddress}`);
+            }
+          }
+        } catch (err) {
+          console.error(`[AddressScan-Agent] Error resolving maps link:`, err.message);
+          return;
+        }
+      }
+
+      if (!finalAddress) return;
 
       const existingAddr = await ValidatedAddress.findOne({
         where: { user_id: userId, respond_contact_id: contact.id.toString() },
@@ -910,32 +965,30 @@ class PollingService {
       });
 
       if (existingAddr) {
-        const newNorm = latestAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const newNorm = finalAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
         const origNorm = (existingAddr.original_address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const validNorm = (existingAddr.validated_address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         if (newNorm === origNorm || newNorm === validNorm) {
           return;
         }
-        console.log(`[AddressScan-Agent] Nueva direccion de ${contactName} (${contact.id}): "${latestAddress}" (anterior: "${existingAddr.validated_address}")`);
+        console.log(`[AddressScan-Agent] Nueva direccion de ${contactName} (${contact.id}): "${finalAddress}" (anterior: "${existingAddr.validated_address}")`);
       } else {
-        console.log(`[AddressScan-Agent] Direccion de ${contactName} (${contact.id}): "${latestAddress}"`);
+        console.log(`[AddressScan-Agent] Direccion de ${contactName} (${contact.id}): "${finalAddress}"`);
       }
 
-      let finalAddress = latestAddress;
-      let finalZip = null;
-      let geocoded = { success: false };
-
-      try {
-        geocoded = await geocodingService.geocodeAddress(latestAddress);
-        if (geocoded.success) {
-          finalAddress = geocoded.fullAddress;
-          finalZip = geocoded.zip || finalZip;
-          if (geocoded.wasChanged) {
-            console.log(`[AddressScan-Agent] Geocoding corrigio: "${latestAddress}" -> "${finalAddress}"`);
+      if (!mapsLink && !locationCoords) {
+        try {
+          geocoded = await geocodingService.geocodeAddress(latestAddress);
+          if (geocoded.success) {
+            finalAddress = geocoded.fullAddress;
+            finalZip = geocoded.zip || finalZip;
+            if (geocoded.wasChanged) {
+              console.log(`[AddressScan-Agent] Geocoding corrigio: "${latestAddress}" -> "${finalAddress}"`);
+            }
           }
+        } catch (geoError) {
+          console.error(`[AddressScan-Agent] Error geocoding:`, geoError.message);
         }
-      } catch (geoError) {
-        console.error(`[AddressScan-Agent] Error geocoding:`, geoError.message);
       }
 
       const customFieldsUpdate = {};
@@ -1105,9 +1158,21 @@ class PollingService {
 
           const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
           let latestExtracted = null;
+          let scanMapsLink = null;
+          let scanLocationCoords = null;
+
           for (const msg of incomingMessages) {
+            if (msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
+              scanLocationCoords = { lat: msg.message.latitude, lng: msg.message.longitude };
+              break;
+            }
             const text = msg.message?.text || '';
             if (!text || text.length < 5) continue;
+            const gLink = extractor.extractGoogleMapsLink(text);
+            if (gLink) {
+              scanMapsLink = gLink;
+              break;
+            }
             const addr = extractor.extractAddressFromMessage(text);
             if (addr) {
               latestExtracted = addr;
@@ -1115,10 +1180,63 @@ class PollingService {
             }
           }
 
-          const result = latestExtracted ? { address: latestExtracted } : extractor.extractAddressFromConversation(messagesResult.items);
+          let result;
+          if (scanLocationCoords) {
+            result = { address: null, googleMapsCoords: scanLocationCoords };
+          } else if (scanMapsLink) {
+            result = { address: null, googleMapsLink: scanMapsLink };
+          } else if (latestExtracted) {
+            result = { address: latestExtracted };
+          } else {
+            result = extractor.extractAddressFromConversation(messagesResult.items);
+          }
 
-          if (result && result.address) {
-            const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+          if (!result) continue;
+          if (!result.address && !result.googleMapsLink && !result.googleMapsCoords) continue;
+
+          const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+          let finalAddress = result.address;
+          let finalZip = null;
+          let geocoded = { success: false };
+
+          if (result.googleMapsCoords) {
+            try {
+              geocoded = await geocodingService.reverseGeocode(result.googleMapsCoords.lat, result.googleMapsCoords.lng);
+              if (geocoded.success) {
+                finalAddress = geocoded.fullAddress;
+                finalZip = geocoded.zip;
+                console.log(`[AddressScan] Ubicacion de ${contactName} (${contact.id}): ${finalAddress}`);
+              } else {
+                continue;
+              }
+            } catch (err) {
+              console.error(`[AddressScan] Error reverse geocoding:`, err.message);
+              continue;
+            }
+          } else if (result.googleMapsLink) {
+            try {
+              const resolved = await geocodingService.resolveGoogleMapsLink(result.googleMapsLink);
+              if (resolved.success) {
+                if (resolved.lat && resolved.lng) {
+                  geocoded = await geocodingService.reverseGeocode(resolved.lat, resolved.lng);
+                } else if (resolved.address) {
+                  geocoded = await geocodingService.geocodeAddress(resolved.address);
+                }
+                if (geocoded.success) {
+                  finalAddress = geocoded.fullAddress;
+                  finalZip = geocoded.zip;
+                  console.log(`[AddressScan] Google Maps de ${contactName} (${contact.id}): ${finalAddress}`);
+                } else {
+                  continue;
+                }
+              } else {
+                continue;
+              }
+            } catch (err) {
+              console.error(`[AddressScan] Error resolving maps link:`, err.message);
+              continue;
+            }
+          } else if (result.address) {
             const existing = addressMap.get(contactIdStr);
 
             if (existing) {
@@ -1132,10 +1250,7 @@ class PollingService {
               console.log(`[AddressScan] Nueva direccion detectada para ${contactName} (${contact.id}): "${result.address}" (anterior: "${existing.validated}")`);
             }
 
-            let finalAddress = result.address;
-            let finalZip = null;
-
-            const geocoded = await geocodingService.geocodeAddress(result.address);
+            geocoded = await geocodingService.geocodeAddress(result.address);
 
             if (geocoded.success && geocoded.confidence === 'high') {
               finalAddress = geocoded.fullAddress;
@@ -1152,49 +1267,63 @@ class PollingService {
               finalZip = components.zip;
               console.log(`[AddressScan] Geocoding no disponible, usando dirección original: "${result.address}"`);
             }
+          } else {
+            continue;
+          }
 
-            const customFieldsUpdate = {};
-            customFieldsUpdate.address = finalAddress;
+          if (!finalAddress) continue;
 
-            if (finalZip) {
-              customFieldsUpdate.zip_code = finalZip;
-            }
-
-            let updateResult;
-            try {
-              updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
-            } catch (updateErr) {
-              console.log(`[AddressScan] No se pudo actualizar ${contactName} (${contact.id}), se reintentará después`);
-              this.addressScannedContacts.delete(contactIdStr);
+          const existingDb = addressMap.get(contactIdStr);
+          if (existingDb) {
+            const newAddrNorm = finalAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const existOrigNorm = (existingDb.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const existValidNorm = (existingDb.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (newAddrNorm === existOrigNorm || newAddrNorm === existValidNorm) {
               continue;
             }
+          }
 
-            if (updateResult.success) {
-              updatedCount++;
-              console.log(`[AddressScan] Direccion actualizada para ${contactName} (${contact.id}): "${finalAddress}"${finalZip ? ` ZIP: ${finalZip}` : ''}`);
-            } else {
-              const altFieldsUpdate = {};
-              altFieldsUpdate['Address'] = finalAddress;
-              if (finalZip) {
-                altFieldsUpdate['Zip Code'] = finalZip;
-              }
+          const customFieldsUpdate = {};
+          customFieldsUpdate.address = finalAddress;
 
-              try {
-                const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
-                if (altResult.success) {
-                  updatedCount++;
-                  console.log(`[AddressScan] Direccion actualizada (alt) para ${contactName} (${contact.id}): "${finalAddress}"`);
-                } else {
-                  console.error(`[AddressScan] Error actualizando direccion de ${contactName} (${contact.id}):`, updateResult.error);
-                }
-              } catch (altErr) {
-                console.log(`[AddressScan] No se pudo actualizar (alt) ${contactName} (${contact.id}), se reintentará después`);
-                this.addressScannedContacts.delete(contactIdStr);
-              }
+          if (finalZip) {
+            customFieldsUpdate.zip_code = finalZip;
+          }
+
+          let updateResult;
+          try {
+            updateResult = await respondio.updateContactCustomFields(contact.id, customFieldsUpdate);
+          } catch (updateErr) {
+            console.log(`[AddressScan] No se pudo actualizar ${contactName} (${contact.id}), se reintentará después`);
+            this.addressScannedContacts.delete(contactIdStr);
+            continue;
+          }
+
+          if (updateResult.success) {
+            updatedCount++;
+            console.log(`[AddressScan] Direccion actualizada para ${contactName} (${contact.id}): "${finalAddress}"${finalZip ? ` ZIP: ${finalZip}` : ''}`);
+          } else {
+            const altFieldsUpdate = {};
+            altFieldsUpdate['Address'] = finalAddress;
+            if (finalZip) {
+              altFieldsUpdate['Zip Code'] = finalZip;
             }
 
-            await this.saveValidatedAddress(userId, contact, finalAddress, result.address, finalZip, geocoded);
+            try {
+              const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
+              if (altResult.success) {
+                updatedCount++;
+                console.log(`[AddressScan] Direccion actualizada (alt) para ${contactName} (${contact.id}): "${finalAddress}"`);
+              } else {
+                console.error(`[AddressScan] Error actualizando direccion de ${contactName} (${contact.id}):`, updateResult.error);
+              }
+            } catch (altErr) {
+              console.log(`[AddressScan] No se pudo actualizar (alt) ${contactName} (${contact.id}), se reintentará después`);
+              this.addressScannedContacts.delete(contactIdStr);
+            }
           }
+
+          await this.saveValidatedAddress(userId, contact, finalAddress, result.address || finalAddress, finalZip, geocoded);
         } catch (contactError) {
           console.error(`[AddressScan] Error procesando contacto ${contact.id}:`, contactError.message);
         }

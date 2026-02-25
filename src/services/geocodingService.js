@@ -172,6 +172,128 @@ class GeocodingService {
     return parts.join(', ');
   }
 
+  async reverseGeocode(lat, lng) {
+    if (!this.apiKey) {
+      return { success: false, error: 'No API key' };
+    }
+
+    if (Date.now() < this.rateLimitedUntil) {
+      return { success: false, error: 'Rate limited' };
+    }
+
+    const cacheKey = `reverse_${lat}_${lng}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      const ttl = cached.isError ? this.ERROR_CACHE_TTL_MS : this.CACHE_TTL_MS;
+      if ((Date.now() - cached.timestamp) < ttl) {
+        return cached.result;
+      }
+      this.cache.delete(cacheKey);
+    }
+
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          latlng: `${lat},${lng}`,
+          key: this.apiKey,
+          language: 'en'
+        },
+        timeout: 5000
+      });
+
+      const data = response.data;
+
+      if (data.status === 'OK' && data.results && data.results.length > 0) {
+        const bestResult = data.results[0];
+        const components = this.parseAddressComponents(bestResult.address_components);
+        const builtAddress = this.buildCleanAddress(components);
+        const cleanFormatted = bestResult.formatted_address.replace(/,\s*USA?\s*$/i, '').trim();
+        const finalAddress = builtAddress && builtAddress.length > 5 ? builtAddress : cleanFormatted;
+
+        const result = {
+          success: true,
+          original: `${lat},${lng}`,
+          fullAddress: finalAddress,
+          streetNumber: components.streetNumber,
+          street: components.street,
+          city: components.city,
+          state: components.stateShort || components.state,
+          stateShort: components.stateShort,
+          zip: components.zip,
+          county: components.county,
+          latitude: lat,
+          longitude: lng,
+          confidence: 'high',
+          locationType: 'ROOFTOP',
+          wasChanged: true
+        };
+
+        this.addToCache(cacheKey, result, false);
+        return result;
+      }
+
+      if (data.status === 'OVER_QUERY_LIMIT') {
+        this.rateLimitedUntil = Date.now() + 60 * 1000;
+        return { success: false, error: 'Rate limited' };
+      }
+
+      return { success: false, error: `API status: ${data.status}` };
+    } catch (error) {
+      console.error('[Geocoding] Reverse geocode error:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async resolveGoogleMapsLink(url) {
+    try {
+      if (!url.startsWith('http')) {
+        url = 'https://' + url;
+      }
+
+      const response = await axios.get(url, {
+        maxRedirects: 5,
+        timeout: 8000,
+        validateStatus: () => true,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+
+      const finalUrl = response.request?.res?.responseUrl || response.headers?.location || url;
+      const allText = finalUrl + ' ' + (typeof response.data === 'string' ? response.data : '');
+
+      const coordPatterns = [
+        /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+        /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+        /ll=(-?\d+\.\d+),(-?\d+\.\d+)/,
+        /center=(-?\d+\.\d+),(-?\d+\.\d+)/,
+        /q=(-?\d+\.\d+),(-?\d+\.\d+)/
+      ];
+
+      for (const pattern of coordPatterns) {
+        const match = allText.match(pattern);
+        if (match) {
+          const lat = parseFloat(match[1]);
+          const lng = parseFloat(match[2]);
+          if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            console.log(`[Geocoding] Google Maps coords resolved: ${lat}, ${lng}`);
+            return { success: true, lat, lng };
+          }
+        }
+      }
+
+      const addressMatch = allText.match(/place\/([^/@]+)/);
+      if (addressMatch) {
+        const address = decodeURIComponent(addressMatch[1].replace(/\+/g, ' '));
+        console.log(`[Geocoding] Google Maps place name: "${address}"`);
+        return { success: true, address };
+      }
+
+      return { success: false, error: 'No coordinates found in Google Maps link' };
+    } catch (error) {
+      console.error('[Geocoding] Error resolving Google Maps link:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
   addToCache(key, result, isError = false) {
     if (this.cache.size >= this.CACHE_MAX_SIZE) {
       const firstKey = this.cache.keys().next().value;

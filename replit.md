@@ -41,7 +41,7 @@ Area 862 System is a route planning and optimization application for delivery se
     - **Multi-Agent System**: Agents assigned based on selected product, with fallback options.
     - **Conversation Protection**: Bot avoids interference if a human agent has already responded.
     - **Test Mode**: Allows testing chatbot flows with a specific contact, including a "Reset Test" button.
-- **Automatic Address Scanning**: Scans chat messages to extract and validate addresses using Google Maps Geocoding, updating custom fields in Respond.io.
+- **Automatic Address Scanning**: Scans chat messages to extract and validate addresses using Google Maps Geocoding, updating custom fields in Respond.io. Supports Google Maps links (maps.app.goo.gl, etc.) and WhatsApp location messages via reverse geocoding. Filters out conversational messages that incidentally mention street names.
 - **Automatic Follow-up System**: Configurable message re-sending if a customer does not respond.
 - **System Logs Viewer**: In-memory LogBuffer (500 entries) intercepts console output; admin-only page at `/admin/logs` with auto-refresh, level filters, and search.
 - **Coverage Zones**: Admin users see ALL coverage zones globally (no user_id filter); non-admins see only their own.

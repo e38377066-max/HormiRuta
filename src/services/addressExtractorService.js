@@ -54,7 +54,6 @@ class AddressExtractorService {
       /^(ok|si|no|yes|gracias|listo|perfecto|bueno|bien|hola|claro|que|como|cuando|donde|por|para|dale|va|genial|excelente|entendido)$/i,
       /^(quiero|necesito|tengo|puedo|puede|cuanto|cuesta|precio|pago|cobro|deposito|transferencia|zelle|venmo|cash|tarjeta)$/i,
       /^\d{1,4}$/,
-      /^https?:\/\//i,
       /^@/,
       /whatsapp/i,
       /^\?+$/,
@@ -69,6 +68,61 @@ class AddressExtractorService {
       /recordatorio/i,
       /presupuesto/i
     ];
+
+    this.conversationalPatterns = [
+      /\bpero\b/i, /\baunque\b/i, /\bsin embargo\b/i,
+      /\btrabajo cerca\b/i, /\btrabajo en\b/i, /\bvoy a\b/i,
+      /\bpuedo pasar\b/i, /\btambien puedo\b/i,
+      /\bsi no\b/i, /\byo tambien\b/i, /\bsi quiere\b/i,
+      /\bme queda\b/i, /\bcerca de\b/i, /\bcerca aqui\b/i
+    ];
+
+    this.googleMapsPatterns = [
+      /maps\.app\.goo\.gl\/\S+/i,
+      /maps\.google\.com\/\S+/i,
+      /google\.com\/maps\/\S+/i,
+      /goo\.gl\/maps\/\S+/i
+    ];
+  }
+
+  extractGoogleMapsLink(messageText) {
+    if (!messageText) return null;
+    for (const pattern of this.googleMapsPatterns) {
+      const match = messageText.match(pattern);
+      if (match) return match[0];
+    }
+    return null;
+  }
+
+  isConversationalMessage(text) {
+    const wordCount = text.split(/\s+/).length;
+    if (wordCount < 8) return false;
+
+    let conversationalHits = 0;
+    for (const pattern of this.conversationalPatterns) {
+      if (pattern.test(text)) conversationalHits++;
+    }
+    if (conversationalHits >= 1) return true;
+
+    return false;
+  }
+
+  hasAddressWithCity(text) {
+    const lowerText = text.toLowerCase();
+    const hasNumber = /^\d+\s+\w/.test(text);
+    if (!hasNumber) return false;
+
+    const hasCity = this.knownCities.some(city => {
+      const cityRegex = new RegExp(`\\b${city}\\b`, 'i');
+      return cityRegex.test(lowerText);
+    });
+
+    const hasState = /\b[A-Z]{2}\b/.test(text) && [...this.stateAbbrSet].some(abbr => {
+      const stateRegex = new RegExp(`\\b${abbr}\\b`);
+      return stateRegex.test(text);
+    });
+
+    return hasCity || hasState;
   }
 
   extractAddressFromMessage(messageText) {
@@ -80,6 +134,8 @@ class AddressExtractorService {
       if (pattern.test(cleanText)) return null;
     }
 
+    if (this.isConversationalMessage(cleanText)) return null;
+
     const hasStreetNumber = /^\d+\s+\w/.test(cleanText) || /\b\d+\s+[A-Za-z]/.test(cleanText);
     if (!hasStreetNumber) return null;
 
@@ -87,11 +143,11 @@ class AddressExtractorService {
     const streetRegex = new RegExp(`\\b(${suffixPattern})\\b\\.?`, 'i');
     const hasStreetSuffix = streetRegex.test(cleanText);
 
-    if (!hasStreetSuffix) return null;
+    if (!hasStreetSuffix && !this.hasAddressWithCity(cleanText)) return null;
 
     const address = this.cleanAddress(cleanText);
 
-    if (this.validateAddressFormat(address)) {
+    if (this.validateAddressFormat(address) || this.hasAddressWithCity(cleanText)) {
       return address;
     }
 
@@ -99,18 +155,41 @@ class AddressExtractorService {
   }
 
   extractAddressFromConversation(messages) {
-    const incomingMessages = messages
-      .filter(msg => msg.traffic === 'incoming')
-      .filter(msg => msg.message?.type === 'text' && msg.message?.text);
+    const incomingMessages = messages.filter(msg => msg.traffic === 'incoming');
 
     for (let i = incomingMessages.length - 1; i >= 0; i--) {
-      const text = incomingMessages[i].message.text;
+      const msg = incomingMessages[i];
+
+      if (msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
+        return {
+          address: null,
+          googleMapsCoords: { lat: msg.message.latitude, lng: msg.message.longitude },
+          messageId: msg.messageId,
+          timestamp: msg.createdAt || msg.timestamp
+        };
+      }
+
+      const text = msg.message?.text;
+      if (!text) continue;
+
+      const mapsLink = this.extractGoogleMapsLink(text);
+      if (mapsLink) {
+        return {
+          address: null,
+          googleMapsLink: mapsLink,
+          messageId: msg.messageId,
+          timestamp: msg.createdAt || msg.timestamp
+        };
+      }
+
+      if (msg.message?.type !== 'text') continue;
+
       const address = this.extractAddressFromMessage(text);
       if (address) {
         return {
           address,
-          messageId: incomingMessages[i].messageId,
-          timestamp: incomingMessages[i].createdAt || incomingMessages[i].timestamp
+          messageId: msg.messageId,
+          timestamp: msg.createdAt || msg.timestamp
         };
       }
     }
