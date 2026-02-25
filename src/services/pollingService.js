@@ -1218,7 +1218,6 @@ class PollingService {
       'Approved': 'approved',
       'Ordered': 'ordered',
       'On Delivery': 'on_delivery',
-      'UPS Shipped': 'ups_shipped',
       'Delivered': 'delivered'
     };
     return map[lifecycle] || 'approved';
