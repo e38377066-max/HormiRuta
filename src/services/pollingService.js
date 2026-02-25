@@ -11,6 +11,15 @@ import MessageLog from '../models/MessageLog.js';
 import CoverageZone from '../models/CoverageZone.js';
 import ConversationState from '../models/ConversationState.js';
 import ValidatedAddress from '../models/ValidatedAddress.js';
+import User from '../models/User.js';
+
+async function getGlobalSettings(userId) {
+  const user = await User.findByPk(userId);
+  if (user?.role === 'admin') {
+    return await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
+  }
+  return await MessagingSettings.findOne({ where: { user_id: userId } });
+}
 
 class PollingService {
   constructor() {
@@ -36,7 +45,7 @@ class PollingService {
       return { success: true, message: 'Polling ya está activo' };
     }
 
-    const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+    const settings = await getGlobalSettings(userId);
     
     if (!settings) {
       console.log(`[Polling] ERROR: No hay configuración de mensajería para usuario ${userId}`);
@@ -146,7 +155,7 @@ class PollingService {
     if (!poller) return;
 
     try {
-      const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+      const settings = await getGlobalSettings(userId);
       if (!settings?.respond_api_token) return;
 
       const respondio = this.getRespondioInstance(settings.respond_api_token);
@@ -180,11 +189,39 @@ class PollingService {
     return { active: false };
   }
 
+  getAnyActivePollingStatus() {
+    for (const [userId, poller] of this.activePollers) {
+      if (poller.isRunning) {
+        return {
+          active: true,
+          lastPoll: poller.lastPoll,
+          intervalMs: poller.intervalMs,
+          processedCount: poller.processedMessageIds.size
+        };
+      }
+    }
+    return { active: false };
+  }
+
+  stopAllPolling() {
+    if (this.activePollers.size === 0) {
+      return { success: false, error: 'No hay polling activo' };
+    }
+    for (const [userId, poller] of this.activePollers) {
+      poller.isRunning = false;
+      if (poller.intervalId) clearInterval(poller.intervalId);
+      if (poller.scanIntervalId) clearInterval(poller.scanIntervalId);
+      this.activePollers.delete(userId);
+      console.log(`[Polling] Detenido para usuario ${userId} (admin stop all)`);
+    }
+    return { success: true, message: 'Polling detenido' };
+  }
+
   async pollForNewMessages(userId, apiToken, poller) {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = this.getRespondioInstance(apiToken);
     
-    const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+    const settings = await getGlobalSettings(userId);
     const messageLimit = settings?.message_history_limit || 50;
     
     // MODO PRUEBA: Solo procesar un contacto específico
@@ -479,7 +516,7 @@ class PollingService {
 
     this.addressScannedContacts.delete(contact.id.toString());
 
-    const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+    const settings = await getGlobalSettings(userId);
     const isAutomatic = settings?.attention_mode === 'automatic';
 
     const latestMessage = incomingMessages[incomingMessages.length - 1];
@@ -744,7 +781,7 @@ class PollingService {
 
   async processIncomingMessage(userId, contact, message, respondio, useAutomaticMode = false, isTestMode = false) {
     try {
-      const settings = await MessagingSettings.findOne({ where: { user_id: userId } });
+      const settings = await getGlobalSettings(userId);
       if (!settings) return;
 
       const messageText = message.message?.text || '';
