@@ -144,7 +144,6 @@ export default function DispatchMap() {
       const config = STATUS_CONFIG[order.order_status] || STATUS_CONFIG.approved
       const selIndex = selectedOrders.indexOf(order.id)
       const isSelected = selIndex !== -1
-      const isNonApproved = order.order_status && order.order_status !== 'approved'
 
       let icon
       if (isSelected) {
@@ -153,19 +152,13 @@ export default function DispatchMap() {
           scaledSize: new window.google.maps.Size(36, 44),
           anchor: new window.google.maps.Point(18, 44)
         }
-      } else if (isNonApproved) {
-        icon = {
-          url: createNumberedIcon(config.label.charAt(0), config.color),
-          scaledSize: new window.google.maps.Size(36, 44),
-          anchor: new window.google.maps.Point(18, 44)
-        }
       } else {
         icon = {
           path: window.google.maps.SymbolPath.CIRCLE,
           fillColor: config.color,
           fillOpacity: 1,
-          strokeColor: '#333',
-          strokeWeight: 1.5,
+          strokeColor: '#fff',
+          strokeWeight: 2,
           scale: 10
         }
       }
