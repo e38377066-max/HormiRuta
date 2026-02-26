@@ -11,6 +11,7 @@ export default function AdminLogs() {
   const [levelFilter, setLevelFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [fileStats, setFileStats] = useState(null)
+  const [archives, setArchives] = useState([])
   const logsEndRef = useRef(null)
   const containerRef = useRef(null)
 
@@ -37,9 +38,19 @@ export default function AdminLogs() {
     }
   }
 
+  const fetchArchives = async () => {
+    try {
+      const response = await api.get('/api/admin/logs/archives')
+      setArchives(response.data.archives || [])
+    } catch (error) {
+      console.error('Error fetching archives:', error)
+    }
+  }
+
   useEffect(() => {
     fetchLogs()
     fetchFileStats()
+    fetchArchives()
   }, [fetchLogs])
 
   useEffect(() => {
@@ -72,17 +83,39 @@ export default function AdminLogs() {
       const response = await api.get(`/api/admin/logs/download/${type}`, {
         responseType: 'blob'
       })
+      const disposition = response.headers['content-disposition'] || ''
+      const filenameMatch = disposition.match(/filename="(.+)"/)
+      const fallbackName = type === 'important' ? '24h.txt' : '3dias.txt'
+      const filename = filenameMatch ? filenameMatch[1] : fallbackName
+
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      const dateStr = new Date().toISOString().split('T')[0]
-      link.setAttribute('download', type === 'important' ? `logs_24h_${dateStr}.txt` : `logs_3dias_${dateStr}.txt`)
+      link.setAttribute('download', filename)
       document.body.appendChild(link)
       link.click()
       link.remove()
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error downloading logs:', error)
+    }
+  }
+
+  const handleDownloadArchive = async (filename) => {
+    try {
+      const response = await api.get(`/api/admin/logs/archives/${filename}`, {
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading archive:', error)
     }
   }
 
@@ -187,6 +220,18 @@ export default function AdminLogs() {
             )}
           </button>
         </div>
+        {archives.length > 0 && (
+          <div className="logs-archive-section">
+            <span className="logs-archive-label">Historial:</span>
+            {archives.map(file => (
+              <button key={file.name} className="logs-archive-btn" onClick={() => handleDownloadArchive(file.name)}>
+                <span className="material-icons">folder</span>
+                {file.name.replace('.txt', '')}
+                <span className="logs-file-info">({file.sizeFormatted})</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="logs-terminal" ref={containerRef}>

@@ -194,17 +194,40 @@ router.get('/logs/download/:type', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'No hay logs disponibles' });
     }
 
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const filename = type === 'important'
-      ? `logs_24h_${dateStr}.txt`
-      : `logs_3dias_${dateStr}.txt`;
+    const filename = logBuffer.getDownloadFileName(type);
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(content);
   } catch (error) {
     res.status(500).json({ error: 'Error al descargar logs' });
+  }
+});
+
+router.get('/logs/archives', requireAdmin, async (req, res) => {
+  try {
+    const archives = logBuffer.getArchiveFiles();
+    res.json({ archives });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener archivos' });
+  }
+});
+
+router.get('/logs/archives/:filename', requireAdmin, async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename.endsWith('.txt') || filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ error: 'Nombre de archivo invalido' });
+    }
+    const content = logBuffer.getArchiveContent(filename);
+    if (!content) {
+      return res.status(404).json({ error: 'Archivo no encontrado' });
+    }
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(content);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al descargar archivo' });
   }
 });
 
