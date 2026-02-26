@@ -10,6 +10,13 @@ if (!fs.existsSync(LOGS_DIR)) {
   fs.mkdirSync(LOGS_DIR, { recursive: true });
 }
 
+function formatDate(date) {
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}.${m}.${y}`;
+}
+
 class LogBuffer {
   constructor(maxEntries = 500) {
     this.maxEntries = maxEntries;
@@ -28,6 +35,8 @@ class LogBuffer {
     this._intercept();
 
     this._cleanupInterval = setInterval(() => this._cleanOldEntries(), 60 * 60 * 1000);
+    this._archiveInterval = setInterval(() => this._dailyArchive(), 60 * 60 * 1000);
+    this._dailyArchive();
   }
 
   _intercept() {
@@ -104,13 +113,13 @@ class LogBuffer {
     if (msg.includes('iniciar') || msg.includes('servidor')) return true;
     if (msg.includes('actualizada') || msg.includes('actualizado')) return true;
     if (msg.includes('nueva direccion') || msg.includes('geocoding')) return true;
-    if (msg.includes('lifecycle sync')) return true;
+    if (msg.includes('lifecycle')) return true;
     if (msg.includes('cobertura') || msg.includes('coverage')) return true;
     if (msg.includes('polling') && (msg.includes('start') || msg.includes('stop'))) return true;
     if (msg.includes('orden') || msg.includes('order')) return true;
     if (msg.includes('asigna') || msg.includes('assign')) return true;
     if (msg.includes('contactos actualizados')) return true;
-    if (msg.includes('nombre actualizado')) return true;
+    if (msg.includes('nombre actualizado') || msg.includes('nombre sync')) return true;
     if (msg.includes('google maps')) return true;
     if (msg.includes('ubicacion')) return true;
     return false;
@@ -144,6 +153,75 @@ class LogBuffer {
       fs.writeFileSync(filePath, kept.join('\n') + (kept.length > 0 ? '\n' : ''));
     } catch {
     }
+  }
+
+  _dailyArchive() {
+    try {
+      const now = new Date();
+      const today = formatDate(now);
+      const archiveDir = path.join(LOGS_DIR, 'archive');
+      if (!fs.existsSync(archiveDir)) {
+        fs.mkdirSync(archiveDir, { recursive: true });
+      }
+
+      const importantArchive = path.join(archiveDir, `${today}.txt`);
+      if (!fs.existsSync(importantArchive) && fs.existsSync(this.importantLogFile)) {
+        const content = this._formatLogFile(this.importantLogFile);
+        if (content.trim()) {
+          fs.writeFileSync(importantArchive, content);
+        }
+      }
+
+      const threeDaysAgo = new Date(now);
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 2);
+      const startDay = String(threeDaysAgo.getDate()).padStart(2, '0');
+      const startMonth = String(threeDaysAgo.getMonth() + 1).padStart(2, '0');
+      const endDay = String(now.getDate()).padStart(2, '0');
+      const endMonth = String(now.getMonth() + 1).padStart(2, '0');
+      const endYear = now.getFullYear();
+      const fullArchiveName = threeDaysAgo.getMonth() === now.getMonth()
+        ? `${startDay}_${endDay}.${endMonth}.${endYear}.txt`
+        : `${startDay}.${startMonth}_${endDay}.${endMonth}.${endYear}.txt`;
+      const fullArchive = path.join(archiveDir, fullArchiveName);
+      if (!fs.existsSync(fullArchive) && fs.existsSync(this.fullLogFile)) {
+        const content = this._formatLogFile(this.fullLogFile);
+        if (content.trim()) {
+          fs.writeFileSync(fullArchive, content);
+        }
+      }
+
+      this._cleanOldArchives(archiveDir);
+    } catch {
+    }
+  }
+
+  _cleanOldArchives(archiveDir) {
+    try {
+      const files = fs.readdirSync(archiveDir);
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      files.forEach(file => {
+        const filePath = path.join(archiveDir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.mtime.getTime() < cutoff) {
+          fs.unlinkSync(filePath);
+        }
+      });
+    } catch {
+    }
+  }
+
+  _formatLogFile(filePath) {
+    if (!fs.existsSync(filePath)) return '';
+    const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split('\n').filter(l => l.trim());
+    return lines.map(line => {
+      try {
+        const entry = JSON.parse(line);
+        return `[${entry.timestamp}] [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}`;
+      } catch {
+        return line;
+      }
+    }).join('\n');
   }
 
   _detectSource(message) {
@@ -182,21 +260,28 @@ class LogBuffer {
     return { logs: paged, total };
   }
 
+  getDownloadFileName(type = 'full') {
+    const now = new Date();
+    const today = formatDate(now);
+    if (type === 'important') {
+      return `${today}.txt`;
+    }
+    const threeDaysAgo = new Date(now);
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 2);
+    const startDay = String(threeDaysAgo.getDate()).padStart(2, '0');
+    const startMonth = String(threeDaysAgo.getMonth() + 1).padStart(2, '0');
+    const endDay = String(now.getDate()).padStart(2, '0');
+    const endMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const endYear = now.getFullYear();
+    if (threeDaysAgo.getMonth() === now.getMonth()) {
+      return `${startDay}_${endDay}.${endMonth}.${endYear}.txt`;
+    }
+    return `${startDay}.${startMonth}_${endDay}.${endMonth}.${endYear}.txt`;
+  }
+
   getFileContent(type = 'full') {
     const filePath = type === 'important' ? this.importantLogFile : this.fullLogFile;
-    if (!fs.existsSync(filePath)) return '';
-
-    const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split('\n').filter(l => l.trim());
-
-    return lines.map(line => {
-      try {
-        const entry = JSON.parse(line);
-        return `[${entry.timestamp}] [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}`;
-      } catch {
-        return line;
-      }
-    }).join('\n');
+    return this._formatLogFile(filePath);
   }
 
   getFileStats() {
@@ -219,6 +304,33 @@ class LogBuffer {
       }
     }
     return stats;
+  }
+
+  getArchiveFiles() {
+    const archiveDir = path.join(LOGS_DIR, 'archive');
+    if (!fs.existsSync(archiveDir)) return [];
+    return fs.readdirSync(archiveDir)
+      .filter(f => f.endsWith('.txt'))
+      .sort()
+      .reverse()
+      .map(f => {
+        const stat = fs.statSync(path.join(archiveDir, f));
+        return {
+          name: f,
+          size: stat.size,
+          sizeFormatted: stat.size > 1024 * 1024 
+            ? (stat.size / (1024 * 1024)).toFixed(1) + ' MB' 
+            : (stat.size / 1024).toFixed(1) + ' KB',
+          date: stat.mtime.toISOString()
+        };
+      });
+  }
+
+  getArchiveContent(filename) {
+    const archiveDir = path.join(LOGS_DIR, 'archive');
+    const filePath = path.join(archiveDir, filename);
+    if (!fs.existsSync(filePath)) return null;
+    return fs.readFileSync(filePath, 'utf8');
   }
 
   clear() {

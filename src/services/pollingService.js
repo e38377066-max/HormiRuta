@@ -1071,9 +1071,57 @@ class PollingService {
 
       if (allContacts.length === 0) return;
 
+      await this.syncContactNames(userId, allContacts);
+
       await this.scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings);
     } catch (error) {
       console.error(`[AddressScan] Error en ciclo independiente:`, error.message);
+    }
+  }
+
+  async syncContactNames(userId, contacts) {
+    try {
+      const contactIds = contacts.map(c => c.id.toString());
+      const existingAddresses = await ValidatedAddress.findAll({
+        where: {
+          user_id: userId,
+          respond_contact_id: { [Op.in]: contactIds }
+        }
+      });
+
+      if (existingAddresses.length === 0) return;
+
+      const addressMap = new Map();
+      for (const va of existingAddresses) {
+        addressMap.set(va.respond_contact_id, va);
+      }
+
+      let updatedCount = 0;
+      for (const contact of contacts) {
+        const contactIdStr = contact.id.toString();
+        const existing = addressMap.get(contactIdStr);
+        if (!existing) continue;
+
+        const currentName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+        if (existing.customer_name && existing.customer_name !== currentName && currentName !== 'Sin nombre') {
+          try {
+            await ValidatedAddress.update(
+              { customer_name: currentName },
+              { where: { id: existing.id } }
+            );
+            console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
+            updatedCount++;
+          } catch (err) {
+            console.error(`[AddressScan] Error sync nombre ${contactIdStr}:`, err.message);
+          }
+        }
+      }
+
+      if (updatedCount > 0) {
+        console.log(`[AddressScan] ${updatedCount} nombre(s) sincronizado(s)`);
+      }
+    } catch (error) {
+      console.error(`[AddressScan] Error en syncContactNames:`, error.message);
     }
   }
 
