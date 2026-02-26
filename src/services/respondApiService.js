@@ -449,7 +449,8 @@ class RespondApiService {
    * @param {string|null} name - Lifecycle stage name, or null to remove
    */
   async updateLifecycle(identifier, name) {
-    return this.request('POST', `/contact/${identifier}/lifecycle/update`, { name });
+    const formattedId = identifier.includes(':') ? identifier : `id:${identifier}`;
+    return this.request('POST', `/contact/${formattedId}/lifecycle/update`, { name });
   }
 
   // ==========================================
