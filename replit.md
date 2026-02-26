@@ -45,7 +45,8 @@ Area 862 System is a route planning and optimization application for delivery se
 - **Automatic Follow-up System**: Configurable message re-sending if a customer does not respond.
 - **System Logs Viewer**: In-memory LogBuffer (500 entries) intercepts console output; admin-only page at `/admin/logs` with auto-refresh, level filters, and search. Persistent file storage: 24h important logs and 3-day full logs, downloadable from the admin panel.
 - **Coverage Zones**: Admin users see ALL coverage zones globally (no user_id filter); non-admins see only their own.
-- **Dispatch Lifecycle Sync**: Order statuses aligned with Respond.io lifecycle stages: `approved` → `ordered` → `on_delivery` → `ups_shipped` → `delivered`. Address scanner auto-syncs order_status from contact lifecycle.
+- **Dispatch Lifecycle Sync**: Order statuses aligned with Respond.io lifecycle stages: `approved` → `ordered` → `on_delivery` → `ups_shipped` → `delivered`. Address scanner auto-syncs order_status from contact lifecycle. Dispatch status changes (single, bulk, route completion) also sync back to Respond.io lifecycle.
+- **Delivery History (Entregadas tab)**: Separate tab in dispatch showing completed deliveries with evidence photos. Evidence modal shows full-size photo, recipient name, and completion date.
 - **Bulk Zone Address Search**: Address geocoding search available in both single-add and bulk-add zone modals.
 
 ## External Dependencies
