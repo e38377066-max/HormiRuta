@@ -56,6 +56,9 @@ export default function DispatchMap() {
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [routeInfo, setRouteInfo] = useState(null)
   const [optimizingLive, setOptimizingLive] = useState(false)
+  const [deliveredOrders, setDeliveredOrders] = useState([])
+  const [loadingDelivered, setLoadingDelivered] = useState(false)
+  const [evidenceModal, setEvidenceModal] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -83,6 +86,18 @@ export default function DispatchMap() {
       setLoading(false)
     }
   }, [filterStatus, isAdmin])
+
+  const fetchDeliveredOrders = useCallback(async () => {
+    try {
+      setLoadingDelivered(true)
+      const res = await api.get('/api/dispatch/orders/delivered')
+      setDeliveredOrders(res.data.orders || [])
+    } catch (error) {
+      console.error('Error fetching delivered orders:', error)
+    } finally {
+      setLoadingDelivered(false)
+    }
+  }, [])
 
   useEffect(() => {
     fetchData()
@@ -129,11 +144,18 @@ export default function DispatchMap() {
       const config = STATUS_CONFIG[order.order_status] || STATUS_CONFIG.approved
       const selIndex = selectedOrders.indexOf(order.id)
       const isSelected = selIndex !== -1
+      const isNonApproved = order.order_status && order.order_status !== 'approved'
 
       let icon
       if (isSelected) {
         icon = {
           url: createNumberedIcon(selIndex + 1, '#6200ea'),
+          scaledSize: new window.google.maps.Size(36, 44),
+          anchor: new window.google.maps.Point(18, 44)
+        }
+      } else if (isNonApproved) {
+        icon = {
+          url: createNumberedIcon(config.label.charAt(0), config.color),
           scaledSize: new window.google.maps.Size(36, 44),
           anchor: new window.google.maps.Point(18, 44)
         }
@@ -346,11 +368,13 @@ export default function DispatchMap() {
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, order_status: newStatus } : o))
       await api.put(`/api/dispatch/orders/${orderId}/status`, { order_status: newStatus })
       fetchData()
     } catch (error) {
       console.error('Error updating status:', error)
       alert(error.response?.data?.error || 'Error al actualizar estado')
+      fetchData()
     }
   }
 
@@ -552,6 +576,9 @@ export default function DispatchMap() {
             </button>
             <button className={`dtab ${activeTab === 'drivers' ? 'active' : ''}`} onClick={() => { setActiveTab('drivers'); if (allUsers.length === 0) fetchAllUsers() }}>
               <span className="material-icons">people</span> Choferes
+            </button>
+            <button className={`dtab ${activeTab === 'delivered' ? 'active' : ''}`} onClick={() => { setActiveTab('delivered'); fetchDeliveredOrders() }}>
+              <span className="material-icons">done_all</span> Entregadas
             </button>
           </div>
         )}
@@ -923,6 +950,59 @@ export default function DispatchMap() {
                 )}
               </div>
             </div>
+          ) : activeTab === 'delivered' ? (
+            loadingDelivered ? (
+              <div className="loading-center"><div className="spinner"></div></div>
+            ) : deliveredOrders.length === 0 ? (
+              <div className="empty-dispatch">
+                <span className="material-icons">inventory_2</span>
+                <p>No hay entregas completadas</p>
+              </div>
+            ) : (
+              deliveredOrders.map(order => (
+                <div key={order.id} className="dispatch-order delivered-order">
+                  <div className="do-status-dot" style={{ backgroundColor: '#ff6d00' }}></div>
+                  <div className="do-content">
+                    <div className="do-top">
+                      <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
+                      <span className="do-id">#{order.id}</span>
+                    </div>
+                    <div className="do-address">{order.address || 'Sin direccion'}</div>
+                    <div className="do-phone">{order.customer_phone || ''}</div>
+                    <div className="do-bottom">
+                      <span className="do-tag" style={{ backgroundColor: '#ff6d0020', color: '#ff6d00', borderColor: '#ff6d00' }}>
+                        <span className="material-icons" style={{ fontSize: '14px' }}>done_all</span>
+                        Entregada
+                      </span>
+                      {order.amount > 0 && (
+                        <span className="do-amount">${order.amount.toFixed(2)}</span>
+                      )}
+                      {order.delivered_at && (
+                        <span className="do-delivered-date">
+                          {new Date(order.delivered_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
+                    {order.evidence_photos?.length > 0 && (
+                      <div className="do-evidence" onClick={e => e.stopPropagation()}>
+                        {order.evidence_photos.map((ev, idx) => (
+                          <div key={idx} className="evidence-thumb" onClick={() => setEvidenceModal({ order, photo: ev })}>
+                            <img src={ev.photo_url} alt="Evidencia" />
+                            <span className="material-icons evidence-icon">photo_camera</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {order.evidence_photos?.length === 0 && (
+                      <div className="do-no-evidence">
+                        <span className="material-icons" style={{ fontSize: '14px', color: '#999' }}>no_photography</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>Sin evidencia</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )
           ) : null}
         </div>
       </div>
@@ -960,6 +1040,32 @@ export default function DispatchMap() {
             </div>
             <div className="dm-actions">
               <button className="dbtn outline" onClick={() => setShowAssignDriver(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {evidenceModal && (
+        <div className="modal-backdrop" onClick={() => setEvidenceModal(null)}>
+          <div className="evidence-modal" onClick={e => e.stopPropagation()}>
+            <div className="evidence-modal-header">
+              <h3>Evidencia de Entrega</h3>
+              <button className="evidence-modal-close" onClick={() => setEvidenceModal(null)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="evidence-modal-info">
+              <strong>{evidenceModal.order.customer_name || 'Sin nombre'}</strong>
+              <span>{evidenceModal.order.address}</span>
+              {evidenceModal.photo.recipient_name && (
+                <span>Recibido por: {evidenceModal.photo.recipient_name}</span>
+              )}
+              {evidenceModal.photo.completed_at && (
+                <span>{new Date(evidenceModal.photo.completed_at).toLocaleString('es-MX')}</span>
+              )}
+            </div>
+            <div className="evidence-modal-image">
+              <img src={evidenceModal.photo.photo_url} alt="Evidencia de entrega" />
             </div>
           </div>
         </div>

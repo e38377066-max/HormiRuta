@@ -7,7 +7,16 @@ import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import RespondioService from '../services/respondio.js';
+import respondApiService from '../services/respondApiService.js';
 import { optimizeRouteOrder } from '../services/optimization.js';
+
+const ORDER_STATUS_TO_LIFECYCLE = {
+  approved: 'Approved',
+  ordered: 'Ordered',
+  on_delivery: 'On Delivery',
+  ups_shipped: 'UPS Shipped',
+  delivered: 'Delivered'
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -106,6 +115,52 @@ router.get('/stats', requireAdmin, async (req, res) => {
   }
 });
 
+router.get('/orders/delivered', requireAdmin, async (req, res) => {
+  try {
+    const deliveredOrders = await ValidatedAddress.findAll({
+      where: { order_status: 'delivered' },
+      order: [['delivered_at', 'DESC']]
+    });
+
+    const routeIds = [...new Set(deliveredOrders.filter(o => o.route_id).map(o => o.route_id))];
+    const allStops = routeIds.length > 0
+      ? await Stop.findAll({ where: { route_id: { [Op.in]: routeIds } } })
+      : [];
+    const stopsByRoute = {};
+    allStops.forEach(s => {
+      if (!stopsByRoute[s.route_id]) stopsByRoute[s.route_id] = [];
+      stopsByRoute[s.route_id].push(s);
+    });
+
+    const ordersWithEvidence = deliveredOrders.map(order => {
+      const orderData = order.toDict();
+      orderData.evidence_photos = [];
+
+      if (order.route_id && stopsByRoute[order.route_id]) {
+        const stops = stopsByRoute[order.route_id];
+        const matchingStop = stops.find(s =>
+          (Math.abs(s.lat - order.address_lat) < 0.0001 && Math.abs(s.lng - order.address_lng) < 0.0001)
+        ) || stops.find(s => s.address === order.validated_address);
+
+        if (matchingStop && matchingStop.photo_url) {
+          orderData.evidence_photos.push({
+            photo_url: matchingStop.photo_url,
+            completed_at: matchingStop.completed_at,
+            recipient_name: matchingStop.recipient_name
+          });
+        }
+      }
+
+      return orderData;
+    });
+
+    res.json({ orders: ordersWithEvidence });
+  } catch (error) {
+    console.error('Error fetching delivered orders:', error);
+    res.status(500).json({ error: 'Error al cargar historial de entregas' });
+  }
+});
+
 router.put('/orders/:id/status', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -146,6 +201,22 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
     }
     await order.save();
 
+    if (order.respond_contact_id) {
+      try {
+        const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
+        if (settings?.respond_api_token) {
+          respondApiService.setContext(order.user_id, settings.respond_api_token);
+          const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
+          if (lifecycleName) {
+            await respondApiService.updateLifecycle(order.respond_contact_id, lifecycleName);
+            console.log(`[Dispatch] Lifecycle actualizado en Respond.io: ${order.customer_name} -> ${lifecycleName}`);
+          }
+        }
+      } catch (lcError) {
+        console.error(`[Dispatch] Error actualizando lifecycle en Respond.io:`, lcError.message);
+      }
+    }
+
     res.json({ success: true, order: order.toDict() });
   } catch (error) {
     console.error('Error updating order status:', error);
@@ -175,10 +246,31 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Datos invalidos' });
     }
 
+    const ordersToUpdate = await ValidatedAddress.findAll({
+      where: { id: { [Op.in]: order_ids } }
+    });
+
     await ValidatedAddress.update(
       { order_status },
       { where: { id: { [Op.in]: order_ids } } }
     );
+
+    const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
+    if (lifecycleName) {
+      for (const o of ordersToUpdate) {
+        if (!o.respond_contact_id) continue;
+        try {
+          const settings = await MessagingSettings.findOne({ where: { user_id: o.user_id } });
+          if (settings?.respond_api_token) {
+            respondApiService.setContext(o.user_id, settings.respond_api_token);
+            await respondApiService.updateLifecycle(o.respond_contact_id, lifecycleName);
+            console.log(`[Dispatch] Lifecycle bulk: ${o.customer_name} -> ${lifecycleName}`);
+          }
+        } catch (lcErr) {
+          console.error(`[Dispatch] Error lifecycle bulk ${o.customer_name}:`, lcErr.message);
+        }
+      }
+    }
 
     res.json({ success: true, updated: order_ids.length });
   } catch (error) {
@@ -524,6 +616,19 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
       order.order_status = 'delivered';
       order.delivered_at = new Date();
       await order.save();
+
+      if (order.respond_contact_id) {
+        try {
+          const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
+          if (settings?.respond_api_token) {
+            respondApiService.setContext(order.user_id, settings.respond_api_token);
+            await respondApiService.updateLifecycle(order.respond_contact_id, 'Delivered');
+            console.log(`[Dispatch] Ruta completada - Lifecycle: ${order.customer_name} -> Delivered`);
+          }
+        } catch (lcErr) {
+          console.error(`[Dispatch] Error lifecycle ruta completada ${order.customer_name}:`, lcErr.message);
+        }
+      }
     }
 
     res.json({ success: true, route: await route.toDict() });
