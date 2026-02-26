@@ -10,6 +10,7 @@ export default function AdminLogs() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [levelFilter, setLevelFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [fileStats, setFileStats] = useState(null)
   const logsEndRef = useRef(null)
   const containerRef = useRef(null)
 
@@ -27,8 +28,18 @@ export default function AdminLogs() {
     }
   }, [levelFilter, search])
 
+  const fetchFileStats = async () => {
+    try {
+      const response = await api.get('/api/admin/logs/stats')
+      setFileStats(response.data)
+    } catch (error) {
+      console.error('Error fetching log stats:', error)
+    }
+  }
+
   useEffect(() => {
     fetchLogs()
+    fetchFileStats()
   }, [fetchLogs])
 
   useEffect(() => {
@@ -53,6 +64,25 @@ export default function AdminLogs() {
       setLogs([])
     } catch (error) {
       console.error('Error clearing logs:', error)
+    }
+  }
+
+  const handleDownload = async (type) => {
+    try {
+      const response = await api.get(`/api/admin/logs/download/${type}`, {
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      const dateStr = new Date().toISOString().split('T')[0]
+      link.setAttribute('download', type === 'important' ? `logs_24h_${dateStr}.txt` : `logs_3dias_${dateStr}.txt`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading logs:', error)
     }
   }
 
@@ -140,6 +170,25 @@ export default function AdminLogs() {
         </div>
       </div>
 
+      <div className="logs-download-bar">
+        <div className="logs-download-section">
+          <button className="logs-download-btn" onClick={() => handleDownload('important')}>
+            <span className="material-icons">download</span>
+            24h Importantes
+            {fileStats?.important && (
+              <span className="logs-file-info">({fileStats.important.entries} entradas - {fileStats.important.sizeFormatted})</span>
+            )}
+          </button>
+          <button className="logs-download-btn" onClick={() => handleDownload('full')}>
+            <span className="material-icons">download</span>
+            3 Dias Completo
+            {fileStats?.full && (
+              <span className="logs-file-info">({fileStats.full.entries} entradas - {fileStats.full.sizeFormatted})</span>
+            )}
+          </button>
+        </div>
+      </div>
+
       <div className="logs-terminal" ref={containerRef}>
         {logs.length === 0 ? (
           <div className="logs-empty">No hay logs disponibles</div>
@@ -159,7 +208,7 @@ export default function AdminLogs() {
       </div>
 
       <div className="logs-footer">
-        <span>{logs.length} entradas</span>
+        <span>{logs.length} entradas en memoria</span>
       </div>
     </div>
   )

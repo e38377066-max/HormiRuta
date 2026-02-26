@@ -68,7 +68,6 @@ class AddressValidationService {
     
     const zone = await CoverageZone.findOne({
       where: {
-        user_id: this.userId,
         city: {
           [Op.iLike]: `%${cityName}%`
         },
@@ -143,7 +142,6 @@ class AddressValidationService {
     if (zipCode) {
       const zone = await CoverageZone.findOne({
         where: {
-          user_id: this.userId,
           zip_code: zipCode,
           is_active: true
         }
@@ -247,7 +245,6 @@ class AddressValidationService {
 
     const zone = await CoverageZone.findOne({
       where: {
-        user_id: this.userId,
         zip_code: zipCode,
         is_active: true
       }

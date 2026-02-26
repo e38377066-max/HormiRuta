@@ -1094,6 +1094,51 @@
   word-break: break-word;
 }
 
+.logs-download-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #333;
+  margin-bottom: 4px;
+}
+
+.logs-download-section {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.logs-download-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.logs-download-btn:hover {
+  background: #334155;
+  color: #e2e8f0;
+  border-color: #5b8def;
+}
+
+.logs-download-btn .material-icons {
+  font-size: 16px;
+}
+
+.logs-file-info {
+  font-size: 11px;
+  color: #64748b;
+  margin-left: 4px;
+}
+
 .logs-footer {
   display: flex;
   align-items: center;

@@ -43,7 +43,7 @@ Area 862 System is a route planning and optimization application for delivery se
     - **Test Mode**: Allows testing chatbot flows with a specific contact, including a "Reset Test" button.
 - **Automatic Address Scanning**: Scans chat messages to extract and validate addresses using Google Maps Geocoding, updating custom fields in Respond.io. Supports Google Maps links (maps.app.goo.gl, etc.) and WhatsApp location messages via reverse geocoding. Filters out conversational messages that incidentally mention street names.
 - **Automatic Follow-up System**: Configurable message re-sending if a customer does not respond.
-- **System Logs Viewer**: In-memory LogBuffer (500 entries) intercepts console output; admin-only page at `/admin/logs` with auto-refresh, level filters, and search.
+- **System Logs Viewer**: In-memory LogBuffer (500 entries) intercepts console output; admin-only page at `/admin/logs` with auto-refresh, level filters, and search. Persistent file storage: 24h important logs and 3-day full logs, downloadable from the admin panel.
 - **Coverage Zones**: Admin users see ALL coverage zones globally (no user_id filter); non-admins see only their own.
 - **Dispatch Lifecycle Sync**: Order statuses aligned with Respond.io lifecycle stages: `approved` → `ordered` → `on_delivery` → `ups_shipped` → `delivered`. Address scanner auto-syncs order_status from contact lifecycle.
 - **Bulk Zone Address Search**: Address geocoding search available in both single-add and bulk-add zone modals.
