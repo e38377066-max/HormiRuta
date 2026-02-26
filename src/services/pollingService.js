@@ -1138,9 +1138,31 @@ class PollingService {
       const addressMap = new Map();
       for (const va of existingAddresses) {
         addressMap.set(va.respond_contact_id, {
+          id: va.id,
           validated: va.validated_address,
-          original: va.original_address
+          original: va.original_address,
+          customer_name: va.customer_name
         });
+      }
+
+      for (const contact of batch) {
+        const contactIdStr = contact.id.toString();
+        const existingEntry = addressMap.get(contactIdStr);
+        if (existingEntry) {
+          const currentName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+          if (existingEntry.customer_name && existingEntry.customer_name !== currentName && currentName !== 'Sin nombre') {
+            try {
+              await ValidatedAddress.update(
+                { customer_name: currentName },
+                { where: { id: existingEntry.id } }
+              );
+              console.log(`[AddressScan] Nombre actualizado: "${existingEntry.customer_name}" -> "${currentName}" (${contactIdStr})`);
+              existingEntry.customer_name = currentName;
+            } catch (nameErr) {
+              console.error(`[AddressScan] Error actualizando nombre de ${contactIdStr}:`, nameErr.message);
+            }
+          }
+        }
       }
 
       for (let i = 0; i < batch.length; i++) {

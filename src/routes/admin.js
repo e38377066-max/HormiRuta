@@ -173,4 +173,39 @@ router.delete('/logs', requireAdmin, async (req, res) => {
   }
 });
 
+router.get('/logs/stats', requireAdmin, async (req, res) => {
+  try {
+    const stats = logBuffer.getFileStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener estadisticas de logs' });
+  }
+});
+
+router.get('/logs/download/:type', requireAdmin, async (req, res) => {
+  try {
+    const { type } = req.params;
+    if (type !== 'full' && type !== 'important') {
+      return res.status(400).json({ error: 'Tipo invalido. Usa "full" o "important"' });
+    }
+
+    const content = logBuffer.getFileContent(type);
+    if (!content) {
+      return res.status(404).json({ error: 'No hay logs disponibles' });
+    }
+
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const filename = type === 'important'
+      ? `logs_24h_${dateStr}.txt`
+      : `logs_3dias_${dateStr}.txt`;
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(content);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al descargar logs' });
+  }
+});
+
 export default router;
