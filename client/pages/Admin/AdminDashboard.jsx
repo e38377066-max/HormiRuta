@@ -7,6 +7,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     fetchStats()
@@ -20,6 +21,25 @@ export default function AdminDashboard() {
       console.error('Error fetching admin stats:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResetDispatch = async () => {
+    const confirmed = window.confirm('ATENCION: Esto eliminara TODAS las direcciones, rutas, paradas, historial y fotos de evidencia del dispatch. Esta accion no se puede deshacer.\n\n¿Estas seguro?')
+    if (!confirmed) return
+    const doubleConfirm = window.confirm('ULTIMA CONFIRMACION: Se borraran todos los datos del dispatch permanentemente. ¿Continuar?')
+    if (!doubleConfirm) return
+    
+    setResetting(true)
+    try {
+      const res = await api.delete('/api/admin/dispatch/reset')
+      const d = res.data.deleted
+      alert(`Dispatch vaciado:\n- ${d.addresses} direcciones\n- ${d.routes} rutas\n- ${d.stops} paradas\n- ${d.routeHistory} historial\n- ${d.photos} fotos de evidencia`)
+      fetchStats()
+    } catch (err) {
+      alert('Error al vaciar dispatch')
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -158,6 +178,15 @@ export default function AdminDashboard() {
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
+            <button className="section-item danger-item" onClick={handleResetDispatch} disabled={resetting}>
+              <div className="item-icon red">
+                <span className="material-icons">{resetting ? 'sync' : 'delete_forever'}</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">{resetting ? 'Vaciando...' : 'Vaciar Dispatch'}</div>
+                <div className="item-subtitle">Eliminar todas las direcciones, rutas, paradas y evidencias</div>
+              </div>
+            </button>
           </div>
         </div>
 

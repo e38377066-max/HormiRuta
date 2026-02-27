@@ -1,8 +1,10 @@
 import express from 'express';
 import { Op } from 'sequelize';
-import { User, Route, MessagingOrder } from '../models/index.js';
+import { User, Route, Stop, ValidatedAddress, MessagingOrder } from '../models/index.js';
 import { requireAdmin } from '../middleware/auth.js';
 import logBuffer from '../services/logService.js';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
 
@@ -228,6 +230,48 @@ router.get('/logs/archives/:filename', requireAdmin, async (req, res) => {
     res.send(content);
   } catch (error) {
     res.status(500).json({ error: 'Error al descargar archivo' });
+  }
+});
+
+router.delete('/dispatch/reset', requireAdmin, async (req, res) => {
+  try {
+    const stopsDeleted = await Stop.destroy({ where: {} });
+    const routesDeleted = await Route.destroy({ where: {} });
+    const addressesDeleted = await ValidatedAddress.destroy({ where: {} });
+
+    let routeHistoryDeleted = 0;
+    try {
+      const { sequelize } = await import('../models/index.js');
+      const [, meta] = await sequelize.query('DELETE FROM route_history');
+      routeHistoryDeleted = meta?.rowCount || 0;
+    } catch (e) {}
+
+    const evidencePath = path.join(process.cwd(), 'uploads', 'evidence');
+    let photosDeleted = 0;
+    if (fs.existsSync(evidencePath)) {
+      const files = fs.readdirSync(evidencePath);
+      for (const file of files) {
+        if (file === '.gitkeep') continue;
+        fs.unlinkSync(path.join(evidencePath, file));
+        photosDeleted++;
+      }
+    }
+
+    console.log(`[Admin] Dispatch vaciado: ${addressesDeleted} direcciones, ${routesDeleted} rutas, ${stopsDeleted} paradas, ${routeHistoryDeleted} historial, ${photosDeleted} fotos eliminadas`);
+
+    res.json({
+      success: true,
+      deleted: {
+        addresses: addressesDeleted,
+        routes: routesDeleted,
+        stops: stopsDeleted,
+        routeHistory: routeHistoryDeleted,
+        photos: photosDeleted
+      }
+    });
+  } catch (error) {
+    console.error('Reset dispatch error:', error);
+    res.status(500).json({ error: 'Error al vaciar dispatch' });
   }
 });
 
