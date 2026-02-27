@@ -620,24 +620,44 @@ router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
     const skipped = [];
 
     for (const zip_code of zip_codes) {
+      const trimmedZip = zip_code.trim();
       const existing = await CoverageZone.findOne({
         where: {
           user_id: req.userId,
-          zip_code: zip_code.trim()
+          zip_code: trimmedZip
         }
       });
 
       if (existing) {
-        skipped.push(zip_code);
+        skipped.push(trimmedZip);
         continue;
+      }
+
+      let zipCity = city || '';
+      let zipState = state || '';
+      let zipZoneName = zone_name || '';
+
+      if (!zipCity || !zipState) {
+        try {
+          const zipResponse = await fetch(`https://api.zippopotam.us/us/${trimmedZip}`);
+          if (zipResponse.ok) {
+            const zipData = await zipResponse.json();
+            if (zipData.places && zipData.places.length > 0) {
+              const place = zipData.places[0];
+              zipCity = zipCity || place['place name'] || '';
+              zipState = zipState || place['state abbreviation'] || '';
+              zipZoneName = zipZoneName || place['place name'] || '';
+            }
+          }
+        } catch (e) {}
       }
 
       const zone = await CoverageZone.create({
         user_id: req.userId,
-        zip_code: zip_code.trim(),
-        zone_name,
-        city,
-        state,
+        zip_code: trimmedZip,
+        zone_name: zipZoneName,
+        city: zipCity,
+        state: zipState,
         is_active: true
       });
       created.push(zone.toDict());

@@ -470,7 +470,13 @@ router.get('/drivers', requireAdmin, async (req, res) => {
 
 router.get('/respond-users', requireAdmin, async (req, res) => {
   try {
-    const settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+    if (!settings?.respond_api_token) {
+      settings = await MessagingSettings.findOne({
+        where: { respond_api_token: { [Op.ne]: null } },
+        order: [['id', 'ASC']]
+      });
+    }
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay token de API de Respond.io configurado' });
     }
