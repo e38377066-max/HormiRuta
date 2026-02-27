@@ -460,6 +460,38 @@ router.delete('/orders/:id', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/orders/revalidate', requireAuth, async (req, res) => {
+  try {
+    const admin = await isAdminUser(req.userId);
+    if (!admin) return res.status(403).json({ error: 'Solo admin' });
+
+    const noCoverageOrders = await MessagingOrder.findAll({
+      where: { validation_status: 'no_coverage' }
+    });
+
+    let revalidated = 0;
+    for (const order of noCoverageOrders) {
+      if (!order.zip_code) continue;
+      const zone = await CoverageZone.findOne({
+        where: { zip_code: order.zip_code, is_active: true }
+      });
+      if (zone) {
+        await order.update({
+          validation_status: 'covered',
+          validation_message: `ZIP ${order.zip_code} con cobertura - ${zone.zone_name || zone.city || 'Zona'}`
+        });
+        revalidated++;
+      }
+    }
+
+    console.log(`[Coverage] Re-validacion manual: ${revalidated} ordenes actualizadas de ${noCoverageOrders.length} sin cobertura`);
+    res.json({ revalidated, total: noCoverageOrders.length });
+  } catch (error) {
+    console.error('Revalidate orders error:', error);
+    res.status(500).json({ error: 'Error al re-validar' });
+  }
+});
+
 router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
   try {
     const admin = await isAdminUser(req.userId);
@@ -561,6 +593,14 @@ router.post('/coverage-zones', requireAuth, async (req, res) => {
       notes: notes || null
     });
 
+    const updated = await MessagingOrder.update(
+      { validation_status: 'covered', validation_message: `ZIP ${zip_code} con cobertura - ${zone_name || city || 'Zona'}` },
+      { where: { zip_code, validation_status: 'no_coverage' } }
+    );
+    if (updated[0] > 0) {
+      console.log(`[Coverage] Re-validadas ${updated[0]} ordenes para ZIP ${zip_code}`);
+    }
+
     res.status(201).json(zone.toDict());
   } catch (error) {
     console.error('Create coverage zone error:', error);
@@ -601,6 +641,17 @@ router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
         is_active: true
       });
       created.push(zone.toDict());
+    }
+
+    if (created.length > 0) {
+      const createdZips = created.map(z => z.zip_code);
+      const revalidated = await MessagingOrder.update(
+        { validation_status: 'covered' },
+        { where: { zip_code: createdZips, validation_status: 'no_coverage' } }
+      );
+      if (revalidated[0] > 0) {
+        console.log(`[Coverage] Re-validadas ${revalidated[0]} ordenes en bulk para ZIPs: ${createdZips.join(', ')}`);
+      }
     }
 
     res.status(201).json({
