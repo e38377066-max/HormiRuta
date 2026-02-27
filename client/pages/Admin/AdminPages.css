@@ -192,6 +192,29 @@
 .item-icon.green { background: #4caf50; }
 .item-icon.blue { background: #2196f3; }
 .item-icon.cyan { background: #00bcd4; }
+.item-icon.red { background: #e53935; }
+
+button.section-item.danger-item {
+  width: 100%;
+  border: 1px solid #ffcdd2;
+  background: #fff5f5;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button.section-item.danger-item:hover {
+  background: #ffebee;
+  border-color: #ef9a9a;
+}
+
+button.section-item.danger-item .item-title {
+  color: #c62828;
+}
+
+button.section-item.danger-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .item-content {
   flex: 1;
