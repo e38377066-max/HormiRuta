@@ -1061,7 +1061,7 @@ class PollingService {
         cursorId = result.pagination.nextCursor;
       }
 
-      const excludedLifecycles = ['UPS Shipped'];
+      const excludedLifecycles = ['UPS Shipped', 'New Lead', 'Pending', 'Impropos'];
       allContacts = allContacts.filter(contact => {
         if (contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
           return false;
@@ -1227,6 +1227,7 @@ class PollingService {
           if (!messagesResult.success || !messagesResult.items) continue;
 
           const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
+          const outgoingMessages = messagesResult.items.filter(m => m.traffic === 'outgoing');
           let latestExtracted = null;
           let scanMapsLink = null;
           let scanLocationCoords = null;
@@ -1247,6 +1248,33 @@ class PollingService {
             if (addr) {
               latestExtracted = addr;
               break;
+            }
+          }
+
+          if (!scanLocationCoords && !scanMapsLink && !latestExtracted) {
+            const confirmPatterns = [
+              /(?:esta|esta es|tu|su|la)\s+(?:direccion|dir|address)/i,
+              /(?:confirm|verific|correct|bien)\s+.*(?:direccion|dir|address)/i,
+              /(?:direccion|address)\s+(?:es|seria|correcta|confirmada)/i,
+              /(?:te|le)\s+(?:mando|envio|confirmo)\s+(?:la|tu|su)?\s*(?:direccion|dir|address)/i,
+              /(?:entrega|delivery|envio)\s+(?:a|en|para)\s*:?\s*/i
+            ];
+            for (const msg of outgoingMessages) {
+              const text = msg.message?.text || '';
+              if (!text || text.length < 10) continue;
+              const isConfirmation = confirmPatterns.some(p => p.test(text));
+              if (!isConfirmation) continue;
+              const gLink = extractor.extractGoogleMapsLink(text);
+              if (gLink) {
+                scanMapsLink = gLink;
+                break;
+              }
+              const addr = extractor.extractAddressFromMessage(text);
+              if (addr) {
+                latestExtracted = addr;
+                console.log(`[AddressScan] Direccion detectada en mensaje de agente: "${addr}"`);
+                break;
+              }
             }
           }
 
