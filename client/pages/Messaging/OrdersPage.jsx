@@ -13,6 +13,7 @@ export default function OrdersPage() {
   const [validationResult, setValidationResult] = useState(null)
   const [validationHistory, setValidationHistory] = useState([])
   const [copySuccess, setCopySuccess] = useState(false)
+  const [revalidating, setRevalidating] = useState(false)
   const [zipForm, setZipForm] = useState({ 
     zip_code: '', 
     contact_name: '', 
@@ -118,6 +119,20 @@ export default function OrdersPage() {
     }
   }
 
+  const handleRevalidate = async () => {
+    setRevalidating(true)
+    try {
+      const res = await api.post('/api/messaging/orders/revalidate')
+      const { revalidated, total } = res.data
+      alert(`Re-validacion completada: ${revalidated} de ${total} ordenes actualizadas`)
+      fetchOrders(filter || null)
+    } catch (err) {
+      alert('Error al re-validar')
+    } finally {
+      setRevalidating(false)
+    }
+  }
+
   const handleCopyMessage = async (message) => {
     if (!message) return
     try {
@@ -191,6 +206,10 @@ export default function OrdersPage() {
         <button className="btn-accent" onClick={() => navigate('/messaging/settings')}>
           <span className="material-icons">settings</span>
           Configuracion
+        </button>
+        <button className="btn-outline" onClick={handleRevalidate} disabled={revalidating}>
+          <span className="material-icons">{revalidating ? 'sync' : 'refresh'}</span>
+          {revalidating ? 'Validando...' : 'Re-validar'}
         </button>
       </div>
 
