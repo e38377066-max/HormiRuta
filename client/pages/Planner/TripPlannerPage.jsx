@@ -1254,12 +1254,14 @@ export default function TripPlannerPage() {
                         >
                           <span className="material-icons" style={{ fontSize: 16 }}>arrow_downward</span>
                         </button>
-                        <button 
-                          className="header-btn" 
-                          onClick={(e) => { e.stopPropagation(); removeStop(index); }}
-                        >
-                          <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
-                        </button>
+                        {!currentRouteId && (
+                          <button 
+                            className="header-btn" 
+                            onClick={(e) => { e.stopPropagation(); removeStop(index); }}
+                          >
+                            <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1585,6 +1587,7 @@ export default function TripPlannerPage() {
                 <span className="material-icons">close</span>
               </button>
             </div>
+            <div className="evidence-scroll-content">
             <div className="evidence-client-info">
               {stops[showEvidenceModal]?.name && (
                 <div className="evidence-info-row">
@@ -1714,6 +1717,7 @@ export default function TripPlannerPage() {
                   <p>Selecciona un metodo de pago (opcional)</p>
                 </div>
               )}
+            </div>
             </div>
             <div className="evidence-modal-footer">
               <button className="btn-cancel" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); setSelectedPaymentMethod(''); setAmountCollected(''); }}>
