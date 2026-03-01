@@ -224,18 +224,18 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
   }
 });
 
-router.put('/orders/:id/amount', requireAdmin, async (req, res) => {
+router.put('/orders/:id/notes', requireAuth, async (req, res) => {
   try {
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
 
-    order.amount = req.body.amount || 0;
+    order.notes = req.body.notes || '';
     await order.save();
 
     res.json({ success: true, order: order.toDict() });
   } catch (error) {
-    console.error('Error updating order amount:', error);
-    res.status(500).json({ error: 'Error al actualizar monto' });
+    console.error('Error updating order notes:', error);
+    res.status(500).json({ error: 'Error al actualizar notas' });
   }
 });
 
@@ -579,11 +579,9 @@ router.post('/stops/:id/evidence', requireAuth, upload.single('photo'), async (r
       }
     }
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'Se requiere una foto de evidencia' });
+    if (req.file) {
+      stop.photo_url = `/uploads/evidence/${req.file.filename}`;
     }
-
-    stop.photo_url = `/uploads/evidence/${req.file.filename}`;
     stop.status = 'completed';
     stop.completed_at = new Date();
     await stop.save();
@@ -608,9 +606,9 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
     }
 
     const allStops = await Stop.findAll({ where: { route_id: route.id } });
-    const allCompleted = allStops.every(s => s.status === 'completed' && s.photo_url);
+    const allCompleted = allStops.every(s => s.status === 'completed');
     if (!allCompleted) {
-      return res.status(400).json({ error: 'Todas las paradas deben tener evidencia antes de finalizar' });
+      return res.status(400).json({ error: 'Todas las paradas deben estar completadas antes de finalizar' });
     }
 
     route.status = 'completed';

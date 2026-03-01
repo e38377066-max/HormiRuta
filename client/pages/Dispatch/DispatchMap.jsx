@@ -46,8 +46,8 @@ export default function DispatchMap() {
   const [showAssignDriver, setShowAssignDriver] = useState(null)
   const [routeName, setRouteName] = useState('')
   const [activeTab, setActiveTab] = useState('orders')
-  const [editingAmount, setEditingAmount] = useState(null)
-  const [amountValue, setAmountValue] = useState('')
+  const [editingNotes, setEditingNotes] = useState(null)
+  const [notesValue, setNotesValue] = useState('')
   const [respondUsers, setRespondUsers] = useState([])
   const [selectedRespondUsers, setSelectedRespondUsers] = useState([])
   const [loadingRespondUsers, setLoadingRespondUsers] = useState(false)
@@ -443,14 +443,14 @@ export default function DispatchMap() {
     }
   }
 
-  const handleSaveAmount = async (orderId) => {
+  const handleSaveNotes = async (orderId) => {
     try {
-      await api.put(`/api/dispatch/orders/${orderId}/amount`, { amount: parseFloat(amountValue) || 0 })
-      setEditingAmount(null)
-      setAmountValue('')
+      await api.put(`/api/dispatch/orders/${orderId}/notes`, { notes: notesValue })
+      setEditingNotes(null)
+      setNotesValue('')
       fetchData()
     } catch (error) {
-      alert('Error al guardar monto')
+      alert('Error al guardar notas')
     }
   }
 
@@ -720,8 +720,10 @@ export default function DispatchMap() {
                           <span className="material-icons" style={{ fontSize: '14px' }}>{cfg.icon}</span>
                           {cfg.label}
                         </span>
-                        {order.amount > 0 && (
-                          <span className="do-amount">${order.amount.toFixed(2)}</span>
+                        {order.notes && (
+                          <span className="do-notes-tag">
+                            <span className="material-icons" style={{ fontSize: '14px' }}>sticky_note_2</span>
+                          </span>
                         )}
                         {order.driver_name && (
                           <span className="do-driver">
@@ -743,31 +745,35 @@ export default function DispatchMap() {
                               {getStatusConfig(getNextStatus(order.order_status)).label}
                             </button>
                           )}
-                          {editingAmount === order.id ? (
-                            <div className="do-amount-edit">
-                              <input
-                                type="number"
-                                value={amountValue}
-                                onChange={e => setAmountValue(e.target.value)}
-                                placeholder="$0.00"
+                          {editingNotes === order.id ? (
+                            <div className="do-notes-edit">
+                              <textarea
+                                value={notesValue}
+                                onChange={e => setNotesValue(e.target.value)}
+                                placeholder="Agregar notas..."
                                 autoFocus
-                                onKeyDown={e => e.key === 'Enter' && handleSaveAmount(order.id)}
+                                rows={2}
                               />
-                              <button onClick={() => handleSaveAmount(order.id)}>
-                                <span className="material-icons">check</span>
-                              </button>
-                              <button onClick={() => setEditingAmount(null)}>
-                                <span className="material-icons">close</span>
-                              </button>
+                              <div className="do-notes-actions">
+                                <button onClick={() => handleSaveNotes(order.id)}>
+                                  <span className="material-icons">check</span>
+                                </button>
+                                <button onClick={() => setEditingNotes(null)}>
+                                  <span className="material-icons">close</span>
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <button
-                              className="do-edit-amount"
-                              onClick={() => { setEditingAmount(order.id); setAmountValue(order.amount || '') }}
-                              title="Editar monto"
+                              className="do-edit-notes"
+                              onClick={() => { setEditingNotes(order.id); setNotesValue(order.notes || '') }}
+                              title="Notas"
                             >
-                              <span className="material-icons">attach_money</span>
+                              <span className="material-icons">sticky_note_2</span>
                             </button>
+                          )}
+                          {order.notes && editingNotes !== order.id && (
+                            <div className="do-notes-preview">{order.notes}</div>
                           )}
                         </div>
                       )}
