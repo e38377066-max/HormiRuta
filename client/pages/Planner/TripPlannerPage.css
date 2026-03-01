@@ -289,6 +289,37 @@
   gap: 4px;
 }
 
+.stop-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.stop-move-btn {
+  background: none;
+  border: none;
+  color: #5b8def;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.stop-move-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.stop-move-btn:not(:disabled):active {
+  opacity: 1;
+  background: rgba(91, 141, 239, 0.15);
+}
+
 .stop-checkbox {
   width: 28px;
   cursor: pointer;

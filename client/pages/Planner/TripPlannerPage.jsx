@@ -286,11 +286,26 @@ export default function TripPlannerPage() {
   }, [userLocation, navigationMode, stops])
 
   const navLastUpdateRef = useRef(0)
+  const navLastRouteRef = useRef(null)
+
+  const isOffRoute = (currentPos) => {
+    if (!navLastRouteRef.current) return true
+    const routePath = navLastRouteRef.current
+    let minDist = Infinity
+    for (let i = 0; i < routePath.length; i++) {
+      const p = routePath[i]
+      const d = Math.sqrt(Math.pow((currentPos.lat - p.lat) * 111000, 2) + Math.pow((currentPos.lng - p.lng) * 111000 * Math.cos(currentPos.lat * Math.PI / 180), 2))
+      if (d < minDist) minDist = d
+    }
+    return minDist > 50
+  }
 
   const updateNavLine = async (from, to) => {
     const now = Date.now()
     const hasRenderer = !!navRendererRef.current
-    if (hasRenderer && now - navLastUpdateRef.current < 10000) return
+    const offRoute = isOffRoute(from)
+    const throttle = offRoute ? 5000 : 15000
+    if (hasRenderer && now - navLastUpdateRef.current < throttle) return
     navLastUpdateRef.current = now
     try {
       const directionsService = new window.google.maps.DirectionsService()
@@ -299,6 +314,11 @@ export default function TripPlannerPage() {
         destination: to,
         travelMode: window.google.maps.TravelMode[travelMode]
       })
+
+      if (result.routes[0]) {
+        const path = result.routes[0].overview_path?.map(p => ({ lat: p.lat(), lng: p.lng() })) || []
+        navLastRouteRef.current = path
+      }
 
       if (!navRendererRef.current && mapInstanceRef.current) {
         navRendererRef.current = new window.google.maps.DirectionsRenderer({
@@ -534,6 +554,23 @@ export default function TripPlannerPage() {
     setStops(updatedStops)
     setIsOptimized(false)
     updateMapMarkers(updatedStops)
+  }
+
+  const moveStop = (index, direction) => {
+    const newIndex = index + direction
+    if (newIndex < 0 || newIndex >= stops.length) return
+    const updatedStops = [...stops]
+    const temp = updatedStops[index]
+    updatedStops[index] = updatedStops[newIndex]
+    updatedStops[newIndex] = temp
+    const reindexed = updatedStops.map((s, i) => ({ ...s, id: i + 1 }))
+    setStops(reindexed)
+    setIsOptimized(false)
+    updateMapMarkers(reindexed)
+    vibrate('light')
+    if (reindexed.length >= 2) {
+      calculateRoute(reindexed)
+    }
   }
 
   const toggleStopComplete = (index) => {
@@ -880,6 +917,7 @@ export default function TripPlannerPage() {
   const exitNavigation = () => {
     setNavigationMode(false)
     setAutoFollow(false)
+    navLastRouteRef.current = null
     if (navLineRef.current) {
       navLineRef.current.setMap(null)
       navLineRef.current = null
@@ -1106,13 +1144,28 @@ export default function TripPlannerPage() {
                       {stop.note && <span className="stop-note"><span className="material-icons" style={{ fontSize: 13 }}>sticky_note_2</span> {stop.note}</span>}
                     </div>
                     {!navigationMode && (
-                      <button 
-                        className="header-btn" 
-                        onClick={(e) => { e.stopPropagation(); removeStop(index); }}
-                        style={{ marginRight: -8 }}
-                      >
-                        <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
-                      </button>
+                      <div className="stop-actions-row">
+                        <button 
+                          className="stop-move-btn"
+                          onClick={(e) => { e.stopPropagation(); moveStop(index, -1); }}
+                          disabled={index === 0}
+                        >
+                          <span className="material-icons" style={{ fontSize: 16 }}>arrow_upward</span>
+                        </button>
+                        <button 
+                          className="stop-move-btn"
+                          onClick={(e) => { e.stopPropagation(); moveStop(index, 1); }}
+                          disabled={index === stops.length - 1}
+                        >
+                          <span className="material-icons" style={{ fontSize: 16 }}>arrow_downward</span>
+                        </button>
+                        <button 
+                          className="header-btn" 
+                          onClick={(e) => { e.stopPropagation(); removeStop(index); }}
+                        >
+                          <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                   {!navigationMode && <div className={`stop-indicator ${stop.completed ? 'completed' : ''}`}></div>}
