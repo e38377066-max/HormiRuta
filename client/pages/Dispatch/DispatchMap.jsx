@@ -778,12 +778,19 @@ export default function DispatchMap() {
                         </div>
                       )}
 
-                      {isDriver && order.order_status === 'on_delivery' && (
-                        <div className="do-actions" onClick={e => e.stopPropagation()}>
-                          <button className="dbtn orange full" onClick={() => handleMarkDelivered(order.id)}>
-                            <span className="material-icons">done_all</span> Entregada
-                          </button>
-                        </div>
+                      {isDriver && (
+                        <>
+                          {order.notes && (
+                            <div className="do-notes-preview">{order.notes}</div>
+                          )}
+                          {order.order_status === 'on_delivery' && (
+                            <div className="do-actions" onClick={e => e.stopPropagation()}>
+                              <button className="dbtn orange full" onClick={() => handleMarkDelivered(order.id)}>
+                                <span className="material-icons">done_all</span> Entregada
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

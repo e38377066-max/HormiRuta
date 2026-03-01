@@ -587,14 +587,16 @@ export default function TripPlannerPage() {
   }
 
   const confirmStopWithEvidence = async () => {
-    if (showEvidenceModal === null || !evidenceFile) return
+    if (showEvidenceModal === null) return
     setUploadingEvidence(true)
     try {
       const stop = stops[showEvidenceModal]
       const stopDbId = stop.dbId || stop.id
 
       const formData = new FormData()
-      formData.append('photo', evidenceFile)
+      if (evidenceFile) {
+        formData.append('photo', evidenceFile)
+      }
       
       const res = await api.post(`/api/dispatch/stops/${stopDbId}/evidence`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -1088,24 +1090,31 @@ export default function TripPlannerPage() {
             <>
               <div className="stops-section-header">Parada</div>
               {stops.map((stop, index) => (
-                <div key={stop.id} className="stop-row" onClick={() => navigationMode && !stop.completed && toggleStopComplete(index)}>
-                  {navigationMode ? (
-                    <span className="material-icons stop-checkbox" style={{ color: stop.completed ? '#22c55e' : '#5b8def', fontSize: 22 }}>
-                      {stop.completed ? 'check_circle' : 'camera_alt'}
-                    </span>
-                  ) : (
-                    <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
-                  )}
-                  <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Lugar sin nombre'}</span>
-                  {!navigationMode && (
-                    <button 
-                      className="header-btn" 
-                      onClick={(e) => { e.stopPropagation(); removeStop(index); }}
-                      style={{ marginRight: -8 }}
-                    >
-                      <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
-                    </button>
-                  )}
+                <div key={stop.id} className={`stop-row ${navigationMode ? 'stop-row-nav' : ''}`} onClick={() => navigationMode && !stop.completed && toggleStopComplete(index)}>
+                  <div className="stop-row-top">
+                    {navigationMode ? (
+                      <span className="material-icons stop-checkbox" style={{ color: stop.completed ? '#22c55e' : '#5b8def', fontSize: 22 }}>
+                        {stop.completed ? 'check_circle' : 'radio_button_unchecked'}
+                      </span>
+                    ) : (
+                      <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
+                    )}
+                    <div className="stop-info-block">
+                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Lugar sin nombre'}</span>
+                      {stop.phone && <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>}
+                      {navigationMode && stop.address && <span className="stop-address-detail">{stop.address}</span>}
+                      {stop.note && <span className="stop-note"><span className="material-icons" style={{ fontSize: 13 }}>sticky_note_2</span> {stop.note}</span>}
+                    </div>
+                    {!navigationMode && (
+                      <button 
+                        className="header-btn" 
+                        onClick={(e) => { e.stopPropagation(); removeStop(index); }}
+                        style={{ marginRight: -8 }}
+                      >
+                        <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
+                      </button>
+                    )}
+                  </div>
                   {!navigationMode && <div className={`stop-indicator ${stop.completed ? 'completed' : ''}`}></div>}
                 </div>
               ))}
@@ -1137,10 +1146,10 @@ export default function TripPlannerPage() {
                 Finalizar ruta
               </button>
             ) : (
-              <button className="btn-start-route" onClick={() => toggleStopComplete(nextPendingIndex)}>
-                <span className="material-icons">camera_alt</span>
-                Confirmar parada {nextPendingIndex + 1}
-              </button>
+              <div className="nav-footer-info">
+                <span className="material-icons" style={{ fontSize: 18, color: '#5b8def' }}>touch_app</span>
+                <span>Toca una parada para completarla</span>
+              </div>
             )
           ) : isOptimized ? (
             <button className="btn-start-route" onClick={startRoute}>
@@ -1428,9 +1437,29 @@ export default function TripPlannerPage() {
                 <span className="material-icons">close</span>
               </button>
             </div>
-            <div className="evidence-modal-address">
-              <span className="material-icons">place</span>
-              <span>{stops[showEvidenceModal]?.name || stops[showEvidenceModal]?.address?.split(',')[0] || 'Parada'}</span>
+            <div className="evidence-client-info">
+              {stops[showEvidenceModal]?.name && (
+                <div className="evidence-info-row">
+                  <span className="material-icons">person</span>
+                  <span>{stops[showEvidenceModal].name}</span>
+                </div>
+              )}
+              {stops[showEvidenceModal]?.phone && (
+                <div className="evidence-info-row">
+                  <span className="material-icons">phone</span>
+                  <a href={`tel:${stops[showEvidenceModal].phone}`} onClick={e => e.stopPropagation()}>{stops[showEvidenceModal].phone}</a>
+                </div>
+              )}
+              <div className="evidence-info-row">
+                <span className="material-icons">place</span>
+                <span>{stops[showEvidenceModal]?.address || 'Parada'}</span>
+              </div>
+              {stops[showEvidenceModal]?.note && (
+                <div className="evidence-info-row">
+                  <span className="material-icons">sticky_note_2</span>
+                  <span>{stops[showEvidenceModal].note}</span>
+                </div>
+              )}
             </div>
             <div className="evidence-modal-body">
               {evidencePreview ? (
@@ -1444,8 +1473,8 @@ export default function TripPlannerPage() {
               ) : (
                 <div className="evidence-capture-area" onClick={openEvidenceCapture}>
                   <span className="material-icons" style={{ fontSize: 48, color: '#5b8def' }}>camera_alt</span>
-                  <p>Toca para tomar foto de evidencia</p>
-                  <p className="evidence-hint">Firma, comprobante, o foto de entrega</p>
+                  <p>Foto de transferencia Zelle (opcional)</p>
+                  <p className="evidence-hint">Toca para capturar foto del comprobante</p>
                 </div>
               )}
             </div>
@@ -1456,11 +1485,11 @@ export default function TripPlannerPage() {
               <button 
                 className="btn-optimize" 
                 onClick={confirmStopWithEvidence} 
-                disabled={!evidenceFile || uploadingEvidence}
-                style={{ flex: 1, opacity: !evidenceFile ? 0.5 : 1 }}
+                disabled={uploadingEvidence}
+                style={{ flex: 1 }}
               >
                 <span className="material-icons">{uploadingEvidence ? 'hourglass_empty' : 'check'}</span>
-                {uploadingEvidence ? 'Subiendo...' : 'Confirmar entrega'}
+                {uploadingEvidence ? 'Subiendo...' : evidenceFile ? 'Confirmar con foto' : 'Confirmar entrega'}
               </button>
             </div>
           </div>

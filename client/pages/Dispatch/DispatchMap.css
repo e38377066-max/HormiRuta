@@ -470,10 +470,10 @@
   font-weight: 500;
 }
 
-.do-amount {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #2e7d32;
+.do-notes-tag {
+  display: flex;
+  align-items: center;
+  color: #e8a838;
 }
 
 .do-driver {
@@ -489,6 +489,7 @@
   align-items: center;
   gap: 6px;
   margin-top: 6px;
+  flex-wrap: wrap;
 }
 
 .do-status-select {
@@ -500,7 +501,7 @@
   flex: 1;
 }
 
-.do-edit-amount {
+.do-edit-notes {
   background: none;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -508,24 +509,33 @@
   padding: 3px 6px;
   display: flex;
   align-items: center;
-  color: #2e7d32;
+  color: #e8a838;
 }
 
-.do-amount-edit {
+.do-notes-edit {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.do-notes-edit textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #e8a838;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  resize: vertical;
+  font-family: inherit;
+  min-height: 40px;
+}
+
+.do-notes-actions {
+  display: flex;
   gap: 4px;
 }
 
-.do-amount-edit input {
-  width: 80px;
-  padding: 4px 8px;
-  border: 1px solid #2e7d32;
-  border-radius: 4px;
-  font-size: 0.8rem;
-}
-
-.do-amount-edit button {
+.do-notes-actions button {
   background: none;
   border: none;
   cursor: pointer;
@@ -533,8 +543,18 @@
   display: flex;
 }
 
-.do-amount-edit button .material-icons {
+.do-notes-actions button .material-icons {
   font-size: 18px;
+}
+
+.do-notes-preview {
+  font-size: 0.75rem;
+  color: #e8a838;
+  background: rgba(232, 168, 56, 0.08);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+  width: 100%;
 }
 
 .dispatch-route-card {

@@ -48,6 +48,10 @@ Area 862 System is a route planning and optimization application for delivery se
 - **Dispatch Lifecycle Sync**: Order statuses aligned with Respond.io lifecycle stages: `approved` → `ordered` → `on_delivery` → `ups_shipped` → `delivered`. Address scanner auto-syncs order_status from contact lifecycle. Dispatch status changes (single, bulk, route completion) also sync back to Respond.io lifecycle.
 - **Delivery History (Entregadas tab)**: Separate tab in dispatch showing completed deliveries with evidence photos. Evidence modal shows full-size photo, recipient name, and completion date.
 - **Bulk Zone Address Search**: Address geocoding search available in both single-add and bulk-add zone modals.
+- **Client Info in Dispatch/Driver Views**: Full client info (name, phone, address, notes) visible in both dispatcher order cards and driver mobile planner. Evidence modal shows complete client details with clickable phone link.
+- **Flexible Stop Completion**: Drivers can complete any stop in any order (no sequential enforcement). Footer shows "Toca una parada para completarla" instead of forcing next stop.
+- **Optional Evidence Photos**: Evidence (Zelle transfer photo) is optional when confirming deliveries. Drivers can confirm a stop with or without a photo. Backend and frontend both accept empty evidence.
+- **Notes Field**: Orders use a notes field (replacing amount/$) for internal notes. Editable by admins in dispatch, visible to drivers.
 
 ## External Dependencies
 
