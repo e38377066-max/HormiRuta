@@ -677,6 +677,118 @@
   animation: spin 1s linear infinite;
 }
 
+.do-billing-edit {
+  padding: 8px;
+  background: #f0faf0;
+  border: 1px solid #c8e6c9;
+  border-radius: 6px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.billing-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.billing-field label {
+  font-size: 11px;
+  color: #555;
+  min-width: 90px;
+  white-space: nowrap;
+}
+
+.billing-field input {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+  width: 80px;
+}
+
+.do-billing-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: #f0faf0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.do-billing-row:hover {
+  background: #e0f2e0;
+}
+
+.billing-summary {
+  font-size: 12px;
+  color: #333;
+}
+
+.billing-detail {
+  color: #888;
+  font-size: 11px;
+}
+
+.do-billing-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: #f0faf0;
+  border-radius: 6px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.billing-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  color: #555;
+  flex: 1;
+}
+
+.billing-info strong {
+  color: #2e7d32;
+  font-size: 13px;
+}
+
+.payment-badge {
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.payment-badge.paid {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.payment-badge.partial {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.payment-method-tag {
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  background: #e3f2fd;
+  color: #1565c0;
+  text-transform: capitalize;
+}
+
 .do-driver {
   font-size: 0.75rem;
   color: #666;

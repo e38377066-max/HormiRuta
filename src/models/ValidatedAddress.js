@@ -99,6 +99,35 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
   notes: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  order_cost: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
+  },
+  deposit_amount: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
+  },
+  total_to_collect: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
+  },
+  payment_method: {
+    type: DataTypes.STRING(20),
+    allowNull: true
+  },
+  amount_collected: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
+  },
+  payment_status: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    defaultValue: 'pending'
   }
 }, {
   tableName: 'validated_addresses',
@@ -132,6 +161,12 @@ ValidatedAddress.prototype.toDict = function() {
     route_id: this.route_id,
     delivered_at: this.delivered_at,
     notes: this.notes,
+    order_cost: this.order_cost,
+    deposit_amount: this.deposit_amount,
+    total_to_collect: this.total_to_collect,
+    payment_method: this.payment_method,
+    amount_collected: this.amount_collected,
+    payment_status: this.payment_status,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

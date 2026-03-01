@@ -59,6 +59,8 @@ export default function DispatchMap() {
   const [deliveredOrders, setDeliveredOrders] = useState([])
   const [loadingDelivered, setLoadingDelivered] = useState(false)
   const [evidenceModal, setEvidenceModal] = useState(null)
+  const [editingBilling, setEditingBilling] = useState(null)
+  const [billingValues, setBillingValues] = useState({ order_cost: '', deposit_amount: '', total_to_collect: '' })
   const [messageModal, setMessageModal] = useState(null)
   const [templates, setTemplates] = useState([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
@@ -494,6 +496,40 @@ export default function DispatchMap() {
     }
   }
 
+  const handleSaveBilling = async (orderId) => {
+    try {
+      await api.put(`/api/dispatch/orders/${orderId}/billing`, {
+        order_cost: billingValues.order_cost !== '' ? parseFloat(billingValues.order_cost) : null,
+        deposit_amount: billingValues.deposit_amount !== '' ? parseFloat(billingValues.deposit_amount) : null,
+        total_to_collect: billingValues.total_to_collect !== '' ? parseFloat(billingValues.total_to_collect) : undefined
+      })
+      setEditingBilling(null)
+      setBillingValues({ order_cost: '', deposit_amount: '', total_to_collect: '' })
+      fetchData()
+    } catch (error) {
+      alert('Error al guardar cobranza')
+    }
+  }
+
+  const openBillingEditor = (order) => {
+    setEditingBilling(order.id)
+    setBillingValues({
+      order_cost: order.order_cost != null ? String(order.order_cost) : '',
+      deposit_amount: order.deposit_amount != null ? String(order.deposit_amount) : '',
+      total_to_collect: order.total_to_collect != null ? String(order.total_to_collect) : ''
+    })
+  }
+
+  const handleBillingChange = (field, value) => {
+    const newValues = { ...billingValues, [field]: value }
+    if (field === 'order_cost' || field === 'deposit_amount') {
+      const cost = parseFloat(field === 'order_cost' ? value : newValues.order_cost) || 0
+      const deposit = parseFloat(field === 'deposit_amount' ? value : newValues.deposit_amount) || 0
+      newValues.total_to_collect = String(Math.max(0, cost - deposit))
+    }
+    setBillingValues(newValues)
+  }
+
   const fetchAllUsers = async () => {
     try {
       setLoadingUsers(true)
@@ -829,6 +865,45 @@ export default function DispatchMap() {
                           {order.notes && editingNotes !== order.id && (
                             <div className="do-notes-preview">{order.notes}</div>
                           )}
+
+                          {editingBilling === order.id ? (
+                            <div className="do-billing-edit" onClick={e => e.stopPropagation()}>
+                              <div className="billing-field">
+                                <label>Costo $</label>
+                                <input type="number" step="0.01" value={billingValues.order_cost} onChange={e => handleBillingChange('order_cost', e.target.value)} placeholder="0.00" />
+                              </div>
+                              <div className="billing-field">
+                                <label>Deposito $</label>
+                                <input type="number" step="0.01" value={billingValues.deposit_amount} onChange={e => handleBillingChange('deposit_amount', e.target.value)} placeholder="0.00" />
+                              </div>
+                              <div className="billing-field">
+                                <label>Total a cobrar $</label>
+                                <input type="number" step="0.01" value={billingValues.total_to_collect} onChange={e => handleBillingChange('total_to_collect', e.target.value)} placeholder="0.00" />
+                              </div>
+                              <div className="do-notes-actions">
+                                <button onClick={() => handleSaveBilling(order.id)}><span className="material-icons">check</span></button>
+                                <button onClick={() => setEditingBilling(null)}><span className="material-icons">close</span></button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="do-billing-row" onClick={e => { e.stopPropagation(); openBillingEditor(order) }}>
+                              <span className="material-icons" style={{ fontSize: 16, color: '#4CAF50' }}>payments</span>
+                              {order.total_to_collect != null ? (
+                                <span className="billing-summary">
+                                  Cobrar: <strong>${Number(order.total_to_collect).toFixed(2)}</strong>
+                                  {order.order_cost != null && <span className="billing-detail"> (Costo: ${Number(order.order_cost).toFixed(2)})</span>}
+                                  {order.deposit_amount > 0 && <span className="billing-detail"> - Dep: ${Number(order.deposit_amount).toFixed(2)}</span>}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#999', fontSize: 12 }}>Agregar cobranza</span>
+                              )}
+                              {order.payment_status && order.payment_status !== 'pending' && (
+                                <span className={`payment-badge ${order.payment_status}`}>
+                                  {order.payment_status === 'paid' ? 'Pagado' : 'Parcial'}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -836,6 +911,24 @@ export default function DispatchMap() {
                         <>
                           {order.notes && (
                             <div className="do-notes-preview">{order.notes}</div>
+                          )}
+                          {(order.total_to_collect != null || order.order_cost != null) && (
+                            <div className="do-billing-display">
+                              <span className="material-icons" style={{ fontSize: 16, color: '#4CAF50' }}>payments</span>
+                              <div className="billing-info">
+                                {order.order_cost != null && <span>Costo: ${Number(order.order_cost).toFixed(2)}</span>}
+                                {order.deposit_amount > 0 && <span>Deposito: ${Number(order.deposit_amount).toFixed(2)}</span>}
+                                {order.total_to_collect != null && <strong>Cobrar: ${Number(order.total_to_collect).toFixed(2)}</strong>}
+                              </div>
+                              {order.payment_method && (
+                                <span className="payment-method-tag">{order.payment_method}</span>
+                              )}
+                              {order.payment_status && order.payment_status !== 'pending' && (
+                                <span className={`payment-badge ${order.payment_status}`}>
+                                  {order.payment_status === 'paid' ? 'Pagado' : 'Parcial'}
+                                </span>
+                              )}
+                            </div>
                           )}
                           {order.order_status === 'on_delivery' && (
                             <div className="do-actions" onClick={e => e.stopPropagation()}>
@@ -1034,8 +1127,16 @@ export default function DispatchMap() {
                         <span className="material-icons" style={{ fontSize: '14px' }}>done_all</span>
                         Entregada
                       </span>
-                      {order.amount > 0 && (
-                        <span className="do-amount">${order.amount.toFixed(2)}</span>
+                      {order.total_to_collect > 0 && (
+                        <span className="do-amount">${Number(order.total_to_collect).toFixed(2)}</span>
+                      )}
+                      {order.payment_method && (
+                        <span className="payment-method-tag">{order.payment_method}</span>
+                      )}
+                      {order.payment_status && order.payment_status !== 'pending' && (
+                        <span className={`payment-badge ${order.payment_status}`}>
+                          {order.payment_status === 'paid' ? 'Pagado' : 'Parcial'}
+                        </span>
                       )}
                       {order.delivered_at && (
                         <span className="do-delivered-date">

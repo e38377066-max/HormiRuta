@@ -121,6 +121,35 @@ const Stop = sequelize.define('Stop', {
   photo_url: {
     type: DataTypes.STRING(500),
     allowNull: true
+  },
+  order_cost: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
+  },
+  deposit_amount: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
+  },
+  total_to_collect: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
+  },
+  payment_method: {
+    type: DataTypes.STRING(20),
+    allowNull: true
+  },
+  amount_collected: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
+  },
+  payment_status: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    defaultValue: 'pending'
   }
 }, {
   tableName: 'stops',
@@ -158,7 +187,13 @@ Stop.prototype.toDict = function() {
     arrived_at: this.arrived_at,
     completed_at: this.completed_at,
     signature_url: this.signature_url,
-    photo_url: this.photo_url
+    photo_url: this.photo_url,
+    order_cost: this.order_cost,
+    deposit_amount: this.deposit_amount,
+    total_to_collect: this.total_to_collect,
+    payment_method: this.payment_method,
+    amount_collected: this.amount_collected,
+    payment_status: this.payment_status
   };
 };
 

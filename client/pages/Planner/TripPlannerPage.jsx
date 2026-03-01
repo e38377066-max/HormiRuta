@@ -61,6 +61,8 @@ export default function TripPlannerPage() {
   const [evidencePreview, setEvidencePreview] = useState(null)
   const [evidenceFile, setEvidenceFile] = useState(null)
   const [uploadingEvidence, setUploadingEvidence] = useState(false)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
+  const [amountCollected, setAmountCollected] = useState('')
   const [messageModal, setMessageModal] = useState(null)
   const [templates, setTemplates] = useState([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
@@ -104,7 +106,13 @@ export default function TripPlannerPage() {
         note: s.note || '',
         completed: s.status === 'completed',
         photo_url: s.photo_url || null,
-        color: '#EA4335'
+        color: '#EA4335',
+        order_cost: s.order_cost,
+        deposit_amount: s.deposit_amount,
+        total_to_collect: s.total_to_collect,
+        payment_method: s.payment_method,
+        amount_collected: s.amount_collected,
+        payment_status: s.payment_status
       }))
 
     setStops(routeStops)
@@ -584,6 +592,8 @@ export default function TripPlannerPage() {
     setShowEvidenceModal(index)
     setEvidencePreview(null)
     setEvidenceFile(null)
+    setSelectedPaymentMethod('')
+    setAmountCollected(stop.total_to_collect != null ? String(stop.total_to_collect) : '')
   }
 
   const handleEvidencePhoto = (e) => {
@@ -639,6 +649,12 @@ export default function TripPlannerPage() {
       if (evidenceFile) {
         formData.append('photo', evidenceFile)
       }
+      if (selectedPaymentMethod) {
+        formData.append('payment_method', selectedPaymentMethod)
+      }
+      if (amountCollected !== '') {
+        formData.append('amount_collected', amountCollected)
+      }
       
       const res = await api.post(`/api/dispatch/stops/${stopDbId}/evidence`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -646,7 +662,14 @@ export default function TripPlannerPage() {
 
       if (res.data.success) {
         const updatedStops = stops.map((s, i) => 
-          i === showEvidenceModal ? { ...s, completed: true, photo_url: res.data.stop.photo_url } : s
+          i === showEvidenceModal ? {
+            ...s,
+            completed: true,
+            photo_url: res.data.stop.photo_url,
+            payment_method: res.data.stop.payment_method,
+            amount_collected: res.data.stop.amount_collected,
+            payment_status: res.data.stop.payment_status
+          } : s
         )
         setStops(updatedStops)
         updateMapMarkers(updatedStops)
@@ -1206,6 +1229,14 @@ export default function TripPlannerPage() {
                       )}
                       {navigationMode && stop.address && <span className="stop-address-detail">{stop.address}</span>}
                       {stop.note && <span className="stop-note"><span className="material-icons" style={{ fontSize: 13 }}>sticky_note_2</span> {stop.note}</span>}
+                      {stop.total_to_collect != null && stop.total_to_collect > 0 && (
+                        <span className="stop-billing-tag">
+                          <span className="material-icons" style={{ fontSize: 13 }}>payments</span>
+                          Cobrar: ${Number(stop.total_to_collect).toFixed(2)}
+                          {stop.payment_status === 'paid' && <span className="stop-paid-badge">Pagado</span>}
+                          {stop.payment_status === 'partial' && <span className="stop-partial-badge">Parcial</span>}
+                        </span>
+                      )}
                     </div>
                     {!navigationMode && (
                       <div className="stop-actions-row">
@@ -1592,25 +1623,100 @@ export default function TripPlannerPage() {
                 </div>
               )}
             </div>
-            <div className="evidence-modal-body">
-              {evidencePreview ? (
-                <div className="evidence-preview-container">
-                  <img src={evidencePreview} alt="Evidencia" className="evidence-preview-img" />
-                  <button className="evidence-retake-btn" onClick={retakeEvidence}>
-                    <span className="material-icons">refresh</span>
-                    Tomar otra
+            {(stops[showEvidenceModal]?.total_to_collect != null || stops[showEvidenceModal]?.order_cost != null) && (
+              <div className="evidence-billing-block">
+                <div className="evidence-billing-title">
+                  <span className="material-icons" style={{ fontSize: 18, color: '#4CAF50' }}>payments</span>
+                  Cobranza
+                </div>
+                <div className="evidence-billing-details">
+                  {stops[showEvidenceModal]?.order_cost != null && (
+                    <div className="evidence-billing-line">
+                      <span>Costo:</span>
+                      <strong>${Number(stops[showEvidenceModal].order_cost).toFixed(2)}</strong>
+                    </div>
+                  )}
+                  {stops[showEvidenceModal]?.deposit_amount > 0 && (
+                    <div className="evidence-billing-line">
+                      <span>Deposito:</span>
+                      <strong>-${Number(stops[showEvidenceModal].deposit_amount).toFixed(2)}</strong>
+                    </div>
+                  )}
+                  {stops[showEvidenceModal]?.total_to_collect != null && (
+                    <div className="evidence-billing-line total-line">
+                      <span>Total a cobrar:</span>
+                      <strong>${Number(stops[showEvidenceModal].total_to_collect).toFixed(2)}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="evidence-payment-section">
+              <label className="evidence-section-label">Metodo de pago</label>
+              <div className="payment-method-options">
+                {[
+                  { value: 'cash', label: 'Efectivo', icon: 'payments' },
+                  { value: 'zelle', label: 'Zelle', icon: 'account_balance' },
+                  { value: 'card', label: 'Tarjeta', icon: 'credit_card' },
+                  { value: 'other', label: 'Otro', icon: 'more_horiz' }
+                ].map(pm => (
+                  <button
+                    key={pm.value}
+                    className={`payment-method-btn ${selectedPaymentMethod === pm.value ? 'active' : ''}`}
+                    onClick={() => setSelectedPaymentMethod(selectedPaymentMethod === pm.value ? '' : pm.value)}
+                  >
+                    <span className="material-icons">{pm.icon}</span>
+                    {pm.label}
                   </button>
+                ))}
+              </div>
+              {selectedPaymentMethod && (
+                <div className="payment-amount-row">
+                  <label>Monto cobrado $</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={amountCollected}
+                    onChange={e => setAmountCollected(e.target.value)}
+                    placeholder="0.00"
+                    className="payment-amount-input"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="evidence-modal-body">
+              {selectedPaymentMethod === 'zelle' ? (
+                evidencePreview ? (
+                  <div className="evidence-preview-container">
+                    <img src={evidencePreview} alt="Evidencia" className="evidence-preview-img" />
+                    <button className="evidence-retake-btn" onClick={retakeEvidence}>
+                      <span className="material-icons">refresh</span>
+                      Tomar otra
+                    </button>
+                  </div>
+                ) : (
+                  <div className="evidence-capture-area" onClick={openEvidenceCapture}>
+                    <span className="material-icons" style={{ fontSize: 48, color: '#5b8def' }}>camera_alt</span>
+                    <p>Foto de constancia Zelle</p>
+                    <p className="evidence-hint">Toca para capturar foto del comprobante</p>
+                  </div>
+                )
+              ) : selectedPaymentMethod ? (
+                <div className="evidence-no-photo-needed">
+                  <span className="material-icons" style={{ fontSize: 32, color: '#4CAF50' }}>check_circle</span>
+                  <p>No se requiere foto para pago con {selectedPaymentMethod === 'cash' ? 'efectivo' : selectedPaymentMethod === 'card' ? 'tarjeta' : 'otro metodo'}</p>
                 </div>
               ) : (
-                <div className="evidence-capture-area" onClick={openEvidenceCapture}>
-                  <span className="material-icons" style={{ fontSize: 48, color: '#5b8def' }}>camera_alt</span>
-                  <p>Foto de transferencia Zelle (opcional)</p>
-                  <p className="evidence-hint">Toca para capturar foto del comprobante</p>
+                <div className="evidence-no-photo-needed">
+                  <span className="material-icons" style={{ fontSize: 32, color: '#999' }}>info</span>
+                  <p>Selecciona un metodo de pago (opcional)</p>
                 </div>
               )}
             </div>
             <div className="evidence-modal-footer">
-              <button className="btn-cancel" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); }}>
+              <button className="btn-cancel" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); setSelectedPaymentMethod(''); setAmountCollected(''); }}>
                 Cancelar
               </button>
               <button 

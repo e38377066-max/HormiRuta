@@ -142,12 +142,17 @@ router.get('/orders/delivered', requireAdmin, async (req, res) => {
           (Math.abs(s.lat - order.address_lat) < 0.0001 && Math.abs(s.lng - order.address_lng) < 0.0001)
         ) || stops.find(s => s.address === order.validated_address);
 
-        if (matchingStop && matchingStop.photo_url) {
-          orderData.evidence_photos.push({
-            photo_url: matchingStop.photo_url,
-            completed_at: matchingStop.completed_at,
-            recipient_name: matchingStop.recipient_name
-          });
+        if (matchingStop) {
+          if (matchingStop.photo_url) {
+            orderData.evidence_photos.push({
+              photo_url: matchingStop.photo_url,
+              completed_at: matchingStop.completed_at,
+              recipient_name: matchingStop.recipient_name
+            });
+          }
+          orderData.payment_method = matchingStop.payment_method || orderData.payment_method;
+          orderData.amount_collected = matchingStop.amount_collected ?? orderData.amount_collected;
+          orderData.payment_status = matchingStop.payment_status || orderData.payment_status;
         }
       }
 
@@ -239,6 +244,45 @@ router.put('/orders/:id/notes', requireAuth, async (req, res) => {
   }
 });
 
+router.put('/orders/:id/billing', requireAdmin, async (req, res) => {
+  try {
+    const order = await ValidatedAddress.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    const { order_cost, deposit_amount, total_to_collect } = req.body;
+    if (order_cost !== undefined) order.order_cost = order_cost;
+    if (deposit_amount !== undefined) order.deposit_amount = deposit_amount;
+
+    if (total_to_collect !== undefined) {
+      order.total_to_collect = total_to_collect;
+    } else if (order_cost !== undefined || deposit_amount !== undefined) {
+      const cost = order_cost !== undefined ? order_cost : (order.order_cost || 0);
+      const deposit = deposit_amount !== undefined ? deposit_amount : (order.deposit_amount || 0);
+      order.total_to_collect = Math.max(0, cost - deposit);
+    }
+
+    await order.save();
+
+    if (order.route_id) {
+      const stops = await Stop.findAll({ where: { route_id: order.route_id } });
+      const matchStop = stops.find(s =>
+        (Math.abs(s.lat - order.address_lat) < 0.0001 && Math.abs(s.lng - order.address_lng) < 0.0001)
+      ) || stops.find(s => s.address === order.validated_address);
+      if (matchStop) {
+        matchStop.order_cost = order.order_cost;
+        matchStop.deposit_amount = order.deposit_amount;
+        matchStop.total_to_collect = order.total_to_collect;
+        await matchStop.save();
+      }
+    }
+
+    res.json({ success: true, order: order.toDict() });
+  } catch (error) {
+    console.error('Error updating billing:', error);
+    res.status(500).json({ error: 'Error al actualizar cobranza' });
+  }
+});
+
 router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
   try {
     const { order_ids, order_status } = req.body;
@@ -315,7 +359,10 @@ router.post('/routes', requireAdmin, async (req, res) => {
         order: i,
         customer_name: order.customer_name,
         phone: order.customer_phone,
-        note: order.notes
+        note: order.notes,
+        order_cost: order.order_cost,
+        deposit_amount: order.deposit_amount,
+        total_to_collect: order.total_to_collect
       });
 
       order.route_id = route.id;
@@ -582,9 +629,39 @@ router.post('/stops/:id/evidence', requireAuth, upload.single('photo'), async (r
     if (req.file) {
       stop.photo_url = `/uploads/evidence/${req.file.filename}`;
     }
+
+    if (req.body.payment_method) stop.payment_method = req.body.payment_method;
+    if (req.body.amount_collected !== undefined && req.body.amount_collected !== '') {
+      stop.amount_collected = parseFloat(req.body.amount_collected) || 0;
+    }
+
+    if (req.body.payment_method) {
+      const collected = stop.amount_collected || 0;
+      const toCollect = stop.total_to_collect || 0;
+      if (toCollect <= 0 || collected >= toCollect) {
+        stop.payment_status = 'paid';
+      } else if (collected > 0) {
+        stop.payment_status = 'partial';
+      } else {
+        stop.payment_status = 'pending';
+      }
+    }
+
     stop.status = 'completed';
     stop.completed_at = new Date();
     await stop.save();
+
+    const routeOrders = await ValidatedAddress.findAll({ where: { route_id: stop.route_id } });
+    const matchOrder = routeOrders.find(o =>
+      (Math.abs(o.address_lat - stop.lat) < 0.0001 && Math.abs(o.address_lng - stop.lng) < 0.0001)
+    ) || routeOrders.find(o => o.validated_address === stop.address);
+
+    if (matchOrder) {
+      if (req.body.payment_method) matchOrder.payment_method = req.body.payment_method;
+      if (stop.amount_collected !== null) matchOrder.amount_collected = stop.amount_collected;
+      if (stop.payment_status) matchOrder.payment_status = stop.payment_status;
+      await matchOrder.save();
+    }
 
     res.json({ success: true, stop: stop.toDict() });
   } catch (error) {
