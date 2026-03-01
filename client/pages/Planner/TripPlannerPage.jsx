@@ -57,6 +57,8 @@ export default function TripPlannerPage() {
   const [autoFollow, setAutoFollow] = useState(true)
   const [navEta, setNavEta] = useState('')
   const [navDistance, setNavDistance] = useState('')
+  const [navSteps, setNavSteps] = useState([])
+  const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [showEvidenceModal, setShowEvidenceModal] = useState(null)
   const [evidencePreview, setEvidencePreview] = useState(null)
   const [evidenceFile, setEvidenceFile] = useState(null)
@@ -264,6 +266,10 @@ export default function TripPlannerPage() {
     if (navigationMode && autoFollow && userLocation && mapInstanceRef.current) {
       mapInstanceRef.current.panTo(userLocation)
     }
+    if (navigationMode && userLocation && navSteps.length > 0) {
+      const idx = findCurrentStep(userLocation, navSteps)
+      setCurrentStepIndex(idx)
+    }
   }, [userLocation, navigationMode, autoFollow])
 
   useEffect(() => {
@@ -332,6 +338,38 @@ export default function TripPlannerPage() {
     }
   }
 
+  const getManeuverIcon = (maneuver) => {
+    if (!maneuver) return 'straight'
+    if (maneuver.includes('left')) return 'turn_left'
+    if (maneuver.includes('right')) return 'turn_right'
+    if (maneuver.includes('uturn')) return 'u_turn_left'
+    if (maneuver.includes('merge')) return 'merge'
+    if (maneuver.includes('ramp')) return 'ramp_right'
+    if (maneuver.includes('fork')) return 'fork_right'
+    if (maneuver.includes('roundabout')) return 'roundabout_right'
+    return 'straight'
+  }
+
+  const findCurrentStep = (userPos, steps) => {
+    if (!steps || steps.length === 0) return 0
+    let minDist = Infinity
+    let closestIdx = 0
+    for (let i = 0; i < steps.length; i++) {
+      const endLat = steps[i].endLat
+      const endLng = steps[i].endLng
+      const d = Math.sqrt(
+        Math.pow((userPos.lat - endLat) * 111000, 2) + 
+        Math.pow((userPos.lng - endLng) * 111000 * Math.cos(userPos.lat * Math.PI / 180), 2)
+      )
+      if (d < minDist) {
+        minDist = d
+        closestIdx = i
+      }
+    }
+    if (minDist < 30) return Math.min(closestIdx + 1, steps.length - 1)
+    return closestIdx
+  }
+
   const updateNavLine = async (from, to) => {
     const now = Date.now()
     const hasRenderer = !!navRendererRef.current
@@ -349,11 +387,28 @@ export default function TripPlannerPage() {
 
       if (!result.routes || !result.routes[0]) {
         drawFallbackLine(from, to)
+        setNavSteps([])
         return
       }
 
       const path = result.routes[0].overview_path?.map(p => ({ lat: p.lat(), lng: p.lng() })) || []
       navLastRouteRef.current = path
+
+      const leg = result.routes[0].legs[0]
+      if (leg && leg.steps) {
+        const steps = leg.steps.map(s => ({
+          instruction: s.instructions?.replace(/<[^>]*>/g, '') || '',
+          distance: s.distance?.text || '',
+          duration: s.duration?.text || '',
+          maneuver: s.maneuver || '',
+          icon: getManeuverIcon(s.maneuver),
+          endLat: s.end_location?.lat() || 0,
+          endLng: s.end_location?.lng() || 0
+        }))
+        setNavSteps(steps)
+        const idx = findCurrentStep(from, steps)
+        setCurrentStepIndex(idx)
+      }
 
       if (navLineRef.current) {
         navLineRef.current.setMap(null)
@@ -373,6 +428,7 @@ export default function TripPlannerPage() {
       }
     } catch (err) {
       drawFallbackLine(from, to)
+      setNavSteps([])
     }
   }
 
@@ -1001,6 +1057,8 @@ export default function TripPlannerPage() {
   const exitNavigation = () => {
     setNavigationMode(false)
     setAutoFollow(false)
+    setNavSteps([])
+    setCurrentStepIndex(0)
     navLastRouteRef.current = null
     if (navLineRef.current) {
       navLineRef.current.setMap(null)
@@ -1101,6 +1159,15 @@ export default function TripPlannerPage() {
 
         {navigationMode && nextPendingStop && (
           <div className="nav-bar">
+            {navSteps.length > 0 && navSteps[currentStepIndex] && (
+              <div className="nav-step-banner">
+                <span className="material-icons nav-step-icon">{navSteps[currentStepIndex].icon}</span>
+                <div className="nav-step-info">
+                  <div className="nav-step-instruction">{navSteps[currentStepIndex].instruction || 'Continua recto'}</div>
+                  <div className="nav-step-distance">{navSteps[currentStepIndex].distance}</div>
+                </div>
+              </div>
+            )}
             <div className="nav-bar-stop">
               <span className="nav-bar-number">{nextPendingIndex + 1}</span>
               <div className="nav-bar-info">
