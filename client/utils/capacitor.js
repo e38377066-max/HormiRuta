@@ -3,6 +3,7 @@ import { Geolocation } from '@capacitor/geolocation'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { KeepAwake } from '@capacitor-community/keep-awake'
 
 export const isNative = Capacitor.isNativePlatform()
 export const platform = Capacitor.getPlatform()
@@ -93,7 +94,8 @@ export const watchPosition = (callback, errorCallback, options = {}) => {
               coords: {
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy
+                accuracy: position.coords.accuracy,
+                speed: position.coords.speed
               }
             })
           }
@@ -112,7 +114,8 @@ export const watchPosition = (callback, errorCallback, options = {}) => {
         coords: {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
-          accuracy: pos.coords.accuracy
+          accuracy: pos.coords.accuracy,
+          speed: pos.coords.speed
         }
       }),
       errorCallback,
@@ -187,5 +190,60 @@ export const vibrate = async (style = 'medium') => {
     if (navigator.vibrate) {
       navigator.vibrate(style === 'light' ? 10 : style === 'heavy' ? 50 : 25)
     }
+  }
+}
+
+export const keepScreenAwake = async () => {
+  try {
+    await KeepAwake.keepAwake()
+  } catch (e) {
+    if ('wakeLock' in navigator) {
+      try {
+        await navigator.wakeLock.request('screen')
+      } catch (err) {}
+    }
+  }
+}
+
+export const allowScreenSleep = async () => {
+  try {
+    await KeepAwake.allowSleep()
+  } catch (e) {}
+}
+
+let speechSynth = null
+let currentUtterance = null
+
+export const speakInstruction = (text, lang = 'es-MX') => {
+  if (!text) return
+  if (!('speechSynthesis' in window)) return
+  if (!speechSynth) speechSynth = window.speechSynthesis
+
+  if (currentUtterance) {
+    speechSynth.cancel()
+  }
+
+  const cleanText = text
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\//g, ' ')
+
+  currentUtterance = new SpeechSynthesisUtterance(cleanText)
+  currentUtterance.lang = lang
+  currentUtterance.rate = 1.0
+  currentUtterance.pitch = 1.0
+  currentUtterance.volume = 1.0
+
+  const voices = speechSynth.getVoices()
+  const spanishVoice = voices.find(v => v.lang.startsWith('es'))
+  if (spanishVoice) currentUtterance.voice = spanishVoice
+
+  speechSynth.speak(currentUtterance)
+}
+
+export const stopSpeaking = () => {
+  if (speechSynth) {
+    speechSynth.cancel()
+    currentUtterance = null
   }
 }
