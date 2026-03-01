@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { usePlanner } from '../../layouts/PlannerLayout'
-import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile } from '../../utils/capacitor'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 export default function TripPlannerPage() {
@@ -59,6 +59,9 @@ export default function TripPlannerPage() {
   const [navDistance, setNavDistance] = useState('')
   const [navSteps, setNavSteps] = useState([])
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  const [currentSpeed, setCurrentSpeed] = useState(null)
+  const [voiceEnabled, setVoiceEnabled] = useState(true)
+  const lastSpokenStepRef = useRef(-1)
   const [showEvidenceModal, setShowEvidenceModal] = useState(null)
   const [evidencePreview, setEvidencePreview] = useState(null)
   const [evidenceFile, setEvidenceFile] = useState(null)
@@ -254,6 +257,9 @@ export default function TripPlannerPage() {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setUserLocation(loc)
         updateUserLocationMarker(loc, pos.coords.accuracy)
+        if (pos.coords.speed != null && pos.coords.speed >= 0) {
+          setCurrentSpeed(Math.round(pos.coords.speed * 3.6))
+        }
       },
       (err) => console.error('Watch position error:', err),
       { maximumAge: 3000 }
@@ -269,6 +275,14 @@ export default function TripPlannerPage() {
     if (navigationMode && userLocation && navSteps.length > 0) {
       const idx = findCurrentStep(userLocation, navSteps)
       setCurrentStepIndex(idx)
+      if (voiceEnabled && idx !== lastSpokenStepRef.current && navSteps[idx]) {
+        lastSpokenStepRef.current = idx
+        const step = navSteps[idx]
+        const voiceText = step.distance 
+          ? `En ${step.distance}, ${step.instruction}` 
+          : step.instruction
+        speakInstruction(voiceText)
+      }
     }
   }, [userLocation, navigationMode, autoFollow])
 
@@ -558,6 +572,8 @@ export default function TripPlannerPage() {
       if (watchIdRef.current && typeof watchIdRef.current === 'function') {
         watchIdRef.current()
       }
+      allowScreenSleep()
+      stopSpeaking()
     }
   }, [])
 
@@ -1048,6 +1064,7 @@ export default function TripPlannerPage() {
   const startRoute = () => {
     setNavigationMode(true)
     setAutoFollow(true)
+    keepScreenAwake()
     if (userLocation && mapInstanceRef.current) {
       mapInstanceRef.current.panTo(userLocation)
       mapInstanceRef.current.setZoom(16)
@@ -1059,6 +1076,10 @@ export default function TripPlannerPage() {
     setAutoFollow(false)
     setNavSteps([])
     setCurrentStepIndex(0)
+    setCurrentSpeed(null)
+    lastSpokenStepRef.current = -1
+    allowScreenSleep()
+    stopSpeaking()
     navLastRouteRef.current = null
     if (navLineRef.current) {
       navLineRef.current.setMap(null)
@@ -1177,7 +1198,22 @@ export default function TripPlannerPage() {
                   {navEta && <span> · {navEta}</span>}
                 </div>
               </div>
+              <div className="nav-bar-controls">
+                <button 
+                  className={`nav-control-btn ${voiceEnabled ? 'active' : ''}`}
+                  onClick={() => { setVoiceEnabled(!voiceEnabled); if (voiceEnabled) stopSpeaking(); }}
+                >
+                  <span className="material-icons" style={{ fontSize: 20 }}>{voiceEnabled ? 'volume_up' : 'volume_off'}</span>
+                </button>
+              </div>
             </div>
+          </div>
+        )}
+
+        {navigationMode && currentSpeed != null && (
+          <div className="speed-indicator">
+            <span className="speed-value">{currentSpeed}</span>
+            <span className="speed-unit">km/h</span>
           </div>
         )}
 
