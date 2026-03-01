@@ -1139,7 +1139,26 @@ export default function TripPlannerPage() {
                     )}
                     <div className="stop-info-block">
                       <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Lugar sin nombre'}</span>
-                      {stop.phone && <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>}
+                      {stop.phone && (
+                        <div className="stop-contact-row">
+                          <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>
+                          {navigationMode && (
+                            <div className="stop-contact-btns" onClick={e => e.stopPropagation()}>
+                              <a href={`tel:${stop.phone.replace(/[^0-9+]/g, '')}`} className="stop-contact-btn stop-call-btn">
+                                <span className="material-icons" style={{ fontSize: 16 }}>call</span>
+                              </a>
+                              <a 
+                                href={`https://wa.me/${stop.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stop.name || ''}, soy del equipo Area 862. Estoy en camino con tu entrega.`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="stop-contact-btn stop-wa-btn"
+                              >
+                                <span className="material-icons" style={{ fontSize: 16 }}>chat</span>
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {navigationMode && stop.address && <span className="stop-address-detail">{stop.address}</span>}
                       {stop.note && <span className="stop-note"><span className="material-icons" style={{ fontSize: 13 }}>sticky_note_2</span> {stop.note}</span>}
                     </div>
@@ -1498,9 +1517,23 @@ export default function TripPlannerPage() {
                 </div>
               )}
               {stops[showEvidenceModal]?.phone && (
-                <div className="evidence-info-row">
+                <div className="evidence-info-row evidence-contact-row">
                   <span className="material-icons">phone</span>
-                  <a href={`tel:${stops[showEvidenceModal].phone}`} onClick={e => e.stopPropagation()}>{stops[showEvidenceModal].phone}</a>
+                  <span>{stops[showEvidenceModal].phone}</span>
+                  <div className="evidence-contact-btns">
+                    <a href={`tel:${stops[showEvidenceModal].phone.replace(/[^0-9+]/g, '')}`} className="evidence-contact-btn evidence-call-btn" onClick={e => e.stopPropagation()}>
+                      <span className="material-icons">call</span> Llamar
+                    </a>
+                    <a 
+                      href={`https://wa.me/${stops[showEvidenceModal].phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stops[showEvidenceModal]?.name || ''}, soy del equipo Area 862. Estoy afuera. ¿Me puedes confirmar si hay alguien para recibir?`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="evidence-contact-btn evidence-wa-btn"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <span className="material-icons">chat</span> WhatsApp
+                    </a>
+                  </div>
                 </div>
               )}
               <div className="evidence-info-row">
