@@ -61,6 +61,11 @@ export default function TripPlannerPage() {
   const [evidencePreview, setEvidencePreview] = useState(null)
   const [evidenceFile, setEvidenceFile] = useState(null)
   const [uploadingEvidence, setUploadingEvidence] = useState(false)
+  const [messageModal, setMessageModal] = useState(null)
+  const [templates, setTemplates] = useState([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [messageSuccess, setMessageSuccess] = useState('')
   const fileInputRef = useRef(null)
   const isDragging = useRef(false)
   const startY = useRef(0)
@@ -654,6 +659,46 @@ export default function TripPlannerPage() {
       setShowEvidenceModal(null)
       setEvidencePreview(null)
       setEvidenceFile(null)
+    }
+  }
+
+  const openMessageModal = async (stop) => {
+    setMessageModal(stop)
+    setMessageSuccess('')
+    if (templates.length === 0) {
+      setLoadingTemplates(true)
+      try {
+        const res = await api.get('/api/dispatch/templates')
+        setTemplates(res.data.templates || [])
+      } catch (err) {
+        console.error('Error loading templates:', err)
+      } finally {
+        setLoadingTemplates(false)
+      }
+    }
+  }
+
+  const findOrderIdForStop = (stop) => {
+    return stop.orderId || stop.dbId || stop.id
+  }
+
+  const sendTemplate = async (template) => {
+    if (!messageModal || sendingMessage) return
+    const orderId = findOrderIdForStop(messageModal)
+    setSendingMessage(true)
+    setMessageSuccess('')
+    try {
+      await api.post(`/api/dispatch/orders/${orderId}/send-template`, {
+        templateName: template.name,
+        languageCode: template.language || 'es',
+        components: template.components || []
+      })
+      setMessageSuccess(`Template "${template.name}" enviado`)
+      setTimeout(() => setMessageSuccess(''), 3000)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al enviar template')
+    } finally {
+      setSendingMessage(false)
     }
   }
 
