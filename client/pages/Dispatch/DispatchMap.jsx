@@ -59,6 +59,11 @@ export default function DispatchMap() {
   const [deliveredOrders, setDeliveredOrders] = useState([])
   const [loadingDelivered, setLoadingDelivered] = useState(false)
   const [evidenceModal, setEvidenceModal] = useState(null)
+  const [messageModal, setMessageModal] = useState(null)
+  const [templates, setTemplates] = useState([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [messageSuccess, setMessageSuccess] = useState('')
 
   const fetchData = useCallback(async () => {
     try {
@@ -443,6 +448,41 @@ export default function DispatchMap() {
     }
   }
 
+  const openMessageModal = async (order) => {
+    setMessageModal(order)
+    setMessageSuccess('')
+    if (templates.length === 0) {
+      setLoadingTemplates(true)
+      try {
+        const res = await api.get('/api/dispatch/templates')
+        setTemplates(res.data.templates || [])
+      } catch (err) {
+        console.error('Error loading templates:', err)
+      } finally {
+        setLoadingTemplates(false)
+      }
+    }
+  }
+
+  const sendTemplate = async (template) => {
+    if (!messageModal || sendingMessage) return
+    setSendingMessage(true)
+    setMessageSuccess('')
+    try {
+      await api.post(`/api/dispatch/orders/${messageModal.id}/send-template`, {
+        templateName: template.name,
+        languageCode: template.language || 'es',
+        components: template.components || []
+      })
+      setMessageSuccess(`Template "${template.name}" enviado a ${messageModal.customer_name}`)
+      setTimeout(() => setMessageSuccess(''), 3000)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al enviar template')
+    } finally {
+      setSendingMessage(false)
+    }
+  }
+
   const handleSaveNotes = async (orderId) => {
     try {
       await api.put(`/api/dispatch/orders/${orderId}/notes`, { notes: notesValue })
@@ -720,15 +760,13 @@ export default function DispatchMap() {
                           <a href={`tel:${order.customer_phone.replace(/[^0-9+]/g, '')}`} className="do-contact-btn do-call-btn" title="Llamar">
                             <span className="material-icons">call</span>
                           </a>
-                          <a 
-                            href={`https://wa.me/${order.customer_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${order.customer_name || ''}, soy del equipo Area 862. Voy en camino con tu pedido #${order.id}.`)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
                             className="do-contact-btn do-wa-btn"
-                            title="WhatsApp"
+                            title="Enviar mensaje por Respond.io"
+                            onClick={() => openMessageModal(order)}
                           >
                             <span className="material-icons">chat</span>
-                          </a>
+                          </button>
                         </div>
                       )}
                       <div className="do-bottom">
@@ -1089,6 +1127,61 @@ export default function DispatchMap() {
             <div className="evidence-modal-image">
               <img src={evidenceModal.photo.photo_url} alt="Evidencia de entrega" />
             </div>
+          </div>
+        </div>
+      )}
+      {messageModal && (
+        <div className="modal-overlay" onClick={() => setMessageModal(null)}>
+          <div className="message-modal" onClick={e => e.stopPropagation()}>
+            <div className="message-modal-header">
+              <h3>Enviar mensaje</h3>
+              <button className="evidence-modal-close" onClick={() => setMessageModal(null)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="message-modal-client">
+              <span className="material-icons">person</span>
+              <div>
+                <strong>{messageModal.customer_name || 'Sin nombre'}</strong>
+                <span>{messageModal.customer_phone}</span>
+              </div>
+            </div>
+            {messageSuccess && (
+              <div className="message-success">
+                <span className="material-icons">check_circle</span>
+                {messageSuccess}
+              </div>
+            )}
+            <div className="message-modal-body">
+              <h4>Templates de WhatsApp</h4>
+              {loadingTemplates ? (
+                <div className="message-loading">Cargando templates...</div>
+              ) : templates.length === 0 ? (
+                <div className="message-empty">No hay templates disponibles. Verifica la configuracion de Respond.io y el canal.</div>
+              ) : (
+                <div className="template-list">
+                  {templates.map((tpl, i) => (
+                    <div key={i} className="template-item" onClick={() => sendTemplate(tpl)}>
+                      <div className="template-name">
+                        <span className="material-icons" style={{ fontSize: 18, color: '#25D366' }}>description</span>
+                        {tpl.name}
+                      </div>
+                      {tpl.body && <div className="template-body">{tpl.body}</div>}
+                      <div className="template-meta">
+                        {tpl.language && <span>{tpl.language}</span>}
+                        {tpl.status && <span className={`template-status ${tpl.status}`}>{tpl.status}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {sendingMessage && (
+              <div className="message-sending">
+                <span className="material-icons rotating">hourglass_empty</span>
+                Enviando...
+              </div>
+            )}
           </div>
         </div>
       )}

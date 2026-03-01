@@ -713,4 +713,104 @@ router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/templates', requireAuth, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+    if (!settings) {
+      const adminSettings = await MessagingSettings.findOne();
+      if (!adminSettings || !adminSettings.respond_api_token || !adminSettings.default_channel_id) {
+        return res.json({ templates: [] });
+      }
+      respondApiService.setContext(adminSettings.user_id, adminSettings.respond_api_token);
+      const result = await respondApiService.listMessageTemplates(adminSettings.default_channel_id, 50);
+      return res.json({ templates: result?.data || [] });
+    }
+
+    if (!settings.respond_api_token || !settings.default_channel_id) {
+      const adminSettings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+      if (!adminSettings || !adminSettings.default_channel_id) {
+        return res.json({ templates: [] });
+      }
+      respondApiService.setContext(adminSettings.user_id, adminSettings.respond_api_token);
+      const result = await respondApiService.listMessageTemplates(adminSettings.default_channel_id, 50);
+      return res.json({ templates: result?.data || [] });
+    }
+
+    respondApiService.setContext(req.userId, settings.respond_api_token);
+    const result = await respondApiService.listMessageTemplates(settings.default_channel_id, 50);
+    res.json({ templates: result?.data || [] });
+  } catch (error) {
+    console.error('Error fetching templates:', error.message);
+    res.json({ templates: [] });
+  }
+});
+
+router.post('/orders/:id/send-template', requireAuth, async (req, res) => {
+  try {
+    const { templateName, languageCode, components } = req.body;
+    if (!templateName) return res.status(400).json({ error: 'Template requerido' });
+
+    const order = await ValidatedAddress.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (!order.respond_contact_id) return res.status(400).json({ error: 'Este cliente no tiene contacto en Respond.io' });
+
+    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+    if (!settings || !settings.respond_api_token) {
+      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+    }
+    if (!settings || !settings.respond_api_token) {
+      return res.status(400).json({ error: 'API de Respond.io no configurada' });
+    }
+
+    respondApiService.setContext(settings.user_id, settings.respond_api_token);
+    const identifier = `id:${order.respond_contact_id}`;
+    const channelId = settings.default_channel_id || null;
+
+    const result = await respondApiService.sendWhatsAppTemplate(
+      identifier, 
+      templateName, 
+      languageCode || 'es', 
+      components || [],
+      channelId
+    );
+
+    console.log(`[Dispatch] Template "${templateName}" enviado a ${order.customer_name} (contacto ${order.respond_contact_id})`);
+    res.json({ success: true, message: 'Template enviado', result });
+  } catch (error) {
+    console.error('Error sending template:', error.message);
+    res.status(500).json({ error: error.message || 'Error al enviar template' });
+  }
+});
+
+router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Mensaje requerido' });
+
+    const order = await ValidatedAddress.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (!order.respond_contact_id) return res.status(400).json({ error: 'Este cliente no tiene contacto en Respond.io' });
+
+    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+    if (!settings || !settings.respond_api_token) {
+      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+    }
+    if (!settings || !settings.respond_api_token) {
+      return res.status(400).json({ error: 'API de Respond.io no configurada' });
+    }
+
+    respondApiService.setContext(settings.user_id, settings.respond_api_token);
+    const identifier = `id:${order.respond_contact_id}`;
+    const channelId = settings.default_channel_id || null;
+
+    const result = await respondApiService.sendMessage(identifier, text, channelId);
+
+    console.log(`[Dispatch] Mensaje enviado a ${order.customer_name} (contacto ${order.respond_contact_id})`);
+    res.json({ success: true, message: 'Mensaje enviado', result });
+  } catch (error) {
+    console.error('Error sending message:', error.message);
+    res.status(500).json({ error: error.message || 'Error al enviar mensaje' });
+  }
+});
+
 export default router;
