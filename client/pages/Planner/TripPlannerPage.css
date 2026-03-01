@@ -225,19 +225,37 @@
 
 .stop-row {
   display: flex;
-  align-items: center;
-  padding: 14px 16px;
+  flex-direction: column;
+  padding: 12px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.stop-row-nav {
+  cursor: pointer;
+}
+
+.stop-row-top {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
 }
 
 .stop-number {
   font-size: 14px;
   color: #666;
   width: 28px;
+  margin-top: 2px;
+}
+
+.stop-info-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .stop-name {
-  flex: 1;
   font-size: 15px;
   color: white;
 }
@@ -247,9 +265,34 @@
   text-decoration: line-through;
 }
 
+.stop-phone {
+  font-size: 12px;
+  color: #8899aa;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stop-address-detail {
+  font-size: 12px;
+  color: #7788aa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stop-note {
+  font-size: 12px;
+  color: #e8a838;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 .stop-checkbox {
   width: 28px;
   cursor: pointer;
+  margin-top: 2px;
 }
 
 .stop-indicator {
@@ -257,10 +300,22 @@
   height: 12px;
   border-radius: 50%;
   background: #5b8def;
+  margin-left: 28px;
+  margin-top: 6px;
 }
 
 .stop-indicator.completed {
   background: #5b8def;
+}
+
+.nav-footer-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  color: #aab;
+  font-size: 14px;
 }
 
 .panel-footer {
@@ -925,19 +980,30 @@
   font-size: 18px;
 }
 
-.evidence-modal-address {
+.evidence-client-info {
+  padding: 8px 16px;
+  background: rgba(91, 141, 239, 0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.evidence-info-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
-  background: rgba(91, 141, 239, 0.08);
+  padding: 5px 0;
   color: #ccc;
   font-size: 14px;
 }
 
-.evidence-modal-address .material-icons {
+.evidence-info-row .material-icons {
   color: #5b8def;
-  font-size: 20px;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.evidence-info-row a {
+  color: #5b8def;
+  text-decoration: none;
 }
 
 .evidence-modal-body {
