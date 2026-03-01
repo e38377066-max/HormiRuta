@@ -313,6 +313,25 @@ export default function TripPlannerPage() {
     return minDist > 50
   }
 
+  const drawFallbackLine = (from, to) => {
+    if (navRendererRef.current) {
+      navRendererRef.current.setMap(null)
+      navRendererRef.current = null
+    }
+    if (navLineRef.current) {
+      navLineRef.current.setPath([from, to])
+    } else if (mapInstanceRef.current) {
+      navLineRef.current = new window.google.maps.Polyline({
+        path: [from, to],
+        geodesic: true,
+        strokeColor: '#4285F4',
+        strokeOpacity: 0.8,
+        strokeWeight: 4,
+        map: mapInstanceRef.current
+      })
+    }
+  }
+
   const updateNavLine = async (from, to) => {
     const now = Date.now()
     const hasRenderer = !!navRendererRef.current
@@ -328,9 +347,17 @@ export default function TripPlannerPage() {
         travelMode: window.google.maps.TravelMode[travelMode]
       })
 
-      if (result.routes[0]) {
-        const path = result.routes[0].overview_path?.map(p => ({ lat: p.lat(), lng: p.lng() })) || []
-        navLastRouteRef.current = path
+      if (!result.routes || !result.routes[0]) {
+        drawFallbackLine(from, to)
+        return
+      }
+
+      const path = result.routes[0].overview_path?.map(p => ({ lat: p.lat(), lng: p.lng() })) || []
+      navLastRouteRef.current = path
+
+      if (navLineRef.current) {
+        navLineRef.current.setMap(null)
+        navLineRef.current = null
       }
 
       if (!navRendererRef.current && mapInstanceRef.current) {
@@ -345,18 +372,7 @@ export default function TripPlannerPage() {
         navRendererRef.current.setDirections(result)
       }
     } catch (err) {
-      if (navLineRef.current) {
-        navLineRef.current.setPath([from, to])
-      } else if (mapInstanceRef.current) {
-        navLineRef.current = new window.google.maps.Polyline({
-          path: [from, to],
-          geodesic: true,
-          strokeColor: '#4285F4',
-          strokeOpacity: 0.8,
-          strokeWeight: 4,
-          map: mapInstanceRef.current
-        })
-      }
+      drawFallbackLine(from, to)
     }
   }
 
