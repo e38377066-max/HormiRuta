@@ -1206,28 +1206,26 @@ export default function TripPlannerPage() {
                       <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
                     )}
                     <div className="stop-info-block">
-                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Lugar sin nombre'}</span>
+                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || 'Sin nombre'}</span>
+                      <span className="stop-address-detail">{stop.address || 'Sin direccion'}</span>
                       {stop.phone && (
                         <div className="stop-contact-row">
                           <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>
-                          {navigationMode && (
-                            <div className="stop-contact-btns" onClick={e => e.stopPropagation()}>
-                              <a href={`tel:${stop.phone.replace(/[^0-9+]/g, '')}`} className="stop-contact-btn stop-call-btn">
-                                <span className="material-icons" style={{ fontSize: 16 }}>call</span>
-                              </a>
-                              <a 
-                                href={`https://wa.me/${stop.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stop.name || ''}, soy del equipo Area 862. Estoy en camino con tu entrega.`)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="stop-contact-btn stop-wa-btn"
-                              >
-                                <span className="material-icons" style={{ fontSize: 16 }}>chat</span>
-                              </a>
-                            </div>
-                          )}
+                          <div className="stop-contact-btns" onClick={e => e.stopPropagation()}>
+                            <a href={`tel:${stop.phone.replace(/[^0-9+]/g, '')}`} className="stop-contact-btn stop-call-btn">
+                              <span className="material-icons" style={{ fontSize: 16 }}>call</span>
+                            </a>
+                            <a 
+                              href={`https://wa.me/${stop.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stop.name || ''}, soy del equipo Area 862. Estoy en camino con tu entrega.`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="stop-contact-btn stop-wa-btn"
+                            >
+                              <span className="material-icons" style={{ fontSize: 16 }}>chat</span>
+                            </a>
+                          </div>
                         </div>
                       )}
-                      {navigationMode && stop.address && <span className="stop-address-detail">{stop.address}</span>}
                       {stop.note && <span className="stop-note"><span className="material-icons" style={{ fontSize: 13 }}>sticky_note_2</span> {stop.note}</span>}
                       {stop.total_to_collect != null && stop.total_to_collect > 0 && (
                         <span className="stop-billing-tag">
