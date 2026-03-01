@@ -476,6 +476,43 @@
   color: #e8a838;
 }
 
+.do-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.do-contact-row .do-phone {
+  font-size: 0.8rem;
+  color: #555;
+  flex: 1;
+}
+
+.do-contact-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.do-contact-btn .material-icons {
+  font-size: 16px;
+  color: white;
+}
+
+.do-call-btn {
+  background: #4CAF50;
+}
+
+.do-wa-btn {
+  background: #25D366;
+}
+
 .do-driver {
   font-size: 0.75rem;
   color: #666;

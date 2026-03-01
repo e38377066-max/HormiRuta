@@ -714,7 +714,23 @@ export default function DispatchMap() {
                         <span className="do-id">#{order.id}</span>
                       </div>
                       <div className="do-address">{order.address || 'Sin direccion'}</div>
-                      <div className="do-phone">{order.customer_phone || ''}</div>
+                      {order.customer_phone && (
+                        <div className="do-contact-row" onClick={e => e.stopPropagation()}>
+                          <span className="do-phone">{order.customer_phone}</span>
+                          <a href={`tel:${order.customer_phone.replace(/[^0-9+]/g, '')}`} className="do-contact-btn do-call-btn" title="Llamar">
+                            <span className="material-icons">call</span>
+                          </a>
+                          <a 
+                            href={`https://wa.me/${order.customer_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${order.customer_name || ''}, soy del equipo Area 862. Voy en camino con tu pedido #${order.id}.`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="do-contact-btn do-wa-btn"
+                            title="WhatsApp"
+                          >
+                            <span className="material-icons">chat</span>
+                          </a>
+                        </div>
+                      )}
                       <div className="do-bottom">
                         <span className="do-tag" style={{ backgroundColor: `${cfg.color}20`, color: cfg.color, borderColor: cfg.color }}>
                           <span className="material-icons" style={{ fontSize: '14px' }}>{cfg.icon}</span>
