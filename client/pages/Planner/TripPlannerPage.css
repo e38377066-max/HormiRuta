@@ -305,7 +305,9 @@
 }
 
 .stop-wa-btn {
-  background: #25D366;
+  background: #5b8def;
+  border: none;
+  cursor: pointer;
 }
 
 .stop-address-detail {

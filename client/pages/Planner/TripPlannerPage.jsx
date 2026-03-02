@@ -790,17 +790,16 @@ export default function TripPlannerPage() {
     }
   }
 
-  const findOrderIdForStop = (stop) => {
-    return stop.orderId || stop.dbId || stop.id
-  }
-
   const sendTemplate = async (template) => {
     if (!messageModal || sendingMessage) return
-    const orderId = findOrderIdForStop(messageModal)
     setSendingMessage(true)
     setMessageSuccess('')
     try {
-      await api.post(`/api/dispatch/orders/${orderId}/send-template`, {
+      const stopId = messageModal.dbId
+      const endpoint = stopId 
+        ? `/api/dispatch/stops/${stopId}/send-template`
+        : `/api/dispatch/orders/${messageModal.orderId || messageModal.id}/send-template`
+      await api.post(endpoint, {
         templateName: template.name,
         languageCode: template.language || 'es',
         components: template.components || []
@@ -1358,14 +1357,12 @@ export default function TripPlannerPage() {
                             <a href={`tel:${stop.phone.replace(/[^0-9+]/g, '')}`} className="stop-contact-btn stop-call-btn">
                               <span className="material-icons" style={{ fontSize: 16 }}>call</span>
                             </a>
-                            <a 
-                              href={`https://wa.me/${stop.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stop.name || ''}, soy del equipo Area 862. Estoy en camino con tu entrega.`)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button 
                               className="stop-contact-btn stop-wa-btn"
+                              onClick={() => openMessageModal(stop)}
                             >
                               <span className="material-icons" style={{ fontSize: 16 }}>chat</span>
-                            </a>
+                            </button>
                           </div>
                         </div>
                       )}
@@ -1742,15 +1739,12 @@ export default function TripPlannerPage() {
                     <a href={`tel:${stops[showEvidenceModal].phone.replace(/[^0-9+]/g, '')}`} className="evidence-contact-btn evidence-call-btn" onClick={e => e.stopPropagation()}>
                       <span className="material-icons">call</span> Llamar
                     </a>
-                    <a 
-                      href={`https://wa.me/${stops[showEvidenceModal].phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stops[showEvidenceModal]?.name || ''}, soy del equipo Area 862. Estoy afuera. ¿Me puedes confirmar si hay alguien para recibir?`)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button 
                       className="evidence-contact-btn evidence-wa-btn"
-                      onClick={e => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); openMessageModal(stops[showEvidenceModal]); }}
                     >
-                      <span className="material-icons">chat</span> WhatsApp
-                    </a>
+                      <span className="material-icons">chat</span> Respond.io
+                    </button>
                   </div>
                 </div>
               )}
