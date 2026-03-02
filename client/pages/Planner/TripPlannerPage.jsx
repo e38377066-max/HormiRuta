@@ -681,7 +681,7 @@ export default function TripPlannerPage() {
     setEvidencePreview(null)
     setEvidenceFile(null)
     setSelectedPaymentMethod('')
-    setAmountCollected(stop.total_to_collect != null ? String(stop.total_to_collect) : '')
+    setAmountCollected(stop.total_to_collect != null && stop.total_to_collect > 0 ? Number(stop.total_to_collect).toFixed(2) : '0.00')
   }
 
   const handleEvidencePhoto = (e) => {
@@ -764,7 +764,8 @@ export default function TripPlannerPage() {
       }
     } catch (err) {
       console.error('Error uploading evidence:', err)
-      alert('Error al subir la evidencia. Intenta de nuevo.')
+      const errorMsg = err.response?.data?.error || 'Error al subir la evidencia. Intenta de nuevo.'
+      alert(errorMsg)
     } finally {
       setUploadingEvidence(false)
       setShowEvidenceModal(null)
@@ -1325,91 +1326,62 @@ export default function TripPlannerPage() {
                       <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
                     )}
                     <div className="stop-info-block">
-                      {navigationMode ? (
-                        <>
-                          <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Siguiente parada'}</span>
-                          {stop.phone && (
-                            <div className="stop-contact-row">
-                              <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>
-                              <div className="stop-contact-btns" onClick={e => e.stopPropagation()}>
-                                <a href={`tel:${stop.phone.replace(/[^0-9+]/g, '')}`} className="stop-contact-btn stop-call-btn">
-                                  <span className="material-icons" style={{ fontSize: 16 }}>call</span>
-                                </a>
-                                <a 
-                                  href={`https://wa.me/${stop.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stop.name || ''}, soy del equipo Area 862. Estoy en camino con tu entrega.`)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="stop-contact-btn stop-wa-btn"
-                                >
-                                  <span className="material-icons" style={{ fontSize: 16 }}>chat</span>
-                                </a>
-                              </div>
-                            </div>
-                          )}
-                          {stop.address && <span className="stop-address-detail">{stop.address}</span>}
-                        </>
-                      ) : (
-                        <>
-                          <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || 'Sin nombre'}</span>
-                          <span className="stop-address-detail">{stop.address || 'Sin direccion'}</span>
-                          {stop.phone && (
-                            <div className="stop-contact-row">
-                              <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>
-                              <div className="stop-contact-btns" onClick={e => e.stopPropagation()}>
-                                <a href={`tel:${stop.phone.replace(/[^0-9+]/g, '')}`} className="stop-contact-btn stop-call-btn">
-                                  <span className="material-icons" style={{ fontSize: 16 }}>call</span>
-                                </a>
-                                <a 
-                                  href={`https://wa.me/${stop.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stop.name || ''}, soy del equipo Area 862. Estoy en camino con tu entrega.`)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="stop-contact-btn stop-wa-btn"
-                                >
-                                  <span className="material-icons" style={{ fontSize: 16 }}>chat</span>
-                                </a>
-                              </div>
-                            </div>
-                          )}
-                          {stop.note && <span className="stop-note"><span className="material-icons" style={{ fontSize: 13 }}>sticky_note_2</span> {stop.note}</span>}
-                          {stop.total_to_collect != null && stop.total_to_collect > 0 && (
-                            <span className="stop-billing-tag">
-                              <span className="material-icons" style={{ fontSize: 13 }}>payments</span>
-                              Cobrar: ${Number(stop.total_to_collect).toFixed(2)}
-                              {stop.payment_status === 'paid' && <span className="stop-paid-badge">Pagado</span>}
-                              {stop.payment_status === 'partial' && <span className="stop-partial-badge">Parcial</span>}
-                            </span>
-                          )}
-                        </>
+                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Parada'}</span>
+                      <span className="stop-address-detail">{stop.address || ''}</span>
+                      {stop.phone && (
+                        <div className="stop-contact-row">
+                          <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>
+                          <div className="stop-contact-btns" onClick={e => e.stopPropagation()}>
+                            <a href={`tel:${stop.phone.replace(/[^0-9+]/g, '')}`} className="stop-contact-btn stop-call-btn">
+                              <span className="material-icons" style={{ fontSize: 16 }}>call</span>
+                            </a>
+                            <a 
+                              href={`https://wa.me/${stop.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${stop.name || ''}, soy del equipo Area 862. Estoy en camino con tu entrega.`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="stop-contact-btn stop-wa-btn"
+                            >
+                              <span className="material-icons" style={{ fontSize: 16 }}>chat</span>
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                      {stop.note && <span className="stop-note"><span className="material-icons" style={{ fontSize: 13 }}>sticky_note_2</span> {stop.note}</span>}
+                      {stop.total_to_collect != null && stop.total_to_collect > 0 && (
+                        <span className="stop-billing-tag">
+                          <span className="material-icons" style={{ fontSize: 13 }}>payments</span>
+                          Cobrar: ${Number(stop.total_to_collect).toFixed(2)}
+                          {stop.payment_status === 'paid' && <span className="stop-paid-badge">Pagado</span>}
+                          {stop.payment_status === 'partial' && <span className="stop-partial-badge">Parcial</span>}
+                        </span>
                       )}
                     </div>
-                    {!navigationMode && (
-                      <div className="stop-actions-row">
+                    <div className="stop-actions-row">
+                      <button 
+                        className="stop-move-btn"
+                        onClick={(e) => { e.stopPropagation(); moveStop(index, -1); }}
+                        disabled={index === 0}
+                      >
+                        <span className="material-icons" style={{ fontSize: 16 }}>arrow_upward</span>
+                      </button>
+                      <button 
+                        className="stop-move-btn"
+                        onClick={(e) => { e.stopPropagation(); moveStop(index, 1); }}
+                        disabled={index === stops.length - 1}
+                      >
+                        <span className="material-icons" style={{ fontSize: 16 }}>arrow_downward</span>
+                      </button>
+                      {!currentRouteId && (
                         <button 
-                          className="stop-move-btn"
-                          onClick={(e) => { e.stopPropagation(); moveStop(index, -1); }}
-                          disabled={index === 0}
+                          className="header-btn" 
+                          onClick={(e) => { e.stopPropagation(); removeStop(index); }}
                         >
-                          <span className="material-icons" style={{ fontSize: 16 }}>arrow_upward</span>
+                          <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
                         </button>
-                        <button 
-                          className="stop-move-btn"
-                          onClick={(e) => { e.stopPropagation(); moveStop(index, 1); }}
-                          disabled={index === stops.length - 1}
-                        >
-                          <span className="material-icons" style={{ fontSize: 16 }}>arrow_downward</span>
-                        </button>
-                        {!currentRouteId && (
-                          <button 
-                            className="header-btn" 
-                            onClick={(e) => { e.stopPropagation(); removeStop(index); }}
-                          >
-                            <span className="material-icons" style={{ fontSize: 18, color: '#666' }}>close</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                  {!navigationMode && <div className={`stop-indicator ${stop.completed ? 'completed' : ''}`}></div>}
+                  <div className={`stop-indicator ${stop.completed ? 'completed' : ''}`}></div>
                 </div>
               ))}
             </>
@@ -1822,10 +1794,16 @@ export default function TripPlannerPage() {
                 <div className="payment-amount-row">
                   <label>Monto cobrado $</label>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*\.?[0-9]*"
                     value={amountCollected}
-                    onChange={e => setAmountCollected(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value
+                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                        setAmountCollected(val)
+                      }
+                    }}
                     placeholder="0.00"
                     className="payment-amount-input"
                   />
