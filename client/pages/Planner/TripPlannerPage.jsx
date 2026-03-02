@@ -849,7 +849,13 @@ export default function TripPlannerPage() {
             await api.post(`/api/routes/${routeId}/stops`, {
               address: stop.address,
               lat: stop.latitude,
-              lng: stop.longitude
+              lng: stop.longitude,
+              customer_name: stop.name || '',
+              phone: stop.phone || '',
+              note: stop.note || '',
+              order_cost: stop.order_cost,
+              deposit_amount: stop.deposit_amount,
+              total_to_collect: stop.total_to_collect
             })
           }
         }
@@ -863,14 +869,31 @@ export default function TripPlannerPage() {
         })
         
         if (optimized.data.route?.stops) {
-          const backendStops = optimized.data.route.stops.map((s, i) => ({
-            id: i + 1,
-            address: s.address,
-            latitude: s.lat,
-            longitude: s.lng,
-            completed: false,
-            color: '#EA4335'
-          }))
+          const backendStops = optimized.data.route.stops.map((s, i) => {
+            const original = stops.find(orig => 
+              (orig.dbId && orig.dbId === s.id) ||
+              (Math.abs((orig.latitude || 0) - (s.lat || 0)) < 0.0001 && Math.abs((orig.longitude || 0) - (s.lng || 0)) < 0.0001)
+            )
+            return {
+              ...(original || {}),
+              id: i + 1,
+              dbId: s.id || (original?.dbId),
+              address: s.address,
+              latitude: s.lat,
+              longitude: s.lng,
+              name: s.customer_name || original?.name || '',
+              phone: s.phone || original?.phone || '',
+              note: s.note || original?.note || '',
+              completed: s.status === 'completed' || false,
+              color: '#EA4335',
+              order_cost: s.order_cost ?? original?.order_cost,
+              deposit_amount: s.deposit_amount ?? original?.deposit_amount,
+              total_to_collect: s.total_to_collect ?? original?.total_to_collect,
+              payment_method: s.payment_method ?? original?.payment_method,
+              amount_collected: s.amount_collected ?? original?.amount_collected,
+              payment_status: s.payment_status ?? original?.payment_status
+            }
+          })
           setStops(backendStops)
           updateMapMarkers(backendStops)
           await calculateRoute(backendStops)
