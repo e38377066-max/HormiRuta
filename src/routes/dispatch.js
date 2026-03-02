@@ -890,4 +890,82 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/stops/:id/send-template', requireAuth, async (req, res) => {
+  try {
+    const { templateName, languageCode, components } = req.body;
+    if (!templateName) return res.status(400).json({ error: 'Template requerido' });
+
+    const stop = await Stop.findByPk(req.params.id);
+    if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+
+    const routeOrders = await ValidatedAddress.findAll({ where: { route_id: stop.route_id } });
+    const order = routeOrders.find(o =>
+      (Math.abs(o.address_lat - stop.lat) < 0.0001 && Math.abs(o.address_lng - stop.lng) < 0.0001)
+    ) || routeOrders.find(o => o.validated_address === stop.address);
+
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada para esta parada' });
+    if (!order.respond_contact_id) return res.status(400).json({ error: 'Este cliente no tiene contacto en Respond.io' });
+
+    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+    if (!settings || !settings.respond_api_token) {
+      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+    }
+    if (!settings || !settings.respond_api_token) {
+      return res.status(400).json({ error: 'API de Respond.io no configurada' });
+    }
+
+    respondApiService.setContext(settings.user_id, settings.respond_api_token);
+    const identifier = `id:${order.respond_contact_id}`;
+    const channelId = settings.default_channel_id || null;
+
+    const result = await respondApiService.sendWhatsAppTemplate(
+      identifier, templateName, languageCode || 'es', components || [], channelId
+    );
+
+    console.log(`[Dispatch] Template "${templateName}" enviado a ${order.customer_name} (contacto ${order.respond_contact_id}) via stop`);
+    res.json({ success: true, message: 'Template enviado', result });
+  } catch (error) {
+    console.error('Error sending template via stop:', error.message);
+    res.status(500).json({ error: error.message || 'Error al enviar template' });
+  }
+});
+
+router.post('/stops/:id/send-message', requireAuth, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Mensaje requerido' });
+
+    const stop = await Stop.findByPk(req.params.id);
+    if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+
+    const routeOrders = await ValidatedAddress.findAll({ where: { route_id: stop.route_id } });
+    const order = routeOrders.find(o =>
+      (Math.abs(o.address_lat - stop.lat) < 0.0001 && Math.abs(o.address_lng - stop.lng) < 0.0001)
+    ) || routeOrders.find(o => o.validated_address === stop.address);
+
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada para esta parada' });
+    if (!order.respond_contact_id) return res.status(400).json({ error: 'Este cliente no tiene contacto en Respond.io' });
+
+    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+    if (!settings || !settings.respond_api_token) {
+      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+    }
+    if (!settings || !settings.respond_api_token) {
+      return res.status(400).json({ error: 'API de Respond.io no configurada' });
+    }
+
+    respondApiService.setContext(settings.user_id, settings.respond_api_token);
+    const identifier = `id:${order.respond_contact_id}`;
+    const channelId = settings.default_channel_id || null;
+
+    const result = await respondApiService.sendMessage(identifier, text, channelId);
+
+    console.log(`[Dispatch] Mensaje enviado a ${order.customer_name} (contacto ${order.respond_contact_id}) via stop`);
+    res.json({ success: true, message: 'Mensaje enviado', result });
+  } catch (error) {
+    console.error('Error sending message via stop:', error.message);
+    res.status(500).json({ error: error.message || 'Error al enviar mensaje' });
+  }
+});
+
 export default router;
