@@ -1223,6 +1223,48 @@ class PollingService {
         }
 
         try {
+          const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+
+          let contactFieldAddress = null;
+          try {
+            const contactDetail = await respondio.getContact(contact.id);
+            if (contactDetail.success && contactDetail.data) {
+              const cData = contactDetail.data;
+              const cfAddress = cData.custom_fields?.find(f => 
+                f.name?.toLowerCase() === 'address' || f.name?.toLowerCase() === 'direccion'
+              );
+              if (cfAddress?.value && cfAddress.value.trim().length >= 5) {
+                contactFieldAddress = cfAddress.value.trim();
+              }
+            }
+          } catch (cfErr) {
+            // skip
+          }
+
+          if (contactFieldAddress) {
+            const existing = addressMap.get(contactIdStr);
+            if (existing) {
+              const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (cfNorm !== existOrigNorm && cfNorm !== existValidNorm) {
+                const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
+                if (cfGeocoded.success) {
+                  console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}" -> "${cfGeocoded.fullAddress}"`);
+                  await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded);
+                  continue;
+                }
+              }
+            } else {
+              const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
+              if (cfGeocoded.success) {
+                console.log(`[AddressScan] Direccion desde contacto ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}"`);
+                await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded);
+                continue;
+              }
+            }
+          }
+
           const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
           if (!messagesResult.success || !messagesResult.items) continue;
 
@@ -1292,7 +1334,6 @@ class PollingService {
           if (!result) continue;
           if (!result.address && !result.googleMapsLink && !result.googleMapsCoords) continue;
 
-          const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
           let finalAddress = result.address;
           let finalZip = null;
           let geocoded = { success: false };
