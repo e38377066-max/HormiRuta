@@ -1063,10 +1063,38 @@ class PollingService {
 
       if (allContacts.length === 0) return;
 
-      await this.syncContactNames(userId, allContacts);
+      const excludedTags = ['rec'];
+      const tagFilteredContacts = allContacts.filter(contact => {
+        const contactTags = contact.tags || [];
+        const tagNames = contactTags.map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
+        return !tagNames.some(tag => excludedTags.includes(tag));
+      });
+
+      const tagExcludedIds = allContacts
+        .filter(c => !tagFilteredContacts.includes(c))
+        .map(c => c.id.toString());
+
+      if (tagExcludedIds.length > 0) {
+        try {
+          const deletedCount = await ValidatedAddress.destroy({
+            where: {
+              user_id: userId,
+              respond_contact_id: { [Op.in]: tagExcludedIds }
+            }
+          });
+          if (deletedCount > 0) {
+            console.log(`[AddressScan] ${deletedCount} orden(es) eliminada(s) por tag excluido (rec)`);
+          }
+        } catch (err) {
+          console.error(`[AddressScan] Error limpiando tags excluidos:`, err.message);
+        }
+      }
+
+      await this.syncContactNames(userId, tagFilteredContacts);
+      await this.cleanupDuplicateAddresses(userId);
 
       const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
-      const scanContacts = allContacts.filter(contact => {
+      const scanContacts = tagFilteredContacts.filter(contact => {
         if (contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
           return false;
         }
@@ -1538,6 +1566,36 @@ class PollingService {
       }
     } catch (error) {
       console.error(`[AddressScan] Error general en escaneo de direcciones:`, error.message);
+    }
+  }
+
+  async cleanupDuplicateAddresses(userId) {
+    try {
+      const [duplicates] = await ValidatedAddress.sequelize.query(`
+        SELECT respond_contact_id, COUNT(*) as cnt
+        FROM validated_addresses
+        WHERE user_id = :userId AND respond_contact_id IS NOT NULL
+        GROUP BY respond_contact_id
+        HAVING COUNT(*) > 1
+      `, { replacements: { userId } });
+
+      if (duplicates.length === 0) return;
+
+      for (const dup of duplicates) {
+        const records = await ValidatedAddress.findAll({
+          where: { user_id: userId, respond_contact_id: dup.respond_contact_id },
+          order: [['created_at', 'DESC']]
+        });
+        const toDelete = records.slice(1).filter(r => !r.route_id);
+        for (const old of toDelete) {
+          await old.destroy();
+        }
+        if (toDelete.length > 0) {
+          console.log(`[AddressScan] Limpiados ${toDelete.length} duplicado(s) para contacto ${dup.respond_contact_id}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[AddressScan] Error limpiando duplicados:`, error.message);
     }
   }
 
