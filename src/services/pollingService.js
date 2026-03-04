@@ -1189,7 +1189,8 @@ class PollingService {
           id: va.id,
           validated: va.validated_address,
           original: va.original_address,
-          customer_name: va.customer_name
+          customer_name: va.customer_name,
+          source: va.source
         });
       }
 
@@ -1241,25 +1242,32 @@ class PollingService {
             // skip
           }
 
-          if (contactFieldAddress) {
-            const existing = addressMap.get(contactIdStr);
-            if (existing) {
+          const existing = addressMap.get(contactIdStr);
+
+          if (existing && existing.source === 'contact_corrected') {
+            if (contactFieldAddress) {
               const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
               const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (cfNorm !== existOrigNorm && cfNorm !== existValidNorm) {
+              if (cfNorm !== existValidNorm) {
                 const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
                 if (cfGeocoded.success) {
-                  console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}" -> "${cfGeocoded.fullAddress}"`);
-                  await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded);
-                  continue;
+                  console.log(`[AddressScan] Direccion re-corregida en contacto ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}" [contact_corrected]`);
+                  await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
                 }
               }
-            } else {
+            }
+            continue;
+          }
+
+          if (contactFieldAddress && existing) {
+            const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cfNorm !== existOrigNorm && cfNorm !== existValidNorm) {
               const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
               if (cfGeocoded.success) {
-                console.log(`[AddressScan] Direccion desde contacto ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}"`);
-                await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded);
+                console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}" -> "${cfGeocoded.fullAddress}" [contact_corrected]`);
+                await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
                 continue;
               }
             }
@@ -1491,7 +1499,7 @@ class PollingService {
     return map[lifecycle] || 'approved';
   }
 
-  async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded) {
+  async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded, sourceOverride) {
     try {
       const contactIdStr = contact.id.toString();
       const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
@@ -1524,12 +1532,15 @@ class PollingService {
           customer_name: customerName,
           customer_phone: contact.phone || existing.customer_phone
         };
+        if (sourceOverride) {
+          updateData.source = sourceOverride;
+        }
         if (orderStatus && existing.order_status !== orderStatus) {
           updateData.order_status = orderStatus;
           console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${existing.order_status} -> ${orderStatus}`);
         }
         await existing.update(updateData);
-        console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})`);
+        console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})${sourceOverride ? ` [${sourceOverride}]` : ''}`);
       } else {
         await ValidatedAddress.create({
           user_id: userId,
@@ -1544,7 +1555,7 @@ class PollingService {
           city: geocoded.city || null,
           state: geocoded.stateShort || geocoded.state || null,
           confidence: geocoded.confidence || null,
-          source: 'scanner',
+          source: sourceOverride || 'scanner',
           order_status: orderStatus || 'approved'
         });
         console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus}]`);

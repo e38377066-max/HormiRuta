@@ -982,6 +982,18 @@
   color: #4caf50;
 }
 
+.dr-driver-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dr-driver-row .dr-driver {
+  margin-top: 0;
+}
+
 .dr-driver {
   margin-top: 8px;
   font-size: 0.8rem;
