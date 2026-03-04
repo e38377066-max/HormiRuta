@@ -1001,7 +1001,17 @@ export default function DispatchMap() {
                       </button>
                     </div>
                   )}
-                  {route.status === 'assigned' && route.orders?.[0]?.driver_name && (
+                  {isAdmin && route.status === 'assigned' && (
+                    <div className="dr-driver-row">
+                      <div className="dr-driver">
+                        <span className="material-icons">person</span> {route.orders?.[0]?.driver_name || 'Chofer asignado'}
+                      </div>
+                      <button className="dbtn outline small" onClick={() => setShowAssignDriver(route.id)}>
+                        <span className="material-icons">swap_horiz</span> Cambiar
+                      </button>
+                    </div>
+                  )}
+                  {!isAdmin && route.status === 'assigned' && route.orders?.[0]?.driver_name && (
                     <div className="dr-driver">
                       <span className="material-icons">person</span> {route.orders[0].driver_name}
                     </div>
