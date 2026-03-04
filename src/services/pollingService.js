@@ -965,6 +965,10 @@ class PollingService {
       });
 
       if (existingAddr) {
+        if (existingAddr.source === 'contact_corrected') {
+          console.log(`[AddressScan-Agent] ${contactName} (${contact.id}) tiene direccion corregida por agente, ignorando mensaje del chat`);
+          return;
+        }
         const newNorm = finalAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
         const origNorm = (existingAddr.original_address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const validNorm = (existingAddr.validated_address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1339,14 +1343,23 @@ class PollingService {
             continue;
           }
 
-          if (contactFieldAddress && existing) {
-            const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (cfNorm !== existOrigNorm && cfNorm !== existValidNorm) {
+          if (contactFieldAddress) {
+            if (existing) {
+              const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (cfNorm !== existOrigNorm && cfNorm !== existValidNorm) {
+                const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
+                if (cfGeocoded.success) {
+                  console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}" -> "${cfGeocoded.fullAddress}" [contact_corrected]`);
+                  await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
+                  continue;
+                }
+              }
+            } else {
               const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
               if (cfGeocoded.success) {
-                console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}" -> "${cfGeocoded.fullAddress}" [contact_corrected]`);
+                console.log(`[AddressScan] Direccion desde contacto (sin registro previo) ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}" [contact_corrected]`);
                 await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
                 continue;
               }
