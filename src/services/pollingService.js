@@ -1227,6 +1227,7 @@ class PollingService {
           const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
 
           let contactFieldAddress = null;
+          let contactBilling = null;
           try {
             const contactDetail = await respondio.getContact(contact.id);
             if (contactDetail.success && contactDetail.data) {
@@ -1237,12 +1238,51 @@ class PollingService {
               if (cfAddress?.value && cfAddress.value.trim().length >= 5) {
                 contactFieldAddress = cfAddress.value.trim();
               }
+              const cfCost = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'cost');
+              const cfDeposit = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'deposit');
+              const cfBalance = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'balance');
+              if (cfCost || cfDeposit || cfBalance) {
+                const parseBilling = (val) => {
+                  if (val === null || val === undefined || val === '') return null;
+                  const num = parseFloat(val);
+                  return isNaN(num) ? null : num;
+                };
+                contactBilling = {
+                  cost: parseBilling(cfCost?.value),
+                  deposit: parseBilling(cfDeposit?.value),
+                  balance: parseBilling(cfBalance?.value)
+                };
+              }
             }
           } catch (cfErr) {
             // skip
           }
 
           const existing = addressMap.get(contactIdStr);
+
+          if (contactBilling && existing) {
+            try {
+              const dbRecord = await ValidatedAddress.findByPk(existing.id);
+              if (dbRecord) {
+                const billingUpdate = {};
+                if (contactBilling.cost !== null && dbRecord.order_cost !== contactBilling.cost) {
+                  billingUpdate.order_cost = contactBilling.cost;
+                }
+                if (contactBilling.deposit !== null && dbRecord.deposit_amount !== contactBilling.deposit) {
+                  billingUpdate.deposit_amount = contactBilling.deposit;
+                }
+                if (contactBilling.balance !== null && dbRecord.total_to_collect !== contactBilling.balance) {
+                  billingUpdate.total_to_collect = contactBilling.balance;
+                }
+                if (Object.keys(billingUpdate).length > 0) {
+                  await dbRecord.update(billingUpdate);
+                  console.log(`[AddressScan] Billing sync ${contactName} (${contact.id}): cost=${billingUpdate.order_cost ?? '-'} deposit=${billingUpdate.deposit_amount ?? '-'} balance=${billingUpdate.total_to_collect ?? '-'}`);
+                }
+              }
+            } catch (billErr) {
+              console.error(`[AddressScan] Error billing sync ${contact.id}:`, billErr.message);
+            }
+          }
 
           if (existing && existing.source === 'contact_corrected') {
             if (contactFieldAddress) {
