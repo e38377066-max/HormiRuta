@@ -1095,6 +1095,7 @@ class PollingService {
       }
 
       await this.syncContactNames(userId, tagFilteredContacts);
+      await this.syncClosedConversationLifecycles(userId, apiToken, tagFilteredContacts);
       await this.cleanupDuplicateAddresses(userId);
 
       const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
@@ -1579,6 +1580,65 @@ class PollingService {
       }
     } catch (error) {
       console.error(`[AddressScan] Error general en escaneo de direcciones:`, error.message);
+    }
+  }
+
+  async syncClosedConversationLifecycles(userId, apiToken, openContacts) {
+    try {
+      const openContactIds = new Set(openContacts.map(c => c.id.toString()));
+
+      const nonTerminalOrders = await ValidatedAddress.findAll({
+        where: {
+          user_id: userId,
+          respond_contact_id: { [Op.ne]: null },
+          order_status: { [Op.notIn]: ['delivered', 'ups_shipped'] }
+        }
+      });
+
+      const closedOrders = nonTerminalOrders.filter(o => !openContactIds.has(o.respond_contact_id));
+
+      if (closedOrders.length === 0) return;
+
+      const respondio = new RespondioService(apiToken);
+      let syncedCount = 0;
+      const DELAY_MS = 300;
+
+      for (const order of closedOrders) {
+        try {
+          if (syncedCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+          }
+
+          const contactResult = await respondio.getContact(parseInt(order.respond_contact_id));
+          if (!contactResult.success || !contactResult.data) continue;
+
+          const contact = contactResult.data;
+          const newStatus = this.lifecycleToOrderStatus(contact.lifecycle);
+
+          if (newStatus && newStatus !== order.order_status) {
+            await order.update({ order_status: newStatus });
+            console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
+            syncedCount++;
+          } else if (!newStatus && contact.lifecycle) {
+            const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
+            if (excludedLifecycles.includes(contact.lifecycle)) {
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contact.lifecycle}, eliminando del dispatch`);
+              if (!order.route_id) {
+                await order.destroy();
+              }
+              syncedCount++;
+            }
+          }
+        } catch (err) {
+          console.error(`[LifecycleSync] Error consultando contacto ${order.respond_contact_id}:`, err.message);
+        }
+      }
+
+      if (syncedCount > 0) {
+        console.log(`[LifecycleSync] ${syncedCount} orden(es) sincronizada(s) de chats cerrados`);
+      }
+    } catch (error) {
+      console.error(`[LifecycleSync] Error en sync de chats cerrados:`, error.message);
     }
   }
 
