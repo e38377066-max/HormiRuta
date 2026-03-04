@@ -1,4 +1,4 @@
-import { DataTypes } from 'sequelize';
+import { DataTypes, Op } from 'sequelize';
 import sequelize from '../config/database.js';
 
 const ValidatedAddress = sequelize.define('ValidatedAddress', {
@@ -133,7 +133,15 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
   tableName: 'validated_addresses',
   timestamps: true,
   createdAt: 'created_at',
-  updatedAt: 'updated_at'
+  updatedAt: 'updated_at',
+  indexes: [
+    {
+      unique: true,
+      fields: ['user_id', 'respond_contact_id'],
+      where: { respond_contact_id: { [Op.ne]: null } },
+      name: 'unique_user_contact'
+    }
+  ]
 });
 
 ValidatedAddress.prototype.toDict = function() {

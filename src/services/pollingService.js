@@ -1622,40 +1622,12 @@ class PollingService {
         return;
       }
 
-      const existing = await ValidatedAddress.findOne({
+      const [record, created] = await ValidatedAddress.findOrCreate({
         where: {
           user_id: userId,
           respond_contact_id: contactIdStr
         },
-        order: [['created_at', 'DESC']]
-      });
-
-      if (existing) {
-        const updateData = {
-          validated_address: finalAddress,
-          original_address: originalAddress,
-          address_lat: lat,
-          address_lng: lng,
-          zip_code: finalZip || existing.zip_code,
-          city: geocoded.city || existing.city,
-          state: geocoded.stateShort || geocoded.state || existing.state,
-          confidence: geocoded.confidence || existing.confidence,
-          customer_name: customerName,
-          customer_phone: contact.phone || existing.customer_phone
-        };
-        if (sourceOverride) {
-          updateData.source = sourceOverride;
-        }
-        if (orderStatus && existing.order_status !== orderStatus) {
-          updateData.order_status = orderStatus;
-          console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${existing.order_status} -> ${orderStatus}`);
-        }
-        await existing.update(updateData);
-        console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})${sourceOverride ? ` [${sourceOverride}]` : ''}`);
-      } else {
-        await ValidatedAddress.create({
-          user_id: userId,
-          respond_contact_id: contactIdStr,
+        defaults: {
           customer_name: customerName,
           customer_phone: contact.phone || null,
           original_address: originalAddress,
@@ -1668,8 +1640,33 @@ class PollingService {
           confidence: geocoded.confidence || null,
           source: sourceOverride || 'scanner',
           order_status: orderStatus || 'approved'
-        });
+        }
+      });
+
+      if (created) {
         console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus || 'approved'}]`);
+      } else {
+        const updateData = {
+          validated_address: finalAddress,
+          original_address: originalAddress,
+          address_lat: lat,
+          address_lng: lng,
+          zip_code: finalZip || record.zip_code,
+          city: geocoded.city || record.city,
+          state: geocoded.stateShort || geocoded.state || record.state,
+          confidence: geocoded.confidence || record.confidence,
+          customer_name: customerName,
+          customer_phone: contact.phone || record.customer_phone
+        };
+        if (sourceOverride) {
+          updateData.source = sourceOverride;
+        }
+        if (orderStatus && record.order_status !== orderStatus) {
+          updateData.order_status = orderStatus;
+          console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${record.order_status} -> ${orderStatus}`);
+        }
+        await record.update(updateData);
+        console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})${sourceOverride ? ` [${sourceOverride}]` : ''}`);
       }
     } catch (error) {
       console.error(`[ValidatedAddr] Error guardando direccion validada:`, error.message);
