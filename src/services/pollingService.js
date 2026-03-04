@@ -1061,19 +1061,21 @@ class PollingService {
         cursorId = result.pagination.nextCursor;
       }
 
-      const excludedLifecycles = ['UPS Shipped', 'New Lead', 'Pending', 'Impropos'];
-      allContacts = allContacts.filter(contact => {
+      if (allContacts.length === 0) return;
+
+      await this.syncContactNames(userId, allContacts);
+
+      const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
+      const scanContacts = allContacts.filter(contact => {
         if (contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
           return false;
         }
         return true;
       });
 
-      if (allContacts.length === 0) return;
+      if (scanContacts.length === 0) return;
 
-      await this.syncContactNames(userId, allContacts);
-
-      await this.scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings);
+      await this.scanAddressesInConversations(userId, apiToken, scanContacts, respondio, messageLimit, settings);
     } catch (error) {
       console.error(`[AddressScan] Error en ciclo independiente:`, error.message);
     }
@@ -1102,23 +1104,33 @@ class PollingService {
         const existing = addressMap.get(contactIdStr);
         if (!existing) continue;
 
+        const updateFields = {};
         const currentName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
         if (existing.customer_name && existing.customer_name !== currentName && currentName !== 'Sin nombre') {
+          updateFields.customer_name = currentName;
+        }
+
+        const orderStatus = this.lifecycleToOrderStatus(contact.lifecycle);
+        if (orderStatus && existing.order_status !== orderStatus) {
+          updateFields.order_status = orderStatus;
+          console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
+        }
+
+        if (Object.keys(updateFields).length > 0) {
           try {
-            await ValidatedAddress.update(
-              { customer_name: currentName },
-              { where: { id: existing.id } }
-            );
-            console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
+            await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+            if (updateFields.customer_name) {
+              console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
+            }
             updatedCount++;
           } catch (err) {
-            console.error(`[AddressScan] Error sync nombre ${contactIdStr}:`, err.message);
+            console.error(`[AddressScan] Error sync ${contactIdStr}:`, err.message);
           }
         }
       }
 
       if (updatedCount > 0) {
-        console.log(`[AddressScan] ${updatedCount} nombre(s) sincronizado(s)`);
+        console.log(`[AddressScan] ${updatedCount} contacto(s) sincronizado(s)`);
       }
     } catch (error) {
       console.error(`[AddressScan] Error en syncContactNames:`, error.message);
@@ -1534,9 +1546,10 @@ class PollingService {
       'Approved': 'approved',
       'Ordered': 'ordered',
       'On Delivery': 'on_delivery',
-      'Delivered': 'delivered'
+      'Delivered': 'delivered',
+      'UPS Shipped': 'ups_shipped'
     };
-    return map[lifecycle] || 'approved';
+    return map[lifecycle] || null;
   }
 
   async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded, sourceOverride) {
@@ -1598,7 +1611,7 @@ class PollingService {
           source: sourceOverride || 'scanner',
           order_status: orderStatus || 'approved'
         });
-        console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus}]`);
+        console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus || 'approved'}]`);
       }
     } catch (error) {
       console.error(`[ValidatedAddr] Error guardando direccion validada:`, error.message);
