@@ -568,12 +568,9 @@ router.post('/coverage-zones', requireAuth, async (req, res) => {
     const { zip_code, zone_name, city, state, country, is_active,
             delivery_fee, min_order_amount, estimated_delivery_time, notes } = req.body;
 
-    const existing = await CoverageZone.findOne({
-      where: {
-        user_id: req.userId,
-        zip_code
-      }
-    });
+    const user = await User.findByPk(req.userId);
+    const dupWhere = user?.role === 'admin' ? { zip_code } : { user_id: req.userId, zip_code };
+    const existing = await CoverageZone.findOne({ where: dupWhere });
 
     if (existing) {
       return res.status(400).json({ error: 'Ya existe una zona con este codigo postal' });
@@ -616,17 +613,15 @@ router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Se requiere una lista de codigos postales' });
     }
 
+    const user = await User.findByPk(req.userId);
+    const isAdmin = user?.role === 'admin';
     const created = [];
     const skipped = [];
 
     for (const zip_code of zip_codes) {
       const trimmedZip = zip_code.trim();
-      const existing = await CoverageZone.findOne({
-        where: {
-          user_id: req.userId,
-          zip_code: trimmedZip
-        }
-      });
+      const dupWhere = isAdmin ? { zip_code: trimmedZip } : { user_id: req.userId, zip_code: trimmedZip };
+      const existing = await CoverageZone.findOne({ where: dupWhere });
 
       if (existing) {
         skipped.push(trimmedZip);
