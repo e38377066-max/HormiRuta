@@ -33,6 +33,8 @@ export default function CoveragePage() {
     notes: ''
   })
   const [loadingZipInfo, setLoadingZipInfo] = useState(false)
+  const [sortField, setSortField] = useState('zip_code')
+  const [sortDir, setSortDir] = useState('asc')
 
   useEffect(() => {
     loadZones()
@@ -147,12 +149,43 @@ export default function CoveragePage() {
     }
   }
 
+  const toggleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+  }
+
   const filteredZones = coverageZones.filter(z => {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
     return (z.zip_code || z.zipCode || '').toLowerCase().includes(query) ||
            (z.zone_name || '').toLowerCase().includes(query) ||
-           (z.city || '').toLowerCase().includes(query)
+           (z.city || '').toLowerCase().includes(query) ||
+           (z.state || '').toLowerCase().includes(query)
+  }).sort((a, b) => {
+    let valA = '', valB = ''
+    if (sortField === 'zip_code') {
+      valA = a.zip_code || a.zipCode || ''
+      valB = b.zip_code || b.zipCode || ''
+    } else if (sortField === 'zone_name') {
+      valA = a.zone_name || ''
+      valB = b.zone_name || ''
+    } else if (sortField === 'city') {
+      valA = a.city || ''
+      valB = b.city || ''
+    } else if (sortField === 'state') {
+      valA = a.state || ''
+      valB = b.state || ''
+    } else if (sortField === 'delivery_fee') {
+      valA = parseFloat(a.delivery_fee) || 0
+      valB = parseFloat(b.delivery_fee) || 0
+      return sortDir === 'asc' ? valA - valB : valB - valA
+    }
+    const cmp = valA.toString().localeCompare(valB.toString())
+    return sortDir === 'asc' ? cmp : -cmp
   })
 
   const resetForm = () => {
@@ -291,11 +324,21 @@ export default function CoveragePage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>ZIP Code</th>
-                  <th>Zona</th>
-                  <th>Ciudad</th>
-                  <th>Estado</th>
-                  <th>Costo</th>
+                  <th onClick={() => toggleSort('zip_code')} style={{cursor: 'pointer', userSelect: 'none'}}>
+                    ZIP Code {sortField === 'zip_code' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  </th>
+                  <th onClick={() => toggleSort('zone_name')} style={{cursor: 'pointer', userSelect: 'none'}}>
+                    Zona {sortField === 'zone_name' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  </th>
+                  <th onClick={() => toggleSort('city')} style={{cursor: 'pointer', userSelect: 'none'}}>
+                    Ciudad {sortField === 'city' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  </th>
+                  <th onClick={() => toggleSort('state')} style={{cursor: 'pointer', userSelect: 'none'}}>
+                    Estado {sortField === 'state' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  </th>
+                  <th onClick={() => toggleSort('delivery_fee')} style={{cursor: 'pointer', userSelect: 'none'}}>
+                    Costo {sortField === 'delivery_fee' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  </th>
                   <th>Activo</th>
                   <th>Acciones</th>
                 </tr>

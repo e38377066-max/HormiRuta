@@ -70,6 +70,8 @@ router.get('/orders', requireAuth, async (req, res) => {
     } else if (user.role === 'admin') {
       if (req.query.status) {
         where.order_status = req.query.status;
+      } else {
+        where.order_status = { [Op.ne]: 'delivered' };
       }
       if (req.query.available === 'true') {
         where.route_id = { [Op.is]: null };
