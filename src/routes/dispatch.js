@@ -80,7 +80,7 @@ router.get('/orders', requireAuth, async (req, res) => {
 
     const orders = await ValidatedAddress.findAll({
       where,
-      order: [['created_at', 'DESC']]
+      order: [['customer_name', 'ASC'], ['created_at', 'DESC']]
     });
 
     res.json({ orders: orders.map(o => o.toDict()) });
