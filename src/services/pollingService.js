@@ -1285,17 +1285,18 @@ class PollingService {
               }
               const cfCost = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'cost');
               const cfDeposit = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'deposit');
-              const cfBalance = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'balance');
-              if (cfCost || cfDeposit || cfBalance) {
+              if (cfCost || cfDeposit) {
                 const parseBilling = (val) => {
                   if (val === null || val === undefined || val === '') return null;
                   const num = parseFloat(val);
                   return isNaN(num) ? null : num;
                 };
+                const cost = parseBilling(cfCost?.value);
+                const deposit = parseBilling(cfDeposit?.value);
                 contactBilling = {
-                  cost: parseBilling(cfCost?.value),
-                  deposit: parseBilling(cfDeposit?.value),
-                  balance: parseBilling(cfBalance?.value)
+                  cost,
+                  deposit,
+                  balance: (cost !== null ? cost : 0) - (deposit !== null ? deposit : 0)
                 };
               }
             }
@@ -1316,12 +1317,14 @@ class PollingService {
                 if (contactBilling.deposit !== null && dbRecord.deposit_amount !== contactBilling.deposit) {
                   billingUpdate.deposit_amount = contactBilling.deposit;
                 }
-                if (contactBilling.balance !== null && dbRecord.total_to_collect !== contactBilling.balance) {
-                  billingUpdate.total_to_collect = contactBilling.balance;
+                if (billingUpdate.order_cost !== undefined || billingUpdate.deposit_amount !== undefined) {
+                  const finalCost = billingUpdate.order_cost ?? dbRecord.order_cost ?? 0;
+                  const finalDeposit = billingUpdate.deposit_amount ?? dbRecord.deposit_amount ?? 0;
+                  billingUpdate.total_to_collect = finalCost - finalDeposit;
                 }
                 if (Object.keys(billingUpdate).length > 0) {
                   await dbRecord.update(billingUpdate);
-                  console.log(`[AddressScan] Billing sync ${contactName} (${contact.id}): cost=${billingUpdate.order_cost ?? '-'} deposit=${billingUpdate.deposit_amount ?? '-'} balance=${billingUpdate.total_to_collect ?? '-'}`);
+                  console.log(`[AddressScan] Billing sync ${contactName} (${contact.id}): cost=${billingUpdate.order_cost ?? '-'} deposit=${billingUpdate.deposit_amount ?? '-'} cobrar=${billingUpdate.total_to_collect ?? '-'}`);
                 }
               }
             } catch (billErr) {
