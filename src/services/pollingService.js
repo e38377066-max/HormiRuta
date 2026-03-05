@@ -232,7 +232,7 @@ class PollingService {
       console.log(`[Polling] MODO PRUEBA - Buscando contacto: ${testContactId}`);
     }
     
-    console.log(`[Polling] Obteniendo conversaciones ABIERTAS con lifecycle New Lead/Pending (limite: ${messageLimit} msgs)...`);
+    console.log(`[Polling] Obteniendo conversaciones ABIERTAS con lifecycle New Lead (limite: ${messageLimit} msgs)...`);
     
     let allContacts = [];
     let cursorId = null;
@@ -261,7 +261,7 @@ class PollingService {
       cursorId = contactsResult.pagination.nextCursor;
     }
 
-    const targetLifecycles = ['New Lead', 'Pending'];
+    const targetLifecycles = ['New Lead'];
     let filteredContacts = allContacts.filter(contact => 
       contact.lifecycle && targetLifecycles.includes(contact.lifecycle)
     );
@@ -270,7 +270,7 @@ class PollingService {
       index === self.findIndex(c => c.id === contact.id)
     );
 
-    console.log(`[Polling] Conversaciones abiertas: ${allContacts.length}, Con lifecycle New Lead/Pending: ${uniqueContacts.length}`);
+    console.log(`[Polling] Conversaciones abiertas: ${allContacts.length}, Con lifecycle New Lead: ${uniqueContacts.length}`);
 
     // MODO PRUEBA: Buscar contacto directamente via API de Respond.io (sin depender de listas)
     if (isTestMode && testContactId) {
