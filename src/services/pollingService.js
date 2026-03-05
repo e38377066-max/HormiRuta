@@ -1144,6 +1144,19 @@ class PollingService {
         }
 
         const orderStatus = this.lifecycleToOrderStatus(contact.lifecycle);
+        const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
+        if (!orderStatus && contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
+          if (!existing.route_id) {
+            try {
+              await ValidatedAddress.destroy({ where: { id: existing.id } });
+              console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" eliminada (lifecycle=${contact.lifecycle}) (${contactIdStr})`);
+              updatedCount++;
+            } catch (err) {
+              console.error(`[AddressScan] Error eliminando ${contactIdStr}:`, err.message);
+            }
+          }
+          continue;
+        }
         if (orderStatus && existing.order_status !== orderStatus) {
           updateFields.order_status = orderStatus;
           console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);

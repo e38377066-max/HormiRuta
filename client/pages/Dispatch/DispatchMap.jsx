@@ -48,6 +48,7 @@ export default function DispatchMap() {
   const [activeTab, setActiveTab] = useState('orders')
   const [editingNotes, setEditingNotes] = useState(null)
   const [notesValue, setNotesValue] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [respondUsers, setRespondUsers] = useState([])
   const [selectedRespondUsers, setSelectedRespondUsers] = useState([])
   const [loadingRespondUsers, setLoadingRespondUsers] = useState(false)
@@ -108,7 +109,7 @@ export default function DispatchMap() {
 
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 30000)
+    const interval = setInterval(fetchData, 180000)
     return () => clearInterval(interval)
   }, [fetchData])
 
@@ -654,6 +655,20 @@ export default function DispatchMap() {
 
         {isAdmin && (
           <div className="dispatch-filter">
+            <div className="dispatch-search-box">
+              <span className="material-icons">search</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Buscar por nombre..."
+              />
+              {searchQuery && (
+                <button className="dispatch-search-clear" onClick={() => setSearchQuery('')}>
+                  <span className="material-icons">close</span>
+                </button>
+              )}
+            </div>
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">Todos los estados</option>
               <option value="approved">Aprobadas</option>
@@ -762,13 +777,17 @@ export default function DispatchMap() {
           {loading ? (
             <div className="loading-center"><div className="spinner"></div></div>
           ) : activeTab === 'orders' ? (
-            orders.length === 0 ? (
-              <div className="empty-dispatch">
-                <span className="material-icons">inbox</span>
-                <p>No hay ordenes con direccion</p>
-              </div>
-            ) : (
-              orders.map(order => {
+            (() => {
+              const filtered = searchQuery
+                ? orders.filter(o => (o.customer_name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (o.address || '').toLowerCase().includes(searchQuery.toLowerCase()) || (o.customer_phone || '').includes(searchQuery))
+                : orders
+              return filtered.length === 0 ? (
+                <div className="empty-dispatch">
+                  <span className="material-icons">inbox</span>
+                  <p>{searchQuery ? 'No se encontraron ordenes' : 'No hay ordenes con direccion'}</p>
+                </div>
+              ) : (
+              filtered.map(order => {
                 const cfg = getStatusConfig(order.order_status)
                 const isSelected = selectedOrders.includes(order.id)
                 return (
@@ -944,6 +963,7 @@ export default function DispatchMap() {
                 )
               })
             )
+            })()
           ) : activeTab === 'routes' ? (
             routes.length === 0 ? (
               <div className="empty-dispatch">
