@@ -611,7 +611,7 @@ export default function DispatchMap() {
     setGlobalCommissionResult(null)
     try {
       const res = await api.put('/api/dispatch/drivers/global-commission', { commission_per_stop: val })
-      setGlobalCommissionResult({ success: true, message: `Comisión $${val.toFixed(2)} aplicada a ${res.data.updated} chofer(es)` })
+      setGlobalCommissionResult({ success: true, message: `Comisión de $${val.toFixed(2)} por parada guardada` })
       fetchData()
     } catch (error) {
       setGlobalCommissionResult({ success: false, message: error.response?.data?.error || 'Error al actualizar' })
@@ -1275,9 +1275,10 @@ export default function DispatchMap() {
 
               <div className="drivers-section">
                 <div className="drivers-section-header">
-                  <h3><span className="material-icons">paid</span> Comisión Global por Parada</h3>
+                  <h3><span className="material-icons">paid</span> Comisión por Parada</h3>
                 </div>
                 <div className="global-commission-form">
+                  <p className="gc-desc">Valor que el chofer cobra por cada parada completada. Si una ruta tiene 10 paradas, el chofer gana este valor × 10.</p>
                   <div className="gc-input-row">
                     <span className="gc-dollar">$</span>
                     <input
@@ -1294,8 +1295,8 @@ export default function DispatchMap() {
                       onClick={handleGlobalCommission}
                       disabled={savingGlobalCommission || !globalCommission}
                     >
-                      <span className="material-icons">{savingGlobalCommission ? 'hourglass_empty' : 'group'}</span>
-                      {savingGlobalCommission ? 'Aplicando...' : 'Aplicar a todos'}
+                      <span className="material-icons">{savingGlobalCommission ? 'hourglass_empty' : 'save'}</span>
+                      {savingGlobalCommission ? 'Guardando...' : 'Guardar'}
                     </button>
                   </div>
                   {globalCommissionResult && (
@@ -1304,7 +1305,6 @@ export default function DispatchMap() {
                       <span>{globalCommissionResult.message}</span>
                     </div>
                   )}
-                  <p className="gc-hint">Establece la comisión por parada para todos los choferes</p>
                 </div>
               </div>
             </div>

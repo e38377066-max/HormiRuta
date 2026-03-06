@@ -1828,10 +1828,11 @@
   font-size: 16px;
 }
 
-.gc-hint {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: #999;
+.gc-desc {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.4;
 }
 
 .dr-commission {
