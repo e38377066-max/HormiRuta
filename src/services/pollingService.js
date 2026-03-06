@@ -1155,6 +1155,8 @@ class PollingService {
             } catch (err) {
               console.error(`[AddressScan] Error eliminando ${contactIdStr}:`, err.message);
             }
+          } else {
+            console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" lifecycle=${contact.lifecycle} pero tiene ruta asignada, no se elimina (${contactIdStr})`);
           }
           continue;
         }
