@@ -1504,7 +1504,7 @@
   margin-top: 6px;
 }
 
-.evidence-modal {
+.dispatch-evidence-modal {
   background: white;
   border-radius: 12px;
   max-width: 600px;
@@ -1514,7 +1514,7 @@
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
 }
 
-.evidence-modal-header {
+.dispatch-evidence-modal .evidence-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1522,12 +1522,13 @@
   border-bottom: 1px solid #e0e0e0;
 }
 
-.evidence-modal-header h3 {
+.dispatch-evidence-modal .evidence-modal-header h3 {
   margin: 0;
   font-size: 1.1rem;
+  color: #333;
 }
 
-.evidence-modal-close {
+.dispatch-evidence-modal .evidence-modal-close {
   background: none;
   border: none;
   cursor: pointer;
@@ -1536,12 +1537,12 @@
   border-radius: 50%;
 }
 
-.evidence-modal-close:hover {
+.dispatch-evidence-modal .evidence-modal-close:hover {
   background: #f0f0f0;
   color: #333;
 }
 
-.evidence-modal-info {
+.dispatch-evidence-modal .evidence-modal-info {
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
@@ -1551,7 +1552,7 @@
   border-bottom: 1px solid #f0f0f0;
 }
 
-.evidence-modal-info strong {
+.dispatch-evidence-modal .evidence-modal-info strong {
   font-size: 16px;
   color: #333;
 }

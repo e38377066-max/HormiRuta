@@ -1413,7 +1413,7 @@ export default function DispatchMap() {
 
       {evidenceModal && (
         <div className="modal-backdrop" onClick={() => setEvidenceModal(null)}>
-          <div className="evidence-modal" onClick={e => e.stopPropagation()}>
+          <div className="dispatch-evidence-modal" onClick={e => e.stopPropagation()}>
             <div className="evidence-modal-header">
               <h3>Evidencia de Entrega</h3>
               <button className="evidence-modal-close" onClick={() => setEvidenceModal(null)}>
