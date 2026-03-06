@@ -1099,9 +1099,10 @@ class PollingService {
       await this.cleanupDuplicateAddresses(userId);
       await this.cleanupDeliveredOrders();
 
-      const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
+      const excludedLifecycles = ['new lead', 'pending', 'impropos'];
       const scanContacts = tagFilteredContacts.filter(contact => {
-        if (contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
+        const lc = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
+        if (lc && excludedLifecycles.includes(lc)) {
           return false;
         }
         return true;
@@ -1144,19 +1145,21 @@ class PollingService {
           updateFields.customer_name = currentName;
         }
 
-        const orderStatus = this.lifecycleToOrderStatus(contact.lifecycle);
+        const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
+        const orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
         const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
-        if (!orderStatus && contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
+        const isExcluded = excludedLifecycles.some(ex => ex.toLowerCase() === contactLifecycle.toLowerCase());
+        if (!orderStatus && contactLifecycle && isExcluded) {
           if (!existing.route_id) {
             try {
               await ValidatedAddress.destroy({ where: { id: existing.id } });
-              console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" eliminada (lifecycle=${contact.lifecycle}) (${contactIdStr})`);
+              console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" eliminada (lifecycle=${contactLifecycle}) (${contactIdStr})`);
               updatedCount++;
             } catch (err) {
               console.error(`[AddressScan] Error eliminando ${contactIdStr}:`, err.message);
             }
           } else {
-            console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" lifecycle=${contact.lifecycle} pero tiene ruta asignada, no se elimina (${contactIdStr})`);
+            console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" lifecycle=${contactLifecycle} pero tiene ruta asignada, no se elimina (${contactIdStr})`);
           }
           continue;
         }
@@ -1632,16 +1635,17 @@ class PollingService {
           if (!contactResult.success || !contactResult.data) continue;
 
           const contact = contactResult.data;
-          const newStatus = this.lifecycleToOrderStatus(contact.lifecycle);
+          const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
+          const newStatus = this.lifecycleToOrderStatus(contactLifecycle);
 
           if (newStatus && newStatus !== order.order_status) {
             await order.update({ order_status: newStatus });
             console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
             syncedCount++;
-          } else if (!newStatus && contact.lifecycle) {
-            const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
-            if (excludedLifecycles.includes(contact.lifecycle)) {
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contact.lifecycle}, eliminando del dispatch`);
+          } else if (!newStatus && contactLifecycle) {
+            const excludedLifecycles = ['new lead', 'pending', 'impropos'];
+            if (excludedLifecycles.some(ex => ex === contactLifecycle.toLowerCase())) {
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando del dispatch`);
               if (!order.route_id) {
                 await order.destroy();
               }
@@ -1816,14 +1820,16 @@ class PollingService {
   }
 
   lifecycleToOrderStatus(lifecycle) {
+    if (!lifecycle) return null;
+    const lc = lifecycle.toLowerCase();
     const map = {
-      'Approved': 'approved',
-      'Ordered': 'ordered',
-      'On Delivery': 'on_delivery',
-      'Delivered': 'delivered',
-      'UPS Shipped': 'ups_shipped'
+      'approved': 'approved',
+      'ordered': 'ordered',
+      'on delivery': 'on_delivery',
+      'delivered': 'delivered',
+      'ups shipped': 'ups_shipped'
     };
-    return map[lifecycle] || null;
+    return map[lc] || null;
   }
 
   async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded, sourceOverride) {
