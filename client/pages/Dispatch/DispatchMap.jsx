@@ -67,6 +67,18 @@ export default function DispatchMap() {
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [messageSuccess, setMessageSuccess] = useState('')
+  const [showManualOrder, setShowManualOrder] = useState(false)
+  const [manualOrderForm, setManualOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '' })
+  const [manualOrderGeo, setManualOrderGeo] = useState(null)
+  const [manualOrderGeoLoading, setManualOrderGeoLoading] = useState(false)
+  const [manualOrderSaving, setManualOrderSaving] = useState(false)
+  const [manualOrderError, setManualOrderError] = useState('')
+  const [editOrderModal, setEditOrderModal] = useState(null)
+  const [editOrderForm, setEditOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '' })
+  const [editOrderGeo, setEditOrderGeo] = useState(null)
+  const [editOrderGeoLoading, setEditOrderGeoLoading] = useState(false)
+  const [editOrderSaving, setEditOrderSaving] = useState(false)
+  const [editOrderError, setEditOrderError] = useState('')
 
   const fetchData = useCallback(async () => {
     try {
@@ -591,6 +603,98 @@ export default function DispatchMap() {
 
   const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.approved
 
+  const openManualOrderModal = () => {
+    setManualOrderForm({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '' })
+    setManualOrderGeo(null)
+    setManualOrderError('')
+    setShowManualOrder(true)
+  }
+
+  const handleManualGeocode = async () => {
+    if (!manualOrderForm.validated_address.trim()) return
+    setManualOrderGeoLoading(true)
+    setManualOrderGeo(null)
+    setManualOrderError('')
+    try {
+      const res = await api.get('/api/dispatch/geocode-address', { params: { address: manualOrderForm.validated_address } })
+      setManualOrderGeo(res.data)
+      setManualOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
+    } catch (e) {
+      setManualOrderError(e.response?.data?.error || 'No se pudo geocodificar la dirección')
+    } finally {
+      setManualOrderGeoLoading(false)
+    }
+  }
+
+  const calcTotal = (form) => {
+    const cost = parseFloat(form.order_cost) || 0
+    const deposit = parseFloat(form.deposit_amount) || 0
+    return Math.max(0, cost - deposit).toFixed(2)
+  }
+
+  const handleSaveManualOrder = async () => {
+    if (!manualOrderForm.customer_name.trim() || !manualOrderForm.validated_address.trim()) {
+      setManualOrderError('Nombre y dirección son requeridos')
+      return
+    }
+    setManualOrderSaving(true)
+    setManualOrderError('')
+    try {
+      await api.post('/api/dispatch/orders', manualOrderForm)
+      setShowManualOrder(false)
+      fetchData()
+    } catch (e) {
+      setManualOrderError(e.response?.data?.error || 'Error al guardar la orden')
+    } finally {
+      setManualOrderSaving(false)
+    }
+  }
+
+  const openEditOrderModal = (order) => {
+    setEditOrderForm({
+      customer_name: order.customer_name || '',
+      customer_phone: order.customer_phone || '',
+      validated_address: order.validated_address || order.address || '',
+      order_cost: order.order_cost != null ? String(order.order_cost) : '',
+      deposit_amount: order.deposit_amount != null ? String(order.deposit_amount) : '',
+      notes: order.notes || ''
+    })
+    setEditOrderGeo(null)
+    setEditOrderError('')
+    setEditOrderModal(order)
+  }
+
+  const handleEditGeocode = async () => {
+    if (!editOrderForm.validated_address.trim()) return
+    setEditOrderGeoLoading(true)
+    setEditOrderGeo(null)
+    setEditOrderError('')
+    try {
+      const res = await api.get('/api/dispatch/geocode-address', { params: { address: editOrderForm.validated_address } })
+      setEditOrderGeo(res.data)
+      setEditOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
+    } catch (e) {
+      setEditOrderError(e.response?.data?.error || 'No se pudo geocodificar la dirección')
+    } finally {
+      setEditOrderGeoLoading(false)
+    }
+  }
+
+  const handleSaveEditOrder = async () => {
+    if (!editOrderModal) return
+    setEditOrderSaving(true)
+    setEditOrderError('')
+    try {
+      await api.put(`/api/dispatch/orders/${editOrderModal.id}/edit`, editOrderForm)
+      setEditOrderModal(null)
+      fetchData()
+    } catch (e) {
+      setEditOrderError(e.response?.data?.error || 'Error al guardar cambios')
+    } finally {
+      setEditOrderSaving(false)
+    }
+  }
+
   const ADMIN_TRANSITIONS = {
     approved: 'ordered',
     ordered: 'on_delivery',
@@ -669,14 +773,19 @@ export default function DispatchMap() {
                 </button>
               )}
             </div>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-              <option value="">Todos los estados</option>
-              <option value="approved">Aprobadas</option>
-              <option value="ordered">Ordenadas</option>
-              <option value="on_delivery">En Entrega</option>
-              <option value="ups_shipped">UPS Shipped</option>
-              <option value="delivered">Entregadas</option>
-            </select>
+            <div className="dispatch-filter-row">
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                <option value="">Todos los estados</option>
+                <option value="approved">Aprobadas</option>
+                <option value="ordered">Ordenadas</option>
+                <option value="on_delivery">En Entrega</option>
+                <option value="ups_shipped">UPS Shipped</option>
+                <option value="delivered">Entregadas</option>
+              </select>
+              <button className="btn-add-manual-order" onClick={openManualOrderModal} title="Agregar orden manual">
+                <span className="material-icons">add</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -881,6 +990,15 @@ export default function DispatchMap() {
                               <span className="material-icons">sticky_note_2</span>
                             </button>
                           )}
+                          <button
+                            className="do-edit-notes"
+                            onClick={() => openEditOrderModal(order)}
+                            title="Editar orden"
+                            style={{ color: '#2196f3' }}
+                          >
+                            <span className="material-icons">edit</span>
+                          </button>
+
                           {order.notes && editingNotes !== order.id && (
                             <div className="do-notes-preview">{order.notes}</div>
                           )}
@@ -1313,6 +1431,140 @@ export default function DispatchMap() {
                 Enviando...
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showManualOrder && (
+        <div className="order-modal-overlay" onClick={() => setShowManualOrder(false)}>
+          <div className="order-modal" onClick={e => e.stopPropagation()}>
+            <div className="order-modal-header">
+              <span className="material-icons">add_location_alt</span>
+              <h3>Nueva Orden Manual</h3>
+              <button className="order-modal-close" onClick={() => setShowManualOrder(false)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="order-modal-body">
+              {manualOrderError && <div className="order-modal-error">{manualOrderError}</div>}
+              <div className="order-form-field">
+                <label>Nombre del cliente *</label>
+                <input type="text" value={manualOrderForm.customer_name} onChange={e => setManualOrderForm(p => ({ ...p, customer_name: e.target.value }))} placeholder="Nombre completo" />
+              </div>
+              <div className="order-form-field">
+                <label>Teléfono</label>
+                <input type="tel" value={manualOrderForm.customer_phone} onChange={e => setManualOrderForm(p => ({ ...p, customer_phone: e.target.value }))} placeholder="+1 (000) 000-0000" />
+              </div>
+              <div className="order-form-field">
+                <label>Dirección *</label>
+                <div className="order-address-row">
+                  <input type="text" value={manualOrderForm.validated_address} onChange={e => { setManualOrderForm(p => ({ ...p, validated_address: e.target.value })); setManualOrderGeo(null) }} placeholder="123 Main St, Dallas TX 75201" />
+                  <button className="btn-geocode" onClick={handleManualGeocode} disabled={manualOrderGeoLoading || !manualOrderForm.validated_address.trim()}>
+                    {manualOrderGeoLoading ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">my_location</span>}
+                  </button>
+                </div>
+                {manualOrderGeo && (
+                  <div className="geocode-result">
+                    <span className="material-icons" style={{ color: '#4caf50', fontSize: 16 }}>check_circle</span>
+                    {manualOrderGeo.formatted_address}
+                    {manualOrderGeo.zip_code && <span className="geocode-detail"> · ZIP {manualOrderGeo.zip_code}</span>}
+                    {manualOrderGeo.city && <span className="geocode-detail"> · {manualOrderGeo.city}, {manualOrderGeo.state}</span>}
+                  </div>
+                )}
+              </div>
+              <div className="order-form-row">
+                <div className="order-form-field">
+                  <label>Costo ($)</label>
+                  <input type="number" step="0.01" min="0" value={manualOrderForm.order_cost} onChange={e => setManualOrderForm(p => ({ ...p, order_cost: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div className="order-form-field">
+                  <label>Depósito ($)</label>
+                  <input type="number" step="0.01" min="0" value={manualOrderForm.deposit_amount} onChange={e => setManualOrderForm(p => ({ ...p, deposit_amount: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div className="order-form-field">
+                  <label>Total a cobrar</label>
+                  <input type="text" readOnly value={`$${calcTotal(manualOrderForm)}`} className="readonly-field" />
+                </div>
+              </div>
+              <div className="order-form-field">
+                <label>Notas</label>
+                <textarea value={manualOrderForm.notes} onChange={e => setManualOrderForm(p => ({ ...p, notes: e.target.value }))} placeholder="Notas internas..." rows={2} />
+              </div>
+            </div>
+            <div className="order-modal-footer">
+              <button className="dbtn outline" onClick={() => setShowManualOrder(false)}>Cancelar</button>
+              <button className="dbtn purple" onClick={handleSaveManualOrder} disabled={manualOrderSaving}>
+                {manualOrderSaving ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">save</span>}
+                Guardar Orden
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editOrderModal && (
+        <div className="order-modal-overlay" onClick={() => setEditOrderModal(null)}>
+          <div className="order-modal" onClick={e => e.stopPropagation()}>
+            <div className="order-modal-header">
+              <span className="material-icons">edit</span>
+              <h3>Editar Orden #{editOrderModal.id}</h3>
+              <button className="order-modal-close" onClick={() => setEditOrderModal(null)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="order-modal-body">
+              {editOrderError && <div className="order-modal-error">{editOrderError}</div>}
+              <div className="order-form-field">
+                <label>Nombre del cliente</label>
+                <input type="text" value={editOrderForm.customer_name} onChange={e => setEditOrderForm(p => ({ ...p, customer_name: e.target.value }))} placeholder="Nombre completo" />
+              </div>
+              <div className="order-form-field">
+                <label>Teléfono</label>
+                <input type="tel" value={editOrderForm.customer_phone} onChange={e => setEditOrderForm(p => ({ ...p, customer_phone: e.target.value }))} placeholder="+1 (000) 000-0000" />
+              </div>
+              <div className="order-form-field">
+                <label>Dirección</label>
+                <div className="order-address-row">
+                  <input type="text" value={editOrderForm.validated_address} onChange={e => { setEditOrderForm(p => ({ ...p, validated_address: e.target.value })); setEditOrderGeo(null) }} placeholder="123 Main St, Dallas TX 75201" />
+                  <button className="btn-geocode" onClick={handleEditGeocode} disabled={editOrderGeoLoading || !editOrderForm.validated_address.trim()}>
+                    {editOrderGeoLoading ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">my_location</span>}
+                  </button>
+                </div>
+                {editOrderGeo && (
+                  <div className="geocode-result">
+                    <span className="material-icons" style={{ color: '#4caf50', fontSize: 16 }}>check_circle</span>
+                    {editOrderGeo.formatted_address}
+                    {editOrderGeo.zip_code && <span className="geocode-detail"> · ZIP {editOrderGeo.zip_code}</span>}
+                    {editOrderGeo.city && <span className="geocode-detail"> · {editOrderGeo.city}, {editOrderGeo.state}</span>}
+                  </div>
+                )}
+              </div>
+              <div className="order-form-row">
+                <div className="order-form-field">
+                  <label>Costo ($)</label>
+                  <input type="number" step="0.01" min="0" value={editOrderForm.order_cost} onChange={e => setEditOrderForm(p => ({ ...p, order_cost: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div className="order-form-field">
+                  <label>Depósito ($)</label>
+                  <input type="number" step="0.01" min="0" value={editOrderForm.deposit_amount} onChange={e => setEditOrderForm(p => ({ ...p, deposit_amount: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div className="order-form-field">
+                  <label>Total a cobrar</label>
+                  <input type="text" readOnly value={`$${calcTotal(editOrderForm)}`} className="readonly-field" />
+                </div>
+              </div>
+              <div className="order-form-field">
+                <label>Notas</label>
+                <textarea value={editOrderForm.notes} onChange={e => setEditOrderForm(p => ({ ...p, notes: e.target.value }))} placeholder="Notas internas..." rows={2} />
+              </div>
+            </div>
+            <div className="order-modal-footer">
+              <button className="dbtn outline" onClick={() => setEditOrderModal(null)}>Cancelar</button>
+              <button className="dbtn purple" onClick={handleSaveEditOrder} disabled={editOrderSaving}>
+                {editOrderSaving ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">save</span>}
+                Guardar Cambios
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -149,6 +149,16 @@ export default function AdminDashboard() {
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
+            <Link to="/admin/accounting" className="section-item">
+              <div className="item-icon purple">
+                <span className="material-icons">receipt_long</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Contabilidad de Choferes</div>
+                <div className="item-subtitle">Reporte de entregas y comisiones</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
             <Link to="/dispatch" className="section-item">
               <div className="item-icon green">
                 <span className="material-icons">map</span>

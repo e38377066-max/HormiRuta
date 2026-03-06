@@ -1097,6 +1097,7 @@ class PollingService {
       await this.syncContactNames(userId, tagFilteredContacts);
       await this.syncClosedConversationLifecycles(userId, apiToken, tagFilteredContacts);
       await this.cleanupDuplicateAddresses(userId);
+      await this.cleanupDeliveredOrders();
 
       const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
       const scanContacts = tagFilteredContacts.filter(contact => {
@@ -1685,6 +1686,23 @@ class PollingService {
       }
     } catch (error) {
       console.error(`[AddressScan] Error limpiando duplicados:`, error.message);
+    }
+  }
+
+  async cleanupDeliveredOrders() {
+    try {
+      const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const deleted = await ValidatedAddress.destroy({
+        where: {
+          order_status: 'delivered',
+          updated_at: { [Op.lt]: cutoff }
+        }
+      });
+      if (deleted > 0) {
+        console.log(`[Cleanup] ${deleted} orden(es) entregada(s) eliminada(s) (>48h)`);
+      }
+    } catch (error) {
+      console.error(`[Cleanup] Error limpiando órdenes entregadas:`, error.message);
     }
   }
 
