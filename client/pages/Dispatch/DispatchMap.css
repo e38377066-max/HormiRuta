@@ -1565,3 +1565,212 @@
   border-radius: 8px;
   display: block;
 }
+
+/* ==================== FILTER ROW ==================== */
+.dispatch-filter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dispatch-filter-row select {
+  flex: 1;
+}
+
+.btn-add-manual-order {
+  background: #6200ea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.btn-add-manual-order:hover {
+  background: #7c4dff;
+}
+
+/* ==================== ORDER MODAL ==================== */
+.order-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.order-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.22);
+  overflow: hidden;
+}
+
+.order-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+  background: #f8f9fa;
+}
+
+.order-modal-header .material-icons {
+  color: #6200ea;
+  font-size: 22px;
+}
+
+.order-modal-header h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.order-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+}
+
+.order-modal-close:hover {
+  background: #eee;
+  color: #333;
+}
+
+.order-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.order-modal-error {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.order-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.order-form-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.order-form-field input,
+.order-form-field textarea {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  outline: none;
+  transition: border 0.2s;
+  font-family: inherit;
+}
+
+.order-form-field input:focus,
+.order-form-field textarea:focus {
+  border-color: #6200ea;
+}
+
+.order-form-field .readonly-field {
+  background: #f5f5f5;
+  color: #333;
+  font-weight: 600;
+}
+
+.order-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.order-address-row {
+  display: flex;
+  gap: 8px;
+}
+
+.order-address-row input {
+  flex: 1;
+}
+
+.btn-geocode {
+  background: #e8eaf6;
+  color: #3949ab;
+  border: 1px solid #c5cae9;
+  border-radius: 8px;
+  width: 42px;
+  min-width: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-geocode:hover:not(:disabled) {
+  background: #c5cae9;
+}
+
+.btn-geocode:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.geocode-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #388e3c;
+  background: #e8f5e9;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.geocode-detail {
+  color: #555;
+}
+
+.order-modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+  justify-content: flex-end;
+}

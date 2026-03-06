@@ -1237,3 +1237,113 @@ button.section-item.danger-item:disabled {
     display: none;
   }
 }
+
+/* ==================== ACCOUNTING PAGE ==================== */
+.accounting-filter-form {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accounting-filter-fields {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .accounting-filter-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.accounting-filter-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  background: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.accounting-table {
+  min-width: 820px;
+}
+
+.accounting-badge {
+  display: inline-block;
+  background: #e8eaf6;
+  color: #3949ab;
+  border-radius: 20px;
+  padding: 2px 12px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.accounting-row td {
+  vertical-align: middle;
+}
+
+.accounting-totals td {
+  border-top: 2px solid #e0e0e0;
+  background: #f8f9fa;
+  padding: 12px 16px;
+}
+
+.accounting-detail {
+  background: #f9f9ff;
+  border-top: 1px solid #e8eaf6;
+  border-bottom: 1px solid #e8eaf6;
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.detail-table th {
+  background: #f0f0ff;
+  padding: 8px 14px;
+  font-weight: 600;
+  color: #555;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.detail-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid #eee;
+  color: #333;
+}
+
+.detail-table tr:last-child td {
+  border-bottom: none;
+}
+
+.payment-method-tag.zelle { background: #e3f2fd; color: #1565c0; }
+.payment-method-tag.cash { background: #e8f5e9; color: #2e7d32; }
+.payment-method-tag.card { background: #fff3e0; color: #e65100; }
+.payment-method-tag.other { background: #f3e5f5; color: #6a1b9a; }

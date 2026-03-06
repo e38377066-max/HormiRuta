@@ -53,7 +53,7 @@ router.get('/users', requireAdmin, async (req, res) => {
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
       offset: parseInt(offset),
-      attributes: ['id', 'username', 'email', 'phone', 'role', 'active', 'subscription_type', 'created_at']
+      attributes: ['id', 'username', 'email', 'phone', 'role', 'active', 'subscription_type', 'commission_per_stop', 'created_at']
     });
 
     res.json({ users, total });
@@ -83,7 +83,7 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    const allowedFields = ['username', 'email', 'phone', 'role', 'active', 'subscription_type'];
+    const allowedFields = ['username', 'email', 'phone', 'role', 'active', 'subscription_type', 'commission_per_stop'];
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         user[field] = req.body[field];

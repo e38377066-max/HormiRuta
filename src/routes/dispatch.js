@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 import RespondioService from '../services/respondio.js';
 import respondApiService from '../services/respondApiService.js';
 import { optimizeRouteOrder } from '../services/optimization.js';
+import geocodingService from '../services/geocodingService.js';
 
 const ORDER_STATUS_TO_LIFECYCLE = {
   approved: 'Approved',
@@ -282,6 +283,209 @@ router.put('/orders/:id/billing', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error updating billing:', error);
     res.status(500).json({ error: 'Error al actualizar cobranza' });
+  }
+});
+
+router.get('/geocode-address', requireAdmin, async (req, res) => {
+  try {
+    const { address } = req.query;
+    if (!address) return res.status(400).json({ error: 'Dirección requerida' });
+
+    const result = await geocodingService.geocodeAddress(address);
+    if (!result.success) {
+      return res.status(422).json({ error: 'No se pudo geocodificar la dirección', details: result.error });
+    }
+
+    res.json({
+      success: true,
+      formatted_address: result.formattedAddress,
+      lat: result.latitude,
+      lng: result.longitude,
+      zip_code: result.zipCode,
+      city: result.city,
+      state: result.stateShort || result.state
+    });
+  } catch (error) {
+    console.error('Error geocoding address:', error);
+    res.status(500).json({ error: 'Error al geocodificar' });
+  }
+});
+
+router.post('/orders', requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
+    const { customer_name, customer_phone, validated_address, order_cost, deposit_amount, notes } = req.body;
+
+    if (!customer_name || !validated_address) {
+      return res.status(400).json({ error: 'Nombre y dirección son requeridos' });
+    }
+
+    const geo = await geocodingService.geocodeAddress(validated_address);
+    if (!geo.success) {
+      return res.status(422).json({ error: 'No se pudo validar la dirección. Verifica que sea correcta.' });
+    }
+
+    const cost = parseFloat(order_cost) || 0;
+    const deposit = parseFloat(deposit_amount) || 0;
+    const total = Math.max(0, cost - deposit);
+
+    const newOrder = await ValidatedAddress.create({
+      user_id: user.id,
+      respond_contact_id: null,
+      customer_name: customer_name.trim(),
+      customer_phone: customer_phone?.trim() || null,
+      original_address: validated_address,
+      validated_address: geo.formattedAddress || validated_address,
+      address_lat: geo.latitude,
+      address_lng: geo.longitude,
+      zip_code: geo.zipCode || null,
+      city: geo.city || null,
+      state: geo.stateShort || geo.state || null,
+      confidence: geo.confidence || 'high',
+      source: 'manual',
+      order_status: 'approved',
+      order_cost: cost || null,
+      deposit_amount: deposit || null,
+      total_to_collect: total || null,
+      notes: notes?.trim() || null
+    });
+
+    console.log(`[Dispatch] Orden manual creada: ${customer_name} - ${geo.formattedAddress}`);
+    res.status(201).json({ success: true, order: newOrder.toDict() });
+  } catch (error) {
+    console.error('Error creating manual order:', error);
+    res.status(500).json({ error: 'Error al crear orden' });
+  }
+});
+
+router.put('/orders/:id/edit', requireAdmin, async (req, res) => {
+  try {
+    const order = await ValidatedAddress.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    const { customer_name, customer_phone, validated_address, order_cost, deposit_amount, notes } = req.body;
+
+    if (customer_name !== undefined) order.customer_name = customer_name.trim();
+    if (customer_phone !== undefined) order.customer_phone = customer_phone?.trim() || null;
+    if (notes !== undefined) order.notes = notes?.trim() || null;
+
+    if (validated_address && validated_address !== order.validated_address) {
+      const geo = await geocodingService.geocodeAddress(validated_address);
+      if (!geo.success) {
+        return res.status(422).json({ error: 'No se pudo validar la nueva dirección' });
+      }
+      order.validated_address = geo.formattedAddress || validated_address;
+      order.original_address = validated_address;
+      order.address_lat = geo.latitude;
+      order.address_lng = geo.longitude;
+      order.zip_code = geo.zipCode || order.zip_code;
+      order.city = geo.city || order.city;
+      order.state = geo.stateShort || geo.state || order.state;
+      order.confidence = geo.confidence || order.confidence;
+    }
+
+    if (order_cost !== undefined) order.order_cost = parseFloat(order_cost) || null;
+    if (deposit_amount !== undefined) order.deposit_amount = parseFloat(deposit_amount) || null;
+
+    const cost = order.order_cost || 0;
+    const deposit = order.deposit_amount || 0;
+    order.total_to_collect = Math.max(0, cost - deposit);
+
+    await order.save();
+    console.log(`[Dispatch] Orden #${order.id} editada: ${order.customer_name}`);
+    res.json({ success: true, order: order.toDict() });
+  } catch (error) {
+    console.error('Error editing order:', error);
+    res.status(500).json({ error: 'Error al editar orden' });
+  }
+});
+
+router.get('/accounting', requireAdmin, async (req, res) => {
+  try {
+    const { driver_id, date_from, date_to } = req.query;
+
+    const whereOrder = { order_status: 'delivered', assigned_driver_id: { [Op.ne]: null } };
+    if (date_from || date_to) {
+      whereOrder.delivered_at = {};
+      if (date_from) whereOrder.delivered_at[Op.gte] = new Date(date_from + 'T00:00:00');
+      if (date_to) whereOrder.delivered_at[Op.lte] = new Date(date_to + 'T23:59:59');
+    }
+    if (driver_id) whereOrder.assigned_driver_id = parseInt(driver_id);
+
+    const orders = await ValidatedAddress.findAll({ where: whereOrder });
+
+    const driverIds = [...new Set(orders.map(o => o.assigned_driver_id))];
+    const drivers = await User.findAll({ where: { id: { [Op.in]: driverIds } } });
+    const driverMap = {};
+    drivers.forEach(d => { driverMap[d.id] = d; });
+
+    const routeIds = [...new Set(orders.filter(o => o.route_id).map(o => o.route_id))];
+    const allStops = routeIds.length > 0
+      ? await Stop.findAll({ where: { route_id: { [Op.in]: routeIds } } })
+      : [];
+
+    const stopsByRoute = {};
+    allStops.forEach(s => {
+      if (!stopsByRoute[s.route_id]) stopsByRoute[s.route_id] = [];
+      stopsByRoute[s.route_id].push(s);
+    });
+
+    const grouped = {};
+    for (const order of orders) {
+      const did = order.assigned_driver_id;
+      if (!grouped[did]) {
+        const driver = driverMap[did];
+        grouped[did] = {
+          driver_id: did,
+          driver_name: driver?.username || order.driver_name || `Chofer #${did}`,
+          commission_per_stop: driver?.commission_per_stop || 0,
+          stops_count: 0,
+          total_order_cost: 0,
+          total_deposit: 0,
+          total_collected: 0,
+          orders: []
+        };
+      }
+
+      let collected = order.amount_collected || 0;
+      if (order.route_id && stopsByRoute[order.route_id]) {
+        const stops = stopsByRoute[order.route_id];
+        const matchStop = stops.find(s =>
+          Math.abs(s.lat - order.address_lat) < 0.0001 && Math.abs(s.lng - order.address_lng) < 0.0001
+        ) || stops.find(s => s.address === order.validated_address);
+        if (matchStop?.amount_collected != null) collected = matchStop.amount_collected;
+      }
+
+      grouped[did].stops_count += 1;
+      grouped[did].total_order_cost += order.order_cost || 0;
+      grouped[did].total_deposit += order.deposit_amount || 0;
+      grouped[did].total_collected += collected;
+      grouped[did].orders.push({
+        id: order.id,
+        customer_name: order.customer_name,
+        order_cost: order.order_cost,
+        deposit_amount: order.deposit_amount,
+        total_to_collect: order.total_to_collect,
+        amount_collected: collected,
+        payment_method: order.payment_method,
+        delivered_at: order.delivered_at
+      });
+    }
+
+    const report = Object.values(grouped).map(g => ({
+      ...g,
+      total_commission: g.stops_count * (g.commission_per_stop || 0),
+      balance: g.total_collected - g.stops_count * (g.commission_per_stop || 0)
+    }));
+
+    report.sort((a, b) => a.driver_name.localeCompare(b.driver_name));
+
+    res.json({ success: true, report, generated_at: new Date() });
+  } catch (error) {
+    console.error('Error fetching accounting report:', error);
+    res.status(500).json({ error: 'Error al generar reporte' });
   }
 });
 
