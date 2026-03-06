@@ -585,6 +585,23 @@ router.post('/routes', requireAdmin, async (req, res) => {
   }
 });
 
+router.put('/drivers/global-commission', requireAdmin, async (req, res) => {
+  try {
+    const { commission_per_stop } = req.body;
+    if (commission_per_stop === undefined || commission_per_stop === null || isNaN(commission_per_stop) || commission_per_stop < 0) {
+      return res.status(400).json({ error: 'Comisión inválida' });
+    }
+    const [updated] = await User.update(
+      { commission_per_stop: parseFloat(commission_per_stop) },
+      { where: { role: 'driver' } }
+    );
+    res.json({ success: true, updated, commission_per_stop: parseFloat(commission_per_stop) });
+  } catch (error) {
+    console.error('Error setting global commission:', error);
+    res.status(500).json({ error: 'Error al actualizar comisión global' });
+  }
+});
+
 router.get('/routes', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -603,6 +620,11 @@ router.get('/routes', requireAuth, async (req, res) => {
       order: [['created_at', 'DESC']]
     });
 
+    const driverIds = [...new Set(routes.map(r => r.assigned_driver_id).filter(Boolean))];
+    const drivers = driverIds.length > 0 ? await User.findAll({ where: { id: { [Op.in]: driverIds } }, attributes: ['id', 'commission_per_stop'] }) : [];
+    const driverCommissionMap = {};
+    drivers.forEach(d => { driverCommissionMap[d.id] = d.commission_per_stop || 0; });
+
     const routesWithDetails = await Promise.all(routes.map(async (r) => {
       const routeDict = await r.toDict();
       const routeOrders = await ValidatedAddress.findAll({
@@ -610,6 +632,8 @@ router.get('/routes', requireAuth, async (req, res) => {
       });
       routeDict.orders = routeOrders.map(o => o.toDict());
       routeDict.total_amount = routeOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
+      routeDict.driver_commission_per_stop = r.assigned_driver_id ? (driverCommissionMap[r.assigned_driver_id] || 0) : 0;
+      routeDict.driver_commission_total = routeDict.driver_commission_per_stop * (routeDict.stops_count || 0);
       return routeDict;
     }));
 

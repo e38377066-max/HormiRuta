@@ -1133,6 +1133,37 @@
   color: #aaa;
 }
 
+.dispatch-route-commission {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: #bb86fc;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.dispatch-route-commission .material-icons {
+  font-size: 14px;
+}
+
+.route-commission-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #6200ea20;
+  color: #bb86fc;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+.route-commission-badge .material-icons {
+  font-size: 13px;
+}
+
 .dispatch-loading {
   text-align: center;
   color: #aaa;
