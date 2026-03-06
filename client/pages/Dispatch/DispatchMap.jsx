@@ -79,6 +79,9 @@ export default function DispatchMap() {
   const [editOrderGeoLoading, setEditOrderGeoLoading] = useState(false)
   const [editOrderSaving, setEditOrderSaving] = useState(false)
   const [editOrderError, setEditOrderError] = useState('')
+  const [globalCommission, setGlobalCommission] = useState('')
+  const [savingGlobalCommission, setSavingGlobalCommission] = useState(false)
+  const [globalCommissionResult, setGlobalCommissionResult] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -601,6 +604,22 @@ export default function DispatchMap() {
     }
   }
 
+  const handleGlobalCommission = async () => {
+    const val = parseFloat(globalCommission)
+    if (isNaN(val) || val < 0) return
+    setSavingGlobalCommission(true)
+    setGlobalCommissionResult(null)
+    try {
+      const res = await api.put('/api/dispatch/drivers/global-commission', { commission_per_stop: val })
+      setGlobalCommissionResult({ success: true, message: `Comisión $${val.toFixed(2)} aplicada a ${res.data.updated} chofer(es)` })
+      fetchData()
+    } catch (error) {
+      setGlobalCommissionResult({ success: false, message: error.response?.data?.error || 'Error al actualizar' })
+    } finally {
+      setSavingGlobalCommission(false)
+    }
+  }
+
   const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.approved
 
   const openManualOrderModal = () => {
@@ -1105,6 +1124,9 @@ export default function DispatchMap() {
                   <div className="dr-info">
                     <span><span className="material-icons">pin_drop</span> {route.stops_count} paradas</span>
                     {route.total_amount > 0 && <span><span className="material-icons">attach_money</span> ${route.total_amount.toFixed(2)}</span>}
+                    {route.driver_commission_total > 0 && (
+                      <span className="dr-commission"><span className="material-icons">paid</span> Chofer: ${route.driver_commission_total.toFixed(2)}</span>
+                    )}
                   </div>
                   {route.orders?.length > 0 && (
                     <div className="dr-orders">
@@ -1249,6 +1271,41 @@ export default function DispatchMap() {
                     )}
                   </>
                 )}
+              </div>
+
+              <div className="drivers-section">
+                <div className="drivers-section-header">
+                  <h3><span className="material-icons">paid</span> Comisión Global por Parada</h3>
+                </div>
+                <div className="global-commission-form">
+                  <div className="gc-input-row">
+                    <span className="gc-dollar">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={globalCommission}
+                      onChange={e => setGlobalCommission(e.target.value)}
+                      className="gc-input"
+                    />
+                    <button
+                      className="dbtn blue"
+                      onClick={handleGlobalCommission}
+                      disabled={savingGlobalCommission || !globalCommission}
+                    >
+                      <span className="material-icons">{savingGlobalCommission ? 'hourglass_empty' : 'group'}</span>
+                      {savingGlobalCommission ? 'Aplicando...' : 'Aplicar a todos'}
+                    </button>
+                  </div>
+                  {globalCommissionResult && (
+                    <div className={`gc-result ${globalCommissionResult.success ? 'success' : 'error'}`}>
+                      <span className="material-icons">{globalCommissionResult.success ? 'check_circle' : 'error'}</span>
+                      <span>{globalCommissionResult.message}</span>
+                    </div>
+                  )}
+                  <p className="gc-hint">Establece la comisión por parada para todos los choferes</p>
+                </div>
               </div>
             </div>
           ) : activeTab === 'delivered' ? (

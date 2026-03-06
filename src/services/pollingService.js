@@ -1692,17 +1692,124 @@ class PollingService {
   async cleanupDeliveredOrders() {
     try {
       const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
-      const deleted = await ValidatedAddress.destroy({
+      const ordersToDelete = await ValidatedAddress.findAll({
         where: {
           order_status: 'delivered',
           updated_at: { [Op.lt]: cutoff }
         }
       });
+
+      if (ordersToDelete.length === 0) return;
+
+      const archived = await this.archiveDeliveredOrders(ordersToDelete);
+      if (!archived) {
+        console.error(`[Cleanup] Archivo ZIP falló, órdenes NO eliminadas para preservar datos`);
+        return;
+      }
+
+      const deleted = await ValidatedAddress.destroy({
+        where: {
+          id: { [Op.in]: ordersToDelete.map(o => o.id) }
+        }
+      });
       if (deleted > 0) {
-        console.log(`[Cleanup] ${deleted} orden(es) entregada(s) eliminada(s) (>48h)`);
+        console.log(`[Cleanup] ${deleted} orden(es) entregada(s) archivada(s) y eliminada(s) (>48h)`);
       }
     } catch (error) {
       console.error(`[Cleanup] Error limpiando órdenes entregadas:`, error.message);
+    }
+  }
+
+  async archiveDeliveredOrders(orders) {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const archiver = (await import('archiver')).default;
+
+      const archiveDir = path.default.join(process.cwd(), 'uploads', 'archives');
+      if (!fs.default.existsSync(archiveDir)) {
+        fs.default.mkdirSync(archiveDir, { recursive: true });
+      }
+
+      const now = new Date();
+      const dateStr = `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getFullYear()}`;
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}_${now.getMilliseconds()}`;
+      const zipName = `entregas_${dateStr}_${timeStr}.zip`;
+      const zipPath = path.default.join(archiveDir, zipName);
+
+      const { default: Stop } = await import('../models/Stop.js');
+      const { default: Route } = await import('../models/Route.js');
+
+      const routeIds = [...new Set(orders.map(o => o.route_id).filter(Boolean))];
+      const routes = routeIds.length > 0 ? await Route.findAll({ where: { id: { [Op.in]: routeIds } } }) : [];
+      const routeMap = {};
+      routes.forEach(r => { routeMap[r.id] = r.toJSON(); });
+
+      const stops = routeIds.length > 0 ? await Stop.findAll({ where: { route_id: { [Op.in]: routeIds } } }) : [];
+      const stopsMap = {};
+      stops.forEach(s => {
+        if (!stopsMap[s.route_id]) stopsMap[s.route_id] = [];
+        stopsMap[s.route_id].push(s.toJSON());
+      });
+
+      const output = fs.default.createWriteStream(zipPath);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+
+      await new Promise((resolve, reject) => {
+        output.on('close', resolve);
+        archive.on('error', reject);
+        archive.pipe(output);
+
+        const archiveData = orders.map(order => {
+          const o = order.toJSON();
+          const route = o.route_id ? routeMap[o.route_id] : null;
+          const routeStops = o.route_id ? (stopsMap[o.route_id] || []) : [];
+          return {
+            order: o,
+            route: route ? { id: route.id, name: route.name, status: route.status } : null,
+            stops: routeStops.map(s => ({
+              id: s.id, address: s.address, customer_name: s.customer_name,
+              phone: s.phone, order_cost: s.order_cost, deposit_amount: s.deposit_amount,
+              total_to_collect: s.total_to_collect, payment_method: s.payment_method,
+              amount_collected: s.amount_collected, payment_status: s.payment_status,
+              photo_url: s.photo_url, status: s.status, completed_at: s.completed_at
+            }))
+          };
+        });
+
+        archive.append(JSON.stringify(archiveData, null, 2), { name: 'datos_entregas.json' });
+
+        const uploadsDir = process.cwd();
+        for (const stop of stops) {
+          if (stop.photo_url) {
+            const photoPath = path.default.join(uploadsDir, stop.photo_url.replace(/^\//, ''));
+            if (fs.default.existsSync(photoPath)) {
+              const fileName = path.default.basename(photoPath);
+              archive.file(photoPath, { name: `evidencia/${fileName}` });
+            }
+          }
+        }
+
+        archive.finalize();
+      });
+
+      console.log(`[Archive] ZIP creado: ${zipName} (${orders.length} órdenes)`);
+
+      const archiveFiles = fs.default.readdirSync(archiveDir)
+        .filter(f => f.endsWith('.zip'))
+        .sort();
+      if (archiveFiles.length > 30) {
+        const toDelete = archiveFiles.slice(0, archiveFiles.length - 30);
+        for (const f of toDelete) {
+          fs.default.unlinkSync(path.default.join(archiveDir, f));
+        }
+        console.log(`[Archive] Limpiados ${toDelete.length} archivos antiguos`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`[Archive] Error archivando entregas:`, error.message);
+      return false;
     }
   }
 

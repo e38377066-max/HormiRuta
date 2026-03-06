@@ -49,6 +49,7 @@ export default function TripPlannerPage() {
   const [showRouteNameDialog, setShowRouteNameDialog] = useState(false)
   const [mapType, setMapType] = useState('roadmap')
   const [currentRouteId, setCurrentRouteId] = useState(null)
+  const [routeCommission, setRouteCommission] = useState(0)
   const [panelHeight, setPanelHeight] = useState(45)
   const [panelSnap, setPanelSnap] = useState('mid')
   const [dispatchRoutes, setDispatchRoutes] = useState([])
@@ -126,6 +127,7 @@ export default function TripPlannerPage() {
     setTotalDistance(route.total_distance || 0)
     setTotalDuration(route.total_duration || 0)
     setCurrentRouteId(route.id)
+    setRouteCommission(route.driver_commission_total || 0)
     setShowDispatchRoutes(false)
     updateMapMarkers(routeStops)
     if (routeStops.length >= 2) {
@@ -1279,6 +1281,11 @@ export default function TripPlannerPage() {
         <div className="panel-header">
           <div className="panel-header-left">
             <span className="stops-count">{stops.length} parada{stops.length !== 1 ? 's' : ''}</span>
+            {routeCommission > 0 && (
+              <span className="route-commission-badge">
+                <span className="material-icons">paid</span> ${routeCommission.toFixed(2)}
+              </span>
+            )}
           </div>
           <div className="panel-header-right">
             <button className="header-btn" onClick={focusSearch}>
@@ -1311,6 +1318,11 @@ export default function TripPlannerPage() {
                       {dr.total_distance > 0 && <span> - {dr.total_distance} km</span>}
                       {dr.total_duration > 0 && <span> - ~{dr.total_duration} min</span>}
                     </div>
+                    {dr.driver_commission_total > 0 && (
+                      <div className="dispatch-route-commission">
+                        <span className="material-icons">paid</span> Tu comisión: ${dr.driver_commission_total.toFixed(2)}
+                      </div>
+                    )}
                   </div>
                 ))
               )}

@@ -27,6 +27,7 @@
     "@capacitor/splash-screen": "^6.0.4",
     "@capacitor/status-bar": "^6.0.3",
     "@googlemaps/js-api-loader": "^1.16.10",
+    "archiver": "^7.0.1",
     "axios": "^1.13.5",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
