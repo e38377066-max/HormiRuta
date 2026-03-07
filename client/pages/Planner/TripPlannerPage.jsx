@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { usePlanner } from '../../layouts/PlannerLayout'
-import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking } from '../../utils/capacitor'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking, openNativeNavigation } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 export default function TripPlannerPage() {
@@ -1087,6 +1087,10 @@ export default function TripPlannerPage() {
   }
 
   const startRoute = () => {
+    const pendingStops = stops.filter(s => !s.completed)
+    const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
+    openNativeNavigation(pendingStops, loc)
+
     setNavigationMode(true)
     setAutoFollow(true)
     keepScreenAwake()
@@ -1444,9 +1448,16 @@ export default function TripPlannerPage() {
                 Finalizar ruta
               </button>
             ) : (
-              <div className="nav-footer-info">
-                <span className="material-icons" style={{ fontSize: 18, color: '#5b8def' }}>touch_app</span>
-                <span>Toca una parada para completarla</span>
+              <div className="nav-footer-actions">
+                <button className="btn-native-nav" onClick={() => {
+                  const pendingStops = stops.filter(s => !s.completed)
+                  const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
+                  openNativeNavigation(pendingStops, loc)
+                }}>
+                  <span className="material-icons">near_me</span>
+                  Navegar
+                </button>
+                <span className="nav-footer-hint">Toca una parada para completarla</span>
               </div>
             )
           ) : isOptimized ? (

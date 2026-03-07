@@ -211,6 +211,63 @@ export const allowScreenSleep = async () => {
   } catch (e) {}
 }
 
+export const openNativeNavigation = (stops, userLocation = null) => {
+  if (!stops || stops.length === 0) return
+
+  const waypoints = stops.map(s => ({
+    lat: parseFloat(s.lat || s.latitude),
+    lng: parseFloat(s.lng || s.longitude),
+    label: s.customer_name || s.address || ''
+  })).filter(w => !isNaN(w.lat) && !isNaN(w.lng))
+
+  if (waypoints.length === 0) return
+
+  const destination = waypoints[waypoints.length - 1]
+  const intermediates = waypoints.slice(0, -1)
+
+  const plt = Capacitor.getPlatform()
+
+  if (plt === 'ios') {
+    let url = `maps://?daddr=${destination.lat},${destination.lng}&dirflg=d`
+    if (intermediates.length > 0) {
+      const waypointStr = intermediates.map(w => `${w.lat},${w.lng}`).join('+to:')
+      url = `maps://?daddr=${waypointStr}+to:${destination.lat},${destination.lng}&dirflg=d`
+    }
+    if (userLocation) {
+      url += `&saddr=${userLocation.lat},${userLocation.lng}`
+    }
+    window.open(url, '_system')
+    return
+  }
+
+  if (plt === 'android') {
+    let url
+    if (intermediates.length > 0) {
+      const waypointStr = intermediates.map(w => `${w.lat},${w.lng}`).join('|')
+      url = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}&waypoints=${encodeURIComponent(waypointStr)}&travelmode=driving`
+    } else {
+      url = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}&travelmode=driving`
+    }
+    if (userLocation) {
+      url += `&origin=${userLocation.lat},${userLocation.lng}`
+    }
+    window.open(url, '_system')
+    return
+  }
+
+  let url
+  if (intermediates.length > 0) {
+    const waypointStr = intermediates.map(w => `${w.lat},${w.lng}`).join('|')
+    url = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}&waypoints=${encodeURIComponent(waypointStr)}&travelmode=driving`
+  } else {
+    url = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}&travelmode=driving`
+  }
+  if (userLocation) {
+    url += `&origin=${userLocation.lat},${userLocation.lng}`
+  }
+  window.open(url, '_blank')
+}
+
 let speechSynth = null
 let currentUtterance = null
 
