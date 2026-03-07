@@ -995,16 +995,20 @@ export default function TripPlannerPage() {
     markersRef.current.forEach(marker => marker.setMap(null))
     markersRef.current = []
 
+    const visibleStops = navigationMode ? stopsList.filter(s => !s.completed) : stopsList
+    let pendingIndex = 0
+
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
-        const isCompleted = stop.completed
-        const color = isCompleted ? '#22c55e' : '#EA4335'
+        if (navigationMode && stop.completed) return
+        pendingIndex++
+        const color = '#EA4335'
         
         const marker = new window.google.maps.Marker({
           position: { lat: stop.latitude, lng: stop.longitude },
           map: mapInstanceRef.current,
           label: {
-            text: String(index + 1),
+            text: navigationMode ? String(pendingIndex) : String(index + 1),
             color: 'white',
             fontSize: '12px',
             fontWeight: 'bold'
@@ -1025,9 +1029,10 @@ export default function TripPlannerPage() {
       }
     })
 
-    if (stopsList.length > 1) {
+    const stopsForBounds = navigationMode ? visibleStops : stopsList
+    if (stopsForBounds.length > 1) {
       const bounds = new window.google.maps.LatLngBounds()
-      stopsList.forEach(stop => {
+      stopsForBounds.forEach(stop => {
         if (stop.latitude && stop.longitude) {
           bounds.extend({ lat: stop.latitude, lng: stop.longitude })
         }
@@ -1035,16 +1040,53 @@ export default function TripPlannerPage() {
       if (userLocation) {
         bounds.extend(userLocation)
       }
-      mapInstanceRef.current.fitBounds(bounds, 80)
-      
-      const listener = window.google.maps.event.addListener(mapInstanceRef.current, 'idle', () => {
-        if (mapInstanceRef.current.getZoom() > 16) {
-          mapInstanceRef.current.setZoom(16)
+      if (!navigationMode) {
+        mapInstanceRef.current.fitBounds(bounds, 80)
+        const listener = window.google.maps.event.addListener(mapInstanceRef.current, 'idle', () => {
+          if (mapInstanceRef.current.getZoom() > 16) {
+            mapInstanceRef.current.setZoom(16)
+          }
+          window.google.maps.event.removeListener(listener)
+        })
+      }
+    } else if (stopsForBounds.length === 1 && stopsForBounds[0].latitude) {
+      if (!navigationMode) {
+        mapInstanceRef.current.panTo({ lat: stopsForBounds[0].latitude, lng: stopsForBounds[0].longitude })
+      }
+    }
+
+    if (navigationMode) {
+      recalculateNavRoute(stopsList)
+    }
+  }
+
+  const recalculateNavRoute = async (stopsList) => {
+    const pending = stopsList.filter(s => !s.completed && s.latitude && s.longitude)
+    if (pending.length < 2) {
+      if (directionsRendererRef.current) {
+        directionsRendererRef.current.setDirections({ routes: [] })
+      }
+      return
+    }
+    try {
+      const directionsService = new window.google.maps.DirectionsService()
+      const waypoints = pending.slice(1, -1).map(stop => ({
+        location: { lat: stop.latitude, lng: stop.longitude },
+        stopover: true
+      }))
+      const result = await directionsService.route({
+        origin: { lat: pending[0].latitude, lng: pending[0].longitude },
+        destination: { lat: pending[pending.length - 1].latitude, lng: pending[pending.length - 1].longitude },
+        waypoints,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+        drivingOptions: {
+          departureTime: new Date(),
+          trafficModel: window.google.maps.TrafficModel.BEST_GUESS
         }
-        window.google.maps.event.removeListener(listener)
       })
-    } else if (stopsList.length === 1 && stopsList[0].latitude) {
-      mapInstanceRef.current.panTo({ lat: stopsList[0].latitude, lng: stopsList[0].longitude })
+      directionsRendererRef.current.setDirections(result)
+    } catch (err) {
+      console.error('Nav route recalculation error:', err)
     }
   }
 
