@@ -79,9 +79,8 @@ export default function DispatchMap() {
   const [editOrderGeoLoading, setEditOrderGeoLoading] = useState(false)
   const [editOrderSaving, setEditOrderSaving] = useState(false)
   const [editOrderError, setEditOrderError] = useState('')
-  const [globalCommission, setGlobalCommission] = useState('')
-  const [savingGlobalCommission, setSavingGlobalCommission] = useState(false)
-  const [globalCommissionResult, setGlobalCommissionResult] = useState(null)
+  const [driverCommissions, setDriverCommissions] = useState({})
+  const [savingDriverCommission, setSavingDriverCommission] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -604,19 +603,18 @@ export default function DispatchMap() {
     }
   }
 
-  const handleGlobalCommission = async () => {
-    const val = parseFloat(globalCommission)
+  const handleDriverCommission = async (driverId) => {
+    const val = parseFloat(driverCommissions[driverId])
     if (isNaN(val) || val < 0) return
-    setSavingGlobalCommission(true)
-    setGlobalCommissionResult(null)
+    setSavingDriverCommission(driverId)
     try {
-      const res = await api.put('/api/dispatch/drivers/global-commission', { commission_per_stop: val })
-      setGlobalCommissionResult({ success: true, message: `Comisión de $${val.toFixed(2)} por parada guardada` })
+      await api.put(`/api/admin/users/${driverId}`, { commission_per_stop: val })
+      fetchAllUsers()
       fetchData()
     } catch (error) {
-      setGlobalCommissionResult({ success: false, message: error.response?.data?.error || 'Error al actualizar' })
+      alert(error.response?.data?.error || 'Error al actualizar comisión')
     } finally {
-      setSavingGlobalCommission(false)
+      setSavingDriverCommission(null)
     }
   }
 
@@ -1287,33 +1285,41 @@ export default function DispatchMap() {
                 <div className="drivers-section-header">
                   <h3><span className="material-icons">paid</span> Comisión por Parada</h3>
                 </div>
-                <div className="global-commission-form">
-                  <p className="gc-desc">Valor que el chofer cobra por cada parada completada. Si una ruta tiene 10 paradas, el chofer gana este valor × 10.</p>
-                  <div className="gc-input-row">
-                    <span className="gc-dollar">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={globalCommission}
-                      onChange={e => setGlobalCommission(e.target.value)}
-                      className="gc-input"
-                    />
-                    <button
-                      className="dbtn blue"
-                      onClick={handleGlobalCommission}
-                      disabled={savingGlobalCommission || !globalCommission}
-                    >
-                      <span className="material-icons">{savingGlobalCommission ? 'hourglass_empty' : 'save'}</span>
-                      {savingGlobalCommission ? 'Guardando...' : 'Guardar'}
-                    </button>
-                  </div>
-                  {globalCommissionResult && (
-                    <div className={`gc-result ${globalCommissionResult.success ? 'success' : 'error'}`}>
-                      <span className="material-icons">{globalCommissionResult.success ? 'check_circle' : 'error'}</span>
-                      <span>{globalCommissionResult.message}</span>
-                    </div>
+                <p className="gc-desc">Valor que cada chofer cobra por parada completada. Cada chofer puede tener un valor diferente.</p>
+                <div className="driver-commissions-list">
+                  {allUsers.filter(u => u.role === 'driver').length === 0 ? (
+                    <p className="drivers-empty">No hay choferes registrados</p>
+                  ) : (
+                    allUsers.filter(u => u.role === 'driver').map(driver => (
+                      <div key={driver.id} className="driver-commission-row">
+                        <div className="dc-driver-info">
+                          <span className="material-icons">local_shipping</span>
+                          <strong>{driver.username}</strong>
+                        </div>
+                        <div className="dc-input-row">
+                          <span className="gc-dollar">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={driverCommissions[driver.id] !== undefined ? driverCommissions[driver.id] : (driver.commission_per_stop || '')}
+                            onChange={e => setDriverCommissions(prev => ({ ...prev, [driver.id]: e.target.value }))}
+                            className="gc-input"
+                          />
+                          <button
+                            className="dbtn blue small"
+                            onClick={() => handleDriverCommission(driver.id)}
+                            disabled={savingDriverCommission === driver.id}
+                          >
+                            <span className="material-icons">{savingDriverCommission === driver.id ? 'hourglass_empty' : 'save'}</span>
+                          </button>
+                        </div>
+                        {driver.commission_per_stop > 0 && driverCommissions[driver.id] === undefined && (
+                          <span className="dc-current">Actual: ${parseFloat(driver.commission_per_stop).toFixed(2)}/parada</span>
+                        )}
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
