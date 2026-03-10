@@ -1716,7 +1716,9 @@ class PollingService {
 
   async cleanupDuplicateAddresses(userId) {
     try {
-      const [duplicates] = await ValidatedAddress.sequelize.query(`
+      let totalCleaned = 0;
+
+      const [contactDups] = await ValidatedAddress.sequelize.query(`
         SELECT respond_contact_id, COUNT(*) as cnt
         FROM validated_addresses
         WHERE user_id = :userId AND respond_contact_id IS NOT NULL
@@ -1724,15 +1726,12 @@ class PollingService {
         HAVING COUNT(*) > 1
       `, { replacements: { userId } });
 
-      let totalCleaned = 0;
-
-      for (const dup of duplicates) {
+      for (const dup of contactDups) {
         const records = await ValidatedAddress.findAll({
           where: { user_id: userId, respond_contact_id: dup.respond_contact_id },
           order: [['created_at', 'DESC']]
         });
-        const toDelete = records.slice(1);
-        for (const old of toDelete) {
+        for (const old of records.slice(1)) {
           await old.destroy();
           totalCleaned++;
         }
@@ -1751,8 +1750,26 @@ class PollingService {
           where: { user_id: userId, customer_name: dup.customer_name, validated_address: dup.validated_address },
           order: [['created_at', 'DESC']]
         });
-        const toDelete = records.slice(1);
-        for (const old of toDelete) {
+        for (const old of records.slice(1)) {
+          await old.destroy();
+          totalCleaned++;
+        }
+      }
+
+      const [phoneDups] = await ValidatedAddress.sequelize.query(`
+        SELECT customer_phone, COUNT(*) as cnt
+        FROM validated_addresses
+        WHERE user_id = :userId AND customer_phone IS NOT NULL AND customer_phone != ''
+        GROUP BY customer_phone
+        HAVING COUNT(*) > 1
+      `, { replacements: { userId } });
+
+      for (const dup of phoneDups) {
+        const records = await ValidatedAddress.findAll({
+          where: { user_id: userId, customer_phone: dup.customer_phone },
+          order: [['created_at', 'DESC']]
+        });
+        for (const old of records.slice(1)) {
           await old.destroy();
           totalCleaned++;
         }
