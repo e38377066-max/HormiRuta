@@ -150,6 +150,11 @@ const Stop = sequelize.define('Stop', {
     type: DataTypes.STRING(20),
     allowNull: true,
     defaultValue: 'pending'
+  },
+  apartment_number: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: null
   }
 }, {
   tableName: 'stops',
@@ -193,7 +198,8 @@ Stop.prototype.toDict = function() {
     total_to_collect: this.total_to_collect,
     payment_method: this.payment_method,
     amount_collected: this.amount_collected,
-    payment_status: this.payment_status
+    payment_status: this.payment_status,
+    apartment_number: this.apartment_number
   };
 };
 

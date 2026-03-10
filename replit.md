@@ -62,6 +62,7 @@ Area 862 System is a route planning and optimization application for delivery se
 - **Payment Tracking**: On delivery completion, drivers select payment method (cash/zelle/card/other) and enter amount collected. Payment status auto-calculates: `paid` (collected >= total), `partial` (collected > 0), `pending`. Payment data syncs back to the order (ValidatedAddress).
 - **Zelle Evidence Photos**: Photos are specifically for Zelle payment evidence (constancia). When payment method = Zelle, camera capture is shown. For other payment methods, no photo is required. Backend and frontend both accept empty evidence.
 - **Notes Field**: Orders use a notes field (replacing amount/$) for internal notes. Editable by admins in dispatch, visible to drivers.
+- **Apartment/Unit Number**: Separate `apartment_number` field on orders and stops. Editable in both manual order creation and edit modals. Displayed in blue next to the address in dispatch cards and driver planner. Does not affect geocoding — the address stays clean for map routing while apartment info is visible.
 
 ## External Dependencies
 
@@ -70,7 +71,7 @@ Area 862 System is a route planning and optimization application for delivery se
     - Google Maps Geocoding API (backend for address validation and search)
 - **Respond.io API v2**: For chatbot messaging and integration with customer conversations.
 - **PostgreSQL**: Relational database for storing application data.
-- **Capacitor 6**: For building native iOS and Android mobile applications.
+- **Capacitor 8**: For building native iOS and Android mobile applications (requires Node 22+, iOS 16.0+).
 - **Axios**: HTTP client for API requests.
 - **bcryptjs**: For password hashing.
 - **multer**: Node.js middleware for handling `multipart/form-data`, primarily for file uploads.

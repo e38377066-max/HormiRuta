@@ -316,7 +316,7 @@ router.post('/orders', requireAdmin, async (req, res) => {
     const user = await User.findByPk(req.userId);
     if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
 
-    const { customer_name, customer_phone, validated_address, order_cost, deposit_amount, notes } = req.body;
+    const { customer_name, customer_phone, validated_address, order_cost, deposit_amount, notes, apartment_number } = req.body;
 
     if (!customer_name || !validated_address) {
       return res.status(400).json({ error: 'Nombre y dirección son requeridos' });
@@ -349,7 +349,8 @@ router.post('/orders', requireAdmin, async (req, res) => {
       order_cost: cost || null,
       deposit_amount: deposit || null,
       total_to_collect: total || null,
-      notes: notes?.trim() || null
+      notes: notes?.trim() || null,
+      apartment_number: apartment_number?.trim() || null
     });
 
     console.log(`[Dispatch] Orden manual creada: ${customer_name} - ${geo.formattedAddress}`);
@@ -365,11 +366,12 @@ router.put('/orders/:id/edit', requireAdmin, async (req, res) => {
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
 
-    const { customer_name, customer_phone, validated_address, order_cost, deposit_amount, notes } = req.body;
+    const { customer_name, customer_phone, validated_address, order_cost, deposit_amount, notes, apartment_number } = req.body;
 
     if (customer_name !== undefined) order.customer_name = customer_name.trim();
     if (customer_phone !== undefined) order.customer_phone = customer_phone?.trim() || null;
     if (notes !== undefined) order.notes = notes?.trim() || null;
+    if (apartment_number !== undefined) order.apartment_number = apartment_number?.trim() || null;
 
     if (validated_address && validated_address !== order.validated_address) {
       const geo = await geocodingService.geocodeAddress(validated_address);
@@ -568,7 +570,8 @@ router.post('/routes', requireAdmin, async (req, res) => {
         note: order.notes,
         order_cost: order.order_cost,
         deposit_amount: order.deposit_amount,
-        total_to_collect: order.total_to_collect
+        total_to_collect: order.total_to_collect,
+        apartment_number: order.apartment_number
       });
 
       order.route_id = route.id;
