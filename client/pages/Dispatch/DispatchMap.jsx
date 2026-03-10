@@ -628,13 +628,13 @@ export default function DispatchMap() {
   }
 
   const handleManualGeocode = async () => {
-    if (!manualOrderForm.validated_address.trim()) return
-    setManualOrderGeoLoading(true)
-    setManualOrderGeo(null)
-    setManualOrderError('')
     try {
+      if (!manualOrderForm?.validated_address?.trim()) return
+      setManualOrderGeoLoading(true)
+      setManualOrderGeo(null)
+      setManualOrderError('')
       const res = await api.get('/api/dispatch/geocode-address', { params: { address: manualOrderForm.validated_address } })
-      if (res.data && res.data.formatted_address) {
+      if (res?.data && res.data.formatted_address) {
         setManualOrderGeo(res.data)
         setManualOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
       } else {
@@ -642,13 +642,14 @@ export default function DispatchMap() {
       }
     } catch (e) {
       console.error('Geocode error:', e)
-      setManualOrderError(e.response?.data?.error || 'No se pudo geocodificar la dirección')
+      setManualOrderError(e?.response?.data?.error || 'No se pudo geocodificar la dirección')
     } finally {
       setManualOrderGeoLoading(false)
     }
   }
 
   const calcTotal = (form) => {
+    if (!form) return '0.00'
     const cost = parseFloat(form.order_cost) || 0
     const deposit = parseFloat(form.deposit_amount) || 0
     return Math.max(0, cost - deposit).toFixed(2)
@@ -688,13 +689,13 @@ export default function DispatchMap() {
   }
 
   const handleEditGeocode = async () => {
-    if (!editOrderForm.validated_address.trim()) return
-    setEditOrderGeoLoading(true)
-    setEditOrderGeo(null)
-    setEditOrderError('')
     try {
+      if (!editOrderForm?.validated_address?.trim()) return
+      setEditOrderGeoLoading(true)
+      setEditOrderGeo(null)
+      setEditOrderError('')
       const res = await api.get('/api/dispatch/geocode-address', { params: { address: editOrderForm.validated_address } })
-      if (res.data && res.data.formatted_address) {
+      if (res?.data && res.data.formatted_address) {
         setEditOrderGeo(res.data)
         setEditOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
       } else {
@@ -702,7 +703,7 @@ export default function DispatchMap() {
       }
     } catch (e) {
       console.error('Edit geocode error:', e)
-      setEditOrderError(e.response?.data?.error || 'No se pudo geocodificar la dirección')
+      setEditOrderError(e?.response?.data?.error || 'No se pudo geocodificar la dirección')
     } finally {
       setEditOrderGeoLoading(false)
     }
