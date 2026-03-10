@@ -1292,6 +1292,7 @@ class PollingService {
 
           let contactFieldAddress = null;
           let contactBilling = null;
+          let cfApartment = null;
           try {
             const contactDetail = await respondio.getContact(contact.id);
             if (contactDetail.success && contactDetail.data) {
@@ -1302,6 +1303,9 @@ class PollingService {
               if (cfAddress?.value && cfAddress.value.trim().length >= 5) {
                 contactFieldAddress = cfAddress.value.trim();
               }
+              cfApartment = cData.custom_fields?.find(f => 
+                f.name?.toLowerCase() === 'apartment' || f.name?.toLowerCase() === 'apartamento' || f.name?.toLowerCase() === 'apt' || f.name?.toLowerCase() === 'unit'
+              );
               const cfCost = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'cost');
               const cfDeposit = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'deposit');
               if (cfCost || cfDeposit) {
@@ -1325,29 +1329,39 @@ class PollingService {
 
           const existing = addressMap.get(contactIdStr);
 
-          if (contactBilling && existing) {
+          if (existing) {
             try {
               const dbRecord = await ValidatedAddress.findByPk(existing.id);
               if (dbRecord) {
-                const billingUpdate = {};
-                if (contactBilling.cost !== null && dbRecord.order_cost !== contactBilling.cost) {
-                  billingUpdate.order_cost = contactBilling.cost;
+                const fieldUpdate = {};
+                if (contactBilling) {
+                  if (contactBilling.cost !== null && dbRecord.order_cost !== contactBilling.cost) {
+                    fieldUpdate.order_cost = contactBilling.cost;
+                  }
+                  if (contactBilling.deposit !== null && dbRecord.deposit_amount !== contactBilling.deposit) {
+                    fieldUpdate.deposit_amount = contactBilling.deposit;
+                  }
+                  if (fieldUpdate.order_cost !== undefined || fieldUpdate.deposit_amount !== undefined) {
+                    const finalCost = fieldUpdate.order_cost ?? dbRecord.order_cost ?? 0;
+                    const finalDeposit = fieldUpdate.deposit_amount ?? dbRecord.deposit_amount ?? 0;
+                    fieldUpdate.total_to_collect = finalCost - finalDeposit;
+                  }
                 }
-                if (contactBilling.deposit !== null && dbRecord.deposit_amount !== contactBilling.deposit) {
-                  billingUpdate.deposit_amount = contactBilling.deposit;
+                if (cfApartment?.value && cfApartment.value.trim() && dbRecord.apartment_number !== cfApartment.value.trim()) {
+                  fieldUpdate.apartment_number = cfApartment.value.trim();
                 }
-                if (billingUpdate.order_cost !== undefined || billingUpdate.deposit_amount !== undefined) {
-                  const finalCost = billingUpdate.order_cost ?? dbRecord.order_cost ?? 0;
-                  const finalDeposit = billingUpdate.deposit_amount ?? dbRecord.deposit_amount ?? 0;
-                  billingUpdate.total_to_collect = finalCost - finalDeposit;
-                }
-                if (Object.keys(billingUpdate).length > 0) {
-                  await dbRecord.update(billingUpdate);
-                  console.log(`[AddressScan] Billing sync ${contactName} (${contact.id}): cost=${billingUpdate.order_cost ?? '-'} deposit=${billingUpdate.deposit_amount ?? '-'} cobrar=${billingUpdate.total_to_collect ?? '-'}`);
+                if (Object.keys(fieldUpdate).length > 0) {
+                  await dbRecord.update(fieldUpdate);
+                  if (fieldUpdate.order_cost !== undefined || fieldUpdate.deposit_amount !== undefined) {
+                    console.log(`[AddressScan] Billing sync ${contactName} (${contact.id}): cost=${fieldUpdate.order_cost ?? '-'} deposit=${fieldUpdate.deposit_amount ?? '-'} cobrar=${fieldUpdate.total_to_collect ?? '-'}`);
+                  }
+                  if (fieldUpdate.apartment_number) {
+                    console.log(`[AddressScan] Apt sync ${contactName} (${contact.id}): apt=${fieldUpdate.apartment_number}`);
+                  }
                 }
               }
-            } catch (billErr) {
-              console.error(`[AddressScan] Error billing sync ${contact.id}:`, billErr.message);
+            } catch (syncErr) {
+              console.error(`[AddressScan] Error field sync ${contact.id}:`, syncErr.message);
             }
           }
 
@@ -1664,13 +1678,8 @@ class PollingService {
           const newStatus = this.lifecycleToOrderStatus(contactLifecycle);
 
           if (newStatus === 'delivered' || newStatus === 'ups_shipped') {
-            if (!order.route_id) {
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando (terminal)`);
-              await order.destroy();
-            } else {
-              await order.update({ order_status: newStatus });
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" -> ${newStatus} (tiene ruta, no se elimina)`);
-            }
+            console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando (terminal, route_id=${order.route_id || 'ninguna'})`);
+            await order.destroy();
             syncedCount++;
           } else if (newStatus && newStatus !== order.order_status) {
             await order.update({ order_status: newStatus });
@@ -1715,20 +1724,42 @@ class PollingService {
         HAVING COUNT(*) > 1
       `, { replacements: { userId } });
 
-      if (duplicates.length === 0) return;
+      let totalCleaned = 0;
 
       for (const dup of duplicates) {
         const records = await ValidatedAddress.findAll({
           where: { user_id: userId, respond_contact_id: dup.respond_contact_id },
           order: [['created_at', 'DESC']]
         });
-        const toDelete = records.slice(1).filter(r => !r.route_id);
+        const toDelete = records.slice(1);
         for (const old of toDelete) {
           await old.destroy();
+          totalCleaned++;
         }
-        if (toDelete.length > 0) {
-          console.log(`[AddressScan] Limpiados ${toDelete.length} duplicado(s) para contacto ${dup.respond_contact_id}`);
+      }
+
+      const [nameDups] = await ValidatedAddress.sequelize.query(`
+        SELECT customer_name, validated_address, COUNT(*) as cnt
+        FROM validated_addresses
+        WHERE user_id = :userId
+        GROUP BY customer_name, validated_address
+        HAVING COUNT(*) > 1
+      `, { replacements: { userId } });
+
+      for (const dup of nameDups) {
+        const records = await ValidatedAddress.findAll({
+          where: { user_id: userId, customer_name: dup.customer_name, validated_address: dup.validated_address },
+          order: [['created_at', 'DESC']]
+        });
+        const toDelete = records.slice(1);
+        for (const old of toDelete) {
+          await old.destroy();
+          totalCleaned++;
         }
+      }
+
+      if (totalCleaned > 0) {
+        console.log(`[AddressScan] Limpiados ${totalCleaned} duplicado(s) total`);
       }
     } catch (error) {
       console.error(`[AddressScan] Error limpiando duplicados:`, error.message);
