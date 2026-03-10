@@ -298,10 +298,10 @@ router.get('/geocode-address', requireAdmin, async (req, res) => {
 
     res.json({
       success: true,
-      formatted_address: result.formattedAddress,
+      formatted_address: result.fullAddress,
       lat: result.latitude,
       lng: result.longitude,
-      zip_code: result.zipCode,
+      zip_code: result.zip,
       city: result.city,
       state: result.stateShort || result.state
     });
@@ -337,10 +337,10 @@ router.post('/orders', requireAdmin, async (req, res) => {
       customer_name: customer_name.trim(),
       customer_phone: customer_phone?.trim() || null,
       original_address: validated_address,
-      validated_address: geo.formattedAddress || validated_address,
+      validated_address: geo.fullAddress || validated_address,
       address_lat: geo.latitude,
       address_lng: geo.longitude,
-      zip_code: geo.zipCode || null,
+      zip_code: geo.zip || null,
       city: geo.city || null,
       state: geo.stateShort || geo.state || null,
       confidence: geo.confidence || 'high',
@@ -353,7 +353,7 @@ router.post('/orders', requireAdmin, async (req, res) => {
       apartment_number: apartment_number?.trim() || null
     });
 
-    console.log(`[Dispatch] Orden manual creada: ${customer_name} - ${geo.formattedAddress}`);
+    console.log(`[Dispatch] Orden manual creada: ${customer_name} - ${geo.fullAddress}`);
     res.status(201).json({ success: true, order: newOrder.toDict() });
   } catch (error) {
     console.error('Error creating manual order:', error);
@@ -378,11 +378,11 @@ router.put('/orders/:id/edit', requireAdmin, async (req, res) => {
       if (!geo.success) {
         return res.status(422).json({ error: 'No se pudo validar la nueva dirección' });
       }
-      order.validated_address = geo.formattedAddress || validated_address;
+      order.validated_address = geo.fullAddress || validated_address;
       order.original_address = validated_address;
       order.address_lat = geo.latitude;
       order.address_lng = geo.longitude;
-      order.zip_code = geo.zipCode || order.zip_code;
+      order.zip_code = geo.zip || order.zip_code;
       order.city = geo.city || order.city;
       order.state = geo.stateShort || geo.state || order.state;
       order.confidence = geo.confidence || order.confidence;
