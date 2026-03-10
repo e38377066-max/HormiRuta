@@ -1722,33 +1722,20 @@
 .order-address-row {
   display: flex;
   gap: 8px;
+  position: relative;
 }
 
 .order-address-row input {
   flex: 1;
 }
 
-.btn-geocode {
-  background: #e8eaf6;
+.geo-indicator {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
   color: #3949ab;
-  border: 1px solid #c5cae9;
-  border-radius: 8px;
-  width: 42px;
-  min-width: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-geocode:hover:not(:disabled) {
-  background: #c5cae9;
-}
-
-.btn-geocode:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .geocode-result {

@@ -627,26 +627,58 @@ export default function DispatchMap() {
     setShowManualOrder(true)
   }
 
-  const handleManualGeocode = async () => {
-    try {
-      if (!manualOrderForm?.validated_address?.trim()) return
-      setManualOrderGeoLoading(true)
-      setManualOrderGeo(null)
-      setManualOrderError('')
-      const res = await api.get('/api/dispatch/geocode-address', { params: { address: manualOrderForm.validated_address } })
-      if (res?.data && res.data.formatted_address) {
-        setManualOrderGeo(res.data)
-        setManualOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
-      } else {
-        setManualOrderError('No se encontró la dirección')
+  const manualGeoTimerRef = useRef(null)
+  const editGeoTimerRef = useRef(null)
+
+  const autoGeocodeManual = useCallback((address) => {
+    if (manualGeoTimerRef.current) clearTimeout(manualGeoTimerRef.current)
+    setManualOrderGeo(null)
+    if (!address || address.trim().length < 8) return
+    setManualOrderGeoLoading(true)
+    manualGeoTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/dispatch/geocode-address', { params: { address } })
+        if (res?.data && res.data.formatted_address) {
+          setManualOrderGeo(res.data)
+          setManualOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
+          setManualOrderError('')
+        } else {
+          setManualOrderGeo(null)
+          setManualOrderError('No se encontró la dirección')
+        }
+      } catch (e) {
+        console.error('Geocode error:', e)
+        setManualOrderError(e?.response?.data?.error || 'No se pudo geocodificar')
+      } finally {
+        setManualOrderGeoLoading(false)
       }
-    } catch (e) {
-      console.error('Geocode error:', e)
-      setManualOrderError(e?.response?.data?.error || 'No se pudo geocodificar la dirección')
-    } finally {
-      setManualOrderGeoLoading(false)
-    }
-  }
+    }, 1200)
+  }, [])
+
+  const autoGeocodeEdit = useCallback((address) => {
+    if (editGeoTimerRef.current) clearTimeout(editGeoTimerRef.current)
+    setEditOrderGeo(null)
+    if (!address || address.trim().length < 8) return
+    setEditOrderGeoLoading(true)
+    editGeoTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/dispatch/geocode-address', { params: { address } })
+        if (res?.data && res.data.formatted_address) {
+          setEditOrderGeo(res.data)
+          setEditOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
+          setEditOrderError('')
+        } else {
+          setEditOrderGeo(null)
+          setEditOrderError('No se encontró la dirección')
+        }
+      } catch (e) {
+        console.error('Edit geocode error:', e)
+        setEditOrderError(e?.response?.data?.error || 'No se pudo geocodificar')
+      } finally {
+        setEditOrderGeoLoading(false)
+      }
+    }, 1200)
+  }, [])
 
   const calcTotal = (form) => {
     if (!form) return '0.00'
@@ -688,26 +720,6 @@ export default function DispatchMap() {
     setEditOrderModal(order)
   }
 
-  const handleEditGeocode = async () => {
-    try {
-      if (!editOrderForm?.validated_address?.trim()) return
-      setEditOrderGeoLoading(true)
-      setEditOrderGeo(null)
-      setEditOrderError('')
-      const res = await api.get('/api/dispatch/geocode-address', { params: { address: editOrderForm.validated_address } })
-      if (res?.data && res.data.formatted_address) {
-        setEditOrderGeo(res.data)
-        setEditOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
-      } else {
-        setEditOrderError('No se encontró la dirección')
-      }
-    } catch (e) {
-      console.error('Edit geocode error:', e)
-      setEditOrderError(e?.response?.data?.error || 'No se pudo geocodificar la dirección')
-    } finally {
-      setEditOrderGeoLoading(false)
-    }
-  }
 
   const handleSaveEditOrder = async () => {
     if (!editOrderModal) return
@@ -1533,10 +1545,8 @@ export default function DispatchMap() {
               <div className="order-form-field">
                 <label>Dirección *</label>
                 <div className="order-address-row">
-                  <input type="text" value={manualOrderForm.validated_address} onChange={e => { setManualOrderForm(p => ({ ...p, validated_address: e.target.value })); setManualOrderGeo(null) }} placeholder="123 Main St, Dallas TX 75201" />
-                  <button className="btn-geocode" onClick={handleManualGeocode} disabled={manualOrderGeoLoading || !manualOrderForm.validated_address.trim()}>
-                    {manualOrderGeoLoading ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">my_location</span>}
-                  </button>
+                  <input type="text" value={manualOrderForm.validated_address} onChange={e => { const val = e.target.value; setManualOrderForm(p => ({ ...p, validated_address: val })); autoGeocodeManual(val) }} placeholder="123 Main St, Dallas TX 75201" />
+                  {manualOrderGeoLoading && <span className="material-icons rotating geo-indicator">hourglass_empty</span>}
                 </div>
                 {manualOrderGeo && (
                   <div className="geocode-result">
@@ -1604,10 +1614,8 @@ export default function DispatchMap() {
               <div className="order-form-field">
                 <label>Dirección</label>
                 <div className="order-address-row">
-                  <input type="text" value={editOrderForm.validated_address} onChange={e => { setEditOrderForm(p => ({ ...p, validated_address: e.target.value })); setEditOrderGeo(null) }} placeholder="123 Main St, Dallas TX 75201" />
-                  <button className="btn-geocode" onClick={handleEditGeocode} disabled={editOrderGeoLoading || !editOrderForm.validated_address.trim()}>
-                    {editOrderGeoLoading ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">my_location</span>}
-                  </button>
+                  <input type="text" value={editOrderForm.validated_address} onChange={e => { const val = e.target.value; setEditOrderForm(p => ({ ...p, validated_address: val })); autoGeocodeEdit(val) }} placeholder="123 Main St, Dallas TX 75201" />
+                  {editOrderGeoLoading && <span className="material-icons rotating geo-indicator">hourglass_empty</span>}
                 </div>
                 {editOrderGeo && (
                   <div className="geocode-result">
