@@ -128,6 +128,11 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
     type: DataTypes.STRING(20),
     allowNull: true,
     defaultValue: 'pending'
+  },
+  apartment_number: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: null
   }
 }, {
   tableName: 'validated_addresses',
@@ -175,6 +180,7 @@ ValidatedAddress.prototype.toDict = function() {
     payment_method: this.payment_method,
     amount_collected: this.amount_collected,
     payment_status: this.payment_status,
+    apartment_number: this.apartment_number,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

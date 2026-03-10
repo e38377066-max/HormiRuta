@@ -1421,26 +1421,45 @@ class PollingService {
             const confirmPatterns = [
               /(?:esta|esta es|tu|su|la)\s+(?:direccion|dir|address)/i,
               /(?:confirm|verific|correct|bien)\s+.*(?:direccion|dir|address)/i,
-              /(?:direccion|address)\s+(?:es|seria|correcta|confirmada)/i,
+              /(?:direccion|address)\s+(?:es|seria|correcta|confirmada|de\s+entrega)/i,
               /(?:te|le)\s+(?:mando|envio|confirmo)\s+(?:la|tu|su)?\s*(?:direccion|dir|address)/i,
-              /(?:entrega|delivery|envio)\s+(?:a|en|para)\s*:?\s*/i
+              /(?:entrega|delivery|envio)\s+(?:a|en|para)\s*:?\s*/i,
+              /direccion\s+de\s+entrega/i,
+              /dir(?:eccion)?[\s:]+\d+/i
             ];
             for (const msg of outgoingMessages) {
               const text = msg.message?.text || '';
-              if (!text || text.length < 10) continue;
-              const isConfirmation = confirmPatterns.some(p => p.test(text));
-              if (!isConfirmation) continue;
+              if (!text || text.length < 5) continue;
+
               const gLink = extractor.extractGoogleMapsLink(text);
               if (gLink) {
                 scanMapsLink = gLink;
+                console.log(`[AddressScan] Google Maps link detectado en mensaje de agente`);
                 break;
               }
-              const addr = extractor.extractAddressFromMessage(text);
-              if (addr) {
-                latestExtracted = addr;
-                console.log(`[AddressScan] Direccion detectada en mensaje de agente: "${addr}"`);
-                break;
+
+              const isConfirmation = confirmPatterns.some(p => p.test(text));
+              if (isConfirmation) {
+                const addr = extractor.extractAddressFromMessage(text);
+                if (addr) {
+                  latestExtracted = addr;
+                  console.log(`[AddressScan] Direccion detectada en mensaje de agente (confirmacion): "${addr}"`);
+                  break;
+                }
               }
+
+              const lines = text.split('\n').map(l => l.trim()).filter(l => l.length >= 8);
+              for (const line of lines) {
+                if (/^\d+\s+\w/.test(line) && /\b(st|ave|rd|dr|blvd|ln|ct|way|pl|pkwy|hwy|cir|trail|loop)\b/i.test(line)) {
+                  const addr = extractor.extractAddressFromMessage(line);
+                  if (addr) {
+                    latestExtracted = addr;
+                    console.log(`[AddressScan] Direccion detectada en mensaje de agente (standalone): "${addr}"`);
+                    break;
+                  }
+                }
+              }
+              if (latestExtracted) break;
             }
           }
 
@@ -1609,15 +1628,14 @@ class PollingService {
     try {
       const openContactIds = new Set(openContacts.map(c => c.id.toString()));
 
-      const nonTerminalOrders = await ValidatedAddress.findAll({
+      const allOrders = await ValidatedAddress.findAll({
         where: {
           user_id: userId,
-          respond_contact_id: { [Op.ne]: null },
-          order_status: { [Op.notIn]: ['delivered', 'ups_shipped'] }
+          respond_contact_id: { [Op.ne]: null }
         }
       });
 
-      const closedOrders = nonTerminalOrders.filter(o => !openContactIds.has(o.respond_contact_id));
+      const closedOrders = allOrders.filter(o => !openContactIds.has(o.respond_contact_id));
 
       if (closedOrders.length === 0) return;
 
@@ -1632,23 +1650,45 @@ class PollingService {
           }
 
           const contactResult = await respondio.getContact(parseInt(order.respond_contact_id));
-          if (!contactResult.success || !contactResult.data) continue;
+          if (!contactResult.success || !contactResult.data) {
+            if (!order.route_id) {
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" contacto no encontrado en Respond.io, eliminando del dispatch`);
+              await order.destroy();
+              syncedCount++;
+            }
+            continue;
+          }
 
           const contact = contactResult.data;
           const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
           const newStatus = this.lifecycleToOrderStatus(contactLifecycle);
 
-          if (newStatus && newStatus !== order.order_status) {
+          if (newStatus === 'delivered' || newStatus === 'ups_shipped') {
+            if (!order.route_id) {
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando (terminal)`);
+              await order.destroy();
+            } else {
+              await order.update({ order_status: newStatus });
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" -> ${newStatus} (tiene ruta, no se elimina)`);
+            }
+            syncedCount++;
+          } else if (newStatus && newStatus !== order.order_status) {
             await order.update({ order_status: newStatus });
             console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
             syncedCount++;
           } else if (!newStatus && contactLifecycle) {
-            const excludedLifecycles = ['new lead', 'pending', 'impropos'];
+            const excludedLifecycles = ['new lead', 'pending', 'impropos', 'closed'];
             if (excludedLifecycles.some(ex => ex === contactLifecycle.toLowerCase())) {
               console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando del dispatch`);
               if (!order.route_id) {
                 await order.destroy();
               }
+              syncedCount++;
+            }
+          } else if (!newStatus && !contactLifecycle) {
+            if (!order.route_id) {
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" sin lifecycle, eliminando del dispatch`);
+              await order.destroy();
               syncedCount++;
             }
           }

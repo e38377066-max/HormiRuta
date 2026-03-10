@@ -68,13 +68,13 @@ export default function DispatchMap() {
   const [sendingMessage, setSendingMessage] = useState(false)
   const [messageSuccess, setMessageSuccess] = useState('')
   const [showManualOrder, setShowManualOrder] = useState(false)
-  const [manualOrderForm, setManualOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '' })
+  const [manualOrderForm, setManualOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
   const [manualOrderGeo, setManualOrderGeo] = useState(null)
   const [manualOrderGeoLoading, setManualOrderGeoLoading] = useState(false)
   const [manualOrderSaving, setManualOrderSaving] = useState(false)
   const [manualOrderError, setManualOrderError] = useState('')
   const [editOrderModal, setEditOrderModal] = useState(null)
-  const [editOrderForm, setEditOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '' })
+  const [editOrderForm, setEditOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
   const [editOrderGeo, setEditOrderGeo] = useState(null)
   const [editOrderGeoLoading, setEditOrderGeoLoading] = useState(false)
   const [editOrderSaving, setEditOrderSaving] = useState(false)
@@ -621,7 +621,7 @@ export default function DispatchMap() {
   const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.approved
 
   const openManualOrderModal = () => {
-    setManualOrderForm({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '' })
+    setManualOrderForm({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
     setManualOrderGeo(null)
     setManualOrderError('')
     setShowManualOrder(true)
@@ -679,7 +679,8 @@ export default function DispatchMap() {
       validated_address: order.validated_address || order.address || '',
       order_cost: order.order_cost != null ? String(order.order_cost) : '',
       deposit_amount: order.deposit_amount != null ? String(order.deposit_amount) : '',
-      notes: order.notes || ''
+      notes: order.notes || '',
+      apartment_number: order.apartment_number || ''
     })
     setEditOrderGeo(null)
     setEditOrderError('')
@@ -944,7 +945,7 @@ export default function DispatchMap() {
                         <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
                         <span className="do-id">#{order.id}</span>
                       </div>
-                      <div className="do-address">{order.address || 'Sin direccion'}</div>
+                      <div className="do-address">{order.address || 'Sin direccion'}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
                       {order.customer_phone && (
                         <div className="do-contact-row" onClick={e => e.stopPropagation()}>
                           <span className="do-phone">{order.customer_phone}</span>
@@ -1341,7 +1342,7 @@ export default function DispatchMap() {
                       <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
                       <span className="do-id">#{order.id}</span>
                     </div>
-                    <div className="do-address">{order.address || 'Sin direccion'}</div>
+                    <div className="do-address">{order.address || 'Sin direccion'}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
                     <div className="do-phone">{order.customer_phone || ''}</div>
                     <div className="do-bottom">
                       <span className="do-tag" style={{ backgroundColor: '#ff6d0020', color: '#ff6d00', borderColor: '#ff6d00' }}>
@@ -1545,6 +1546,10 @@ export default function DispatchMap() {
                   </div>
                 )}
               </div>
+              <div className="order-form-field">
+                <label>Apt / Unidad</label>
+                <input type="text" value={manualOrderForm.apartment_number} onChange={e => setManualOrderForm(p => ({ ...p, apartment_number: e.target.value }))} placeholder="Ej: #201, Suite B" style={{ maxWidth: '200px' }} />
+              </div>
               <div className="order-form-row">
                 <div className="order-form-field">
                   <label>Costo ($)</label>
@@ -1611,6 +1616,10 @@ export default function DispatchMap() {
                     {editOrderGeo.city && <span className="geocode-detail"> · {editOrderGeo.city}, {editOrderGeo.state}</span>}
                   </div>
                 )}
+              </div>
+              <div className="order-form-field">
+                <label>Apt / Unidad</label>
+                <input type="text" value={editOrderForm.apartment_number} onChange={e => setEditOrderForm(p => ({ ...p, apartment_number: e.target.value }))} placeholder="Ej: #201, Suite B" style={{ maxWidth: '200px' }} />
               </div>
               <div className="order-form-row">
                 <div className="order-form-field">

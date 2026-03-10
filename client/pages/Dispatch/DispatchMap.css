@@ -1861,3 +1861,9 @@
 .dr-commission .material-icons {
   font-size: 14px;
 }
+
+.do-apt {
+  color: #1976d2;
+  font-weight: 600;
+  margin-left: 4px;
+}

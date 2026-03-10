@@ -118,7 +118,8 @@ export default function TripPlannerPage() {
         total_to_collect: s.total_to_collect,
         payment_method: s.payment_method,
         amount_collected: s.amount_collected,
-        payment_status: s.payment_status
+        payment_status: s.payment_status,
+        apartment_number: s.apartment_number || ''
       }))
 
     setStops(routeStops)
@@ -1407,7 +1408,7 @@ export default function TripPlannerPage() {
                     )}
                     <div className="stop-info-block">
                       <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Parada'}</span>
-                      <span className="stop-address-detail">{stop.address || ''}</span>
+                      <span className="stop-address-detail">{stop.address || ''}{stop.apartment_number && <span style={{ color: '#1976d2', fontWeight: 600 }}> Apt {stop.apartment_number}</span>}</span>
                       {stop.phone && (
                         <div className="stop-contact-row">
                           <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>
