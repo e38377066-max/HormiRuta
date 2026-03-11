@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { usePlanner } from '../../layouts/PlannerLayout'
-import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking } from '../../utils/capacitor'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking, openNativeNavigation } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 export default function TripPlannerPage() {
@@ -49,6 +49,7 @@ export default function TripPlannerPage() {
   const [showRouteNameDialog, setShowRouteNameDialog] = useState(false)
   const [mapType, setMapType] = useState('roadmap')
   const [currentRouteId, setCurrentRouteId] = useState(null)
+  const [routeCommission, setRouteCommission] = useState(0)
   const [panelHeight, setPanelHeight] = useState(45)
   const [panelSnap, setPanelSnap] = useState('mid')
   const [dispatchRoutes, setDispatchRoutes] = useState([])
@@ -117,7 +118,8 @@ export default function TripPlannerPage() {
         total_to_collect: s.total_to_collect,
         payment_method: s.payment_method,
         amount_collected: s.amount_collected,
-        payment_status: s.payment_status
+        payment_status: s.payment_status,
+        apartment_number: s.apartment_number || ''
       }))
 
     setStops(routeStops)
@@ -126,6 +128,7 @@ export default function TripPlannerPage() {
     setTotalDistance(route.total_distance || 0)
     setTotalDuration(route.total_duration || 0)
     setCurrentRouteId(route.id)
+    setRouteCommission(route.driver_commission_total || 0)
     setShowDispatchRoutes(false)
     updateMapMarkers(routeStops)
     if (routeStops.length >= 2) {
@@ -993,16 +996,20 @@ export default function TripPlannerPage() {
     markersRef.current.forEach(marker => marker.setMap(null))
     markersRef.current = []
 
+    const visibleStops = navigationMode ? stopsList.filter(s => !s.completed) : stopsList
+    let pendingIndex = 0
+
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
-        const isCompleted = stop.completed
-        const color = isCompleted ? '#22c55e' : '#EA4335'
+        if (navigationMode && stop.completed) return
+        pendingIndex++
+        const color = '#EA4335'
         
         const marker = new window.google.maps.Marker({
           position: { lat: stop.latitude, lng: stop.longitude },
           map: mapInstanceRef.current,
           label: {
-            text: String(index + 1),
+            text: navigationMode ? String(pendingIndex) : String(index + 1),
             color: 'white',
             fontSize: '12px',
             fontWeight: 'bold'
@@ -1023,9 +1030,10 @@ export default function TripPlannerPage() {
       }
     })
 
-    if (stopsList.length > 1) {
+    const stopsForBounds = navigationMode ? visibleStops : stopsList
+    if (stopsForBounds.length > 1) {
       const bounds = new window.google.maps.LatLngBounds()
-      stopsList.forEach(stop => {
+      stopsForBounds.forEach(stop => {
         if (stop.latitude && stop.longitude) {
           bounds.extend({ lat: stop.latitude, lng: stop.longitude })
         }
@@ -1033,16 +1041,53 @@ export default function TripPlannerPage() {
       if (userLocation) {
         bounds.extend(userLocation)
       }
-      mapInstanceRef.current.fitBounds(bounds, 80)
-      
-      const listener = window.google.maps.event.addListener(mapInstanceRef.current, 'idle', () => {
-        if (mapInstanceRef.current.getZoom() > 16) {
-          mapInstanceRef.current.setZoom(16)
+      if (!navigationMode) {
+        mapInstanceRef.current.fitBounds(bounds, 80)
+        const listener = window.google.maps.event.addListener(mapInstanceRef.current, 'idle', () => {
+          if (mapInstanceRef.current.getZoom() > 16) {
+            mapInstanceRef.current.setZoom(16)
+          }
+          window.google.maps.event.removeListener(listener)
+        })
+      }
+    } else if (stopsForBounds.length === 1 && stopsForBounds[0].latitude) {
+      if (!navigationMode) {
+        mapInstanceRef.current.panTo({ lat: stopsForBounds[0].latitude, lng: stopsForBounds[0].longitude })
+      }
+    }
+
+    if (navigationMode) {
+      recalculateNavRoute(stopsList)
+    }
+  }
+
+  const recalculateNavRoute = async (stopsList) => {
+    const pending = stopsList.filter(s => !s.completed && s.latitude && s.longitude)
+    if (pending.length < 2) {
+      if (directionsRendererRef.current) {
+        directionsRendererRef.current.setDirections({ routes: [] })
+      }
+      return
+    }
+    try {
+      const directionsService = new window.google.maps.DirectionsService()
+      const waypoints = pending.slice(1, -1).map(stop => ({
+        location: { lat: stop.latitude, lng: stop.longitude },
+        stopover: true
+      }))
+      const result = await directionsService.route({
+        origin: { lat: pending[0].latitude, lng: pending[0].longitude },
+        destination: { lat: pending[pending.length - 1].latitude, lng: pending[pending.length - 1].longitude },
+        waypoints,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+        drivingOptions: {
+          departureTime: new Date(),
+          trafficModel: window.google.maps.TrafficModel.BEST_GUESS
         }
-        window.google.maps.event.removeListener(listener)
       })
-    } else if (stopsList.length === 1 && stopsList[0].latitude) {
-      mapInstanceRef.current.panTo({ lat: stopsList[0].latitude, lng: stopsList[0].longitude })
+      directionsRendererRef.current.setDirections(result)
+    } catch (err) {
+      console.error('Nav route recalculation error:', err)
     }
   }
 
@@ -1085,6 +1130,10 @@ export default function TripPlannerPage() {
   }
 
   const startRoute = () => {
+    const pendingStops = stops.filter(s => !s.completed)
+    const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
+    openNativeNavigation(pendingStops, loc)
+
     setNavigationMode(true)
     setAutoFollow(true)
     keepScreenAwake()
@@ -1279,6 +1328,11 @@ export default function TripPlannerPage() {
         <div className="panel-header">
           <div className="panel-header-left">
             <span className="stops-count">{stops.length} parada{stops.length !== 1 ? 's' : ''}</span>
+            {routeCommission > 0 && (
+              <span className="route-commission-badge">
+                <span className="material-icons">paid</span> ${routeCommission.toFixed(2)}
+              </span>
+            )}
           </div>
           <div className="panel-header-right">
             <button className="header-btn" onClick={focusSearch}>
@@ -1311,6 +1365,11 @@ export default function TripPlannerPage() {
                       {dr.total_distance > 0 && <span> - {dr.total_distance} km</span>}
                       {dr.total_duration > 0 && <span> - ~{dr.total_duration} min</span>}
                     </div>
+                    {dr.driver_commission_total > 0 && (
+                      <div className="dispatch-route-commission">
+                        <span className="material-icons">paid</span> Tu comisión: ${dr.driver_commission_total.toFixed(2)}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -1349,7 +1408,7 @@ export default function TripPlannerPage() {
                     )}
                     <div className="stop-info-block">
                       <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Parada'}</span>
-                      <span className="stop-address-detail">{stop.address || ''}</span>
+                      <span className="stop-address-detail">{stop.address || ''}{stop.apartment_number && <span style={{ color: '#1976d2', fontWeight: 600 }}> Apt {stop.apartment_number}</span>}</span>
                       {stop.phone && (
                         <div className="stop-contact-row">
                           <span className="stop-phone"><span className="material-icons" style={{ fontSize: 13 }}>phone</span> {stop.phone}</span>
@@ -1432,9 +1491,16 @@ export default function TripPlannerPage() {
                 Finalizar ruta
               </button>
             ) : (
-              <div className="nav-footer-info">
-                <span className="material-icons" style={{ fontSize: 18, color: '#5b8def' }}>touch_app</span>
-                <span>Toca una parada para completarla</span>
+              <div className="nav-footer-actions">
+                <button className="btn-native-nav" onClick={() => {
+                  const pendingStops = stops.filter(s => !s.completed)
+                  const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
+                  openNativeNavigation(pendingStops, loc)
+                }}>
+                  <span className="material-icons">near_me</span>
+                  Navegar
+                </button>
+                <span className="nav-footer-hint">Toca una parada para completarla</span>
               </div>
             )
           ) : isOptimized ? (

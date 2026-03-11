@@ -48,6 +48,7 @@ export default function DispatchMap() {
   const [activeTab, setActiveTab] = useState('orders')
   const [editingNotes, setEditingNotes] = useState(null)
   const [notesValue, setNotesValue] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [respondUsers, setRespondUsers] = useState([])
   const [selectedRespondUsers, setSelectedRespondUsers] = useState([])
   const [loadingRespondUsers, setLoadingRespondUsers] = useState(false)
@@ -66,6 +67,20 @@ export default function DispatchMap() {
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [messageSuccess, setMessageSuccess] = useState('')
+  const [showManualOrder, setShowManualOrder] = useState(false)
+  const [manualOrderForm, setManualOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
+  const [manualOrderGeo, setManualOrderGeo] = useState(null)
+  const [manualOrderGeoLoading, setManualOrderGeoLoading] = useState(false)
+  const [manualOrderSaving, setManualOrderSaving] = useState(false)
+  const [manualOrderError, setManualOrderError] = useState('')
+  const [editOrderModal, setEditOrderModal] = useState(null)
+  const [editOrderForm, setEditOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
+  const [editOrderGeo, setEditOrderGeo] = useState(null)
+  const [editOrderGeoLoading, setEditOrderGeoLoading] = useState(false)
+  const [editOrderSaving, setEditOrderSaving] = useState(false)
+  const [editOrderError, setEditOrderError] = useState('')
+  const [driverCommissions, setDriverCommissions] = useState({})
+  const [savingDriverCommission, setSavingDriverCommission] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -108,7 +123,7 @@ export default function DispatchMap() {
 
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 30000)
+    const interval = setInterval(fetchData, 180000)
     return () => clearInterval(interval)
   }, [fetchData])
 
@@ -588,7 +603,138 @@ export default function DispatchMap() {
     }
   }
 
+  const handleDriverCommission = async (driverId) => {
+    const val = parseFloat(driverCommissions[driverId])
+    if (isNaN(val) || val < 0) return
+    setSavingDriverCommission(driverId)
+    try {
+      await api.put(`/api/admin/users/${driverId}`, { commission_per_stop: val })
+      fetchAllUsers()
+      fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al actualizar comisión')
+    } finally {
+      setSavingDriverCommission(null)
+    }
+  }
+
   const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.approved
+
+  const openManualOrderModal = () => {
+    setManualOrderForm({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
+    setManualOrderGeo(null)
+    setManualOrderError('')
+    setShowManualOrder(true)
+  }
+
+  const manualGeoTimerRef = useRef(null)
+  const editGeoTimerRef = useRef(null)
+
+  const autoGeocodeManual = useCallback((address) => {
+    if (manualGeoTimerRef.current) clearTimeout(manualGeoTimerRef.current)
+    setManualOrderGeo(null)
+    if (!address || address.trim().length < 8) return
+    setManualOrderGeoLoading(true)
+    manualGeoTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/dispatch/geocode-address', { params: { address } })
+        if (res?.data && res.data.formatted_address) {
+          setManualOrderGeo(res.data)
+          setManualOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
+          setManualOrderError('')
+        } else {
+          setManualOrderGeo(null)
+          setManualOrderError('No se encontró la dirección')
+        }
+      } catch (e) {
+        console.error('Geocode error:', e)
+        setManualOrderError(e?.response?.data?.error || 'No se pudo geocodificar')
+      } finally {
+        setManualOrderGeoLoading(false)
+      }
+    }, 1200)
+  }, [])
+
+  const autoGeocodeEdit = useCallback((address) => {
+    if (editGeoTimerRef.current) clearTimeout(editGeoTimerRef.current)
+    setEditOrderGeo(null)
+    if (!address || address.trim().length < 8) return
+    setEditOrderGeoLoading(true)
+    editGeoTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/dispatch/geocode-address', { params: { address } })
+        if (res?.data && res.data.formatted_address) {
+          setEditOrderGeo(res.data)
+          setEditOrderForm(prev => ({ ...prev, validated_address: res.data.formatted_address }))
+          setEditOrderError('')
+        } else {
+          setEditOrderGeo(null)
+          setEditOrderError('No se encontró la dirección')
+        }
+      } catch (e) {
+        console.error('Edit geocode error:', e)
+        setEditOrderError(e?.response?.data?.error || 'No se pudo geocodificar')
+      } finally {
+        setEditOrderGeoLoading(false)
+      }
+    }, 1200)
+  }, [])
+
+  const calcTotal = (form) => {
+    if (!form) return '0.00'
+    const cost = parseFloat(form.order_cost) || 0
+    const deposit = parseFloat(form.deposit_amount) || 0
+    return Math.max(0, cost - deposit).toFixed(2)
+  }
+
+  const handleSaveManualOrder = async () => {
+    if (!manualOrderForm.customer_name.trim() || !manualOrderForm.validated_address.trim()) {
+      setManualOrderError('Nombre y dirección son requeridos')
+      return
+    }
+    setManualOrderSaving(true)
+    setManualOrderError('')
+    try {
+      await api.post('/api/dispatch/orders', manualOrderForm)
+      setShowManualOrder(false)
+      fetchData()
+    } catch (e) {
+      setManualOrderError(e.response?.data?.error || 'Error al guardar la orden')
+    } finally {
+      setManualOrderSaving(false)
+    }
+  }
+
+  const openEditOrderModal = (order) => {
+    setEditOrderForm({
+      customer_name: order.customer_name || '',
+      customer_phone: order.customer_phone || '',
+      validated_address: order.validated_address || order.address || '',
+      order_cost: order.order_cost != null ? String(order.order_cost) : '',
+      deposit_amount: order.deposit_amount != null ? String(order.deposit_amount) : '',
+      notes: order.notes || '',
+      apartment_number: order.apartment_number || ''
+    })
+    setEditOrderGeo(null)
+    setEditOrderError('')
+    setEditOrderModal(order)
+  }
+
+
+  const handleSaveEditOrder = async () => {
+    if (!editOrderModal) return
+    setEditOrderSaving(true)
+    setEditOrderError('')
+    try {
+      await api.put(`/api/dispatch/orders/${editOrderModal.id}/edit`, editOrderForm)
+      setEditOrderModal(null)
+      fetchData()
+    } catch (e) {
+      setEditOrderError(e.response?.data?.error || 'Error al guardar cambios')
+    } finally {
+      setEditOrderSaving(false)
+    }
+  }
 
   const ADMIN_TRANSITIONS = {
     approved: 'ordered',
@@ -654,14 +800,33 @@ export default function DispatchMap() {
 
         {isAdmin && (
           <div className="dispatch-filter">
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-              <option value="">Todos los estados</option>
-              <option value="approved">Aprobadas</option>
-              <option value="ordered">Ordenadas</option>
-              <option value="on_delivery">En Entrega</option>
-              <option value="ups_shipped">UPS Shipped</option>
-              <option value="delivered">Entregadas</option>
-            </select>
+            <div className="dispatch-search-box">
+              <span className="material-icons">search</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Buscar por nombre..."
+              />
+              {searchQuery && (
+                <button className="dispatch-search-clear" onClick={() => setSearchQuery('')}>
+                  <span className="material-icons">close</span>
+                </button>
+              )}
+            </div>
+            <div className="dispatch-filter-row">
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                <option value="">Todos los estados</option>
+                <option value="approved">Aprobadas</option>
+                <option value="ordered">Ordenadas</option>
+                <option value="on_delivery">En Entrega</option>
+                <option value="ups_shipped">UPS Shipped</option>
+                <option value="delivered">Entregadas</option>
+              </select>
+              <button className="btn-add-manual-order" onClick={openManualOrderModal} title="Agregar orden manual">
+                <span className="material-icons">add</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -762,13 +927,17 @@ export default function DispatchMap() {
           {loading ? (
             <div className="loading-center"><div className="spinner"></div></div>
           ) : activeTab === 'orders' ? (
-            orders.length === 0 ? (
-              <div className="empty-dispatch">
-                <span className="material-icons">inbox</span>
-                <p>No hay ordenes con direccion</p>
-              </div>
-            ) : (
-              orders.map(order => {
+            (() => {
+              const filtered = searchQuery
+                ? orders.filter(o => (o.customer_name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (o.address || '').toLowerCase().includes(searchQuery.toLowerCase()) || (o.customer_phone || '').includes(searchQuery))
+                : orders
+              return filtered.length === 0 ? (
+                <div className="empty-dispatch">
+                  <span className="material-icons">inbox</span>
+                  <p>{searchQuery ? 'No se encontraron ordenes' : 'No hay ordenes con direccion'}</p>
+                </div>
+              ) : (
+              filtered.map(order => {
                 const cfg = getStatusConfig(order.order_status)
                 const isSelected = selectedOrders.includes(order.id)
                 return (
@@ -789,7 +958,7 @@ export default function DispatchMap() {
                         <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
                         <span className="do-id">#{order.id}</span>
                       </div>
-                      <div className="do-address">{order.address || 'Sin direccion'}</div>
+                      <div className="do-address">{order.address || 'Sin direccion'}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
                       {order.customer_phone && (
                         <div className="do-contact-row" onClick={e => e.stopPropagation()}>
                           <span className="do-phone">{order.customer_phone}</span>
@@ -862,6 +1031,15 @@ export default function DispatchMap() {
                               <span className="material-icons">sticky_note_2</span>
                             </button>
                           )}
+                          <button
+                            className="do-edit-notes"
+                            onClick={() => openEditOrderModal(order)}
+                            title="Editar orden"
+                            style={{ color: '#2196f3' }}
+                          >
+                            <span className="material-icons">edit</span>
+                          </button>
+
                           {order.notes && editingNotes !== order.id && (
                             <div className="do-notes-preview">{order.notes}</div>
                           )}
@@ -944,6 +1122,7 @@ export default function DispatchMap() {
                 )
               })
             )
+            })()
           ) : activeTab === 'routes' ? (
             routes.length === 0 ? (
               <div className="empty-dispatch">
@@ -967,6 +1146,9 @@ export default function DispatchMap() {
                   <div className="dr-info">
                     <span><span className="material-icons">pin_drop</span> {route.stops_count} paradas</span>
                     {route.total_amount > 0 && <span><span className="material-icons">attach_money</span> ${route.total_amount.toFixed(2)}</span>}
+                    {route.driver_commission_total > 0 && (
+                      <span className="dr-commission"><span className="material-icons">paid</span> Chofer: ${route.driver_commission_total.toFixed(2)}</span>
+                    )}
                   </div>
                   {route.orders?.length > 0 && (
                     <div className="dr-orders">
@@ -1001,7 +1183,17 @@ export default function DispatchMap() {
                       </button>
                     </div>
                   )}
-                  {route.status === 'assigned' && route.orders?.[0]?.driver_name && (
+                  {isAdmin && route.status === 'assigned' && (
+                    <div className="dr-driver-row">
+                      <div className="dr-driver">
+                        <span className="material-icons">person</span> {route.orders?.[0]?.driver_name || 'Chofer asignado'}
+                      </div>
+                      <button className="dbtn outline small" onClick={() => setShowAssignDriver(route.id)}>
+                        <span className="material-icons">swap_horiz</span> Cambiar
+                      </button>
+                    </div>
+                  )}
+                  {!isAdmin && route.status === 'assigned' && route.orders?.[0]?.driver_name && (
                     <div className="dr-driver">
                       <span className="material-icons">person</span> {route.orders[0].driver_name}
                     </div>
@@ -1102,6 +1294,49 @@ export default function DispatchMap() {
                   </>
                 )}
               </div>
+
+              <div className="drivers-section">
+                <div className="drivers-section-header">
+                  <h3><span className="material-icons">paid</span> Comisión por Parada</h3>
+                </div>
+                <p className="gc-desc">Valor que cada chofer cobra por parada completada. Cada chofer puede tener un valor diferente.</p>
+                <div className="driver-commissions-list">
+                  {allUsers.filter(u => u.role === 'driver').length === 0 ? (
+                    <p className="drivers-empty">No hay choferes registrados</p>
+                  ) : (
+                    allUsers.filter(u => u.role === 'driver').map(driver => (
+                      <div key={driver.id} className="driver-commission-row">
+                        <div className="dc-driver-info">
+                          <span className="material-icons">local_shipping</span>
+                          <strong>{driver.username}</strong>
+                        </div>
+                        <div className="dc-input-row">
+                          <span className="gc-dollar">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={driverCommissions[driver.id] !== undefined ? driverCommissions[driver.id] : (driver.commission_per_stop || '')}
+                            onChange={e => setDriverCommissions(prev => ({ ...prev, [driver.id]: e.target.value }))}
+                            className="gc-input"
+                          />
+                          <button
+                            className="dbtn blue small"
+                            onClick={() => handleDriverCommission(driver.id)}
+                            disabled={savingDriverCommission === driver.id}
+                          >
+                            <span className="material-icons">{savingDriverCommission === driver.id ? 'hourglass_empty' : 'save'}</span>
+                          </button>
+                        </div>
+                        {driver.commission_per_stop > 0 && driverCommissions[driver.id] === undefined && (
+                          <span className="dc-current">Actual: ${parseFloat(driver.commission_per_stop).toFixed(2)}/parada</span>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           ) : activeTab === 'delivered' ? (
             loadingDelivered ? (
@@ -1120,7 +1355,7 @@ export default function DispatchMap() {
                       <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
                       <span className="do-id">#{order.id}</span>
                     </div>
-                    <div className="do-address">{order.address || 'Sin direccion'}</div>
+                    <div className="do-address">{order.address || 'Sin direccion'}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
                     <div className="do-phone">{order.customer_phone || ''}</div>
                     <div className="do-bottom">
                       <span className="do-tag" style={{ backgroundColor: '#ff6d0020', color: '#ff6d00', borderColor: '#ff6d00' }}>
@@ -1208,7 +1443,7 @@ export default function DispatchMap() {
 
       {evidenceModal && (
         <div className="modal-backdrop" onClick={() => setEvidenceModal(null)}>
-          <div className="evidence-modal" onClick={e => e.stopPropagation()}>
+          <div className="dispatch-evidence-modal" onClick={e => e.stopPropagation()}>
             <div className="evidence-modal-header">
               <h3>Evidencia de Entrega</h3>
               <button className="evidence-modal-close" onClick={() => setEvidenceModal(null)}>
@@ -1283,6 +1518,144 @@ export default function DispatchMap() {
                 Enviando...
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showManualOrder && (
+        <div className="order-modal-overlay" onClick={() => setShowManualOrder(false)}>
+          <div className="order-modal" onClick={e => e.stopPropagation()}>
+            <div className="order-modal-header">
+              <span className="material-icons">add_location_alt</span>
+              <h3>Nueva Orden Manual</h3>
+              <button className="order-modal-close" onClick={() => setShowManualOrder(false)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="order-modal-body">
+              {manualOrderError && <div className="order-modal-error">{manualOrderError}</div>}
+              <div className="order-form-field">
+                <label>Nombre del cliente *</label>
+                <input type="text" value={manualOrderForm.customer_name} onChange={e => setManualOrderForm(p => ({ ...p, customer_name: e.target.value }))} placeholder="Nombre completo" />
+              </div>
+              <div className="order-form-field">
+                <label>Teléfono</label>
+                <input type="tel" value={manualOrderForm.customer_phone} onChange={e => setManualOrderForm(p => ({ ...p, customer_phone: e.target.value }))} placeholder="+1 (000) 000-0000" />
+              </div>
+              <div className="order-form-field">
+                <label>Dirección *</label>
+                <div className="order-address-row">
+                  <input type="text" value={manualOrderForm.validated_address} onChange={e => { const val = e.target.value; setManualOrderForm(p => ({ ...p, validated_address: val })); autoGeocodeManual(val) }} placeholder="123 Main St, Dallas TX 75201" />
+                  {manualOrderGeoLoading && <span className="material-icons rotating geo-indicator">hourglass_empty</span>}
+                </div>
+                {manualOrderGeo && (
+                  <div className="geocode-result">
+                    <span className="material-icons" style={{ color: '#4caf50', fontSize: 16 }}>check_circle</span>
+                    {manualOrderGeo.formatted_address}
+                    {manualOrderGeo.zip_code && <span className="geocode-detail"> · ZIP {manualOrderGeo.zip_code}</span>}
+                    {manualOrderGeo.city && <span className="geocode-detail"> · {manualOrderGeo.city}, {manualOrderGeo.state}</span>}
+                  </div>
+                )}
+              </div>
+              <div className="order-form-field">
+                <label>Apt / Unidad</label>
+                <input type="text" value={manualOrderForm.apartment_number} onChange={e => setManualOrderForm(p => ({ ...p, apartment_number: e.target.value }))} placeholder="Ej: #201, Suite B" style={{ maxWidth: '200px' }} />
+              </div>
+              <div className="order-form-row">
+                <div className="order-form-field">
+                  <label>Costo ($)</label>
+                  <input type="number" step="0.01" min="0" value={manualOrderForm.order_cost} onChange={e => setManualOrderForm(p => ({ ...p, order_cost: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div className="order-form-field">
+                  <label>Depósito ($)</label>
+                  <input type="number" step="0.01" min="0" value={manualOrderForm.deposit_amount} onChange={e => setManualOrderForm(p => ({ ...p, deposit_amount: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div className="order-form-field">
+                  <label>Total a cobrar</label>
+                  <input type="text" readOnly value={`$${calcTotal(manualOrderForm)}`} className="readonly-field" />
+                </div>
+              </div>
+              <div className="order-form-field">
+                <label>Notas</label>
+                <textarea value={manualOrderForm.notes} onChange={e => setManualOrderForm(p => ({ ...p, notes: e.target.value }))} placeholder="Notas internas..." rows={2} />
+              </div>
+            </div>
+            <div className="order-modal-footer">
+              <button className="dbtn outline" onClick={() => setShowManualOrder(false)}>Cancelar</button>
+              <button className="dbtn purple" onClick={handleSaveManualOrder} disabled={manualOrderSaving}>
+                {manualOrderSaving ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">save</span>}
+                Guardar Orden
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editOrderModal && (
+        <div className="order-modal-overlay" onClick={() => setEditOrderModal(null)}>
+          <div className="order-modal" onClick={e => e.stopPropagation()}>
+            <div className="order-modal-header">
+              <span className="material-icons">edit</span>
+              <h3>Editar Orden #{editOrderModal.id}</h3>
+              <button className="order-modal-close" onClick={() => setEditOrderModal(null)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="order-modal-body">
+              {editOrderError && <div className="order-modal-error">{editOrderError}</div>}
+              <div className="order-form-field">
+                <label>Nombre del cliente</label>
+                <input type="text" value={editOrderForm.customer_name} onChange={e => setEditOrderForm(p => ({ ...p, customer_name: e.target.value }))} placeholder="Nombre completo" />
+              </div>
+              <div className="order-form-field">
+                <label>Teléfono</label>
+                <input type="tel" value={editOrderForm.customer_phone} onChange={e => setEditOrderForm(p => ({ ...p, customer_phone: e.target.value }))} placeholder="+1 (000) 000-0000" />
+              </div>
+              <div className="order-form-field">
+                <label>Dirección</label>
+                <div className="order-address-row">
+                  <input type="text" value={editOrderForm.validated_address} onChange={e => { const val = e.target.value; setEditOrderForm(p => ({ ...p, validated_address: val })); autoGeocodeEdit(val) }} placeholder="123 Main St, Dallas TX 75201" />
+                  {editOrderGeoLoading && <span className="material-icons rotating geo-indicator">hourglass_empty</span>}
+                </div>
+                {editOrderGeo && (
+                  <div className="geocode-result">
+                    <span className="material-icons" style={{ color: '#4caf50', fontSize: 16 }}>check_circle</span>
+                    {editOrderGeo.formatted_address}
+                    {editOrderGeo.zip_code && <span className="geocode-detail"> · ZIP {editOrderGeo.zip_code}</span>}
+                    {editOrderGeo.city && <span className="geocode-detail"> · {editOrderGeo.city}, {editOrderGeo.state}</span>}
+                  </div>
+                )}
+              </div>
+              <div className="order-form-field">
+                <label>Apt / Unidad</label>
+                <input type="text" value={editOrderForm.apartment_number} onChange={e => setEditOrderForm(p => ({ ...p, apartment_number: e.target.value }))} placeholder="Ej: #201, Suite B" style={{ maxWidth: '200px' }} />
+              </div>
+              <div className="order-form-row">
+                <div className="order-form-field">
+                  <label>Costo ($)</label>
+                  <input type="number" step="0.01" min="0" value={editOrderForm.order_cost} onChange={e => setEditOrderForm(p => ({ ...p, order_cost: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div className="order-form-field">
+                  <label>Depósito ($)</label>
+                  <input type="number" step="0.01" min="0" value={editOrderForm.deposit_amount} onChange={e => setEditOrderForm(p => ({ ...p, deposit_amount: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div className="order-form-field">
+                  <label>Total a cobrar</label>
+                  <input type="text" readOnly value={`$${calcTotal(editOrderForm)}`} className="readonly-field" />
+                </div>
+              </div>
+              <div className="order-form-field">
+                <label>Notas</label>
+                <textarea value={editOrderForm.notes} onChange={e => setEditOrderForm(p => ({ ...p, notes: e.target.value }))} placeholder="Notas internas..." rows={2} />
+              </div>
+            </div>
+            <div className="order-modal-footer">
+              <button className="dbtn outline" onClick={() => setEditOrderModal(null)}>Cancelar</button>
+              <button className="dbtn purple" onClick={handleSaveEditOrder} disabled={editOrderSaving}>
+                {editOrderSaving ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">save</span>}
+                Guardar Cambios
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -58,6 +58,11 @@ const User = sequelize.define('User', {
     type: DataTypes.ENUM('admin', 'client', 'driver'),
     defaultValue: 'client',
     allowNull: false
+  },
+  commission_per_stop: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+    defaultValue: null
   }
 }, {
   tableName: 'users',
@@ -88,6 +93,7 @@ User.prototype.toDict = function() {
     subscription_expires: this.subscription_expires,
     role: this.role,
     active: this.active,
+    commission_per_stop: this.commission_per_stop,
     created_at: this.created_at
   };
 };

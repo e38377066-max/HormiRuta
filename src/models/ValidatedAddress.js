@@ -1,4 +1,4 @@
-import { DataTypes } from 'sequelize';
+import { DataTypes, Op } from 'sequelize';
 import sequelize from '../config/database.js';
 
 const ValidatedAddress = sequelize.define('ValidatedAddress', {
@@ -33,15 +33,15 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
   },
   validated_address: {
     type: DataTypes.STRING(500),
-    allowNull: false
+    allowNull: true
   },
   address_lat: {
     type: DataTypes.FLOAT,
-    allowNull: false
+    allowNull: true
   },
   address_lng: {
     type: DataTypes.FLOAT,
-    allowNull: false
+    allowNull: true
   },
   zip_code: {
     type: DataTypes.STRING(20),
@@ -128,12 +128,25 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
     type: DataTypes.STRING(20),
     allowNull: true,
     defaultValue: 'pending'
+  },
+  apartment_number: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: null
   }
 }, {
   tableName: 'validated_addresses',
   timestamps: true,
   createdAt: 'created_at',
-  updatedAt: 'updated_at'
+  updatedAt: 'updated_at',
+  indexes: [
+    {
+      unique: true,
+      fields: ['user_id', 'respond_contact_id'],
+      where: { respond_contact_id: { [Op.ne]: null } },
+      name: 'unique_user_contact'
+    }
+  ]
 });
 
 ValidatedAddress.prototype.toDict = function() {
@@ -167,6 +180,7 @@ ValidatedAddress.prototype.toDict = function() {
     payment_method: this.payment_method,
     amount_collected: this.amount_collected,
     payment_status: this.payment_status,
+    apartment_number: this.apartment_number,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

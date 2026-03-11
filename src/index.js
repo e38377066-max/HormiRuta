@@ -26,6 +26,7 @@ import historyRoutes from './routes/history.js';
 import messagingRoutes from './routes/messaging.js';
 import adminRoutes from './routes/admin.js';
 import dispatchRoutes from './routes/dispatch.js';
+import pollingService from './services/pollingService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -106,7 +107,9 @@ async function startServer() {
     
     await sequelize.sync({ alter: true });
     console.log('Database tables synchronized.');
-    
+
+    pollingService.cleanupDeliveredOrders().catch(e => console.error('[Cleanup] Error inicial:', e.message));
+
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Area 862 System API running on port ${PORT}`);
     });

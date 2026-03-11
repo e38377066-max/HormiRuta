@@ -232,7 +232,7 @@ class PollingService {
       console.log(`[Polling] MODO PRUEBA - Buscando contacto: ${testContactId}`);
     }
     
-    console.log(`[Polling] Obteniendo conversaciones ABIERTAS con lifecycle New Lead/Pending (limite: ${messageLimit} msgs)...`);
+    console.log(`[Polling] Obteniendo conversaciones ABIERTAS con lifecycle New Lead (limite: ${messageLimit} msgs)...`);
     
     let allContacts = [];
     let cursorId = null;
@@ -261,7 +261,7 @@ class PollingService {
       cursorId = contactsResult.pagination.nextCursor;
     }
 
-    const targetLifecycles = ['New Lead', 'Pending'];
+    const targetLifecycles = ['New Lead'];
     let filteredContacts = allContacts.filter(contact => 
       contact.lifecycle && targetLifecycles.includes(contact.lifecycle)
     );
@@ -270,7 +270,7 @@ class PollingService {
       index === self.findIndex(c => c.id === contact.id)
     );
 
-    console.log(`[Polling] Conversaciones abiertas: ${allContacts.length}, Con lifecycle New Lead/Pending: ${uniqueContacts.length}`);
+    console.log(`[Polling] Conversaciones abiertas: ${allContacts.length}, Con lifecycle New Lead: ${uniqueContacts.length}`);
 
     // MODO PRUEBA: Buscar contacto directamente via API de Respond.io (sin depender de listas)
     if (isTestMode && testContactId) {
@@ -965,6 +965,10 @@ class PollingService {
       });
 
       if (existingAddr) {
+        if (existingAddr.source === 'contact_corrected') {
+          console.log(`[AddressScan-Agent] ${contactName} (${contact.id}) tiene direccion corregida por agente, ignorando mensaje del chat`);
+          return;
+        }
         const newNorm = finalAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
         const origNorm = (existingAddr.original_address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const validNorm = (existingAddr.validated_address || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1061,19 +1065,52 @@ class PollingService {
         cursorId = result.pagination.nextCursor;
       }
 
-      const excludedLifecycles = ['UPS Shipped', 'New Lead', 'Pending', 'Impropos'];
-      allContacts = allContacts.filter(contact => {
-        if (contact.lifecycle && excludedLifecycles.includes(contact.lifecycle)) {
+      if (allContacts.length === 0) return;
+
+      const excludedTags = ['rec'];
+      const tagFilteredContacts = allContacts.filter(contact => {
+        const contactTags = contact.tags || [];
+        const tagNames = contactTags.map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
+        return !tagNames.some(tag => excludedTags.includes(tag));
+      });
+
+      const tagExcludedIds = allContacts
+        .filter(c => !tagFilteredContacts.includes(c))
+        .map(c => c.id.toString());
+
+      if (tagExcludedIds.length > 0) {
+        try {
+          const deletedCount = await ValidatedAddress.destroy({
+            where: {
+              user_id: userId,
+              respond_contact_id: { [Op.in]: tagExcludedIds }
+            }
+          });
+          if (deletedCount > 0) {
+            console.log(`[AddressScan] ${deletedCount} orden(es) eliminada(s) por tag excluido (rec)`);
+          }
+        } catch (err) {
+          console.error(`[AddressScan] Error limpiando tags excluidos:`, err.message);
+        }
+      }
+
+      await this.syncContactNames(userId, tagFilteredContacts);
+      await this.syncClosedConversationLifecycles(userId, apiToken, tagFilteredContacts);
+      await this.cleanupDuplicateAddresses(userId);
+      await this.cleanupDeliveredOrders();
+
+      const excludedLifecycles = ['new lead', 'pending', 'impropos'];
+      const scanContacts = tagFilteredContacts.filter(contact => {
+        const lc = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
+        if (lc && excludedLifecycles.includes(lc)) {
           return false;
         }
         return true;
       });
 
-      if (allContacts.length === 0) return;
+      if (scanContacts.length === 0) return;
 
-      await this.syncContactNames(userId, allContacts);
-
-      await this.scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings);
+      await this.scanAddressesInConversations(userId, apiToken, scanContacts, respondio, messageLimit, settings);
     } catch (error) {
       console.error(`[AddressScan] Error en ciclo independiente:`, error.message);
     }
@@ -1102,23 +1139,50 @@ class PollingService {
         const existing = addressMap.get(contactIdStr);
         if (!existing) continue;
 
+        const updateFields = {};
         const currentName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
         if (existing.customer_name && existing.customer_name !== currentName && currentName !== 'Sin nombre') {
+          updateFields.customer_name = currentName;
+        }
+
+        const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
+        const orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
+        const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
+        const isExcluded = excludedLifecycles.some(ex => ex.toLowerCase() === contactLifecycle.toLowerCase());
+        if (!orderStatus && contactLifecycle && isExcluded) {
+          if (!existing.route_id) {
+            try {
+              await ValidatedAddress.destroy({ where: { id: existing.id } });
+              console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" eliminada (lifecycle=${contactLifecycle}) (${contactIdStr})`);
+              updatedCount++;
+            } catch (err) {
+              console.error(`[AddressScan] Error eliminando ${contactIdStr}:`, err.message);
+            }
+          } else {
+            console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" lifecycle=${contactLifecycle} pero tiene ruta asignada, no se elimina (${contactIdStr})`);
+          }
+          continue;
+        }
+        if (orderStatus && existing.order_status !== orderStatus) {
+          updateFields.order_status = orderStatus;
+          console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
+        }
+
+        if (Object.keys(updateFields).length > 0) {
           try {
-            await ValidatedAddress.update(
-              { customer_name: currentName },
-              { where: { id: existing.id } }
-            );
-            console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
+            await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+            if (updateFields.customer_name) {
+              console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
+            }
             updatedCount++;
           } catch (err) {
-            console.error(`[AddressScan] Error sync nombre ${contactIdStr}:`, err.message);
+            console.error(`[AddressScan] Error sync ${contactIdStr}:`, err.message);
           }
         }
       }
 
       if (updatedCount > 0) {
-        console.log(`[AddressScan] ${updatedCount} nombre(s) sincronizado(s)`);
+        console.log(`[AddressScan] ${updatedCount} contacto(s) sincronizado(s)`);
       }
     } catch (error) {
       console.error(`[AddressScan] Error en syncContactNames:`, error.message);
@@ -1189,7 +1253,8 @@ class PollingService {
           id: va.id,
           validated: va.validated_address,
           original: va.original_address,
-          customer_name: va.customer_name
+          customer_name: va.customer_name,
+          source: va.source
         });
       }
 
@@ -1223,6 +1288,127 @@ class PollingService {
         }
 
         try {
+          const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+
+          let contactFieldAddress = null;
+          let contactBilling = null;
+          let cfApartment = null;
+          try {
+            const contactDetail = await respondio.getContact(contact.id);
+            if (contactDetail.success && contactDetail.data) {
+              const cData = contactDetail.data;
+              const cfAddress = cData.custom_fields?.find(f => 
+                f.name?.toLowerCase() === 'address' || f.name?.toLowerCase() === 'direccion'
+              );
+              if (cfAddress?.value && cfAddress.value.trim().length >= 5) {
+                contactFieldAddress = cfAddress.value.trim();
+              }
+              cfApartment = cData.custom_fields?.find(f => 
+                f.name?.toLowerCase() === 'apartment' || f.name?.toLowerCase() === 'apartamento' || f.name?.toLowerCase() === 'apt' || f.name?.toLowerCase() === 'unit'
+              );
+              const cfCost = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'cost');
+              const cfDeposit = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'deposit');
+              if (cfCost || cfDeposit) {
+                const parseBilling = (val) => {
+                  if (val === null || val === undefined || val === '') return null;
+                  const num = parseFloat(val);
+                  return isNaN(num) ? null : num;
+                };
+                const cost = parseBilling(cfCost?.value);
+                const deposit = parseBilling(cfDeposit?.value);
+                contactBilling = {
+                  cost,
+                  deposit,
+                  balance: (cost !== null ? cost : 0) - (deposit !== null ? deposit : 0)
+                };
+              }
+            }
+          } catch (cfErr) {
+            // skip
+          }
+
+          const existing = addressMap.get(contactIdStr);
+
+          if (existing) {
+            try {
+              const dbRecord = await ValidatedAddress.findByPk(existing.id);
+              if (dbRecord) {
+                const fieldUpdate = {};
+                if (contactBilling) {
+                  if (contactBilling.cost !== null && dbRecord.order_cost !== contactBilling.cost) {
+                    fieldUpdate.order_cost = contactBilling.cost;
+                  }
+                  if (contactBilling.deposit !== null && dbRecord.deposit_amount !== contactBilling.deposit) {
+                    fieldUpdate.deposit_amount = contactBilling.deposit;
+                  }
+                  if (fieldUpdate.order_cost !== undefined || fieldUpdate.deposit_amount !== undefined) {
+                    const finalCost = fieldUpdate.order_cost ?? dbRecord.order_cost ?? 0;
+                    const finalDeposit = fieldUpdate.deposit_amount ?? dbRecord.deposit_amount ?? 0;
+                    fieldUpdate.total_to_collect = finalCost - finalDeposit;
+                  }
+                }
+                if (cfApartment?.value && cfApartment.value.trim() && dbRecord.apartment_number !== cfApartment.value.trim()) {
+                  fieldUpdate.apartment_number = cfApartment.value.trim();
+                }
+                if (Object.keys(fieldUpdate).length > 0) {
+                  await dbRecord.update(fieldUpdate);
+                  if (fieldUpdate.order_cost !== undefined || fieldUpdate.deposit_amount !== undefined) {
+                    console.log(`[AddressScan] Billing sync ${contactName} (${contact.id}): cost=${fieldUpdate.order_cost ?? '-'} deposit=${fieldUpdate.deposit_amount ?? '-'} cobrar=${fieldUpdate.total_to_collect ?? '-'}`);
+                  }
+                  if (fieldUpdate.apartment_number) {
+                    console.log(`[AddressScan] Apt sync ${contactName} (${contact.id}): apt=${fieldUpdate.apartment_number}`);
+                  }
+                }
+              }
+            } catch (syncErr) {
+              console.error(`[AddressScan] Error field sync ${contact.id}:`, syncErr.message);
+            }
+          }
+
+          if (existing && existing.source === 'contact_corrected') {
+            if (contactFieldAddress) {
+              const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (cfNorm !== existOrigNorm) {
+                const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
+                if (cfGeocoded.success) {
+                  console.log(`[AddressScan] Direccion re-corregida en contacto ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}" [contact_corrected]`);
+                  await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
+                }
+              }
+            }
+            continue;
+          }
+
+          if (contactFieldAddress) {
+            if (existing) {
+              const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (cfNorm !== existOrigNorm && cfNorm !== existValidNorm) {
+                const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
+                if (cfGeocoded.success) {
+                  console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}" -> "${cfGeocoded.fullAddress}" [contact_corrected]`);
+                  await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
+                  continue;
+                }
+              } else {
+                continue;
+              }
+            } else {
+              const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
+              if (cfGeocoded.success) {
+                console.log(`[AddressScan] Direccion desde contacto (sin registro previo) ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}" [contact_corrected]`);
+                await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
+                continue;
+              }
+            }
+          }
+
+          if (existing && existing.validated) {
+            continue;
+          }
+
           const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
           if (!messagesResult.success || !messagesResult.items) continue;
 
@@ -1255,26 +1441,45 @@ class PollingService {
             const confirmPatterns = [
               /(?:esta|esta es|tu|su|la)\s+(?:direccion|dir|address)/i,
               /(?:confirm|verific|correct|bien)\s+.*(?:direccion|dir|address)/i,
-              /(?:direccion|address)\s+(?:es|seria|correcta|confirmada)/i,
+              /(?:direccion|address)\s+(?:es|seria|correcta|confirmada|de\s+entrega)/i,
               /(?:te|le)\s+(?:mando|envio|confirmo)\s+(?:la|tu|su)?\s*(?:direccion|dir|address)/i,
-              /(?:entrega|delivery|envio)\s+(?:a|en|para)\s*:?\s*/i
+              /(?:entrega|delivery|envio)\s+(?:a|en|para)\s*:?\s*/i,
+              /direccion\s+de\s+entrega/i,
+              /dir(?:eccion)?[\s:]+\d+/i
             ];
             for (const msg of outgoingMessages) {
               const text = msg.message?.text || '';
-              if (!text || text.length < 10) continue;
-              const isConfirmation = confirmPatterns.some(p => p.test(text));
-              if (!isConfirmation) continue;
+              if (!text || text.length < 5) continue;
+
               const gLink = extractor.extractGoogleMapsLink(text);
               if (gLink) {
                 scanMapsLink = gLink;
+                console.log(`[AddressScan] Google Maps link detectado en mensaje de agente`);
                 break;
               }
-              const addr = extractor.extractAddressFromMessage(text);
-              if (addr) {
-                latestExtracted = addr;
-                console.log(`[AddressScan] Direccion detectada en mensaje de agente: "${addr}"`);
-                break;
+
+              const isConfirmation = confirmPatterns.some(p => p.test(text));
+              if (isConfirmation) {
+                const addr = extractor.extractAddressFromMessage(text);
+                if (addr) {
+                  latestExtracted = addr;
+                  console.log(`[AddressScan] Direccion detectada en mensaje de agente (confirmacion): "${addr}"`);
+                  break;
+                }
               }
+
+              const lines = text.split('\n').map(l => l.trim()).filter(l => l.length >= 8);
+              for (const line of lines) {
+                if (/^\d+\s+\w/.test(line) && /\b(st|ave|rd|dr|blvd|ln|ct|way|pl|pkwy|hwy|cir|trail|loop)\b/i.test(line)) {
+                  const addr = extractor.extractAddressFromMessage(line);
+                  if (addr) {
+                    latestExtracted = addr;
+                    console.log(`[AddressScan] Direccion detectada en mensaje de agente (standalone): "${addr}"`);
+                    break;
+                  }
+                }
+              }
+              if (latestExtracted) break;
             }
           }
 
@@ -1292,7 +1497,6 @@ class PollingService {
           if (!result) continue;
           if (!result.address && !result.googleMapsLink && !result.googleMapsCoords) continue;
 
-          const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
           let finalAddress = result.address;
           let finalZip = null;
           let geocoded = { success: false };
@@ -1431,6 +1635,50 @@ class PollingService {
         console.log(`[AddressScan] === ${updatedCount} contactos actualizados con direccion ===`);
       }
 
+      const validLifecycles = ['approved', 'ordered', 'on delivery'];
+      let placeholderCount = 0;
+      for (const contact of batch) {
+        const contactIdStr = contact.id.toString();
+        const existing = addressMap.get(contactIdStr);
+        if (existing) continue;
+
+        const contactLifecycle = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
+        if (!validLifecycles.includes(contactLifecycle)) continue;
+
+        const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+        const orderStatus = this.lifecycleToOrderStatus(contact.lifecycle || contact.lifecycleStage || '');
+        if (!orderStatus) continue;
+
+        try {
+          const [record, created] = await ValidatedAddress.findOrCreate({
+            where: {
+              user_id: userId,
+              respond_contact_id: contactIdStr
+            },
+            defaults: {
+              customer_name: customerName,
+              customer_phone: contact.phone || null,
+              original_address: null,
+              validated_address: null,
+              address_lat: null,
+              address_lng: null,
+              zip_code: null,
+              source: 'placeholder',
+              order_status: orderStatus
+            }
+          });
+          if (created) {
+            placeholderCount++;
+            console.log(`[AddressScan] Placeholder creado para ${customerName} (${contactIdStr}) [${orderStatus}] - sin direccion detectada`);
+          }
+        } catch (phErr) {
+          console.error(`[AddressScan] Error creando placeholder ${contactIdStr}:`, phErr.message);
+        }
+      }
+      if (placeholderCount > 0) {
+        console.log(`[AddressScan] === ${placeholderCount} placeholders creados para contactos sin direccion ===`);
+      }
+
       const remaining = contactsToScan.length - batch.length;
       if (remaining > 0) {
         console.log(`[AddressScan] ${batch.length} escaneados, ${remaining} pendientes para proximo ciclo`);
@@ -1440,17 +1688,289 @@ class PollingService {
     }
   }
 
-  lifecycleToOrderStatus(lifecycle) {
-    const map = {
-      'Approved': 'approved',
-      'Ordered': 'ordered',
-      'On Delivery': 'on_delivery',
-      'Delivered': 'delivered'
-    };
-    return map[lifecycle] || 'approved';
+  async syncClosedConversationLifecycles(userId, apiToken, openContacts) {
+    try {
+      const openContactIds = new Set(openContacts.map(c => c.id.toString()));
+
+      const allOrders = await ValidatedAddress.findAll({
+        where: {
+          user_id: userId,
+          respond_contact_id: { [Op.ne]: null }
+        }
+      });
+
+      const closedOrders = allOrders.filter(o => !openContactIds.has(o.respond_contact_id));
+
+      if (closedOrders.length === 0) return;
+
+      const respondio = new RespondioService(apiToken);
+      let syncedCount = 0;
+      const DELAY_MS = 300;
+
+      for (const order of closedOrders) {
+        try {
+          if (syncedCount > 0) {
+            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+          }
+
+          const contactResult = await respondio.getContact(parseInt(order.respond_contact_id));
+          if (!contactResult.success || !contactResult.data) {
+            if (!order.route_id) {
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" contacto no encontrado en Respond.io, eliminando del dispatch`);
+              await order.destroy();
+              syncedCount++;
+            }
+            continue;
+          }
+
+          const contact = contactResult.data;
+          const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
+          const newStatus = this.lifecycleToOrderStatus(contactLifecycle);
+
+          if (newStatus === 'delivered' || newStatus === 'ups_shipped') {
+            console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando (terminal, route_id=${order.route_id || 'ninguna'})`);
+            await order.destroy();
+            syncedCount++;
+          } else if (newStatus && newStatus !== order.order_status) {
+            await order.update({ order_status: newStatus });
+            console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
+            syncedCount++;
+          } else if (!newStatus && contactLifecycle) {
+            const excludedLifecycles = ['new lead', 'pending', 'impropos', 'closed'];
+            if (excludedLifecycles.some(ex => ex === contactLifecycle.toLowerCase())) {
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando del dispatch`);
+              if (!order.route_id) {
+                await order.destroy();
+              }
+              syncedCount++;
+            }
+          } else if (!newStatus && !contactLifecycle) {
+            if (!order.route_id) {
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" sin lifecycle, eliminando del dispatch`);
+              await order.destroy();
+              syncedCount++;
+            }
+          }
+        } catch (err) {
+          console.error(`[LifecycleSync] Error consultando contacto ${order.respond_contact_id}:`, err.message);
+        }
+      }
+
+      if (syncedCount > 0) {
+        console.log(`[LifecycleSync] ${syncedCount} orden(es) sincronizada(s) de chats cerrados`);
+      }
+    } catch (error) {
+      console.error(`[LifecycleSync] Error en sync de chats cerrados:`, error.message);
+    }
   }
 
-  async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded) {
+  async cleanupDuplicateAddresses(userId) {
+    try {
+      let totalCleaned = 0;
+
+      const [contactDups] = await ValidatedAddress.sequelize.query(`
+        SELECT respond_contact_id, COUNT(*) as cnt
+        FROM validated_addresses
+        WHERE user_id = :userId AND respond_contact_id IS NOT NULL
+        GROUP BY respond_contact_id
+        HAVING COUNT(*) > 1
+      `, { replacements: { userId } });
+
+      for (const dup of contactDups) {
+        const records = await ValidatedAddress.findAll({
+          where: { user_id: userId, respond_contact_id: dup.respond_contact_id },
+          order: [['created_at', 'DESC']]
+        });
+        for (const old of records.slice(1)) {
+          await old.destroy();
+          totalCleaned++;
+        }
+      }
+
+      const [nameDups] = await ValidatedAddress.sequelize.query(`
+        SELECT customer_name, validated_address, COUNT(*) as cnt
+        FROM validated_addresses
+        WHERE user_id = :userId
+        GROUP BY customer_name, validated_address
+        HAVING COUNT(*) > 1
+      `, { replacements: { userId } });
+
+      for (const dup of nameDups) {
+        const records = await ValidatedAddress.findAll({
+          where: { user_id: userId, customer_name: dup.customer_name, validated_address: dup.validated_address },
+          order: [['created_at', 'DESC']]
+        });
+        for (const old of records.slice(1)) {
+          await old.destroy();
+          totalCleaned++;
+        }
+      }
+
+      const [phoneDups] = await ValidatedAddress.sequelize.query(`
+        SELECT customer_phone, COUNT(*) as cnt
+        FROM validated_addresses
+        WHERE user_id = :userId AND customer_phone IS NOT NULL AND customer_phone != ''
+        GROUP BY customer_phone
+        HAVING COUNT(*) > 1
+      `, { replacements: { userId } });
+
+      for (const dup of phoneDups) {
+        const records = await ValidatedAddress.findAll({
+          where: { user_id: userId, customer_phone: dup.customer_phone },
+          order: [['created_at', 'DESC']]
+        });
+        for (const old of records.slice(1)) {
+          await old.destroy();
+          totalCleaned++;
+        }
+      }
+
+      if (totalCleaned > 0) {
+        console.log(`[AddressScan] Limpiados ${totalCleaned} duplicado(s) total`);
+      }
+    } catch (error) {
+      console.error(`[AddressScan] Error limpiando duplicados:`, error.message);
+    }
+  }
+
+  async cleanupDeliveredOrders() {
+    try {
+      const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const ordersToDelete = await ValidatedAddress.findAll({
+        where: {
+          order_status: 'delivered',
+          updated_at: { [Op.lt]: cutoff }
+        }
+      });
+
+      if (ordersToDelete.length === 0) return;
+
+      const archived = await this.archiveDeliveredOrders(ordersToDelete);
+      if (!archived) {
+        console.error(`[Cleanup] Archivo ZIP falló, órdenes NO eliminadas para preservar datos`);
+        return;
+      }
+
+      const deleted = await ValidatedAddress.destroy({
+        where: {
+          id: { [Op.in]: ordersToDelete.map(o => o.id) }
+        }
+      });
+      if (deleted > 0) {
+        console.log(`[Cleanup] ${deleted} orden(es) entregada(s) archivada(s) y eliminada(s) (>48h)`);
+      }
+    } catch (error) {
+      console.error(`[Cleanup] Error limpiando órdenes entregadas:`, error.message);
+    }
+  }
+
+  async archiveDeliveredOrders(orders) {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const archiver = (await import('archiver')).default;
+
+      const archiveDir = path.default.join(process.cwd(), 'uploads', 'archives');
+      if (!fs.default.existsSync(archiveDir)) {
+        fs.default.mkdirSync(archiveDir, { recursive: true });
+      }
+
+      const now = new Date();
+      const dateStr = `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getFullYear()}`;
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}_${now.getMilliseconds()}`;
+      const zipName = `entregas_${dateStr}_${timeStr}.zip`;
+      const zipPath = path.default.join(archiveDir, zipName);
+
+      const { default: Stop } = await import('../models/Stop.js');
+      const { default: Route } = await import('../models/Route.js');
+
+      const routeIds = [...new Set(orders.map(o => o.route_id).filter(Boolean))];
+      const routes = routeIds.length > 0 ? await Route.findAll({ where: { id: { [Op.in]: routeIds } } }) : [];
+      const routeMap = {};
+      routes.forEach(r => { routeMap[r.id] = r.toJSON(); });
+
+      const stops = routeIds.length > 0 ? await Stop.findAll({ where: { route_id: { [Op.in]: routeIds } } }) : [];
+      const stopsMap = {};
+      stops.forEach(s => {
+        if (!stopsMap[s.route_id]) stopsMap[s.route_id] = [];
+        stopsMap[s.route_id].push(s.toJSON());
+      });
+
+      const output = fs.default.createWriteStream(zipPath);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+
+      await new Promise((resolve, reject) => {
+        output.on('close', resolve);
+        archive.on('error', reject);
+        archive.pipe(output);
+
+        const archiveData = orders.map(order => {
+          const o = order.toJSON();
+          const route = o.route_id ? routeMap[o.route_id] : null;
+          const routeStops = o.route_id ? (stopsMap[o.route_id] || []) : [];
+          return {
+            order: o,
+            route: route ? { id: route.id, name: route.name, status: route.status } : null,
+            stops: routeStops.map(s => ({
+              id: s.id, address: s.address, customer_name: s.customer_name,
+              phone: s.phone, order_cost: s.order_cost, deposit_amount: s.deposit_amount,
+              total_to_collect: s.total_to_collect, payment_method: s.payment_method,
+              amount_collected: s.amount_collected, payment_status: s.payment_status,
+              photo_url: s.photo_url, status: s.status, completed_at: s.completed_at
+            }))
+          };
+        });
+
+        archive.append(JSON.stringify(archiveData, null, 2), { name: 'datos_entregas.json' });
+
+        const uploadsDir = process.cwd();
+        for (const stop of stops) {
+          if (stop.photo_url) {
+            const photoPath = path.default.join(uploadsDir, stop.photo_url.replace(/^\//, ''));
+            if (fs.default.existsSync(photoPath)) {
+              const fileName = path.default.basename(photoPath);
+              archive.file(photoPath, { name: `evidencia/${fileName}` });
+            }
+          }
+        }
+
+        archive.finalize();
+      });
+
+      console.log(`[Archive] ZIP creado: ${zipName} (${orders.length} órdenes)`);
+
+      const archiveFiles = fs.default.readdirSync(archiveDir)
+        .filter(f => f.endsWith('.zip'))
+        .sort();
+      if (archiveFiles.length > 30) {
+        const toDelete = archiveFiles.slice(0, archiveFiles.length - 30);
+        for (const f of toDelete) {
+          fs.default.unlinkSync(path.default.join(archiveDir, f));
+        }
+        console.log(`[Archive] Limpiados ${toDelete.length} archivos antiguos`);
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`[Archive] Error archivando entregas:`, error.message);
+      return false;
+    }
+  }
+
+  lifecycleToOrderStatus(lifecycle) {
+    if (!lifecycle) return null;
+    const lc = lifecycle.toLowerCase();
+    const map = {
+      'approved': 'approved',
+      'ordered': 'ordered',
+      'on delivery': 'on_delivery',
+      'delivered': 'delivered',
+      'ups shipped': 'ups_shipped'
+    };
+    return map[lc] || null;
+  }
+
+  async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded, sourceOverride) {
     try {
       const contactIdStr = contact.id.toString();
       const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
@@ -1462,37 +1982,12 @@ class PollingService {
         return;
       }
 
-      const existing = await ValidatedAddress.findOne({
+      const [record, created] = await ValidatedAddress.findOrCreate({
         where: {
           user_id: userId,
           respond_contact_id: contactIdStr
         },
-        order: [['created_at', 'DESC']]
-      });
-
-      if (existing) {
-        const updateData = {
-          validated_address: finalAddress,
-          original_address: originalAddress,
-          address_lat: lat,
-          address_lng: lng,
-          zip_code: finalZip || existing.zip_code,
-          city: geocoded.city || existing.city,
-          state: geocoded.stateShort || geocoded.state || existing.state,
-          confidence: geocoded.confidence || existing.confidence,
-          customer_name: customerName,
-          customer_phone: contact.phone || existing.customer_phone
-        };
-        if (orderStatus && existing.order_status !== orderStatus) {
-          updateData.order_status = orderStatus;
-          console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${existing.order_status} -> ${orderStatus}`);
-        }
-        await existing.update(updateData);
-        console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})`);
-      } else {
-        await ValidatedAddress.create({
-          user_id: userId,
-          respond_contact_id: contactIdStr,
+        defaults: {
           customer_name: customerName,
           customer_phone: contact.phone || null,
           original_address: originalAddress,
@@ -1503,10 +1998,35 @@ class PollingService {
           city: geocoded.city || null,
           state: geocoded.stateShort || geocoded.state || null,
           confidence: geocoded.confidence || null,
-          source: 'scanner',
+          source: sourceOverride || 'scanner',
           order_status: orderStatus || 'approved'
-        });
-        console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus}]`);
+        }
+      });
+
+      if (created) {
+        console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus || 'approved'}]`);
+      } else {
+        const updateData = {
+          validated_address: finalAddress,
+          original_address: originalAddress,
+          address_lat: lat,
+          address_lng: lng,
+          zip_code: finalZip || record.zip_code,
+          city: geocoded.city || record.city,
+          state: geocoded.stateShort || geocoded.state || record.state,
+          confidence: geocoded.confidence || record.confidence,
+          customer_name: customerName,
+          customer_phone: contact.phone || record.customer_phone
+        };
+        if (sourceOverride) {
+          updateData.source = sourceOverride;
+        }
+        if (orderStatus && record.order_status !== orderStatus) {
+          updateData.order_status = orderStatus;
+          console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${record.order_status} -> ${orderStatus}`);
+        }
+        await record.update(updateData);
+        console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})${sourceOverride ? ` [${sourceOverride}]` : ''}`);
       }
     } catch (error) {
       console.error(`[ValidatedAddr] Error guardando direccion validada:`, error.message);

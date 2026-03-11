@@ -51,7 +51,7 @@ export default function AdminUsers() {
   }
 
   const openEditDialog = (user) => {
-    setEditingUser({ ...user })
+    setEditingUser({ ...user, commission_per_stop: user.commission_per_stop ?? '' })
     setShowEditDialog(true)
   }
 
@@ -59,11 +59,15 @@ export default function AdminUsers() {
     if (!editingUser) return
     setSaving(true)
     try {
-      await api.put(`/api/admin/users/${editingUser.id}`, {
-        name: editingUser.name,
+      const payload = {
+        username: editingUser.username || editingUser.name,
         role: editingUser.role,
-        isActive: editingUser.isActive
-      })
+        active: editingUser.active ?? editingUser.isActive
+      }
+      if (editingUser.role === 'driver') {
+        payload.commission_per_stop = editingUser.commission_per_stop !== '' ? parseFloat(editingUser.commission_per_stop) : null
+      }
+      await api.put(`/api/admin/users/${editingUser.id}`, payload)
       fetchUsers()
       setShowEditDialog(false)
     } catch (error) {
@@ -230,12 +234,25 @@ export default function AdminUsers() {
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
-                    checked={editingUser.isActive !== false}
-                    onChange={(e) => setEditingUser({ ...editingUser, isActive: e.target.checked })}
+                    checked={(editingUser.active ?? editingUser.isActive) !== false}
+                    onChange={(e) => setEditingUser({ ...editingUser, active: e.target.checked, isActive: e.target.checked })}
                   />
                   <span>Usuario activo</span>
                 </label>
               </div>
+              {editingUser.role === 'driver' && (
+                <div className="field-group">
+                  <label>Comisión por parada ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={editingUser.commission_per_stop ?? ''}
+                    onChange={(e) => setEditingUser({ ...editingUser, commission_per_stop: e.target.value })}
+                  />
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn-cancel" onClick={() => setShowEditDialog(false)}>Cancelar</button>
