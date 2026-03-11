@@ -1368,8 +1368,8 @@ class PollingService {
           if (existing && existing.source === 'contact_corrected') {
             if (contactFieldAddress) {
               const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (cfNorm !== existValidNorm) {
+              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (cfNorm !== existOrigNorm) {
                 const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
                 if (cfGeocoded.success) {
                   console.log(`[AddressScan] Direccion re-corregida en contacto ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}" [contact_corrected]`);
@@ -1392,6 +1392,8 @@ class PollingService {
                   await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
                   continue;
                 }
+              } else {
+                continue;
               }
             } else {
               const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
@@ -1401,6 +1403,10 @@ class PollingService {
                 continue;
               }
             }
+          }
+
+          if (existing && existing.validated) {
+            continue;
           }
 
           const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
@@ -1627,6 +1633,50 @@ class PollingService {
 
       if (updatedCount > 0) {
         console.log(`[AddressScan] === ${updatedCount} contactos actualizados con direccion ===`);
+      }
+
+      const validLifecycles = ['approved', 'ordered', 'on delivery'];
+      let placeholderCount = 0;
+      for (const contact of batch) {
+        const contactIdStr = contact.id.toString();
+        const existing = addressMap.get(contactIdStr);
+        if (existing) continue;
+
+        const contactLifecycle = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
+        if (!validLifecycles.includes(contactLifecycle)) continue;
+
+        const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+        const orderStatus = this.lifecycleToOrderStatus(contact.lifecycle || contact.lifecycleStage || '');
+        if (!orderStatus) continue;
+
+        try {
+          const [record, created] = await ValidatedAddress.findOrCreate({
+            where: {
+              user_id: userId,
+              respond_contact_id: contactIdStr
+            },
+            defaults: {
+              customer_name: customerName,
+              customer_phone: contact.phone || null,
+              original_address: null,
+              validated_address: null,
+              address_lat: null,
+              address_lng: null,
+              zip_code: null,
+              source: 'placeholder',
+              order_status: orderStatus
+            }
+          });
+          if (created) {
+            placeholderCount++;
+            console.log(`[AddressScan] Placeholder creado para ${customerName} (${contactIdStr}) [${orderStatus}] - sin direccion detectada`);
+          }
+        } catch (phErr) {
+          console.error(`[AddressScan] Error creando placeholder ${contactIdStr}:`, phErr.message);
+        }
+      }
+      if (placeholderCount > 0) {
+        console.log(`[AddressScan] === ${placeholderCount} placeholders creados para contactos sin direccion ===`);
       }
 
       const remaining = contactsToScan.length - batch.length;

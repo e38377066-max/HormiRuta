@@ -33,15 +33,15 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
   },
   validated_address: {
     type: DataTypes.STRING(500),
-    allowNull: false
+    allowNull: true
   },
   address_lat: {
     type: DataTypes.FLOAT,
-    allowNull: false
+    allowNull: true
   },
   address_lng: {
     type: DataTypes.FLOAT,
-    allowNull: false
+    allowNull: true
   },
   zip_code: {
     type: DataTypes.STRING(20),
