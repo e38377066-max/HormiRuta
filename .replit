@@ -49,5 +49,5 @@ NODE_ENV = "development"
 VITE_GOOGLE_MAPS_API_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
 
 [userenv.development]
-SERVER_DOMAIN = "caaf8ac1-a1bd-45cc-8a8c-3b948bf6c458-00-3o0xgbhfiz77b.kirk.replit.dev"
-VITE_API_URL = "https://11aa88d0-3b3d-43c0-9df1-20bd487f29f3-00-2vkz69t7qrm1y.janeway.replit.dev"
+SERVER_DOMAIN = "7ede6d66-4388-4ffe-b78d-5d3ddf76cac5-00-24b4w48upk0ff.picard.replit.dev"
+VITE_API_URL = "https://7ede6d66-4388-4ffe-b78d-5d3ddf76cac5-00-24b4w48upk0ff.picard.replit.dev"
