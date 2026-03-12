@@ -10,6 +10,7 @@ import MessagingSettings from './MessagingSettings.js';
 import ConversationState from './ConversationState.js';
 import ServiceAgent from './ServiceAgent.js';
 import ValidatedAddress from './ValidatedAddress.js';
+import DeliveryHistory from './DeliveryHistory.js';
 
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
 Route.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -99,5 +100,6 @@ export {
   MessagingSettings,
   ConversationState,
   ServiceAgent,
-  ValidatedAddress
+  ValidatedAddress,
+  DeliveryHistory
 };

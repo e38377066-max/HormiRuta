@@ -29,6 +29,9 @@ export default function AccountingPage() {
   const [delDateTo, setDelDateTo] = useState('')
   const [delSearch, setDelSearch] = useState('')
   const [delSearchInput, setDelSearchInput] = useState('')
+  const [availableMonths, setAvailableMonths] = useState([])
+  const [selectedMonth, setSelectedMonth] = useState('')
+  const [archivingMonth, setArchivingMonth] = useState(false)
 
   useEffect(() => {
     fetchDrivers()
@@ -69,17 +72,55 @@ export default function AccountingPage() {
     try {
       const params = {}
       if (delDriver) params.driver_id = delDriver
-      if (delDateFrom) params.date_from = delDateFrom
-      if (delDateTo) params.date_to = delDateTo
+      if (selectedMonth) {
+        params.month_year = selectedMonth
+      } else {
+        if (delDateFrom) params.date_from = delDateFrom
+        if (delDateTo) params.date_to = delDateTo
+      }
       if (delSearch) params.search = delSearch
       const res = await api.get('/api/dispatch/deliveries-report', { params })
       setDeliveries(res.data.deliveries || [])
+      setAvailableMonths(res.data.available_months || [])
     } catch (e) {
       console.error('Error cargando entregas:', e)
     } finally {
       setLoadingDeliveries(false)
     }
-  }, [delDriver, delDateFrom, delDateTo, delSearch])
+  }, [delDriver, delDateFrom, delDateTo, delSearch, selectedMonth])
+
+  const handleArchiveMonth = async () => {
+    const target = selectedMonth || currentMonthYear()
+    if (!window.confirm(`¿Cerrar y exportar a Excel el mes ${target}? Las entregas quedarán marcadas como archivadas.`)) return
+    setArchivingMonth(true)
+    try {
+      const res = await api.post('/api/dispatch/deliveries-report/archive-month', { month_year: target }, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `reporte_${target}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+      await fetchDeliveries()
+    } catch (e) {
+      const msg = e.response?.data ? await e.response.data.text() : 'Error al archivar mes'
+      alert(JSON.parse(msg)?.error || msg)
+    } finally {
+      setArchivingMonth(false)
+    }
+  }
+
+  const currentMonthYear = () => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+
+  const monthLabel = (my) => {
+    if (!my) return ''
+    const [y, m] = my.split('-')
+    const names = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+    return `${names[parseInt(m) - 1]} ${y}`
+  }
 
   const handleSummaryFilter = (e) => {
     e.preventDefault()
@@ -94,7 +135,7 @@ export default function AccountingPage() {
 
   useEffect(() => {
     if (activeTab === 'deliveries') fetchDeliveries()
-  }, [delDriver, delDateFrom, delDateTo, delSearch])
+  }, [delDriver, delDateFrom, delDateTo, delSearch, selectedMonth])
 
   const summaryTotals = report.reduce((acc, row) => ({
     stops: acc.stops + row.stops_count,
@@ -357,6 +398,15 @@ export default function AccountingPage() {
               </div>
               <div className="accounting-filter-fields del-filter-grid">
                 <div className="field-group">
+                  <label>Mes</label>
+                  <select value={selectedMonth} onChange={e => { setSelectedMonth(e.target.value); setDelDateFrom(''); setDelDateTo('') }}>
+                    <option value="">Todos los meses</option>
+                    {availableMonths.map(m => (
+                      <option key={m} value={m}>{monthLabel(m)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field-group">
                   <label>Chofer</label>
                   <select value={delDriver} onChange={e => setDelDriver(e.target.value)}>
                     <option value="">Todos los choferes</option>
@@ -367,11 +417,11 @@ export default function AccountingPage() {
                 </div>
                 <div className="field-group">
                   <label>Desde</label>
-                  <input type="date" value={delDateFrom} onChange={e => setDelDateFrom(e.target.value)} />
+                  <input type="date" value={delDateFrom} disabled={!!selectedMonth} onChange={e => setDelDateFrom(e.target.value)} />
                 </div>
                 <div className="field-group">
                   <label>Hasta</label>
-                  <input type="date" value={delDateTo} onChange={e => setDelDateTo(e.target.value)} />
+                  <input type="date" value={delDateTo} disabled={!!selectedMonth} onChange={e => setDelDateTo(e.target.value)} />
                 </div>
               </div>
               <div className="accounting-filter-actions">
@@ -382,6 +432,16 @@ export default function AccountingPage() {
                 <button type="button" className="btn-secondary" onClick={exportDeliveriesCSV} disabled={deliveries.length === 0}>
                   <span className="material-icons">download</span>
                   Exportar CSV
+                </button>
+                <button
+                  type="button"
+                  className="btn-archive-month"
+                  onClick={handleArchiveMonth}
+                  disabled={archivingMonth}
+                  title={`Cerrar mes ${monthLabel(selectedMonth || currentMonthYear())} y exportar Excel`}
+                >
+                  <span className="material-icons">{archivingMonth ? 'hourglass_empty' : 'table_view'}</span>
+                  {archivingMonth ? 'Exportando...' : `Cerrar ${monthLabel(selectedMonth || currentMonthYear())}`}
                 </button>
                 {deliveries.length > 0 && (
                   <span className="del-count-badge">{deliveries.length} entrega{deliveries.length !== 1 ? 's' : ''}</span>
@@ -424,6 +484,7 @@ export default function AccountingPage() {
                       <td className="del-id-cell">#{d.id}</td>
                       <td className="del-customer-cell">
                         <span className="del-customer-name">{d.customer_name || '—'}</span>
+                        {d.archived && <span className="archived-badge">archivado</span>}
                       </td>
                       <td className="del-phone-cell">{d.customer_phone || '—'}</td>
                       <td className="del-address-cell">

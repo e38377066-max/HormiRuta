@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ValidatedAddress, Route, Stop, User, MessagingSettings } from '../models/index.js';
+import { ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory } from '../models/index.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
@@ -57,6 +57,40 @@ const VALID_TRANSITIONS = {
   ups_shipped: ['delivered'],
   delivered: []
 };
+
+async function saveToDeliveryHistory(order) {
+  try {
+    const existing = await DeliveryHistory.findOne({ where: { original_order_id: order.id } });
+    if (existing) return;
+
+    const driver = order.assigned_driver_id ? await User.findByPk(order.assigned_driver_id) : null;
+    const now = order.delivered_at || new Date();
+    const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    await DeliveryHistory.create({
+      original_order_id: order.id,
+      customer_name: order.customer_name,
+      customer_phone: order.customer_phone,
+      address: order.validated_address,
+      city: order.city,
+      state: order.state,
+      driver_id: order.assigned_driver_id,
+      driver_name: driver?.username || order.driver_name || null,
+      commission_per_stop: driver?.commission_per_stop || 0,
+      order_cost: order.order_cost || 0,
+      deposit_amount: order.deposit_amount || 0,
+      total_to_collect: order.total_to_collect || 0,
+      amount_collected: order.amount_collected || 0,
+      payment_method: order.payment_method,
+      payment_status: order.payment_status,
+      delivered_at: now,
+      month_year: monthYear,
+      archived: false
+    });
+  } catch (err) {
+    console.error('[DeliveryHistory] Error guardando historial:', err.message);
+  }
+}
 
 router.get('/orders', requireAuth, async (req, res) => {
   try {
@@ -208,6 +242,10 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
       order.delivered_at = new Date();
     }
     await order.save();
+
+    if (order_status === 'delivered') {
+      saveToDeliveryHistory(order);
+    }
 
     if (order.respond_contact_id) {
       try {
@@ -493,11 +531,13 @@ router.get('/accounting', requireAdmin, async (req, res) => {
 
 router.get('/deliveries-report', requireAdmin, async (req, res) => {
   try {
-    const { driver_id, date_from, date_to, search } = req.query;
+    const { driver_id, date_from, date_to, search, month_year } = req.query;
 
-    const where = { order_status: 'delivered' };
-    if (driver_id) where.assigned_driver_id = parseInt(driver_id);
-    if (date_from || date_to) {
+    const where = {};
+    if (driver_id) where.driver_id = parseInt(driver_id);
+    if (month_year) {
+      where.month_year = month_year;
+    } else if (date_from || date_to) {
       where.delivered_at = {};
       if (date_from) where.delivered_at[Op.gte] = new Date(date_from + 'T00:00:00');
       if (date_to) where.delivered_at[Op.lte] = new Date(date_to + 'T23:59:59');
@@ -506,65 +546,132 @@ router.get('/deliveries-report', requireAdmin, async (req, res) => {
       where[Op.or] = [
         { customer_name: { [Op.iLike]: `%${search}%` } },
         { customer_phone: { [Op.iLike]: `%${search}%` } },
-        { validated_address: { [Op.iLike]: `%${search}%` } }
+        { address: { [Op.iLike]: `%${search}%` } }
       ];
     }
 
-    const orders = await ValidatedAddress.findAll({ where, order: [['delivered_at', 'DESC']] });
+    const deliveries = await DeliveryHistory.findAll({ where, order: [['delivered_at', 'DESC']] });
 
-    const driverIds = [...new Set(orders.filter(o => o.assigned_driver_id).map(o => o.assigned_driver_id))];
-    const drivers = driverIds.length > 0 ? await User.findAll({ where: { id: { [Op.in]: driverIds } } }) : [];
-    const driverMap = {};
-    drivers.forEach(d => { driverMap[d.id] = d; });
-
-    const routeIds = [...new Set(orders.filter(o => o.route_id).map(o => o.route_id))];
-    const allStops = routeIds.length > 0
-      ? await Stop.findAll({ where: { route_id: { [Op.in]: routeIds } } })
-      : [];
-    const stopsByRoute = {};
-    allStops.forEach(s => {
-      if (!stopsByRoute[s.route_id]) stopsByRoute[s.route_id] = [];
-      stopsByRoute[s.route_id].push(s);
+    const availableMonths = await DeliveryHistory.findAll({
+      attributes: ['month_year'],
+      group: ['month_year'],
+      order: [['month_year', 'DESC']]
     });
 
-    const deliveries = orders.map(order => {
-      const driver = driverMap[order.assigned_driver_id];
-      const commissionPerStop = driver?.commission_per_stop || 0;
-
-      let collected = order.amount_collected || 0;
-      if (order.route_id && stopsByRoute[order.route_id]) {
-        const stops = stopsByRoute[order.route_id];
-        const matchStop = stops.find(s =>
-          Math.abs(s.lat - order.address_lat) < 0.0001 && Math.abs(s.lng - order.address_lng) < 0.0001
-        ) || stops.find(s => s.address === order.validated_address);
-        if (matchStop?.amount_collected != null) collected = matchStop.amount_collected;
-      }
-
-      return {
-        id: order.id,
-        customer_name: order.customer_name,
-        customer_phone: order.customer_phone,
-        address: order.validated_address,
-        city: order.city,
-        state: order.state,
-        driver_id: order.assigned_driver_id,
-        driver_name: driver?.username || order.driver_name || (order.assigned_driver_id ? `Chofer #${order.assigned_driver_id}` : 'Sin asignar'),
-        commission_per_stop: commissionPerStop,
-        order_cost: order.order_cost || 0,
-        deposit_amount: order.deposit_amount || 0,
-        total_to_collect: order.total_to_collect || 0,
-        amount_collected: collected,
-        payment_method: order.payment_method,
-        payment_status: order.payment_status,
-        delivered_at: order.delivered_at,
-        created_at: order.created_at
-      };
+    res.json({
+      success: true,
+      deliveries: deliveries.map(d => ({
+        id: d.id,
+        original_order_id: d.original_order_id,
+        customer_name: d.customer_name,
+        customer_phone: d.customer_phone,
+        address: d.address,
+        city: d.city,
+        state: d.state,
+        driver_id: d.driver_id,
+        driver_name: d.driver_name,
+        commission_per_stop: d.commission_per_stop || 0,
+        order_cost: d.order_cost || 0,
+        deposit_amount: d.deposit_amount || 0,
+        total_to_collect: d.total_to_collect || 0,
+        amount_collected: d.amount_collected || 0,
+        payment_method: d.payment_method,
+        payment_status: d.payment_status,
+        delivered_at: d.delivered_at,
+        month_year: d.month_year,
+        archived: d.archived
+      })),
+      total: deliveries.length,
+      available_months: availableMonths.map(m => m.month_year)
     });
-
-    res.json({ success: true, deliveries, total: deliveries.length });
   } catch (error) {
     console.error('Error fetching deliveries report:', error);
     res.status(500).json({ error: 'Error al generar reporte de entregas' });
+  }
+});
+
+router.post('/deliveries-report/archive-month', requireAdmin, async (req, res) => {
+  try {
+    const { month_year } = req.body;
+    if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
+      return res.status(400).json({ error: 'Formato de mes inválido. Use YYYY-MM' });
+    }
+
+    const deliveries = await DeliveryHistory.findAll({ where: { month_year, archived: false } });
+    if (deliveries.length === 0) {
+      return res.status(400).json({ error: 'No hay entregas sin archivar en ese mes' });
+    }
+
+    const xlsx = (await import('xlsx')).default;
+
+    const [year, month] = month_year.split('-');
+    const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const monthLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
+
+    const rows = deliveries.map(d => ({
+      'ID': d.original_order_id || d.id,
+      'Cliente': d.customer_name || '',
+      'Teléfono': d.customer_phone || '',
+      'Dirección': d.address || '',
+      'Ciudad': d.city || '',
+      'Estado': d.state || '',
+      'Chofer': d.driver_name || '',
+      'Costo Orden': d.order_cost || 0,
+      'Depósito': d.deposit_amount || 0,
+      'A Cobrar': d.total_to_collect || 0,
+      'Cobrado': d.amount_collected || 0,
+      'Método Pago': d.payment_method || '',
+      'Comisión/Parada': d.commission_per_stop || 0,
+      'Fecha Entrega': d.delivered_at ? new Date(d.delivered_at).toLocaleDateString('es') : ''
+    }));
+
+    const totalsRow = {
+      'ID': 'TOTALES',
+      'Cliente': `${deliveries.length} entregas`,
+      'Teléfono': '',
+      'Dirección': '',
+      'Ciudad': '',
+      'Estado': '',
+      'Chofer': '',
+      'Costo Orden': deliveries.reduce((s, d) => s + (d.order_cost || 0), 0),
+      'Depósito': deliveries.reduce((s, d) => s + (d.deposit_amount || 0), 0),
+      'A Cobrar': deliveries.reduce((s, d) => s + (d.total_to_collect || 0), 0),
+      'Cobrado': deliveries.reduce((s, d) => s + (d.amount_collected || 0), 0),
+      'Método Pago': '',
+      'Comisión/Parada': deliveries.reduce((s, d) => s + (d.commission_per_stop || 0), 0),
+      'Fecha Entrega': ''
+    };
+
+    rows.push(totalsRow);
+
+    const wb = xlsx.utils.book_new();
+    const ws = xlsx.utils.json_to_sheet(rows);
+
+    const colWidths = [
+      { wch: 8 }, { wch: 22 }, { wch: 14 }, { wch: 35 }, { wch: 14 }, { wch: 10 },
+      { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 16 }
+    ];
+    ws['!cols'] = colWidths;
+
+    xlsx.utils.book_append_sheet(wb, ws, monthLabel);
+
+    const { default: fs } = await import('fs');
+    const { default: pathMod } = await import('path');
+    const archiveDir = pathMod.join(process.cwd(), 'uploads', 'monthly_reports');
+    if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+
+    const filename = `reporte_${month_year}.xlsx`;
+    const filepath = pathMod.join(archiveDir, filename);
+    xlsx.writeFile(wb, filepath);
+
+    await DeliveryHistory.update({ archived: true }, { where: { month_year, archived: false } });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    fs.createReadStream(filepath).pipe(res);
+  } catch (error) {
+    console.error('Error archiving month:', error);
+    res.status(500).json({ error: 'Error al archivar mes' });
   }
 });
 
@@ -1011,6 +1118,8 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
       order.delivered_at = new Date();
       await order.save();
 
+      saveToDeliveryHistory(order);
+
       if (order.respond_contact_id) {
         try {
           const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
@@ -1095,6 +1204,8 @@ router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
     order.order_status = 'delivered';
     order.delivered_at = new Date();
     await order.save();
+
+    saveToDeliveryHistory(order);
 
     res.json({ success: true, order: order.toDict() });
   } catch (error) {
