@@ -797,9 +797,13 @@ router.get('/respond-users', requireAdmin, async (req, res) => {
 
 router.post('/sync-drivers', requireAdmin, async (req, res) => {
   try {
-    const { users } = req.body;
+    const { users, password } = req.body;
     if (!users?.length) {
       return res.status(400).json({ error: 'Selecciona al menos un miembro' });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
     }
 
     const created = [];
@@ -818,8 +822,7 @@ router.post('/sync-drivers', requireAdmin, async (req, res) => {
         continue;
       }
 
-      const tempPassword = `driver_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const passwordHash = await bcrypt.hash(tempPassword, 10);
+      const passwordHash = await bcrypt.hash(password, 10);
 
       await User.create({
         username: userData.name || email.split('@')[0],

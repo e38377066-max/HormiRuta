@@ -53,6 +53,8 @@ export default function DispatchMap() {
   const [selectedRespondUsers, setSelectedRespondUsers] = useState([])
   const [loadingRespondUsers, setLoadingRespondUsers] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
+  const [importPassword, setImportPassword] = useState('')
+  const [showImportPassword, setShowImportPassword] = useState(false)
   const [allUsers, setAllUsers] = useState([])
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [routeInfo, setRouteInfo] = useState(null)
@@ -588,13 +590,19 @@ export default function DispatchMap() {
 
   const handleSyncDrivers = async () => {
     if (!selectedRespondUsers.length) return
+    if (!importPassword || importPassword.length < 6) {
+      alert('La contraseña debe tener al menos 6 caracteres')
+      return
+    }
     try {
       const usersToSync = respondUsers
         .filter(u => selectedRespondUsers.includes(u.email))
         .map(u => ({ name: u.name, email: u.email }))
-      const res = await api.post('/api/dispatch/sync-drivers', { users: usersToSync })
+      const res = await api.post('/api/dispatch/sync-drivers', { users: usersToSync, password: importPassword })
       setSyncResult(res.data)
       setSelectedRespondUsers([])
+      setImportPassword('')
+      setShowImportPassword(false)
       fetchData()
       const updatedUsers = await api.get('/api/dispatch/respond-users')
       setRespondUsers(updatedUsers.data.users || [])
@@ -1285,6 +1293,25 @@ export default function DispatchMap() {
                     </div>
                     {selectedRespondUsers.length > 0 && (
                       <div className="sync-actions">
+                        <div className="import-password-field">
+                          <label>Contraseña para los choferes importados</label>
+                          <div className="password-input-wrapper">
+                            <input
+                              type={showImportPassword ? 'text' : 'password'}
+                              placeholder="Mínimo 6 caracteres"
+                              value={importPassword}
+                              onChange={e => setImportPassword(e.target.value)}
+                              className="import-password-input"
+                            />
+                            <button
+                              type="button"
+                              className="toggle-pw-btn"
+                              onClick={() => setShowImportPassword(v => !v)}
+                            >
+                              <span className="material-icons">{showImportPassword ? 'visibility_off' : 'visibility'}</span>
+                            </button>
+                          </div>
+                        </div>
                         <button className="dbtn purple full" onClick={handleSyncDrivers}>
                           <span className="material-icons">person_add</span>
                           Importar {selectedRespondUsers.length} chofer{selectedRespondUsers.length > 1 ? 'es' : ''}

@@ -1412,6 +1412,59 @@
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.import-password-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.import-password-field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.password-input-wrapper {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #ccc;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.password-input-wrapper:focus-within {
+  border-color: #7c4dff;
+}
+
+.import-password-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  background: transparent;
+  color: #333;
+}
+
+.toggle-pw-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 10px;
+  color: #888;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-pw-btn:hover {
+  color: #7c4dff;
 }
 
 .sync-result {
