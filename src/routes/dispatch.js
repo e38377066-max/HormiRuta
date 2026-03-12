@@ -491,6 +491,83 @@ router.get('/accounting', requireAdmin, async (req, res) => {
   }
 });
 
+router.get('/deliveries-report', requireAdmin, async (req, res) => {
+  try {
+    const { driver_id, date_from, date_to, search } = req.query;
+
+    const where = { order_status: 'delivered' };
+    if (driver_id) where.assigned_driver_id = parseInt(driver_id);
+    if (date_from || date_to) {
+      where.delivered_at = {};
+      if (date_from) where.delivered_at[Op.gte] = new Date(date_from + 'T00:00:00');
+      if (date_to) where.delivered_at[Op.lte] = new Date(date_to + 'T23:59:59');
+    }
+    if (search) {
+      where[Op.or] = [
+        { customer_name: { [Op.iLike]: `%${search}%` } },
+        { customer_phone: { [Op.iLike]: `%${search}%` } },
+        { validated_address: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    const orders = await ValidatedAddress.findAll({ where, order: [['delivered_at', 'DESC']] });
+
+    const driverIds = [...new Set(orders.filter(o => o.assigned_driver_id).map(o => o.assigned_driver_id))];
+    const drivers = driverIds.length > 0 ? await User.findAll({ where: { id: { [Op.in]: driverIds } } }) : [];
+    const driverMap = {};
+    drivers.forEach(d => { driverMap[d.id] = d; });
+
+    const routeIds = [...new Set(orders.filter(o => o.route_id).map(o => o.route_id))];
+    const allStops = routeIds.length > 0
+      ? await Stop.findAll({ where: { route_id: { [Op.in]: routeIds } } })
+      : [];
+    const stopsByRoute = {};
+    allStops.forEach(s => {
+      if (!stopsByRoute[s.route_id]) stopsByRoute[s.route_id] = [];
+      stopsByRoute[s.route_id].push(s);
+    });
+
+    const deliveries = orders.map(order => {
+      const driver = driverMap[order.assigned_driver_id];
+      const commissionPerStop = driver?.commission_per_stop || 0;
+
+      let collected = order.amount_collected || 0;
+      if (order.route_id && stopsByRoute[order.route_id]) {
+        const stops = stopsByRoute[order.route_id];
+        const matchStop = stops.find(s =>
+          Math.abs(s.lat - order.address_lat) < 0.0001 && Math.abs(s.lng - order.address_lng) < 0.0001
+        ) || stops.find(s => s.address === order.validated_address);
+        if (matchStop?.amount_collected != null) collected = matchStop.amount_collected;
+      }
+
+      return {
+        id: order.id,
+        customer_name: order.customer_name,
+        customer_phone: order.customer_phone,
+        address: order.validated_address,
+        city: order.city,
+        state: order.state,
+        driver_id: order.assigned_driver_id,
+        driver_name: driver?.username || order.driver_name || (order.assigned_driver_id ? `Chofer #${order.assigned_driver_id}` : 'Sin asignar'),
+        commission_per_stop: commissionPerStop,
+        order_cost: order.order_cost || 0,
+        deposit_amount: order.deposit_amount || 0,
+        total_to_collect: order.total_to_collect || 0,
+        amount_collected: collected,
+        payment_method: order.payment_method,
+        payment_status: order.payment_status,
+        delivered_at: order.delivered_at,
+        created_at: order.created_at
+      };
+    });
+
+    res.json({ success: true, deliveries, total: deliveries.length });
+  } catch (error) {
+    console.error('Error fetching deliveries report:', error);
+    res.status(500).json({ error: 'Error al generar reporte de entregas' });
+  }
+});
+
 router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
   try {
     const { order_ids, order_status } = req.body;
