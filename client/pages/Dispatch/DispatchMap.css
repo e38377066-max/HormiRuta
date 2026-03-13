@@ -52,6 +52,7 @@
   display: block;
   font-size: 1.3rem;
   font-weight: 700;
+  color: #1a1a1a;
 }
 
 .dstat-label {
@@ -444,6 +445,7 @@
   transition: all 0.2s;
   border: 2px solid transparent;
   background: #fafafa;
+  color: #1a1a1a;
 }
 
 .dispatch-order:hover {
@@ -927,6 +929,7 @@
   padding: 12px;
   margin: 6px 0;
   border-left: 4px solid #999;
+  color: #1a1a1a;
 }
 
 .dr-color-dot {

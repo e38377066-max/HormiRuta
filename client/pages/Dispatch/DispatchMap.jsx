@@ -1112,15 +1112,13 @@ export default function DispatchMap() {
                       <div className="do-top">
                         <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          {isAdmin && (
-                            <button
-                              onClick={e => { e.stopPropagation(); if (!isOrderFavorited(order)) addOrderToFavorites(order) }}
-                              title={isOrderFavorited(order) ? 'Ya en favoritos' : 'Agregar a favoritos'}
-                              style={{ background: 'none', border: 'none', cursor: isOrderFavorited(order) ? 'default' : 'pointer', padding: '2px', display: 'flex', color: isOrderFavorited(order) ? '#FFD600' : '#ccc' }}
-                            >
-                              <span className="material-icons" style={{ fontSize: '18px' }}>{isOrderFavorited(order) ? 'star' : 'star_border'}</span>
-                            </button>
-                          )}
+                          <button
+                            onClick={e => { e.stopPropagation(); if (!isOrderFavorited(order)) addOrderToFavorites(order) }}
+                            title={isOrderFavorited(order) ? 'Ya en favoritos' : 'Agregar a favoritos'}
+                            style={{ background: 'none', border: 'none', cursor: isOrderFavorited(order) ? 'default' : 'pointer', padding: '2px', display: 'flex', color: isOrderFavorited(order) ? '#FFD600' : '#888' }}
+                          >
+                            <span className="material-icons" style={{ fontSize: '18px' }}>{isOrderFavorited(order) ? 'star' : 'star_border'}</span>
+                          </button>
                           <span className="do-id">#{order.id}</span>
                         </div>
                       </div>
