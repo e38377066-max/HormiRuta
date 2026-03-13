@@ -886,7 +886,8 @@ export default function TripPlannerPage() {
           }
         }
         
-        const startLoc = userLocation || (stops[0] ? { lat: stops[0].latitude, lng: stops[0].longitude } : null)
+        const gpsLoc = useCurrentLocation && userLocation ? userLocation : null
+        const startLoc = gpsLoc || (stops[0] ? { lat: stops[0].latitude, lng: stops[0].longitude } : null)
         
         const optimized = await api.post(`/api/routes/${routeId}/optimize`, {
           start_lat: startLoc?.lat,

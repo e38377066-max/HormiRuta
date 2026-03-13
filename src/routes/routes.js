@@ -195,13 +195,13 @@ router.post('/:id/optimize', requireAuth, async (req, res) => {
     const { start_lat, start_lng, start_address, return_to_start, start_time, mode } = req.body;
     
     let startLocation = null;
-    if (route.start_lat && route.start_lng) {
-      startLocation = { lat: route.start_lat, lng: route.start_lng };
-    } else if (start_lat && start_lng) {
-      startLocation = { lat: start_lat, lng: start_lng };
-      route.start_lat = start_lat;
-      route.start_lng = start_lng;
+    if (start_lat && start_lng) {
+      startLocation = { lat: parseFloat(start_lat), lng: parseFloat(start_lng) };
+      route.start_lat = parseFloat(start_lat);
+      route.start_lng = parseFloat(start_lng);
       route.start_address = start_address || '';
+    } else if (route.start_lat && route.start_lng) {
+      startLocation = { lat: route.start_lat, lng: route.start_lng };
     }
     
     if (return_to_start !== undefined) {
