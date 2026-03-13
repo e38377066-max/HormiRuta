@@ -1098,6 +1098,43 @@ router.post('/stops/:id/evidence', requireAuth, upload.single('photo'), async (r
   }
 });
 
+router.put('/stops/:id/skip', requireAuth, async (req, res) => {
+  try {
+    const stop = await Stop.findByPk(req.params.id);
+    if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+
+    const route = await Route.findByPk(stop.route_id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    if (route.assigned_driver_id !== req.userId) {
+      const user = await User.findByPk(req.userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: 'No tienes permisos para esta parada' });
+      }
+    }
+
+    stop.status = 'skipped';
+    stop.completed_at = new Date();
+    await stop.save();
+
+    const routeOrders = await ValidatedAddress.findAll({ where: { route_id: stop.route_id } });
+    const orderMatch = routeOrders.find(o =>
+      (Math.abs(o.address_lat - stop.lat) < 0.0001 && Math.abs(o.address_lng - stop.lng) < 0.0001)
+    ) || routeOrders.find(o => o.validated_address === stop.address);
+
+    if (orderMatch) {
+      orderMatch.route_id = null;
+      orderMatch.order_status = 'approved';
+      await orderMatch.save();
+    }
+
+    res.json({ success: true, stop: stop.toDict() });
+  } catch (error) {
+    console.error('Error skipping stop:', error);
+    res.status(500).json({ error: 'Error al saltar parada' });
+  }
+});
+
 router.put('/routes/:id/complete', requireAuth, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
@@ -1111,9 +1148,9 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
     }
 
     const allStops = await Stop.findAll({ where: { route_id: route.id } });
-    const allCompleted = allStops.every(s => s.status === 'completed');
-    if (!allCompleted) {
-      return res.status(400).json({ error: 'Todas las paradas deben estar completadas antes de finalizar' });
+    const allDone = allStops.every(s => s.status === 'completed' || s.status === 'skipped');
+    if (!allDone) {
+      return res.status(400).json({ error: 'Todas las paradas deben estar completadas o saltadas antes de finalizar' });
     }
 
     route.status = 'completed';

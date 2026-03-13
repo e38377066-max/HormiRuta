@@ -1099,7 +1099,7 @@ class PollingService {
       await this.cleanupDuplicateAddresses(userId);
       await this.cleanupDeliveredOrders();
 
-      const excludedLifecycles = ['new lead', 'pending', 'impropos'];
+      const excludedLifecycles = ['new lead', 'impropos'];
       const scanContacts = tagFilteredContacts.filter(contact => {
         const lc = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
         if (lc && excludedLifecycles.includes(lc)) {

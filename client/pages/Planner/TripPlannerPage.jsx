@@ -111,6 +111,7 @@ export default function TripPlannerPage() {
         phone: s.phone || '',
         note: s.note || '',
         completed: s.status === 'completed',
+        skipped: s.status === 'skipped',
         photo_url: s.photo_url || null,
         color: '#EA4335',
         order_cost: s.order_cost,
@@ -679,7 +680,7 @@ export default function TripPlannerPage() {
 
   const toggleStopComplete = (index) => {
     const stop = stops[index]
-    if (stop.completed) return
+    if (stop.completed || stop.skipped) return
     setShowEvidenceModal(index)
     setEvidencePreview(null)
     setEvidenceFile(null)
@@ -774,6 +775,29 @@ export default function TripPlannerPage() {
       setShowEvidenceModal(null)
       setEvidencePreview(null)
       setEvidenceFile(null)
+    }
+  }
+
+  const skipStop = async (index) => {
+    const stop = stops[index]
+    const stopDbId = stop.dbId || stop.id
+    try {
+      if (stopDbId && currentRouteId) {
+        await api.put(`/api/dispatch/stops/${stopDbId}/skip`)
+      }
+      const updatedStops = stops.map((s, i) =>
+        i === index ? { ...s, skipped: true, completed: false } : s
+      )
+      setStops(updatedStops)
+      updateMapMarkers(updatedStops)
+      setShowEvidenceModal(null)
+      setEvidencePreview(null)
+      setEvidenceFile(null)
+      setSelectedPaymentMethod('')
+      setAmountCollected('')
+    } catch (err) {
+      console.error('Error skipping stop:', err)
+      alert(err.response?.data?.error || 'Error al saltar parada')
     }
   }
 
@@ -921,13 +945,18 @@ export default function TripPlannerPage() {
       }
 
       const directionsService = new window.google.maps.DirectionsService()
-      
-      const origin = { lat: stops[0].latitude, lng: stops[0].longitude }
-      const destination = roundTrip 
-        ? origin 
+
+      const useGpsOrigin = useCurrentLocation && userLocation
+      const origin = useGpsOrigin
+        ? { lat: userLocation.lat, lng: userLocation.lng }
+        : { lat: stops[0].latitude, lng: stops[0].longitude }
+      const destination = roundTrip
+        ? { lat: stops[0].latitude, lng: stops[0].longitude }
         : { lat: stops[stops.length - 1].latitude, lng: stops[stops.length - 1].longitude }
-      
-      const waypointStops = roundTrip ? stops : stops.slice(1, -1)
+
+      const waypointStops = useGpsOrigin
+        ? (roundTrip ? stops : stops.slice(0, -1))
+        : (roundTrip ? stops : stops.slice(1, -1))
       const waypoints = waypointStops.map(stop => ({
         location: { lat: stop.latitude, lng: stop.longitude },
         stopover: true
@@ -996,12 +1025,12 @@ export default function TripPlannerPage() {
     markersRef.current.forEach(marker => marker.setMap(null))
     markersRef.current = []
 
-    const visibleStops = navigationMode ? stopsList.filter(s => !s.completed) : stopsList
+    const visibleStops = navigationMode ? stopsList.filter(s => !s.completed && !s.skipped) : stopsList
     let pendingIndex = 0
 
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
-        if (navigationMode && stop.completed) return
+        if (navigationMode && (stop.completed || stop.skipped)) return
         pendingIndex++
         const color = '#EA4335'
         
@@ -1062,7 +1091,7 @@ export default function TripPlannerPage() {
   }
 
   const recalculateNavRoute = async (stopsList) => {
-    const pending = stopsList.filter(s => !s.completed && s.latitude && s.longitude)
+    const pending = stopsList.filter(s => !s.completed && !s.skipped && s.latitude && s.longitude)
     if (pending.length < 2) {
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setDirections({ routes: [] })
@@ -1130,7 +1159,7 @@ export default function TripPlannerPage() {
   }
 
   const startRoute = () => {
-    const pendingStops = stops.filter(s => !s.completed)
+    const pendingStops = stops.filter(s => !s.completed && !s.skipped)
     const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
     openNativeNavigation(pendingStops, loc)
 
@@ -1238,8 +1267,8 @@ export default function TripPlannerPage() {
     return new Date(date).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
   }
 
-  const nextPendingStop = stops.find(s => !s.completed)
-  const nextPendingIndex = stops.findIndex(s => !s.completed)
+  const nextPendingStop = stops.find(s => !s.completed && !s.skipped)
+  const nextPendingIndex = stops.findIndex(s => !s.completed && !s.skipped)
 
   return (
     <div className="trip-planner-page">
@@ -1397,17 +1426,17 @@ export default function TripPlannerPage() {
             <>
               <div className="stops-section-header">Parada</div>
               {stops.map((stop, index) => (
-                <div key={stop.id} className={`stop-row ${navigationMode ? 'stop-row-nav' : ''}`} onClick={() => navigationMode && !stop.completed && toggleStopComplete(index)}>
+                <div key={stop.id} className={`stop-row ${navigationMode ? 'stop-row-nav' : ''} ${stop.skipped ? 'stop-row-skipped' : ''}`} onClick={() => navigationMode && !stop.completed && !stop.skipped && toggleStopComplete(index)}>
                   <div className="stop-row-top">
                     {navigationMode ? (
-                      <span className="material-icons stop-checkbox" style={{ color: stop.completed ? '#22c55e' : '#5b8def', fontSize: 22 }}>
-                        {stop.completed ? 'check_circle' : 'radio_button_unchecked'}
+                      <span className="material-icons stop-checkbox" style={{ color: stop.completed ? '#22c55e' : stop.skipped ? '#999' : '#5b8def', fontSize: 22 }}>
+                        {stop.completed ? 'check_circle' : stop.skipped ? 'cancel' : 'radio_button_unchecked'}
                       </span>
                     ) : (
                       <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
                     )}
                     <div className="stop-info-block">
-                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Parada'}</span>
+                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''} ${stop.skipped ? 'stop-skipped-label' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Parada'}{stop.skipped && <span className="badge-saltada">Saltada</span>}</span>
                       <span className="stop-address-detail">{stop.address || ''}{stop.apartment_number && <span style={{ color: '#1976d2', fontWeight: 600 }}> Apt {stop.apartment_number}</span>}</span>
                       {stop.phone && (
                         <div className="stop-contact-row">
@@ -1460,7 +1489,7 @@ export default function TripPlannerPage() {
                       )}
                     </div>
                   </div>
-                  <div className={`stop-indicator ${stop.completed ? 'completed' : ''}`}></div>
+                  <div className={`stop-indicator ${stop.completed ? 'completed' : stop.skipped ? 'skipped' : ''}`}></div>
                 </div>
               ))}
             </>
@@ -1485,7 +1514,7 @@ export default function TripPlannerPage() {
               </div>
             </div>
           ) : navigationMode ? (
-            stops.every(s => s.completed) ? (
+            stops.every(s => s.completed || s.skipped) ? (
               <button className="btn-optimize" onClick={finishRoute}>
                 <span className="material-icons">check_circle</span>
                 Finalizar ruta
@@ -1493,7 +1522,7 @@ export default function TripPlannerPage() {
             ) : (
               <div className="nav-footer-actions">
                 <button className="btn-native-nav" onClick={() => {
-                  const pendingStops = stops.filter(s => !s.completed)
+                  const pendingStops = stops.filter(s => !s.completed && !s.skipped)
                   const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
                   openNativeNavigation(pendingStops, loc)
                 }}>
@@ -1927,6 +1956,14 @@ export default function TripPlannerPage() {
             <div className="evidence-modal-footer">
               <button className="btn-cancel" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); setSelectedPaymentMethod(''); setAmountCollected(''); }}>
                 Cancelar
+              </button>
+              <button
+                className="btn-skip-stop"
+                onClick={() => skipStop(showEvidenceModal)}
+                disabled={uploadingEvidence}
+              >
+                <span className="material-icons">skip_next</span>
+                Saltar
               </button>
               <button 
                 className="btn-optimize" 

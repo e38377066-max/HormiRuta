@@ -135,16 +135,16 @@ export default function RouteHistory() {
 
               <div className="detail-stops-list">
                 {(routeDetail.stops || []).map((stop, i) => (
-                  <div key={stop.id} className={`detail-stop-card ${stop.status === 'completed' ? 'completed' : 'pending'}`}>
+                  <div key={stop.id} className={`detail-stop-card ${stop.status === 'completed' ? 'completed' : stop.status === 'skipped' ? 'skipped' : 'pending'}`}>
                     <div className="detail-stop-header">
                       <span className="detail-stop-number">{i + 1}</span>
                       <div className="detail-stop-info">
                         <div className="detail-stop-name">{stop.customer_name || stop.address?.split(',')[0] || 'Parada'}</div>
                         <div className="detail-stop-address">{stop.address}</div>
-                        {stop.completed_at && <div className="detail-stop-time">Completada: {formatDate(stop.completed_at)}</div>}
+                        {stop.completed_at && <div className="detail-stop-time">{stop.status === 'skipped' ? 'Saltada' : 'Completada'}: {formatDate(stop.completed_at)}</div>}
                       </div>
-                      <span className="material-icons" style={{ color: stop.status === 'completed' ? '#22c55e' : '#f59e0b', fontSize: 24 }}>
-                        {stop.status === 'completed' ? 'check_circle' : 'pending'}
+                      <span className="material-icons" style={{ color: stop.status === 'completed' ? '#22c55e' : stop.status === 'skipped' ? '#ff5050' : '#f59e0b', fontSize: 24 }}>
+                        {stop.status === 'completed' ? 'check_circle' : stop.status === 'skipped' ? 'cancel' : 'pending'}
                       </span>
                     </div>
                     {stop.photo_url ? (

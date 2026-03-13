@@ -853,6 +853,11 @@ button.section-item.danger-item:disabled {
   border-left-color: #ff9800;
 }
 
+.detail-stop-card.skipped {
+  border-left-color: #ff5050;
+  opacity: 0.75;
+}
+
 .detail-stop-header {
   display: flex;
   align-items: flex-start;

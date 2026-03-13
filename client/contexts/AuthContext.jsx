@@ -4,10 +4,8 @@ import api from '../api'
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('user')
-    return saved ? JSON.parse(saved) : null
-  })
+  const [user, setUser] = useState(null)
+  const [initializing, setInitializing] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -75,6 +73,7 @@ export function AuthProvider({ children }) {
   }
 
   const fetchCurrentUser = async () => {
+    setInitializing(true)
     try {
       const token = localStorage.getItem('authToken')
       if (!token) {
@@ -91,6 +90,8 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('user')
       localStorage.removeItem('authToken')
       return null
+    } finally {
+      setInitializing(false)
     }
   }
 
@@ -102,6 +103,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     error,
+    initializing,
     isAuthenticated,
     isAdmin,
     isDriver,
