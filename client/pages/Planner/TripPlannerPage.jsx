@@ -1093,7 +1093,7 @@ export default function TripPlannerPage() {
 
   const recalculateNavRoute = async (stopsList) => {
     const pending = stopsList.filter(s => !s.completed && !s.skipped && s.latitude && s.longitude)
-    if (pending.length < 2) {
+    if (pending.length < 1) {
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setDirections({ routes: [] })
       }
@@ -1101,13 +1101,21 @@ export default function TripPlannerPage() {
     }
     try {
       const directionsService = new window.google.maps.DirectionsService()
-      const waypoints = pending.slice(1, -1).map(stop => ({
+      const gpsOrigin = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
+      const origin = gpsOrigin || { lat: pending[0].latitude, lng: pending[0].longitude }
+      const stopsForRoute = gpsOrigin ? pending : pending.slice(1)
+
+      if (stopsForRoute.length === 0) return
+
+      const destination = { lat: stopsForRoute[stopsForRoute.length - 1].latitude, lng: stopsForRoute[stopsForRoute.length - 1].longitude }
+      const waypoints = stopsForRoute.slice(0, -1).map(stop => ({
         location: { lat: stop.latitude, lng: stop.longitude },
         stopover: true
       }))
+
       const result = await directionsService.route({
-        origin: { lat: pending[0].latitude, lng: pending[0].longitude },
-        destination: { lat: pending[pending.length - 1].latitude, lng: pending[pending.length - 1].longitude },
+        origin,
+        destination,
         waypoints,
         travelMode: window.google.maps.TravelMode.DRIVING,
         drivingOptions: {
