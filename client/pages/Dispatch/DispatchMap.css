@@ -64,11 +64,18 @@
 .dispatch-tabs {
   display: flex;
   border-bottom: 1px solid #e0e0e0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dispatch-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .dtab {
-  flex: 1;
-  padding: 10px;
+  flex: 0 0 auto;
+  padding: 10px 14px;
   border: none;
   background: none;
   cursor: pointer;
@@ -80,6 +87,7 @@
   color: #666;
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .dtab.active {
