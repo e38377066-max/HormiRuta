@@ -11,6 +11,7 @@ import ConversationState from './ConversationState.js';
 import ServiceAgent from './ServiceAgent.js';
 import ValidatedAddress from './ValidatedAddress.js';
 import DeliveryHistory from './DeliveryHistory.js';
+import FavoriteAddress from './FavoriteAddress.js';
 
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
 Route.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -101,5 +102,6 @@ export {
   ConversationState,
   ServiceAgent,
   ValidatedAddress,
-  DeliveryHistory
+  DeliveryHistory,
+  FavoriteAddress
 };

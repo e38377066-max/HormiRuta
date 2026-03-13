@@ -5,9 +5,10 @@ import api from '../../api'
 import './DispatchMap.css'
 
 const STATUS_CONFIG = {
-  approved: { label: 'Aprobada', color: '#4caf50', icon: 'check_circle' },
+  pending: { label: 'Pendiente', color: '#9e9e9e', icon: 'hourglass_empty' },
+  approved: { label: 'Aprobada', color: '#ffc107', icon: 'check_circle' },
   ordered: { label: 'Ordenada', color: '#2196f3', icon: 'shopping_cart' },
-  on_delivery: { label: 'En Entrega', color: '#ff9800', icon: 'delivery_dining' },
+  on_delivery: { label: 'En Entrega', color: '#ffffff', icon: 'delivery_dining' },
   ups_shipped: { label: 'UPS Shipped', color: '#9c27b0', icon: 'local_shipping' },
   delivered: { label: 'Entregada', color: '#ff6d00', icon: 'done_all' }
 }
@@ -22,6 +23,20 @@ function createNumberedIcon(number, color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44">
     <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26s18-12.5 18-26C36 8.06 27.94 0 18 0z" fill="${color}" stroke="#fff" stroke-width="2"/>
     <text x="18" y="22" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="Arial">${number}</text>
+  </svg>`
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
+}
+
+function createTriangleIcon(color) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34">
+    <polygon points="17,2 32,32 2,32" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+  </svg>`
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
+}
+
+function createStarIcon() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="38">
+    <polygon points="19,2 23,14 36,14 26,22 30,34 19,27 8,34 12,22 2,14 15,14" fill="#FFD600" stroke="#fff" stroke-width="2"/>
   </svg>`
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
@@ -83,6 +98,15 @@ export default function DispatchMap() {
   const [editOrderError, setEditOrderError] = useState('')
   const [driverCommissions, setDriverCommissions] = useState({})
   const [savingDriverCommission, setSavingDriverCommission] = useState(null)
+  const [favorites, setFavorites] = useState([])
+  const [loadingFavorites, setLoadingFavorites] = useState(false)
+  const [showAddFav, setShowAddFav] = useState(false)
+  const [favForm, setFavForm] = useState({ name: '', address: '', customer_phone: '', notes: '' })
+  const [favGeo, setFavGeo] = useState(null)
+  const [favGeoLoading, setFavGeoLoading] = useState(false)
+  const [savingFav, setSavingFav] = useState(false)
+  const [favError, setFavError] = useState('')
+  const favGeoTimerRef = useRef(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -123,11 +147,24 @@ export default function DispatchMap() {
     }
   }, [])
 
+  const fetchFavorites = useCallback(async () => {
+    try {
+      setLoadingFavorites(true)
+      const res = await api.get('/api/dispatch/favorites')
+      setFavorites(res.data.favorites || [])
+    } catch (error) {
+      console.error('Error fetching favorites:', error)
+    } finally {
+      setLoadingFavorites(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchData()
+    fetchFavorites()
     const interval = setInterval(fetchData, 180000)
     return () => clearInterval(interval)
-  }, [fetchData])
+  }, [fetchData, fetchFavorites])
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
@@ -168,6 +205,8 @@ export default function DispatchMap() {
       const config = STATUS_CONFIG[order.order_status] || STATUS_CONFIG.approved
       const selIndex = selectedOrders.indexOf(order.id)
       const isSelected = selIndex !== -1
+      const isPending = order.order_status === 'pending'
+      const isWhite = config.color === '#ffffff'
 
       let icon
       if (isSelected) {
@@ -176,13 +215,19 @@ export default function DispatchMap() {
           scaledSize: new window.google.maps.Size(36, 44),
           anchor: new window.google.maps.Point(18, 44)
         }
+      } else if (isPending) {
+        icon = {
+          url: createTriangleIcon(config.color),
+          scaledSize: new window.google.maps.Size(34, 34),
+          anchor: new window.google.maps.Point(17, 34)
+        }
       } else {
         icon = {
           path: window.google.maps.SymbolPath.CIRCLE,
           fillColor: config.color,
           fillOpacity: 1,
-          strokeColor: '#fff',
-          strokeWeight: 2,
+          strokeColor: isWhite ? '#555' : '#fff',
+          strokeWeight: isWhite ? 2.5 : 2,
           scale: 10
         }
       }
@@ -251,7 +296,34 @@ export default function DispatchMap() {
         markersRef.current.push(marker)
       })
     })
-  }, [orders, selectedOrders, routes])
+
+    favorites.filter(f => f.lat && f.lng).forEach(fav => {
+      const marker = new window.google.maps.Marker({
+        position: { lat: fav.lat, lng: fav.lng },
+        map: mapInstance.current,
+        icon: {
+          url: createStarIcon(),
+          scaledSize: new window.google.maps.Size(38, 38),
+          anchor: new window.google.maps.Point(19, 19)
+        },
+        title: fav.name,
+        zIndex: 200
+      })
+
+      const infoContent = `
+        <div style="font-family:sans-serif;min-width:180px">
+          <strong style="color:#FFD600">★ ${fav.name}</strong><br/>
+          <span style="color:#666">${fav.address || ''}</span>
+          ${fav.customer_phone ? `<br/><span style="color:#888">${fav.customer_phone}</span>` : ''}
+          ${fav.notes ? `<br/><em style="color:#aaa;font-size:12px">${fav.notes}</em>` : ''}
+        </div>
+      `
+      const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
+      marker.addListener('click', () => infoWindow.open(mapInstance.current, marker))
+
+      markersRef.current.push(marker)
+    })
+  }, [orders, selectedOrders, routes, favorites])
 
   useEffect(() => {
     if (directionsRendererRef.current) {
@@ -626,6 +698,77 @@ export default function DispatchMap() {
     }
   }
 
+  const addOrderToFavorites = async (order) => {
+    try {
+      const res = await api.post('/api/dispatch/favorites', {
+        name: order.customer_name || 'Sin nombre',
+        address: order.address || order.validated_address,
+        lat: order.address_lat,
+        lng: order.address_lng,
+        customer_phone: order.customer_phone || '',
+        notes: order.notes || ''
+      })
+      setFavorites(prev => [res.data.favorite, ...prev])
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al agregar a favoritos')
+    }
+  }
+
+  const handleRemoveFavorite = async (favId) => {
+    try {
+      await api.delete(`/api/dispatch/favorites/${favId}`)
+      setFavorites(prev => prev.filter(f => f.id !== favId))
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar favorito')
+    }
+  }
+
+  const isOrderFavorited = (order) => favorites.some(
+    f => f.address === (order.address || order.validated_address) && f.name === (order.customer_name || 'Sin nombre')
+  )
+
+  const autoGeocodeFav = (address) => {
+    if (favGeoTimerRef.current) clearTimeout(favGeoTimerRef.current)
+    setFavGeo(null)
+    if (!address || address.trim().length < 8) return
+    setFavGeoLoading(true)
+    favGeoTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/dispatch/geocode-address', { params: { address } })
+        if (res?.data?.formatted_address) {
+          setFavGeo(res.data)
+          setFavForm(prev => ({ ...prev, address: res.data.formatted_address }))
+          setFavError('')
+        } else {
+          setFavGeo(null)
+        }
+      } catch (e) {
+        setFavError(e?.response?.data?.error || 'No se pudo geocodificar')
+      } finally {
+        setFavGeoLoading(false)
+      }
+    }, 1200)
+  }
+
+  const handleSaveFavorite = async () => {
+    if (!favForm.name.trim()) { setFavError('Nombre requerido'); return }
+    setSavingFav(true)
+    setFavError('')
+    try {
+      const payload = { ...favForm }
+      if (favGeo) { payload.lat = favGeo.lat; payload.lng = favGeo.lng }
+      const res = await api.post('/api/dispatch/favorites', payload)
+      setFavorites(prev => [res.data.favorite, ...prev])
+      setShowAddFav(false)
+      setFavForm({ name: '', address: '', customer_phone: '', notes: '' })
+      setFavGeo(null)
+    } catch (e) {
+      setFavError(e.response?.data?.error || 'Error al guardar')
+    } finally {
+      setSavingFav(false)
+    }
+  }
+
   const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.approved
 
   const openManualOrderModal = () => {
@@ -797,6 +940,9 @@ export default function DispatchMap() {
             <button className={`dtab ${activeTab === 'routes' ? 'active' : ''}`} onClick={() => setActiveTab('routes')}>
               <span className="material-icons">route</span> Rutas
             </button>
+            <button className={`dtab ${activeTab === 'favorites' ? 'active' : ''}`} style={activeTab === 'favorites' ? { color: '#FFD600', borderBottomColor: '#FFD600' } : {}} onClick={() => { setActiveTab('favorites'); if (favorites.length === 0) fetchFavorites() }}>
+              <span className="material-icons">star</span> Favoritas
+            </button>
             <button className={`dtab ${activeTab === 'drivers' ? 'active' : ''}`} onClick={() => { setActiveTab('drivers'); if (allUsers.length === 0) fetchAllUsers() }}>
               <span className="material-icons">people</span> Choferes
             </button>
@@ -825,6 +971,7 @@ export default function DispatchMap() {
             <div className="dispatch-filter-row">
               <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
                 <option value="">Todos los estados</option>
+                <option value="pending">Pendientes</option>
                 <option value="approved">Aprobadas</option>
                 <option value="ordered">Ordenadas</option>
                 <option value="on_delivery">En Entrega</option>
@@ -960,11 +1107,22 @@ export default function DispatchMap() {
                       }
                     }}
                   >
-                    <div className="do-status-dot" style={{ backgroundColor: cfg.color }}></div>
+                    <div className="do-status-dot" style={{ backgroundColor: cfg.color, border: cfg.color === '#ffffff' ? '2px solid #555' : 'none' }}></div>
                     <div className="do-content">
                       <div className="do-top">
                         <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
-                        <span className="do-id">#{order.id}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {isAdmin && (
+                            <button
+                              onClick={e => { e.stopPropagation(); if (!isOrderFavorited(order)) addOrderToFavorites(order) }}
+                              title={isOrderFavorited(order) ? 'Ya en favoritos' : 'Agregar a favoritos'}
+                              style={{ background: 'none', border: 'none', cursor: isOrderFavorited(order) ? 'default' : 'pointer', padding: '2px', display: 'flex', color: isOrderFavorited(order) ? '#FFD600' : '#ccc' }}
+                            >
+                              <span className="material-icons" style={{ fontSize: '18px' }}>{isOrderFavorited(order) ? 'star' : 'star_border'}</span>
+                            </button>
+                          )}
+                          <span className="do-id">#{order.id}</span>
+                        </div>
                       </div>
                       <div className="do-address">{order.address || 'Sin direccion'}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
                       {order.customer_phone && (
@@ -983,7 +1141,7 @@ export default function DispatchMap() {
                         </div>
                       )}
                       <div className="do-bottom">
-                        <span className="do-tag" style={{ backgroundColor: `${cfg.color}20`, color: cfg.color, borderColor: cfg.color }}>
+                        <span className="do-tag" style={{ backgroundColor: cfg.color === '#ffffff' ? '#f5f5f5' : `${cfg.color}20`, color: cfg.color === '#ffffff' ? '#555' : cfg.color, borderColor: cfg.color === '#ffffff' ? '#999' : cfg.color }}>
                           <span className="material-icons" style={{ fontSize: '14px' }}>{cfg.icon}</span>
                           {cfg.label}
                         </span>
@@ -1209,6 +1367,90 @@ export default function DispatchMap() {
                 </div>
               )})
             )
+          ) : activeTab === 'favorites' ? (
+            <div className="favorites-tab">
+              <div className="fav-tab-header">
+                <h3><span className="material-icons" style={{ color: '#FFD600' }}>star</span> Direcciones Favoritas</h3>
+                <button className="dbtn purple small" onClick={() => { setShowAddFav(v => !v); setFavForm({ name: '', address: '', customer_phone: '', notes: '' }); setFavGeo(null); setFavError('') }}>
+                  <span className="material-icons">add</span> Agregar
+                </button>
+              </div>
+
+              {showAddFav && (
+                <div className="fav-add-form">
+                  <input
+                    type="text"
+                    placeholder="Nombre *"
+                    value={favForm.name}
+                    onChange={e => setFavForm(p => ({ ...p, name: e.target.value }))}
+                    className="fav-input"
+                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      placeholder="Dirección"
+                      value={favForm.address}
+                      onChange={e => { setFavForm(p => ({ ...p, address: e.target.value })); autoGeocodeFav(e.target.value) }}
+                      className="fav-input"
+                    />
+                    {favGeoLoading && <span className="fav-geo-spin material-icons rotating">sync</span>}
+                    {favGeo && !favGeoLoading && <span className="fav-geo-ok material-icons">check_circle</span>}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Teléfono (opcional)"
+                    value={favForm.customer_phone}
+                    onChange={e => setFavForm(p => ({ ...p, customer_phone: e.target.value }))}
+                    className="fav-input"
+                  />
+                  <textarea
+                    placeholder="Notas (opcional)"
+                    value={favForm.notes}
+                    onChange={e => setFavForm(p => ({ ...p, notes: e.target.value }))}
+                    className="fav-input fav-textarea"
+                    rows={2}
+                  />
+                  {favError && <div className="fav-error">{favError}</div>}
+                  <div className="fav-form-btns">
+                    <button className="dbtn outline" onClick={() => setShowAddFav(false)}>Cancelar</button>
+                    <button className="dbtn purple" onClick={handleSaveFavorite} disabled={savingFav}>
+                      <span className="material-icons">{savingFav ? 'hourglass_empty' : 'star'}</span>
+                      Guardar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {loadingFavorites ? (
+                <div className="loading-center"><div className="spinner"></div></div>
+              ) : favorites.length === 0 ? (
+                <div className="empty-dispatch">
+                  <span className="material-icons" style={{ color: '#FFD600' }}>star_border</span>
+                  <p>No hay favoritas aún.<br/>Agrega direcciones o usa la ★ en las órdenes.</p>
+                </div>
+              ) : (
+                <div className="fav-list">
+                  {favorites.map(fav => (
+                    <div key={fav.id} className="fav-card" onClick={() => { if (mapInstance.current && fav.lat && fav.lng) { mapInstance.current.panTo({ lat: fav.lat, lng: fav.lng }); mapInstance.current.setZoom(15) } }}>
+                      <span className="material-icons fav-star-icon">star</span>
+                      <div className="fav-info">
+                        <strong>{fav.name}</strong>
+                        {fav.address && <span className="fav-addr">{fav.address}</span>}
+                        {fav.customer_phone && <span className="fav-phone">{fav.customer_phone}</span>}
+                        {fav.notes && <span className="fav-notes">{fav.notes}</span>}
+                      </div>
+                      <button
+                        className="fav-delete-btn"
+                        title="Eliminar favorito"
+                        onClick={e => { e.stopPropagation(); handleRemoveFavorite(fav.id) }}
+                      >
+                        <span className="material-icons">delete_outline</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : activeTab === 'drivers' ? (
             <div className="drivers-tab">
               <div className="drivers-section">

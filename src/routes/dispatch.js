@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory } from '../models/index.js';
+import { ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress } from '../models/index.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op } from 'sequelize';
 import bcrypt from 'bcryptjs';
@@ -106,10 +106,18 @@ router.get('/orders', requireAuth, async (req, res) => {
       if (req.query.status) {
         where.order_status = req.query.status;
       } else {
-        where.order_status = { [Op.ne]: 'delivered' };
+        where.order_status = { [Op.notIn]: ['delivered'] };
       }
       if (req.query.available === 'true') {
         where.route_id = { [Op.is]: null };
+        where[Op.or] = [
+          { order_status: { [Op.notIn]: ['delivered', 'pending'] } },
+          {
+            order_status: 'pending',
+            address_lat: { [Op.ne]: null },
+            address_lng: { [Op.ne]: null }
+          }
+        ];
       }
     } else {
       return res.status(403).json({ error: 'No tienes permisos' });
@@ -1389,6 +1397,62 @@ router.post('/stops/:id/send-message', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error sending message via stop:', error.message);
     res.status(500).json({ error: error.message || 'Error al enviar mensaje' });
+  }
+});
+
+router.get('/favorites', requireAdmin, async (req, res) => {
+  try {
+    const favorites = await FavoriteAddress.findAll({ order: [['created_at', 'DESC']] });
+    res.json({ favorites: favorites.map(f => f.toDict()) });
+  } catch (error) {
+    console.error('Error fetching favorites:', error);
+    res.status(500).json({ error: 'Error al cargar favoritos' });
+  }
+});
+
+router.post('/favorites', requireAdmin, async (req, res) => {
+  try {
+    const { name, address, lat, lng, notes, customer_phone } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+
+    let resolvedLat = lat;
+    let resolvedLng = lng;
+    let resolvedAddress = address;
+
+    if (address && (!lat || !lng)) {
+      const geo = await geocodingService.geocodeAddress(address);
+      if (geo.success) {
+        resolvedLat = geo.latitude;
+        resolvedLng = geo.longitude;
+        resolvedAddress = geo.fullAddress || address;
+      }
+    }
+
+    const fav = await FavoriteAddress.create({
+      name: name.trim(),
+      address: resolvedAddress || null,
+      lat: resolvedLat || null,
+      lng: resolvedLng || null,
+      notes: notes?.trim() || null,
+      customer_phone: customer_phone?.trim() || null,
+    });
+
+    res.status(201).json({ success: true, favorite: fav.toDict() });
+  } catch (error) {
+    console.error('Error creating favorite:', error);
+    res.status(500).json({ error: 'Error al guardar favorito' });
+  }
+});
+
+router.delete('/favorites/:id', requireAdmin, async (req, res) => {
+  try {
+    const fav = await FavoriteAddress.findByPk(req.params.id);
+    if (!fav) return res.status(404).json({ error: 'Favorito no encontrado' });
+    await fav.destroy();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting favorite:', error);
+    res.status(500).json({ error: 'Error al eliminar favorito' });
   }
 });
 
