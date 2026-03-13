@@ -482,6 +482,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #000000;
 }
 
 .do-id {
@@ -491,7 +492,7 @@
 
 .do-address {
   font-size: 0.8rem;
-  color: #555;
+  color: #222222;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -500,7 +501,7 @@
 
 .do-phone {
   font-size: 0.75rem;
-  color: #888;
+  color: #333333;
 }
 
 .do-bottom {

@@ -8,7 +8,7 @@ const STATUS_CONFIG = {
   pending: { label: 'Pendiente', color: '#9e9e9e', icon: 'hourglass_empty' },
   approved: { label: 'Aprobada', color: '#ffc107', icon: 'check_circle' },
   ordered: { label: 'Ordenada', color: '#2196f3', icon: 'shopping_cart' },
-  on_delivery: { label: 'En Entrega', color: '#ffffff', icon: 'delivery_dining' },
+  on_delivery: { label: 'En Entrega', color: '#00897b', icon: 'delivery_dining' },
   ups_shipped: { label: 'UPS Shipped', color: '#9c27b0', icon: 'local_shipping' },
   delivered: { label: 'Entregada', color: '#ff6d00', icon: 'done_all' }
 }
@@ -1115,9 +1115,9 @@ export default function DispatchMap() {
                           <button
                             onClick={e => { e.stopPropagation(); if (!isOrderFavorited(order)) addOrderToFavorites(order) }}
                             title={isOrderFavorited(order) ? 'Ya en favoritos' : 'Agregar a favoritos'}
-                            style={{ background: 'none', border: 'none', cursor: isOrderFavorited(order) ? 'default' : 'pointer', padding: '2px', display: 'flex', color: isOrderFavorited(order) ? '#FFD600' : '#888' }}
+                            style={{ background: 'none', border: 'none', cursor: isOrderFavorited(order) ? 'default' : 'pointer', padding: '2px', display: 'flex', color: isOrderFavorited(order) ? '#FFD600' : '#555555' }}
                           >
-                            <span className="material-icons" style={{ fontSize: '18px' }}>{isOrderFavorited(order) ? 'star' : 'star_border'}</span>
+                            <span className="material-icons" style={{ fontSize: '22px' }}>{isOrderFavorited(order) ? 'star' : 'star_border'}</span>
                           </button>
                           <span className="do-id">#{order.id}</span>
                         </div>
