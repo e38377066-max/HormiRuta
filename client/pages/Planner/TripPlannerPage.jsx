@@ -1168,10 +1168,6 @@ export default function TripPlannerPage() {
   }
 
   const startRoute = () => {
-    const pendingStops = stops.filter(s => !s.completed && !s.skipped)
-    const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
-    openNativeNavigation(pendingStops, loc)
-
     setNavigationMode(true)
     setAutoFollow(true)
     keepScreenAwake()
@@ -1498,6 +1494,27 @@ export default function TripPlannerPage() {
                       )}
                     </div>
                   </div>
+                  {navigationMode && !stop.completed && !stop.skipped && (
+                    <div className="stop-nav-actions" onClick={e => e.stopPropagation()}>
+                      <button
+                        className="stop-nav-btn"
+                        onClick={() => {
+                          const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
+                          openNativeNavigation([stop], loc)
+                        }}
+                      >
+                        <span className="material-icons" style={{ fontSize: 16 }}>near_me</span>
+                        Navegar
+                      </button>
+                      <button
+                        className="stop-skip-btn"
+                        onClick={() => skipStop(index)}
+                      >
+                        <span className="material-icons" style={{ fontSize: 16 }}>skip_next</span>
+                        Saltar
+                      </button>
+                    </div>
+                  )}
                   <div className={`stop-indicator ${stop.completed ? 'completed' : stop.skipped ? 'skipped' : ''}`}></div>
                 </div>
               ))}
@@ -1911,25 +1928,23 @@ export default function TripPlannerPage() {
                   </button>
                 ))}
               </div>
-              {selectedPaymentMethod && (
-                <div className="payment-amount-row">
-                  <label>Monto cobrado $</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    pattern="[0-9]*\.?[0-9]*"
-                    value={amountCollected}
-                    onChange={e => {
-                      const val = e.target.value
-                      if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                        setAmountCollected(val)
-                      }
-                    }}
-                    placeholder="0.00"
-                    className="payment-amount-input"
-                  />
-                </div>
-              )}
+              <div className="payment-amount-row">
+                <label>Monto a cobrar $</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*\.?[0-9]*"
+                  value={amountCollected}
+                  onChange={e => {
+                    const val = e.target.value
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                      setAmountCollected(val)
+                    }
+                  }}
+                  placeholder="0.00"
+                  className="payment-amount-input"
+                />
+              </div>
             </div>
 
             <div className="evidence-modal-body">
