@@ -28,6 +28,7 @@ export default function TripPlannerPage() {
   const [panelExpanded, setPanelExpanded] = useState(true)
   const [isOptimized, setIsOptimized] = useState(false)
   const [navigationMode, setNavigationMode] = useState(false)
+  const [selectedStopIndex, setSelectedStopIndex] = useState(null)
   const [optimizing, setOptimizing] = useState(false)
   const [routeName, setRouteName] = useState('Mi Ruta')
   const [totalDistance, setTotalDistance] = useState(0)
@@ -1169,6 +1170,7 @@ export default function TripPlannerPage() {
 
   const startRoute = () => {
     setNavigationMode(true)
+    setSelectedStopIndex(null)
     setAutoFollow(true)
     keepScreenAwake()
     if (userLocation && mapInstanceRef.current) {
@@ -1179,6 +1181,7 @@ export default function TripPlannerPage() {
 
   const exitNavigation = () => {
     setNavigationMode(false)
+    setSelectedStopIndex(null)
     setAutoFollow(false)
     setNavSteps([])
     setCurrentStepIndex(0)
@@ -1431,10 +1434,22 @@ export default function TripPlannerPage() {
             <>
               <div className="stops-section-header">Parada</div>
               {stops.map((stop, index) => (
-                <div key={stop.id} className={`stop-row ${navigationMode ? 'stop-row-nav' : ''} ${stop.skipped ? 'stop-row-skipped' : ''}`} onClick={() => navigationMode && !stop.completed && !stop.skipped && toggleStopComplete(index)}>
+                <div
+                  key={stop.id}
+                  className={`stop-row ${navigationMode ? 'stop-row-nav' : ''} ${stop.skipped ? 'stop-row-skipped' : ''} ${navigationMode && selectedStopIndex === index ? 'stop-row-selected' : ''}`}
+                  onClick={() => {
+                    if (navigationMode && !stop.completed && !stop.skipped) {
+                      setSelectedStopIndex(prev => prev === index ? null : index)
+                    }
+                  }}
+                >
                   <div className="stop-row-top">
                     {navigationMode ? (
-                      <span className="material-icons stop-checkbox" style={{ color: stop.completed ? '#22c55e' : stop.skipped ? '#999' : '#5b8def', fontSize: 22 }}>
+                      <span
+                        className="material-icons stop-checkbox"
+                        style={{ color: stop.completed ? '#22c55e' : stop.skipped ? '#999' : '#5b8def', fontSize: 22 }}
+                        onClick={e => { e.stopPropagation(); if (!stop.completed && !stop.skipped) toggleStopComplete(index) }}
+                      >
                         {stop.completed ? 'check_circle' : stop.skipped ? 'cancel' : 'radio_button_unchecked'}
                       </span>
                     ) : (
@@ -1494,27 +1509,6 @@ export default function TripPlannerPage() {
                       )}
                     </div>
                   </div>
-                  {navigationMode && !stop.completed && !stop.skipped && (
-                    <div className="stop-nav-actions" onClick={e => e.stopPropagation()}>
-                      <button
-                        className="stop-nav-btn"
-                        onClick={() => {
-                          const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
-                          openNativeNavigation([stop], loc)
-                        }}
-                      >
-                        <span className="material-icons" style={{ fontSize: 16 }}>near_me</span>
-                        Navegar
-                      </button>
-                      <button
-                        className="stop-skip-btn"
-                        onClick={() => skipStop(index)}
-                      >
-                        <span className="material-icons" style={{ fontSize: 16 }}>skip_next</span>
-                        Saltar
-                      </button>
-                    </div>
-                  )}
                   <div className={`stop-indicator ${stop.completed ? 'completed' : stop.skipped ? 'skipped' : ''}`}></div>
                 </div>
               ))}
@@ -1547,15 +1541,32 @@ export default function TripPlannerPage() {
               </button>
             ) : (
               <div className="nav-footer-actions">
-                <button className="btn-native-nav" onClick={() => {
-                  const pendingStops = stops.filter(s => !s.completed && !s.skipped)
-                  const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
-                  openNativeNavigation(pendingStops, loc)
-                }}>
-                  <span className="material-icons">near_me</span>
-                  Navegar
-                </button>
-                <span className="nav-footer-hint">Toca una parada para completarla</span>
+                {selectedStopIndex !== null && stops[selectedStopIndex] && !stops[selectedStopIndex].completed && !stops[selectedStopIndex].skipped ? (
+                  <>
+                    <button
+                      className="btn-native-nav"
+                      onClick={() => {
+                        const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
+                        openNativeNavigation([stops[selectedStopIndex]], loc)
+                      }}
+                    >
+                      <span className="material-icons">near_me</span>
+                      Navegar
+                    </button>
+                    <button
+                      className="btn-skip-nav"
+                      onClick={() => { skipStop(selectedStopIndex); setSelectedStopIndex(null) }}
+                    >
+                      <span className="material-icons">skip_next</span>
+                      Saltar parada
+                    </button>
+                  </>
+                ) : (
+                  <span className="nav-footer-hint">
+                    <span className="material-icons" style={{ fontSize: 16, verticalAlign: 'middle', marginRight: 4 }}>touch_app</span>
+                    Selecciona una parada
+                  </span>
+                )}
               </div>
             )
           ) : isOptimized ? (
