@@ -1800,7 +1800,19 @@ class PollingService {
           where: { user_id: userId, customer_name: dup.customer_name, validated_address: dup.validated_address },
           order: [['created_at', 'DESC']]
         });
-        for (const old of records.slice(1)) {
+        const keeper = records.find(r => r.respond_contact_id) || records[0];
+        const donor = records.find(r => r.id !== keeper.id && (r.order_cost || r.notes || r.apartment_number));
+        if (donor) {
+          await keeper.update({
+            order_cost: keeper.order_cost ?? donor.order_cost,
+            deposit_amount: keeper.deposit_amount ?? donor.deposit_amount,
+            total_to_collect: keeper.total_to_collect ?? donor.total_to_collect,
+            notes: keeper.notes || donor.notes,
+            apartment_number: keeper.apartment_number || donor.apartment_number,
+            respond_contact_id: keeper.respond_contact_id || donor.respond_contact_id
+          });
+        }
+        for (const old of records.filter(r => r.id !== keeper.id)) {
           await old.destroy();
           totalCleaned++;
         }
@@ -1819,7 +1831,19 @@ class PollingService {
           where: { user_id: userId, customer_phone: dup.customer_phone },
           order: [['created_at', 'DESC']]
         });
-        for (const old of records.slice(1)) {
+        const keeper = records.find(r => r.respond_contact_id) || records[0];
+        const donor = records.find(r => r.id !== keeper.id && (r.order_cost || r.notes || r.apartment_number));
+        if (donor) {
+          await keeper.update({
+            order_cost: keeper.order_cost ?? donor.order_cost,
+            deposit_amount: keeper.deposit_amount ?? donor.deposit_amount,
+            total_to_collect: keeper.total_to_collect ?? donor.total_to_collect,
+            notes: keeper.notes || donor.notes,
+            apartment_number: keeper.apartment_number || donor.apartment_number,
+            respond_contact_id: keeper.respond_contact_id || donor.respond_contact_id
+          });
+        }
+        for (const old of records.filter(r => r.id !== keeper.id)) {
           await old.destroy();
           totalCleaned++;
         }
@@ -1982,12 +2006,43 @@ class PollingService {
         return;
       }
 
-      const [record, created] = await ValidatedAddress.findOrCreate({
-        where: {
+      let record = await ValidatedAddress.findOne({
+        where: { user_id: userId, respond_contact_id: contactIdStr }
+      });
+
+      let created = false;
+
+      if (!record && contact.phone) {
+        const phoneNorm = contact.phone.replace(/\D/g, '');
+        const byPhone = await ValidatedAddress.findAll({
+          where: { user_id: userId, respond_contact_id: null }
+        });
+        record = byPhone.find(r => r.customer_phone && r.customer_phone.replace(/\D/g, '') === phoneNorm) || null;
+        if (record) {
+          await record.update({ respond_contact_id: contactIdStr });
+          console.log(`[ValidatedAddr] Vinculado registro manual de ${customerName} al contacto ${contactIdStr}`);
+        }
+      }
+
+      if (!record) {
+        const byName = await ValidatedAddress.findOne({
+          where: {
+            user_id: userId,
+            respond_contact_id: null,
+            customer_name: customerName
+          }
+        });
+        if (byName) {
+          record = byName;
+          await record.update({ respond_contact_id: contactIdStr });
+          console.log(`[ValidatedAddr] Vinculado registro manual de ${customerName} (por nombre) al contacto ${contactIdStr}`);
+        }
+      }
+
+      if (!record) {
+        record = await ValidatedAddress.create({
           user_id: userId,
-          respond_contact_id: contactIdStr
-        },
-        defaults: {
+          respond_contact_id: contactIdStr,
           customer_name: customerName,
           customer_phone: contact.phone || null,
           original_address: originalAddress,
@@ -2000,8 +2055,9 @@ class PollingService {
           confidence: geocoded.confidence || null,
           source: sourceOverride || 'scanner',
           order_status: orderStatus || 'approved'
-        }
-      });
+        });
+        created = true;
+      }
 
       if (created) {
         console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus || 'approved'}]`);
