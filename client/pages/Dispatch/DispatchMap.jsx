@@ -8,7 +8,7 @@ const STATUS_CONFIG = {
   pending: { label: 'Pendiente', color: '#9e9e9e', icon: 'hourglass_empty' },
   approved: { label: 'Aprobada', color: '#ffc107', icon: 'check_circle' },
   ordered: { label: 'Ordenada', color: '#2196f3', icon: 'shopping_cart' },
-  on_delivery: { label: 'En Entrega', color: '#00897b', icon: 'delivery_dining' },
+  on_delivery: { label: 'En Entrega', color: '#ffffff', icon: 'delivery_dining' },
   ups_shipped: { label: 'UPS Shipped', color: '#9c27b0', icon: 'local_shipping' },
   delivered: { label: 'Entregada', color: '#ff6d00', icon: 'done_all' }
 }
@@ -107,6 +107,10 @@ export default function DispatchMap() {
   const [savingFav, setSavingFav] = useState(false)
   const [favError, setFavError] = useState('')
   const favGeoTimerRef = useRef(null)
+  const [selectedFavorites, setSelectedFavorites] = useState([])
+  const [editingRouteId, setEditingRouteId] = useState(null)
+  const [routeStops, setRouteStops] = useState({})
+  const [loadingRouteStops, setLoadingRouteStops] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -479,7 +483,7 @@ export default function DispatchMap() {
   }
 
   const handleCreateRoute = async () => {
-    if (!selectedOrders.length) return
+    if (!selectedOrders.length && !selectedFavorites.length) return
     try {
       let orderedIds = [...selectedOrders]
       let isPreOptimized = false
@@ -489,12 +493,16 @@ export default function DispatchMap() {
         isPreOptimized = true
       }
 
+      const favStops = selectedFavorites.map(fid => favorites.find(f => f.id === fid)).filter(Boolean)
+
       await api.post('/api/dispatch/routes', {
         name: routeName || undefined,
         order_ids: orderedIds,
-        pre_optimized: isPreOptimized
+        pre_optimized: isPreOptimized,
+        favorite_stops: favStops.length ? favStops : undefined
       })
       setSelectedOrders([])
+      setSelectedFavorites([])
       setShowCreateRoute(false)
       setRouteName('')
       setRouteInfo(null)
@@ -503,6 +511,69 @@ export default function DispatchMap() {
     } catch (error) {
       alert(error.response?.data?.error || 'Error al crear ruta')
     }
+  }
+
+  const handleDeleteRoute = async (routeId) => {
+    if (!window.confirm('¿Eliminar esta ruta? Las órdenes quedarán disponibles de nuevo.')) return
+    try {
+      await api.delete(`/api/dispatch/routes/${routeId}`)
+      setEditingRouteId(null)
+      fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar ruta')
+    }
+  }
+
+  const loadRouteStops = async (routeId) => {
+    try {
+      setLoadingRouteStops(routeId)
+      const res = await api.get(`/api/dispatch/routes/${routeId}/detail`)
+      const stops = res.data.route?.stops || res.data.stops || []
+      setRouteStops(prev => ({ ...prev, [routeId]: stops }))
+    } catch (error) {
+      console.error('Error loading route stops:', error)
+    } finally {
+      setLoadingRouteStops(null)
+    }
+  }
+
+  const handleRemoveStop = async (routeId, stopId) => {
+    try {
+      await api.delete(`/api/dispatch/routes/${routeId}/stops/${stopId}`)
+      setRouteStops(prev => ({
+        ...prev,
+        [routeId]: (prev[routeId] || []).filter(s => s.id !== stopId)
+      }))
+      fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al quitar parada')
+    }
+  }
+
+  const handleAddOrdersToRoute = async (routeId) => {
+    if (!selectedOrders.length && !selectedFavorites.length) {
+      alert('Selecciona órdenes o favoritas primero')
+      return
+    }
+    try {
+      const favStops = selectedFavorites.map(fid => favorites.find(f => f.id === fid)).filter(Boolean)
+      await api.post(`/api/dispatch/routes/${routeId}/orders`, {
+        order_ids: selectedOrders,
+        favorite_stops: favStops.length ? favStops : undefined
+      })
+      setSelectedOrders([])
+      setSelectedFavorites([])
+      await loadRouteStops(routeId)
+      fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al agregar paradas')
+    }
+  }
+
+  const toggleFavoriteSelection = (favId) => {
+    setSelectedFavorites(prev =>
+      prev.includes(favId) ? prev.filter(id => id !== favId) : [...prev, favId]
+    )
   }
 
   const [optimizing, setOptimizing] = useState(null)
@@ -1086,13 +1157,18 @@ export default function DispatchMap() {
               const filtered = searchQuery
                 ? orders.filter(o => (o.customer_name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (o.address || '').toLowerCase().includes(searchQuery.toLowerCase()) || (o.customer_phone || '').includes(searchQuery))
                 : orders
-              return filtered.length === 0 ? (
+              const filteredFavs = searchQuery
+                ? favorites.filter(f => (f.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (f.address || '').toLowerCase().includes(searchQuery.toLowerCase()))
+                : favorites
+              return (
+              <>
+              {filtered.length === 0 && filteredFavs.length === 0 ? (
                 <div className="empty-dispatch">
                   <span className="material-icons">inbox</span>
                   <p>{searchQuery ? 'No se encontraron ordenes' : 'No hay ordenes con direccion'}</p>
                 </div>
-              ) : (
-              filtered.map(order => {
+              ) : null}
+              {filtered.map(order => {
                 const cfg = getStatusConfig(order.order_status)
                 const isSelected = selectedOrders.includes(order.id)
                 return (
@@ -1158,16 +1234,20 @@ export default function DispatchMap() {
 
                       {isAdmin && (
                         <div className="do-actions" onClick={e => e.stopPropagation()}>
-                          {getNextStatus(order.order_status) && (
-                            <button
-                              className="dbtn full"
-                              style={{ backgroundColor: getStatusConfig(getNextStatus(order.order_status)).color }}
-                              onClick={() => handleUpdateStatus(order.id, getNextStatus(order.order_status))}
-                            >
-                              <span className="material-icons" style={{ fontSize: '16px' }}>{getStatusConfig(getNextStatus(order.order_status)).icon}</span>
-                              {getStatusConfig(getNextStatus(order.order_status)).label}
-                            </button>
-                          )}
+                          {getNextStatus(order.order_status) && (() => {
+                            const nextCfg = getStatusConfig(getNextStatus(order.order_status))
+                            const isWhiteBg = nextCfg.color === '#ffffff'
+                            return (
+                              <button
+                                className="dbtn full"
+                                style={{ backgroundColor: nextCfg.color, color: isWhiteBg ? '#333' : '#fff', border: isWhiteBg ? '1px solid #bbb' : 'none' }}
+                                onClick={() => handleUpdateStatus(order.id, getNextStatus(order.order_status))}
+                              >
+                                <span className="material-icons" style={{ fontSize: '16px', color: isWhiteBg ? '#333' : '#fff' }}>{nextCfg.icon}</span>
+                                {nextCfg.label}
+                              </button>
+                            )
+                          })()}
                           {editingNotes === order.id ? (
                             <div className="do-notes-edit">
                               <textarea
@@ -1284,8 +1364,37 @@ export default function DispatchMap() {
                     </div>
                   </div>
                 )
-              })
-            )
+              })}
+              {filteredFavs.length > 0 && (
+                <div className="fav-orders-section">
+                  <div className="fav-orders-header">
+                    <span className="material-icons" style={{ color: '#FFD600', fontSize: 16 }}>star</span>
+                    <span>Favoritas</span>
+                  </div>
+                  {filteredFavs.map(fav => {
+                    const isFavSelected = selectedFavorites.includes(fav.id)
+                    return (
+                      <div
+                        key={fav.id}
+                        className={`dispatch-order ${isFavSelected ? 'selected' : ''}`}
+                        onClick={() => { if (isAdmin) toggleFavoriteSelection(fav.id); if (mapInstance.current && fav.lat && fav.lng) { mapInstance.current.panTo({ lat: fav.lat, lng: fav.lng }); mapInstance.current.setZoom(15) } }}
+                      >
+                        <div className="do-status-dot" style={{ backgroundColor: '#FFD600', border: 'none' }}></div>
+                        <div className="do-content">
+                          <div className="do-top">
+                            <span className="do-name">{fav.name}</span>
+                            {isAdmin && <span className="material-icons" style={{ fontSize: 18, color: isFavSelected ? '#FFD600' : '#aaa', marginLeft: 'auto' }}>{isFavSelected ? 'star' : 'star_border'}</span>}
+                          </div>
+                          {fav.address && <div className="do-addr">{fav.address}</div>}
+                          {fav.customer_phone && <div className="do-phone">{fav.customer_phone}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              </>
+              )
             })()
           ) : activeTab === 'routes' ? (
             routes.length === 0 ? (
@@ -1298,6 +1407,8 @@ export default function DispatchMap() {
                 const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name ? route.orders[0].driver_name : null
                 const driverColorIdx = driverName ? Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0)) : 0
                 const driverColor = driverName ? getDriverColor(driverColorIdx) : '#999'
+                const isEditing = editingRouteId === route.id
+                const stops = routeStops[route.id] || []
                 return (
                 <div key={route.id} className="dispatch-route-card" style={{ borderLeftColor: driverColor }}>
                   <div className="dr-header">
@@ -1305,7 +1416,21 @@ export default function DispatchMap() {
                       {route.status === 'assigned' && <span className="dr-color-dot" style={{ backgroundColor: driverColor }}></span>}
                       {route.name}
                     </span>
-                    <span className={`dr-status ${route.status}`}>{route.status === 'assigned' ? 'Asignada' : route.status === 'draft' ? 'Borrador' : route.status}</span>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <span className={`dr-status ${route.status}`}>{route.status === 'assigned' ? 'Asignada' : route.status === 'draft' ? 'Borrador' : route.status}</span>
+                      {isAdmin && (
+                        <button
+                          className="dbtn outline small"
+                          style={{ padding: '2px 7px', fontSize: 12 }}
+                          onClick={() => {
+                            if (isEditing) { setEditingRouteId(null) }
+                            else { setEditingRouteId(route.id); if (!routeStops[route.id]) loadRouteStops(route.id) }
+                          }}
+                        >
+                          <span className="material-icons" style={{ fontSize: 14 }}>{isEditing ? 'close' : 'edit'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="dr-info">
                     <span><span className="material-icons">pin_drop</span> {route.stops_count} paradas</span>
@@ -1314,11 +1439,52 @@ export default function DispatchMap() {
                       <span className="dr-commission"><span className="material-icons">paid</span> Chofer: ${route.driver_commission_total.toFixed(2)}</span>
                     )}
                   </div>
-                  {route.orders?.length > 0 && (
+
+                  {isEditing && isAdmin && (
+                    <div className="dr-edit-panel">
+                      {loadingRouteStops === route.id ? (
+                        <div className="loading-center" style={{ padding: 12 }}><div className="spinner"></div></div>
+                      ) : (
+                        <>
+                          <div className="dr-edit-stops">
+                            {stops.length === 0 ? (
+                              <p style={{ fontSize: 12, color: '#888', margin: 0 }}>Sin paradas</p>
+                            ) : stops.map((s, i) => (
+                              <div key={s.id} className="dr-edit-stop-row">
+                                <span className="dr-edit-stop-num">{i + 1}</span>
+                                <span className="dr-edit-stop-name">{s.customer_name || s.address || 'Parada'}</span>
+                                <button
+                                  className="dr-edit-stop-remove"
+                                  title="Quitar parada"
+                                  onClick={() => handleRemoveStop(route.id, s.id)}
+                                >
+                                  <span className="material-icons">remove_circle_outline</span>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="dr-edit-actions">
+                            {(selectedOrders.length > 0 || selectedFavorites.length > 0) && (
+                              <button className="dbtn green small full" onClick={() => handleAddOrdersToRoute(route.id)}>
+                                <span className="material-icons">add</span>
+                                Agregar seleccionadas ({selectedOrders.length + selectedFavorites.length})
+                              </button>
+                            )}
+                            <button className="dbtn red small full" onClick={() => handleDeleteRoute(route.id)}>
+                              <span className="material-icons">delete_forever</span>
+                              Eliminar ruta
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {!isEditing && route.orders?.length > 0 && (
                     <div className="dr-orders">
                       {route.orders.map(o => (
                         <div key={o.id} className="dr-order-mini">
-                          <span className="dr-dot" style={{ backgroundColor: getStatusConfig(o.order_status).color }}></span>
+                          <span className="dr-dot" style={{ backgroundColor: getStatusConfig(o.order_status).color, border: getStatusConfig(o.order_status).color === '#ffffff' ? '1.5px solid #aaa' : 'none' }}></span>
                           <span>{o.customer_name || 'Sin nombre'}</span>
                           <span className="dr-order-status">{getStatusConfig(o.order_status).label}</span>
                         </div>
@@ -1332,7 +1498,7 @@ export default function DispatchMap() {
                       {route.total_duration > 0 && <span> - ~{route.total_duration} min</span>}
                     </div>
                   )}
-                  {isAdmin && route.status === 'draft' && (
+                  {isAdmin && route.status === 'draft' && !isEditing && (
                     <div className="dr-actions">
                       <button
                         className="dbtn blue full"
@@ -1347,7 +1513,7 @@ export default function DispatchMap() {
                       </button>
                     </div>
                   )}
-                  {isAdmin && route.status === 'assigned' && (
+                  {isAdmin && route.status === 'assigned' && !isEditing && (
                     <div className="dr-driver-row">
                       <div className="dr-driver">
                         <span className="material-icons">person</span> {route.orders?.[0]?.driver_name || 'Chofer asignado'}

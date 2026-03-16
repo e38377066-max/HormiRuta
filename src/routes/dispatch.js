@@ -725,49 +725,67 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
 
 router.post('/routes', requireAdmin, async (req, res) => {
   try {
-    const { name, order_ids, pre_optimized } = req.body;
-    if (!order_ids?.length) {
-      return res.status(400).json({ error: 'Selecciona al menos una orden' });
+    const { name, order_ids, pre_optimized, favorite_stops } = req.body;
+    const hasOrders = Array.isArray(order_ids) && order_ids.length > 0;
+    const hasFavs = Array.isArray(favorite_stops) && favorite_stops.length > 0;
+
+    if (!hasOrders && !hasFavs) {
+      return res.status(400).json({ error: 'Selecciona al menos una orden o favorita' });
     }
 
     const ordersMap = new Map();
-    const dbOrders = await ValidatedAddress.findAll({
-      where: { id: { [Op.in]: order_ids } }
-    });
-    dbOrders.forEach(o => ordersMap.set(o.id, o));
-
-    if (ordersMap.size === 0) {
-      return res.status(400).json({ error: 'No se encontraron ordenes con direccion' });
+    if (hasOrders) {
+      const dbOrders = await ValidatedAddress.findAll({
+        where: { id: { [Op.in]: order_ids } }
+      });
+      dbOrders.forEach(o => ordersMap.set(o.id, o));
     }
 
+    const totalStops = ordersMap.size + (hasFavs ? favorite_stops.length : 0);
     const route = await Route.create({
       user_id: req.userId,
-      name: name || `Ruta ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'short' })} - ${ordersMap.size} paradas`,
+      name: name || `Ruta ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'short' })} - ${totalStops} paradas`,
       status: 'draft',
       is_optimized: !!pre_optimized
     });
 
-    for (let i = 0; i < order_ids.length; i++) {
-      const order = ordersMap.get(order_ids[i]);
-      if (!order) continue;
+    let stopOrder = 0;
+    if (hasOrders) {
+      for (let i = 0; i < order_ids.length; i++) {
+        const order = ordersMap.get(order_ids[i]);
+        if (!order) continue;
+        await Stop.create({
+          route_id: route.id,
+          address: order.validated_address,
+          lat: order.address_lat,
+          lng: order.address_lng,
+          order: stopOrder++,
+          customer_name: order.customer_name,
+          phone: order.customer_phone,
+          note: order.notes,
+          order_cost: order.order_cost,
+          deposit_amount: order.deposit_amount,
+          total_to_collect: order.total_to_collect,
+          apartment_number: order.apartment_number
+        });
+        order.route_id = route.id;
+        await order.save();
+      }
+    }
 
-      await Stop.create({
-        route_id: route.id,
-        address: order.validated_address,
-        lat: order.address_lat,
-        lng: order.address_lng,
-        order: i,
-        customer_name: order.customer_name,
-        phone: order.customer_phone,
-        note: order.notes,
-        order_cost: order.order_cost,
-        deposit_amount: order.deposit_amount,
-        total_to_collect: order.total_to_collect,
-        apartment_number: order.apartment_number
-      });
-
-      order.route_id = route.id;
-      await order.save();
+    if (hasFavs) {
+      for (const fav of favorite_stops) {
+        await Stop.create({
+          route_id: route.id,
+          address: fav.address || fav.name,
+          lat: fav.lat,
+          lng: fav.lng,
+          order: stopOrder++,
+          customer_name: fav.name,
+          phone: fav.customer_phone || '',
+          note: fav.notes || ''
+        });
+      }
     }
 
     res.status(201).json({
@@ -777,6 +795,90 @@ router.post('/routes', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error creating dispatch route:', error);
     res.status(500).json({ error: 'Error al crear ruta' });
+  }
+});
+
+router.delete('/routes/:id', requireAdmin, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    await ValidatedAddress.update({ route_id: null }, { where: { route_id: route.id } });
+    await Stop.destroy({ where: { route_id: route.id } });
+    await route.destroy();
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting route:', error);
+    res.status(500).json({ error: 'Error al eliminar ruta' });
+  }
+});
+
+router.delete('/routes/:id/stops/:stopId', requireAdmin, async (req, res) => {
+  try {
+    const stop = await Stop.findOne({ where: { id: req.params.stopId, route_id: req.params.id } });
+    if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+
+    await ValidatedAddress.update({ route_id: null }, { where: { route_id: req.params.id, validated_address: stop.address } });
+    await stop.destroy();
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing stop:', error);
+    res.status(500).json({ error: 'Error al quitar parada' });
+  }
+});
+
+router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
+  try {
+    const { order_ids, favorite_stops } = req.body;
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    const existingStops = await Stop.count({ where: { route_id: route.id } });
+    let stopOrder = existingStops;
+
+    if (Array.isArray(order_ids) && order_ids.length > 0) {
+      const dbOrders = await ValidatedAddress.findAll({ where: { id: { [Op.in]: order_ids } } });
+      for (const order of dbOrders) {
+        await Stop.create({
+          route_id: route.id,
+          address: order.validated_address,
+          lat: order.address_lat,
+          lng: order.address_lng,
+          order: stopOrder++,
+          customer_name: order.customer_name,
+          phone: order.customer_phone,
+          note: order.notes,
+          order_cost: order.order_cost,
+          deposit_amount: order.deposit_amount,
+          total_to_collect: order.total_to_collect,
+          apartment_number: order.apartment_number
+        });
+        order.route_id = route.id;
+        await order.save();
+      }
+    }
+
+    if (Array.isArray(favorite_stops) && favorite_stops.length > 0) {
+      for (const fav of favorite_stops) {
+        await Stop.create({
+          route_id: route.id,
+          address: fav.address || fav.name,
+          lat: fav.lat,
+          lng: fav.lng,
+          order: stopOrder++,
+          customer_name: fav.name,
+          phone: fav.customer_phone || '',
+          note: fav.notes || ''
+        });
+      }
+    }
+
+    res.json({ success: true, route: await route.toDict() });
+  } catch (error) {
+    console.error('Error adding orders to route:', error);
+    res.status(500).json({ error: 'Error al agregar paradas' });
   }
 });
 
