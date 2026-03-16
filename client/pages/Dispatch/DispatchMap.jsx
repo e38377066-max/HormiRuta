@@ -111,6 +111,7 @@ export default function DispatchMap() {
   const [editingRouteId, setEditingRouteId] = useState(null)
   const [routeStops, setRouteStops] = useState({})
   const [loadingRouteStops, setLoadingRouteStops] = useState(null)
+  const [showAddStopsPanel, setShowAddStopsPanel] = useState(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -301,7 +302,14 @@ export default function DispatchMap() {
       })
     })
 
+    window.__dispatchToggleFav = (favId) => {
+      setSelectedFavorites(prev =>
+        prev.includes(favId) ? prev.filter(id => id !== favId) : [...prev, favId]
+      )
+    }
+
     favorites.filter(f => f.lat && f.lng).forEach(fav => {
+      const isSelected = selectedFavorites.includes(fav.id)
       const marker = new window.google.maps.Marker({
         position: { lat: fav.lat, lng: fav.lng },
         map: mapInstance.current,
@@ -315,11 +323,14 @@ export default function DispatchMap() {
       })
 
       const infoContent = `
-        <div style="font-family:sans-serif;min-width:180px">
-          <strong style="color:#FFD600">★ ${fav.name}</strong><br/>
-          <span style="color:#666">${fav.address || ''}</span>
-          ${fav.customer_phone ? `<br/><span style="color:#888">${fav.customer_phone}</span>` : ''}
+        <div style="font-family:sans-serif;min-width:180px;padding:4px">
+          <strong style="color:#b8860b">★ ${fav.name}</strong><br/>
+          <span style="color:#666;font-size:13px">${fav.address || ''}</span>
+          ${fav.customer_phone ? `<br/><span style="color:#888;font-size:12px">${fav.customer_phone}</span>` : ''}
           ${fav.notes ? `<br/><em style="color:#aaa;font-size:12px">${fav.notes}</em>` : ''}
+          <br/><button onclick="window.__dispatchToggleFav(${fav.id})" style="margin-top:8px;background:${isSelected ? '#e53935' : '#4caf50'};color:white;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px;width:100%">
+            ${isSelected ? '✕ Quitar de ruta' : '+ Agregar a ruta'}
+          </button>
         </div>
       `
       const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
@@ -327,7 +338,7 @@ export default function DispatchMap() {
 
       markersRef.current.push(marker)
     })
-  }, [orders, selectedOrders, routes, favorites])
+  }, [orders, selectedOrders, routes, favorites, selectedFavorites])
 
   useEffect(() => {
     if (directionsRendererRef.current) {
@@ -1493,12 +1504,81 @@ export default function DispatchMap() {
                             ))}
                           </div>
                           <div className="dr-edit-actions">
-                            {(selectedOrders.length > 0 || selectedFavorites.length > 0) && (
-                              <button className="dbtn green small full" onClick={() => handleAddOrdersToRoute(route.id)}>
-                                <span className="material-icons">add</span>
-                                Agregar seleccionadas ({selectedOrders.length + selectedFavorites.length})
-                              </button>
+                            <button
+                              className="dbtn outline small full"
+                              onClick={() => setShowAddStopsPanel(showAddStopsPanel === route.id ? null : route.id)}
+                            >
+                              <span className="material-icons">add_location_alt</span>
+                              {showAddStopsPanel === route.id ? 'Cerrar selector' : 'Agregar paradas'}
+                            </button>
+
+                            {showAddStopsPanel === route.id && (
+                              <div className="dr-add-stops-picker">
+                                {orders.length > 0 && (
+                                  <>
+                                    <div className="dr-add-stops-label">
+                                      <span className="material-icons" style={{ fontSize: 13 }}>list_alt</span> Órdenes disponibles
+                                    </div>
+                                    {orders.map(o => {
+                                      const isSel = selectedOrders.includes(o.id)
+                                      return (
+                                        <div
+                                          key={o.id}
+                                          className={`dr-add-stop-item ${isSel ? 'selected' : ''}`}
+                                          onClick={() => toggleOrderSelection(o.id)}
+                                        >
+                                          <span className="dr-add-stop-check">
+                                            <span className="material-icons">{isSel ? 'check_box' : 'check_box_outline_blank'}</span>
+                                          </span>
+                                          <div className="dr-add-stop-info">
+                                            <span className="dr-add-stop-name">{o.customer_name || 'Sin nombre'}</span>
+                                            <span className="dr-add-stop-addr">{o.address || ''}</span>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </>
+                                )}
+                                {favorites.length > 0 && (
+                                  <>
+                                    <div className="dr-add-stops-label" style={{ marginTop: 8 }}>
+                                      <span className="material-icons" style={{ fontSize: 13, color: '#FFD600' }}>star</span> Favoritas
+                                    </div>
+                                    {favorites.map(fav => {
+                                      const isSel = selectedFavorites.includes(fav.id)
+                                      return (
+                                        <div
+                                          key={fav.id}
+                                          className={`dr-add-stop-item ${isSel ? 'selected' : ''}`}
+                                          onClick={() => toggleFavoriteSelection(fav.id)}
+                                        >
+                                          <span className="dr-add-stop-check">
+                                            <span className="material-icons">{isSel ? 'check_box' : 'check_box_outline_blank'}</span>
+                                          </span>
+                                          <div className="dr-add-stop-info">
+                                            <span className="dr-add-stop-name">
+                                              <span style={{ color: '#FFD600', fontSize: 12 }}>★</span> {fav.name}
+                                            </span>
+                                            <span className="dr-add-stop-addr">{fav.address || ''}</span>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </>
+                                )}
+                                {(selectedOrders.length > 0 || selectedFavorites.length > 0) && (
+                                  <button
+                                    className="dbtn green small full"
+                                    style={{ marginTop: 8 }}
+                                    onClick={() => { handleAddOrdersToRoute(route.id); setShowAddStopsPanel(null) }}
+                                  >
+                                    <span className="material-icons">add</span>
+                                    Agregar {selectedOrders.length + selectedFavorites.length} parada{(selectedOrders.length + selectedFavorites.length) > 1 ? 's' : ''}
+                                  </button>
+                                )}
+                              </div>
                             )}
+
                             <button className="dbtn red small full" onClick={() => handleDeleteRoute(route.id)}>
                               <span className="material-icons">delete_forever</span>
                               Eliminar ruta

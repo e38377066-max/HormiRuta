@@ -1019,6 +1019,149 @@
   margin-top: 8px;
 }
 
+.dr-edit-panel {
+  margin-top: 8px;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.dr-edit-stops {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.dr-edit-stop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: #f9f9f9;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.dr-edit-stop-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #6200ea;
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dr-edit-stop-name {
+  flex: 1;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dr-edit-stop-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: #e53935;
+  display: flex;
+  align-items: center;
+}
+
+.dr-edit-stop-remove .material-icons {
+  font-size: 18px;
+}
+
+.dr-edit-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dr-add-stops-picker {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dr-add-stops-label {
+  font-size: 11px;
+  color: #888;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 0 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dr-add-stop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dr-add-stop-item:hover {
+  background: #ebebeb;
+}
+
+.dr-add-stop-item.selected {
+  background: #e8f5e9;
+}
+
+.dr-add-stop-check {
+  color: #bbb;
+  display: flex;
+  align-items: center;
+}
+
+.dr-add-stop-item.selected .dr-add-stop-check {
+  color: #4caf50;
+}
+
+.dr-add-stop-check .material-icons {
+  font-size: 18px;
+}
+
+.dr-add-stop-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dr-add-stop-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dr-add-stop-addr {
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dr-optimized {
   margin-top: 8px;
   padding: 4px 8px;
