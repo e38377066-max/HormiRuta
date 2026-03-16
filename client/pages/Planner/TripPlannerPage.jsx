@@ -781,21 +781,36 @@ export default function TripPlannerPage() {
 
   const skipStop = async (index) => {
     const stop = stops[index]
+
+    const closeModal = () => {
+      setShowEvidenceModal(null)
+      setEvidencePreview(null)
+      setEvidenceFile(null)
+      setSelectedPaymentMethod('')
+      setAmountCollected('')
+    }
+
+    if (!stop.skippedOnce) {
+      const rest = stops.filter((_, i) => i !== index)
+      const deferred = { ...stop, skippedOnce: true }
+      const newStops = [...rest, deferred].map((s, i) => ({ ...s, id: i + 1 }))
+      setStops(newStops)
+      updateMapMarkers(newStops)
+      closeModal()
+      return
+    }
+
     const stopDbId = stop.dbId || stop.id
     try {
       if (stopDbId && currentRouteId) {
         await api.put(`/api/dispatch/stops/${stopDbId}/skip`)
       }
       const updatedStops = stops.map((s, i) =>
-        i === index ? { ...s, skipped: true, completed: false } : s
+        i === index ? { ...s, skipped: true, skippedOnce: false, completed: false } : s
       )
       setStops(updatedStops)
       updateMapMarkers(updatedStops)
-      setShowEvidenceModal(null)
-      setEvidencePreview(null)
-      setEvidenceFile(null)
-      setSelectedPaymentMethod('')
-      setAmountCollected('')
+      closeModal()
     } catch (err) {
       console.error('Error skipping stop:', err)
       alert(err.response?.data?.error || 'Error al saltar parada')
@@ -857,13 +872,57 @@ export default function TripPlannerPage() {
     }
   }
 
+  const sortByGpsDistance = (stopsArr, loc) => {
+    if (!loc) return stopsArr
+    return [...stopsArr].sort((a, b) => {
+      const dA = Math.pow(a.latitude - loc.lat, 2) + Math.pow(a.longitude - loc.lng, 2)
+      const dB = Math.pow(b.latitude - loc.lat, 2) + Math.pow(b.longitude - loc.lng, 2)
+      return dA - dB
+    }).map((s, i) => ({ ...s, id: i + 1 }))
+  }
+
   const optimizeRoute = async () => {
     if (stops.length < 2) return
     setOptimizing(true)
 
     try {
       const oldDistance = totalDistance
-      
+      const useGpsOrigin = useCurrentLocation && userLocation
+
+      if (useGpsOrigin) {
+        const sorted = sortByGpsDistance(stops, userLocation)
+        setStops(sorted)
+        updateMapMarkers(sorted)
+
+        try {
+          let routeId = currentRouteId
+          if (!routeId) {
+            const response = await api.post('/api/routes', { name: routeName })
+            routeId = response.data.route?.id || response.data.id
+            setCurrentRouteId(routeId)
+            for (const stop of sorted) {
+              await api.post(`/api/routes/${routeId}/stops`, {
+                address: stop.address, lat: stop.latitude, lng: stop.longitude,
+                customer_name: stop.name || '', phone: stop.phone || '', note: stop.note || '',
+                order_cost: stop.order_cost, deposit_amount: stop.deposit_amount,
+                total_to_collect: stop.total_to_collect
+              })
+            }
+          }
+          await api.post(`/api/routes/${routeId}/optimize`, {
+            start_lat: userLocation.lat, start_lng: userLocation.lng, return_to_start: roundTrip
+          })
+        } catch (backendErr) {
+          console.log('Backend save error, continuing with local GPS sort')
+        }
+
+        await calculateRoute(sorted)
+        if (oldDistance > 0) setSavedDistance(0)
+        setIsOptimized(true)
+        setOptimizing(false)
+        return
+      }
+
       try {
         let routeId = currentRouteId
         
@@ -887,12 +946,9 @@ export default function TripPlannerPage() {
           }
         }
         
-        const gpsLoc = useCurrentLocation && userLocation ? userLocation : null
-        const startLoc = gpsLoc || (stops[0] ? { lat: stops[0].latitude, lng: stops[0].longitude } : null)
-        
         const optimized = await api.post(`/api/routes/${routeId}/optimize`, {
-          start_lat: startLoc?.lat,
-          start_lng: startLoc?.lng,
+          start_lat: stops[0].latitude,
+          start_lng: stops[0].longitude,
           return_to_start: roundTrip
         })
         
@@ -913,6 +969,7 @@ export default function TripPlannerPage() {
               phone: s.phone || original?.phone || '',
               note: s.note || original?.note || '',
               completed: s.status === 'completed' || false,
+              skipped: s.status === 'skipped' || false,
               color: '#EA4335',
               order_cost: s.order_cost ?? original?.order_cost,
               deposit_amount: s.deposit_amount ?? original?.deposit_amount,
@@ -947,19 +1004,11 @@ export default function TripPlannerPage() {
       }
 
       const directionsService = new window.google.maps.DirectionsService()
-
-      const useGpsOrigin = useCurrentLocation && userLocation
-      const origin = useGpsOrigin
-        ? { lat: userLocation.lat, lng: userLocation.lng }
-        : { lat: stops[0].latitude, lng: stops[0].longitude }
+      const origin = { lat: stops[0].latitude, lng: stops[0].longitude }
       const destination = roundTrip
-        ? { lat: stops[0].latitude, lng: stops[0].longitude }
+        ? origin
         : { lat: stops[stops.length - 1].latitude, lng: stops[stops.length - 1].longitude }
-
-      const waypointStops = useGpsOrigin
-        ? (roundTrip ? stops : stops.slice(0, -1))
-        : (roundTrip ? stops : stops.slice(1, -1))
-      const waypoints = waypointStops.map(stop => ({
+      const waypoints = stops.slice(1, -1).map(stop => ({
         location: { lat: stop.latitude, lng: stop.longitude },
         stopover: true
       }))
@@ -980,24 +1029,15 @@ export default function TripPlannerPage() {
 
       if (result.routes[0].waypoint_order) {
         const waypointOrder = result.routes[0].waypoint_order
-        let optimizedStops
-        
-        if (roundTrip) {
-          optimizedStops = [stops[0], ...waypointOrder.map(i => stops[i])]
-        } else {
-          const middleStops = stops.slice(1, -1)
-          const optimizedMiddle = waypointOrder.map(i => middleStops[i])
-          optimizedStops = [stops[0], ...optimizedMiddle, stops[stops.length - 1]]
-        }
-        
-        const reorderedStops = optimizedStops.map((stop, i) => ({
-          ...stop,
-          id: i + 1
-        }))
+        const middleStops = stops.slice(1, -1)
+        const optimizedMiddle = waypointOrder.map(i => middleStops[i])
+        const optimizedStops = roundTrip
+          ? [stops[0], ...waypointOrder.map(i => stops[i])]
+          : [stops[0], ...optimizedMiddle, stops[stops.length - 1]]
+        const reorderedStops = optimizedStops.map((stop, i) => ({ ...stop, id: i + 1 }))
         
         setStops(reorderedStops)
         updateMapMarkers(reorderedStops)
-        
         directionsRendererRef.current.setDirections(result)
         
         let distance = 0, duration = 0
@@ -1007,10 +1047,7 @@ export default function TripPlannerPage() {
         })
         setTotalDistance(distance / 1000)
         setTotalDuration(duration / 60)
-        
-        if (oldDistance > 0) {
-          setSavedDistance(oldDistance - (distance / 1000))
-        }
+        if (oldDistance > 0) setSavedDistance(oldDistance - (distance / 1000))
       }
       
       setIsOptimized(true)
@@ -1028,11 +1065,13 @@ export default function TripPlannerPage() {
     markersRef.current = []
 
     const visibleStops = navigationMode ? stopsList.filter(s => !s.completed && !s.skipped) : stopsList
+    const hasActivePending = stopsList.some(s => !s.completed && !s.skipped && !s.skippedOnce)
     let pendingIndex = 0
 
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
         if (navigationMode && (stop.completed || stop.skipped)) return
+        if (navigationMode && stop.skippedOnce && hasActivePending) return
         pendingIndex++
         const color = '#EA4335'
         
@@ -1093,7 +1132,12 @@ export default function TripPlannerPage() {
   }
 
   const recalculateNavRoute = async (stopsList) => {
-    const pending = stopsList.filter(s => !s.completed && !s.skipped && s.latitude && s.longitude)
+    const hasActive = stopsList.some(s => !s.completed && !s.skipped && !s.skippedOnce)
+    const pending = stopsList.filter(s => {
+      if (s.completed || s.skipped || !s.latitude || !s.longitude) return false
+      if (s.skippedOnce && hasActive) return false
+      return true
+    })
     if (pending.length < 1) {
       if (directionsRendererRef.current) {
         directionsRendererRef.current.setDirections({ routes: [] })
@@ -1275,8 +1319,10 @@ export default function TripPlannerPage() {
     return new Date(date).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
   }
 
-  const nextPendingStop = stops.find(s => !s.completed && !s.skipped)
-  const nextPendingIndex = stops.findIndex(s => !s.completed && !s.skipped)
+  const activePendingStops = stops.filter(s => !s.completed && !s.skipped && !s.skippedOnce)
+  const deferredPendingStops = stops.filter(s => !s.completed && !s.skipped && s.skippedOnce)
+  const nextPendingStop = activePendingStops.length > 0 ? activePendingStops[0] : deferredPendingStops[0]
+  const nextPendingIndex = nextPendingStop ? stops.indexOf(nextPendingStop) : -1
 
   return (
     <div className="trip-planner-page">
@@ -1456,7 +1502,11 @@ export default function TripPlannerPage() {
                       <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
                     )}
                     <div className="stop-info-block">
-                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''} ${stop.skipped ? 'stop-skipped-label' : ''}`}>{stop.name || stop.address?.split(',')[0] || 'Parada'}{stop.skipped && <span className="badge-saltada">Saltada</span>}</span>
+                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''} ${stop.skipped ? 'stop-skipped-label' : ''} ${stop.skippedOnce ? 'stop-skipped-label' : ''}`}>
+                        <span className="stop-num-inline">{index + 1}.</span> {stop.name || stop.address?.split(',')[0] || 'Parada'}
+                        {stop.skipped && <span className="badge-saltada">Saltada</span>}
+                        {stop.skippedOnce && <span className="badge-diferida">Al final</span>}
+                      </span>
                       <span className="stop-address-detail">{stop.address || ''}{stop.apartment_number && <span style={{ color: '#1976d2', fontWeight: 600 }}> Apt {stop.apartment_number}</span>}</span>
                       {stop.phone && (
                         <div className="stop-contact-row">
@@ -1998,7 +2048,7 @@ export default function TripPlannerPage() {
                 disabled={uploadingEvidence}
               >
                 <span className="material-icons">skip_next</span>
-                Saltar
+                {stops[showEvidenceModal]?.skippedOnce ? 'Saltar definitivo' : 'Mover al final'}
               </button>
               <button 
                 className="btn-optimize" 
