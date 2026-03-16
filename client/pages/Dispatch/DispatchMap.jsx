@@ -1056,12 +1056,12 @@ export default function DispatchMap() {
           </div>
         )}
 
-        {isAdmin && selectedOrders.length > 0 && (
+        {isAdmin && (selectedOrders.length > 0 || selectedFavorites.length > 0) && (
           <div className="dispatch-selection-panel">
             <div className="selection-header">
               <div className="selected-count">
                 <span className="material-icons">check_circle</span>
-                {selectedOrders.length} seleccionada{selectedOrders.length > 1 ? 's' : ''}
+                {selectedOrders.length + selectedFavorites.length} parada{(selectedOrders.length + selectedFavorites.length) > 1 ? 's' : ''}
                 {optimizingLive && <span className="route-calc"> calculando...</span>}
                 {routeInfo && !optimizingLive && (
                   <span className="route-info-inline">
@@ -1070,7 +1070,7 @@ export default function DispatchMap() {
                   </span>
                 )}
               </div>
-              <button className="sel-clear-btn" onClick={() => { setSelectedOrders([]); setShowCreateRoute(false); setRouteName('') }} title="Limpiar">
+              <button className="sel-clear-btn" onClick={() => { setSelectedOrders([]); setSelectedFavorites([]); setShowCreateRoute(false); setRouteName('') }} title="Limpiar">
                 <span className="material-icons">close</span>
               </button>
             </div>
@@ -1107,25 +1107,54 @@ export default function DispatchMap() {
                   </div>
                 )
               })}
+              {selectedFavorites.map((fid, idx) => {
+                const fav = favorites.find(f => f.id === fid)
+                if (!fav) return null
+                const num = selectedOrders.length + idx + 1
+                return (
+                  <div key={`fav-${fid}`} className="sel-stop-item">
+                    <span className="sel-stop-number" style={{ background: '#FFD600', color: '#333' }}>{num}</span>
+                    <div className="sel-stop-info">
+                      <span className="sel-stop-name" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span className="material-icons" style={{ fontSize: 13, color: '#FFD600' }}>star</span>
+                        {fav.name}
+                      </span>
+                      <span className="sel-stop-addr">{fav.address || ''}</span>
+                    </div>
+                    <div className="sel-stop-actions">
+                      <button onClick={(e) => { e.stopPropagation(); toggleFavoriteSelection(fid) }} className="sel-remove-btn">
+                        <span className="material-icons">remove_circle_outline</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
 
             <div className="selection-bottom-actions">
-              <div className="status-btns-row">
-                <button className="dbtn blue" onClick={() => handleBulkStatus('ordered')} title="Ordenada">
-                  <span className="material-icons">shopping_cart</span>
-                </button>
-                <button className="dbtn orange" onClick={() => handleBulkStatus('on_delivery')} title="En Entrega">
-                  <span className="material-icons">delivery_dining</span>
-                </button>
-                <button className="dbtn green" onClick={() => handleBulkStatus('delivered')} title="Entregada">
-                  <span className="material-icons">done_all</span>
-                </button>
-              </div>
+              {selectedOrders.length > 0 && (
+                <div className="status-btns-row">
+                  <button className="dbtn blue" onClick={() => handleBulkStatus('ordered')} title="Ordenada">
+                    <span className="material-icons">shopping_cart</span>
+                  </button>
+                  <button
+                    className="dbtn"
+                    style={{ background: '#fff', color: '#333', border: '1.5px solid #bbb' }}
+                    onClick={() => handleBulkStatus('on_delivery')}
+                    title="En Entrega"
+                  >
+                    <span className="material-icons" style={{ color: '#333' }}>delivery_dining</span>
+                  </button>
+                  <button className="dbtn green" onClick={() => handleBulkStatus('delivered')} title="Entregada">
+                    <span className="material-icons">done_all</span>
+                  </button>
+                </div>
+              )}
 
               {!showCreateRoute ? (
                 <button className="create-route-btn" onClick={() => setShowCreateRoute(true)}>
                   <span className="material-icons">add_road</span>
-                  Crear Ruta con {selectedOrders.length} parada{selectedOrders.length > 1 ? 's' : ''}
+                  Crear Ruta con {selectedOrders.length + selectedFavorites.length} parada{(selectedOrders.length + selectedFavorites.length) > 1 ? 's' : ''}
                 </button>
               ) : (
                 <div className="create-route-inline">
