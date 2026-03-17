@@ -52,7 +52,9 @@ export default function DispatchMap() {
 
   const [orders, setOrders] = useState([])
   const [stats, setStats] = useState({})
-  const [selectedOrders, setSelectedOrders] = useState([])
+  const [selectionList, setSelectionList] = useState([])
+  const [editSelectedOrders, setEditSelectedOrders] = useState([])
+  const [editSelectedFavorites, setEditSelectedFavorites] = useState([])
   const [drivers, setDrivers] = useState([])
   const [routes, setRoutes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -108,11 +110,13 @@ export default function DispatchMap() {
   const [savingFav, setSavingFav] = useState(false)
   const [favError, setFavError] = useState('')
   const favGeoTimerRef = useRef(null)
-  const [selectedFavorites, setSelectedFavorites] = useState([])
   const [editingRouteId, setEditingRouteId] = useState(null)
   const [routeStops, setRouteStops] = useState({})
   const [loadingRouteStops, setLoadingRouteStops] = useState(null)
   const [showAddStopsPanel, setShowAddStopsPanel] = useState(null)
+
+  const selectedOrders = selectionList.filter(x => x.type === 'order').map(x => x.id)
+  const selectedFavorites = selectionList.filter(x => x.type === 'favorite').map(x => x.id)
 
   const fetchData = useCallback(async () => {
     try {
@@ -209,7 +213,7 @@ export default function DispatchMap() {
 
     ordersToShow.forEach(order => {
       const config = STATUS_CONFIG[order.order_status] || STATUS_CONFIG.approved
-      const selIndex = selectedOrders.indexOf(order.id)
+      const selIndex = selectionList.findIndex(x => x.type === 'order' && x.id === order.id)
       const isSelected = selIndex !== -1
       const isPending = order.order_status === 'pending'
       const isWhite = config.color === '#ffffff'
@@ -304,17 +308,24 @@ export default function DispatchMap() {
     })
 
     window.__dispatchToggleFav = (favId) => {
-      setSelectedFavorites(prev =>
-        prev.includes(favId) ? prev.filter(id => id !== favId) : [...prev, favId]
+      setSelectionList(prev =>
+        prev.some(x => x.type === 'favorite' && x.id === favId)
+          ? prev.filter(x => !(x.type === 'favorite' && x.id === favId))
+          : [...prev, { type: 'favorite', id: favId }]
       )
     }
 
     favorites.filter(f => f.lat && f.lng).forEach(fav => {
-      const isSelected = selectedFavorites.includes(fav.id)
+      const selIndex = selectionList.findIndex(x => x.type === 'favorite' && x.id === fav.id)
+      const isSelected = selIndex !== -1
       const marker = new window.google.maps.Marker({
         position: { lat: fav.lat, lng: fav.lng },
         map: mapInstance.current,
-        icon: {
+        icon: isSelected ? {
+          url: createNumberedIcon(selIndex + 1, '#FFD600'),
+          scaledSize: new window.google.maps.Size(36, 44),
+          anchor: new window.google.maps.Point(18, 44)
+        } : {
           url: createStarIcon(),
           scaledSize: new window.google.maps.Size(38, 38),
           anchor: new window.google.maps.Point(19, 19)
@@ -339,7 +350,7 @@ export default function DispatchMap() {
 
       markersRef.current.push(marker)
     })
-  }, [orders, selectedOrders, routes, favorites, selectedFavorites])
+  }, [orders, selectionList, routes, favorites])
 
   useEffect(() => {
     if (directionsRendererRef.current) {
@@ -436,23 +447,25 @@ export default function DispatchMap() {
     return () => {
       if (optimizeTimerRef.current) clearTimeout(optimizeTimerRef.current)
     }
-  }, [selectedOrders, orders])
+  }, [selectionList, orders])
 
   const [dragIdx, setDragIdx] = useState(null)
 
   const toggleOrderSelection = (orderId) => {
-    setSelectedOrders(prev =>
-      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    setSelectionList(prev =>
+      prev.some(x => x.type === 'order' && x.id === orderId)
+        ? prev.filter(x => !(x.type === 'order' && x.id === orderId))
+        : [...prev, { type: 'order', id: orderId }]
     )
   }
 
   const [manualReorder, setManualReorder] = useState(false)
 
-  const moveOrderInSelection = (fromIdx, toIdx) => {
-    if (toIdx < 0 || toIdx >= selectedOrders.length) return
+  const moveItemInSelection = (fromIdx, toIdx) => {
+    if (toIdx < 0 || toIdx >= selectionList.length) return
     setManualReorder(true)
     setRouteInfo(null)
-    setSelectedOrders(prev => {
+    setSelectionList(prev => {
       const arr = [...prev]
       const [item] = arr.splice(fromIdx, 1)
       arr.splice(toIdx, 0, item)
@@ -464,7 +477,7 @@ export default function DispatchMap() {
   const handleDragOver = (e) => e.preventDefault()
   const handleDrop = (targetIdx) => {
     if (dragIdx !== null && dragIdx !== targetIdx) {
-      moveOrderInSelection(dragIdx, targetIdx)
+      moveItemInSelection(dragIdx, targetIdx)
     }
     setDragIdx(null)
   }
@@ -487,7 +500,7 @@ export default function DispatchMap() {
     if (!selectedOrders.length) return
     try {
       await api.put('/api/dispatch/orders/bulk-status', { order_ids: selectedOrders, order_status: newStatus })
-      setSelectedOrders([])
+      setSelectionList(prev => prev.filter(x => x.type !== 'order'))
       fetchData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al actualizar')
@@ -513,8 +526,7 @@ export default function DispatchMap() {
         pre_optimized: isPreOptimized,
         favorite_stops: favStops.length ? favStops : undefined
       })
-      setSelectedOrders([])
-      setSelectedFavorites([])
+      setSelectionList([])
       setShowCreateRoute(false)
       setRouteName('')
       setRouteInfo(null)
@@ -563,18 +575,18 @@ export default function DispatchMap() {
   }
 
   const handleAddOrdersToRoute = async (routeId) => {
-    if (!selectedOrders.length && !selectedFavorites.length) {
+    if (!editSelectedOrders.length && !editSelectedFavorites.length) {
       alert('Selecciona órdenes o favoritas primero')
       return
     }
     try {
-      const favStops = selectedFavorites.map(fid => favorites.find(f => f.id === fid)).filter(Boolean)
+      const favStops = editSelectedFavorites.map(fid => favorites.find(f => f.id === fid)).filter(Boolean)
       await api.post(`/api/dispatch/routes/${routeId}/orders`, {
-        order_ids: selectedOrders,
+        order_ids: editSelectedOrders,
         favorite_stops: favStops.length ? favStops : undefined
       })
-      setSelectedOrders([])
-      setSelectedFavorites([])
+      setEditSelectedOrders([])
+      setEditSelectedFavorites([])
       await loadRouteStops(routeId)
       fetchData()
     } catch (error) {
@@ -583,8 +595,10 @@ export default function DispatchMap() {
   }
 
   const toggleFavoriteSelection = (favId) => {
-    setSelectedFavorites(prev =>
-      prev.includes(favId) ? prev.filter(id => id !== favId) : [...prev, favId]
+    setSelectionList(prev =>
+      prev.some(x => x.type === 'favorite' && x.id === favId)
+        ? prev.filter(x => !(x.type === 'favorite' && x.id === favId))
+        : [...prev, { type: 'favorite', id: favId }]
     )
   }
 
@@ -1104,59 +1118,50 @@ export default function DispatchMap() {
                   </span>
                 )}
               </div>
-              <button className="sel-clear-btn" onClick={() => { setSelectedOrders([]); setSelectedFavorites([]); setShowCreateRoute(false); setRouteName('') }} title="Limpiar">
+              <button className="sel-clear-btn" onClick={() => { setSelectionList([]); setShowCreateRoute(false); setRouteName('') }} title="Limpiar">
                 <span className="material-icons">close</span>
               </button>
             </div>
 
             <div className="selection-stops-list">
-              {selectedOrders.map((id, idx) => {
-                const o = orders.find(x => x.id === id)
-                if (!o) return null
+              {selectionList.map((item, idx) => {
+                const isFav = item.type === 'favorite'
+                const o = !isFav ? orders.find(x => x.id === item.id) : null
+                const fav = isFav ? favorites.find(f => f.id === item.id) : null
+                if (!o && !fav) return null
+                const label = isFav ? fav.name : (o.customer_name || 'Sin nombre')
+                const addr = isFav ? (fav.address || '') : (o.address || '')
                 return (
                   <div
-                    key={id}
+                    key={`${item.type}-${item.id}`}
                     className={`sel-stop-item ${dragIdx === idx ? 'dragging' : ''}`}
                     draggable
                     onDragStart={() => handleDragStart(idx)}
                     onDragOver={handleDragOver}
                     onDrop={() => handleDrop(idx)}
                   >
-                    <span className="sel-stop-number">{idx + 1}</span>
-                    <div className="sel-stop-info">
-                      <span className="sel-stop-name">{o.customer_name || 'Sin nombre'}</span>
-                      <span className="sel-stop-addr">{o.address || ''}</span>
-                    </div>
-                    <div className="sel-stop-actions">
-                      <button onClick={(e) => { e.stopPropagation(); moveOrderInSelection(idx, idx - 1) }} disabled={idx === 0} className="sel-move-btn">
-                        <span className="material-icons">arrow_upward</span>
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); moveOrderInSelection(idx, idx + 1) }} disabled={idx === selectedOrders.length - 1} className="sel-move-btn">
-                        <span className="material-icons">arrow_downward</span>
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); toggleOrderSelection(id) }} className="sel-remove-btn">
-                        <span className="material-icons">remove_circle_outline</span>
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-              {selectedFavorites.map((fid, idx) => {
-                const fav = favorites.find(f => f.id === fid)
-                if (!fav) return null
-                const num = selectedOrders.length + idx + 1
-                return (
-                  <div key={`fav-${fid}`} className="sel-stop-item">
-                    <span className="sel-stop-number" style={{ background: '#FFD600', color: '#333' }}>{num}</span>
+                    <span className="sel-stop-number" style={isFav ? { background: '#FFD600', color: '#333' } : {}}>{idx + 1}</span>
                     <div className="sel-stop-info">
                       <span className="sel-stop-name" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span className="material-icons" style={{ fontSize: 13, color: '#FFD600' }}>star</span>
-                        {fav.name}
+                        {isFav && <span className="material-icons" style={{ fontSize: 13, color: '#FFD600' }}>star</span>}
+                        {label}
                       </span>
-                      <span className="sel-stop-addr">{fav.address || ''}</span>
+                      <span className="sel-stop-addr">{addr}</span>
                     </div>
                     <div className="sel-stop-actions">
-                      <button onClick={(e) => { e.stopPropagation(); toggleFavoriteSelection(fid) }} className="sel-remove-btn">
+                      <button onClick={(e) => { e.stopPropagation(); moveItemInSelection(idx, idx - 1) }} disabled={idx === 0} className="sel-move-btn">
+                        <span className="material-icons">arrow_upward</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); moveItemInSelection(idx, idx + 1) }} disabled={idx === selectionList.length - 1} className="sel-move-btn">
+                        <span className="material-icons">arrow_downward</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          isFav ? toggleFavoriteSelection(item.id) : toggleOrderSelection(item.id)
+                        }}
+                        className="sel-remove-btn"
+                      >
                         <span className="material-icons">remove_circle_outline</span>
                       </button>
                     </div>
@@ -1188,7 +1193,7 @@ export default function DispatchMap() {
               {!showCreateRoute ? (
                 <button className="create-route-btn" onClick={() => setShowCreateRoute(true)}>
                   <span className="material-icons">add_road</span>
-                  Crear Ruta con {selectedOrders.length + selectedFavorites.length} parada{(selectedOrders.length + selectedFavorites.length) > 1 ? 's' : ''}
+                  Crear Ruta con {selectionList.length} parada{selectionList.length > 1 ? 's' : ''}
                 </button>
               ) : (
                 <div className="create-route-inline">
@@ -1529,10 +1534,18 @@ export default function DispatchMap() {
                           <div className="dr-edit-actions">
                             <button
                               className="dbtn outline small full"
-                              onClick={() => setShowAddStopsPanel(showAddStopsPanel === route.id ? null : route.id)}
+                              onClick={() => {
+                                if (showAddStopsPanel === route.id) {
+                                  setShowAddStopsPanel(null)
+                                  setEditSelectedOrders([])
+                                  setEditSelectedFavorites([])
+                                } else {
+                                  setShowAddStopsPanel(route.id)
+                                }
+                              }}
                             >
                               <span className="material-icons">add_location_alt</span>
-                              {showAddStopsPanel === route.id ? 'Cerrar selector' : 'Agregar paradas'}
+                              {showAddStopsPanel === route.id ? 'Cancelar' : 'Agregar paradas'}
                             </button>
 
                             {showAddStopsPanel === route.id && (
@@ -1543,12 +1556,14 @@ export default function DispatchMap() {
                                       <span className="material-icons" style={{ fontSize: 13 }}>list_alt</span> Órdenes disponibles
                                     </div>
                                     {orders.map(o => {
-                                      const isSel = selectedOrders.includes(o.id)
+                                      const isSel = editSelectedOrders.includes(o.id)
                                       return (
                                         <div
                                           key={o.id}
                                           className={`dr-add-stop-item ${isSel ? 'selected' : ''}`}
-                                          onClick={() => toggleOrderSelection(o.id)}
+                                          onClick={() => setEditSelectedOrders(prev =>
+                                            prev.includes(o.id) ? prev.filter(id => id !== o.id) : [...prev, o.id]
+                                          )}
                                         >
                                           <span className="dr-add-stop-check">
                                             <span className="material-icons">{isSel ? 'check_box' : 'check_box_outline_blank'}</span>
@@ -1568,12 +1583,14 @@ export default function DispatchMap() {
                                       <span className="material-icons" style={{ fontSize: 13, color: '#FFD600' }}>star</span> Favoritas
                                     </div>
                                     {favorites.map(fav => {
-                                      const isSel = selectedFavorites.includes(fav.id)
+                                      const isSel = editSelectedFavorites.includes(fav.id)
                                       return (
                                         <div
                                           key={fav.id}
                                           className={`dr-add-stop-item ${isSel ? 'selected' : ''}`}
-                                          onClick={() => toggleFavoriteSelection(fav.id)}
+                                          onClick={() => setEditSelectedFavorites(prev =>
+                                            prev.includes(fav.id) ? prev.filter(id => id !== fav.id) : [...prev, fav.id]
+                                          )}
                                         >
                                           <span className="dr-add-stop-check">
                                             <span className="material-icons">{isSel ? 'check_box' : 'check_box_outline_blank'}</span>
@@ -1589,14 +1606,14 @@ export default function DispatchMap() {
                                     })}
                                   </>
                                 )}
-                                {(selectedOrders.length > 0 || selectedFavorites.length > 0) && (
+                                {(editSelectedOrders.length > 0 || editSelectedFavorites.length > 0) && (
                                   <button
                                     className="dbtn green small full"
                                     style={{ marginTop: 8 }}
                                     onClick={() => { handleAddOrdersToRoute(route.id); setShowAddStopsPanel(null) }}
                                   >
                                     <span className="material-icons">add</span>
-                                    Agregar {selectedOrders.length + selectedFavorites.length} parada{(selectedOrders.length + selectedFavorites.length) > 1 ? 's' : ''}
+                                    Guardar {editSelectedOrders.length + editSelectedFavorites.length} parada{(editSelectedOrders.length + editSelectedFavorites.length) > 1 ? 's' : ''}
                                   </button>
                                 )}
                               </div>
