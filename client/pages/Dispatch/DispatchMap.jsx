@@ -76,6 +76,7 @@ export default function DispatchMap() {
   const [optimizingLive, setOptimizingLive] = useState(false)
   const [deliveredOrders, setDeliveredOrders] = useState([])
   const [loadingDelivered, setLoadingDelivered] = useState(false)
+  const [cleaningDuplicates, setCleaningDuplicates] = useState(false)
   const [evidenceModal, setEvidenceModal] = useState(null)
   const [editingBilling, setEditingBilling] = useState(null)
   const [billingValues, setBillingValues] = useState({ order_cost: '', deposit_amount: '', total_to_collect: '' })
@@ -765,6 +766,20 @@ export default function DispatchMap() {
     }
   }
 
+  const handleCleanupDuplicates = async () => {
+    if (!window.confirm('¿Limpiar duplicados? Esto fusionará registros duplicados por teléfono o contacto.')) return
+    setCleaningDuplicates(true)
+    try {
+      const res = await api.post('/api/dispatch/cleanup-duplicates')
+      alert(`Limpieza completada: ${res.data.cleaned} duplicado(s) eliminado(s)`)
+      await fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al limpiar duplicados')
+    } finally {
+      setCleaningDuplicates(false)
+    }
+  }
+
   const handleDriverCommission = async (driverId) => {
     const val = parseFloat(driverCommissions[driverId])
     if (isNaN(val) || val < 0) return
@@ -1011,6 +1026,14 @@ export default function DispatchMap() {
               <span className="dstat-val">{stats.delivered || 0}</span>
               <span className="dstat-label">Entregadas</span>
             </div>
+            <button
+              className="dstat-cleanup-btn"
+              title="Limpiar duplicados"
+              onClick={handleCleanupDuplicates}
+              disabled={cleaningDuplicates}
+            >
+              <span className="material-icons">{cleaningDuplicates ? 'hourglass_empty' : 'auto_fix_high'}</span>
+            </button>
           </div>
         )}
 

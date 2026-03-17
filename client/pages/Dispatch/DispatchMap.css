@@ -32,12 +32,15 @@
 }
 
 .dispatch-stats {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  display: flex;
   gap: 4px;
   padding: 8px;
   background: #f5f5f5;
   border-bottom: 1px solid #e0e0e0;
+  align-items: stretch;
+}
+.dispatch-stats .dstat {
+  flex: 1;
 }
 
 .dstat {
@@ -60,6 +63,34 @@
   font-size: 0.65rem;
   color: #666;
   text-transform: uppercase;
+}
+
+.dstat-cleanup-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: white;
+  color: #888;
+  cursor: pointer;
+  align-self: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.dstat-cleanup-btn:hover:not(:disabled) {
+  background: #f0f0f0;
+  color: #333;
+}
+.dstat-cleanup-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.dstat-cleanup-btn .material-icons {
+  font-size: 1.1rem;
 }
 
 .dispatch-tabs {
@@ -1391,7 +1422,11 @@
   }
   
   .dispatch-stats {
-    grid-template-columns: repeat(3, 1fr);
+    flex-wrap: wrap;
+  }
+  .dispatch-stats .dstat {
+    flex: 1 1 calc(33% - 4px);
+    min-width: 60px;
   }
 }
 

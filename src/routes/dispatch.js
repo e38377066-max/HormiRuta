@@ -1595,4 +1595,101 @@ router.delete('/favorites/:id', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/cleanup-duplicates', requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const userId = user.id;
+    let totalCleaned = 0;
+
+    const [contactDups] = await ValidatedAddress.sequelize.query(`
+      SELECT respond_contact_id, COUNT(*) as cnt
+      FROM validated_addresses
+      WHERE user_id = :userId AND respond_contact_id IS NOT NULL
+      GROUP BY respond_contact_id
+      HAVING COUNT(*) > 1
+    `, { replacements: { userId } });
+
+    for (const dup of contactDups) {
+      const records = await ValidatedAddress.findAll({
+        where: { user_id: userId, respond_contact_id: dup.respond_contact_id },
+        order: [['created_at', 'DESC']]
+      });
+      for (const old of records.slice(1)) {
+        await old.destroy();
+        totalCleaned++;
+      }
+    }
+
+    const [allWithPhone] = await ValidatedAddress.sequelize.query(`
+      SELECT id, customer_phone,
+             REGEXP_REPLACE(customer_phone, '[^0-9]', '', 'g') as phone_digits
+      FROM validated_addresses
+      WHERE user_id = :userId AND customer_phone IS NOT NULL AND customer_phone != ''
+    `, { replacements: { userId } });
+
+    const phoneDigitGroups = {};
+    for (const row of allWithPhone) {
+      const digits = (row.phone_digits || '').slice(-10);
+      if (!digits || digits.length < 7) continue;
+      if (!phoneDigitGroups[digits]) phoneDigitGroups[digits] = [];
+      phoneDigitGroups[digits].push(row.id);
+    }
+
+    for (const [, ids] of Object.entries(phoneDigitGroups)) {
+      if (ids.length < 2) continue;
+      const records = await ValidatedAddress.findAll({
+        where: { user_id: userId, id: { [Op.in]: ids } },
+        order: [['created_at', 'DESC']]
+      });
+      if (records.length < 2) continue;
+      const keeper = records.find(r => r.respond_contact_id && r.validated_address)
+        || records.find(r => r.respond_contact_id)
+        || records.find(r => r.validated_address)
+        || records[0];
+      const mergeFields = {
+        order_cost: keeper.order_cost,
+        deposit_amount: keeper.deposit_amount,
+        total_to_collect: keeper.total_to_collect,
+        notes: keeper.notes,
+        apartment_number: keeper.apartment_number,
+        respond_contact_id: keeper.respond_contact_id,
+        validated_address: keeper.validated_address,
+        original_address: keeper.original_address,
+        address_lat: keeper.address_lat,
+        address_lng: keeper.address_lng,
+        zip_code: keeper.zip_code,
+        city: keeper.city,
+        state: keeper.state
+      };
+      for (const donor of records.filter(r => r.id !== keeper.id)) {
+        mergeFields.order_cost = mergeFields.order_cost ?? donor.order_cost;
+        mergeFields.deposit_amount = mergeFields.deposit_amount ?? donor.deposit_amount;
+        mergeFields.total_to_collect = mergeFields.total_to_collect ?? donor.total_to_collect;
+        mergeFields.notes = mergeFields.notes || donor.notes;
+        mergeFields.apartment_number = mergeFields.apartment_number || donor.apartment_number;
+        mergeFields.respond_contact_id = mergeFields.respond_contact_id || donor.respond_contact_id;
+        mergeFields.validated_address = mergeFields.validated_address || donor.validated_address;
+        mergeFields.original_address = mergeFields.original_address || donor.original_address;
+        mergeFields.address_lat = mergeFields.address_lat ?? donor.address_lat;
+        mergeFields.address_lng = mergeFields.address_lng ?? donor.address_lng;
+        mergeFields.zip_code = mergeFields.zip_code || donor.zip_code;
+        mergeFields.city = mergeFields.city || donor.city;
+        mergeFields.state = mergeFields.state || donor.state;
+      }
+      await keeper.update(mergeFields);
+      for (const old of records.filter(r => r.id !== keeper.id)) {
+        await old.destroy();
+        totalCleaned++;
+      }
+    }
+
+    console.log(`[Dispatch] Limpieza manual: ${totalCleaned} duplicado(s) eliminado(s)`);
+    res.json({ success: true, cleaned: totalCleaned });
+  } catch (error) {
+    console.error('Error en limpieza de duplicados:', error);
+    res.status(500).json({ error: 'Error al limpiar duplicados' });
+  }
+});
+
 export default router;

@@ -1163,7 +1163,7 @@ class PollingService {
           }
           continue;
         }
-        if (orderStatus && existing.order_status !== orderStatus) {
+        if (orderStatus && existing.order_status !== orderStatus && this.statusCanAdvance(existing.order_status, orderStatus)) {
           updateFields.order_status = orderStatus;
           console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
         }
@@ -1731,7 +1731,7 @@ class PollingService {
             console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando (terminal, route_id=${order.route_id || 'ninguna'})`);
             await order.destroy();
             syncedCount++;
-          } else if (newStatus && newStatus !== order.order_status) {
+          } else if (newStatus && newStatus !== order.order_status && this.statusCanAdvance(order.order_status, newStatus)) {
             await order.update({ order_status: newStatus });
             console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
             syncedCount++;
@@ -1818,34 +1818,67 @@ class PollingService {
         }
       }
 
-      const [phoneDups] = await ValidatedAddress.sequelize.query(`
-        SELECT customer_phone, COUNT(*) as cnt
+      const [allWithPhone] = await ValidatedAddress.sequelize.query(`
+        SELECT id, customer_phone,
+               REGEXP_REPLACE(customer_phone, '[^0-9]', '', 'g') as phone_digits
         FROM validated_addresses
         WHERE user_id = :userId AND customer_phone IS NOT NULL AND customer_phone != ''
-        GROUP BY customer_phone
-        HAVING COUNT(*) > 1
       `, { replacements: { userId } });
 
-      for (const dup of phoneDups) {
+      const phoneDigitGroups = {};
+      for (const row of allWithPhone) {
+        const digits = (row.phone_digits || '').slice(-10);
+        if (!digits || digits.length < 7) continue;
+        if (!phoneDigitGroups[digits]) phoneDigitGroups[digits] = [];
+        phoneDigitGroups[digits].push(row.id);
+      }
+
+      for (const [digits, ids] of Object.entries(phoneDigitGroups)) {
+        if (ids.length < 2) continue;
         const records = await ValidatedAddress.findAll({
-          where: { user_id: userId, customer_phone: dup.customer_phone },
+          where: { user_id: userId, id: { [Op.in]: ids } },
           order: [['created_at', 'DESC']]
         });
-        const keeper = records.find(r => r.respond_contact_id) || records[0];
-        const donor = records.find(r => r.id !== keeper.id && (r.order_cost || r.notes || r.apartment_number));
-        if (donor) {
-          await keeper.update({
-            order_cost: keeper.order_cost ?? donor.order_cost,
-            deposit_amount: keeper.deposit_amount ?? donor.deposit_amount,
-            total_to_collect: keeper.total_to_collect ?? donor.total_to_collect,
-            notes: keeper.notes || donor.notes,
-            apartment_number: keeper.apartment_number || donor.apartment_number,
-            respond_contact_id: keeper.respond_contact_id || donor.respond_contact_id
-          });
+        if (records.length < 2) continue;
+        const keeper = records.find(r => r.respond_contact_id && r.validated_address)
+          || records.find(r => r.respond_contact_id)
+          || records.find(r => r.validated_address)
+          || records[0];
+        const mergeFields = {
+          order_cost: keeper.order_cost,
+          deposit_amount: keeper.deposit_amount,
+          total_to_collect: keeper.total_to_collect,
+          notes: keeper.notes,
+          apartment_number: keeper.apartment_number,
+          respond_contact_id: keeper.respond_contact_id,
+          validated_address: keeper.validated_address,
+          original_address: keeper.original_address,
+          address_lat: keeper.address_lat,
+          address_lng: keeper.address_lng,
+          zip_code: keeper.zip_code,
+          city: keeper.city,
+          state: keeper.state
+        };
+        for (const donor of records.filter(r => r.id !== keeper.id)) {
+          mergeFields.order_cost = mergeFields.order_cost ?? donor.order_cost;
+          mergeFields.deposit_amount = mergeFields.deposit_amount ?? donor.deposit_amount;
+          mergeFields.total_to_collect = mergeFields.total_to_collect ?? donor.total_to_collect;
+          mergeFields.notes = mergeFields.notes || donor.notes;
+          mergeFields.apartment_number = mergeFields.apartment_number || donor.apartment_number;
+          mergeFields.respond_contact_id = mergeFields.respond_contact_id || donor.respond_contact_id;
+          mergeFields.validated_address = mergeFields.validated_address || donor.validated_address;
+          mergeFields.original_address = mergeFields.original_address || donor.original_address;
+          mergeFields.address_lat = mergeFields.address_lat ?? donor.address_lat;
+          mergeFields.address_lng = mergeFields.address_lng ?? donor.address_lng;
+          mergeFields.zip_code = mergeFields.zip_code || donor.zip_code;
+          mergeFields.city = mergeFields.city || donor.city;
+          mergeFields.state = mergeFields.state || donor.state;
         }
+        await keeper.update(mergeFields);
         for (const old of records.filter(r => r.id !== keeper.id)) {
           await old.destroy();
           totalCleaned++;
+          console.log(`[AddressScan] Duplicado por tel ${digits}: eliminado ${old.customer_name} (id=${old.id}), keeper id=${keeper.id}`);
         }
       }
 
@@ -1981,6 +2014,14 @@ class PollingService {
     }
   }
 
+  statusCanAdvance(currentStatus, newStatus) {
+    const STATUS_ORDER = ['approved', 'ordered', 'on_delivery', 'ups_shipped', 'delivered'];
+    const currentIdx = STATUS_ORDER.indexOf(currentStatus);
+    const newIdx = STATUS_ORDER.indexOf(newStatus);
+    if (currentIdx === -1 || newIdx === -1) return newIdx !== -1;
+    return newIdx > currentIdx;
+  }
+
   lifecycleToOrderStatus(lifecycle) {
     if (!lifecycle) return null;
     const lc = lifecycle.toLowerCase();
@@ -2077,7 +2118,7 @@ class PollingService {
         if (sourceOverride) {
           updateData.source = sourceOverride;
         }
-        if (orderStatus && record.order_status !== orderStatus) {
+        if (orderStatus && record.order_status !== orderStatus && this.statusCanAdvance(record.order_status, orderStatus)) {
           updateData.order_status = orderStatus;
           console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${record.order_status} -> ${orderStatus}`);
         }
