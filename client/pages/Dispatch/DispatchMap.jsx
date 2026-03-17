@@ -215,11 +215,19 @@ export default function DispatchMap() {
       const config = STATUS_CONFIG[order.order_status] || STATUS_CONFIG.approved
       const selIndex = selectionList.findIndex(x => x.type === 'order' && x.id === order.id)
       const isSelected = selIndex !== -1
+      const editIdx = editSelectedOrders.indexOf(order.id)
+      const isEditSelected = showAddStopsPanel !== null && editIdx !== -1
       const isPending = order.order_status === 'pending'
       const isWhite = config.color === '#ffffff'
 
       let icon
-      if (isSelected) {
+      if (isEditSelected) {
+        icon = {
+          url: createNumberedIcon(editIdx + 1, '#00897b'),
+          scaledSize: new window.google.maps.Size(36, 44),
+          anchor: new window.google.maps.Point(18, 44)
+        }
+      } else if (isSelected) {
         icon = {
           url: createNumberedIcon(selIndex + 1, '#6200ea'),
           scaledSize: new window.google.maps.Size(36, 44),
@@ -247,7 +255,7 @@ export default function DispatchMap() {
         map: mapInstance.current,
         icon,
         title: `${order.customer_name || 'Sin nombre'} - ${order.address}`,
-        zIndex: isSelected ? 100 : 1
+        zIndex: isEditSelected ? 150 : isSelected ? 100 : 1
       })
 
       const infoContent = `
@@ -262,8 +270,14 @@ export default function DispatchMap() {
       const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
 
       marker.addListener('click', () => {
-        infoWindow.open(mapInstance.current, marker)
-        if (isAdmin) toggleOrderSelection(order.id)
+        if (isAdmin && showAddStopsPanel !== null) {
+          setEditSelectedOrders(prev =>
+            prev.includes(order.id) ? prev.filter(id => id !== order.id) : [...prev, order.id]
+          )
+        } else {
+          infoWindow.open(mapInstance.current, marker)
+          if (isAdmin) toggleOrderSelection(order.id)
+        }
       })
 
       markersRef.current.push(marker)
@@ -350,7 +364,7 @@ export default function DispatchMap() {
 
       markersRef.current.push(marker)
     })
-  }, [orders, selectionList, routes, favorites])
+  }, [orders, selectionList, routes, favorites, showAddStopsPanel, editSelectedOrders])
 
   useEffect(() => {
     if (directionsRendererRef.current) {
@@ -1550,6 +1564,15 @@ export default function DispatchMap() {
 
                             {showAddStopsPanel === route.id && (
                               <div className="dr-add-stops-picker">
+                                <div style={{ fontSize: 11, color: '#00897b', background: '#e0f2f1', borderRadius: 6, padding: '5px 8px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span className="material-icons" style={{ fontSize: 13 }}>touch_app</span>
+                                  Toca paradas en el mapa o selecciónalas aquí
+                                  {editSelectedOrders.length + editSelectedFavorites.length > 0 && (
+                                    <span style={{ marginLeft: 'auto', fontWeight: 'bold' }}>
+                                      {editSelectedOrders.length + editSelectedFavorites.length} seleccionada{(editSelectedOrders.length + editSelectedFavorites.length) > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </div>
                                 {orders.length > 0 && (
                                   <>
                                     <div className="dr-add-stops-label">
