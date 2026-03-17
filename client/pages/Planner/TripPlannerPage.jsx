@@ -1399,7 +1399,7 @@ export default function TripPlannerPage() {
         </div>
       </div>
       
-      <div className={`bottom-panel ${isDragging.current ? 'dragging' : ''}`} style={{ height: `${panelHeight}vh` }}>
+      <div className={`bottom-panel ${isDragging.current ? 'dragging' : ''}`} style={{ height: `${panelHeight}dvh` }}>
         <div 
           className="panel-handle" 
           onMouseDown={handlePanelDragStart}
