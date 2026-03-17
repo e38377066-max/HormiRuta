@@ -927,7 +927,12 @@ router.get('/routes', requireAuth, async (req, res) => {
       const routeOrders = await ValidatedAddress.findAll({
         where: { route_id: r.id }
       });
+      const routeAllStops = await Stop.findAll({
+        where: { route_id: r.id },
+        order: [['order', 'ASC']]
+      });
       routeDict.orders = routeOrders.map(o => o.toDict());
+      routeDict.route_stops = routeAllStops.map(s => s.toDict());
       routeDict.total_amount = routeOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
       routeDict.driver_commission_per_stop = r.assigned_driver_id ? (driverCommissionMap[r.assigned_driver_id] || 0) : 0;
       routeDict.driver_commission_total = routeDict.driver_commission_per_stop * (routeDict.stops_count || 0);

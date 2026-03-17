@@ -114,6 +114,7 @@ export default function DispatchMap() {
   const [routeStops, setRouteStops] = useState({})
   const [loadingRouteStops, setLoadingRouteStops] = useState(null)
   const [showAddStopsPanel, setShowAddStopsPanel] = useState(null)
+  const [editSearchQuery, setEditSearchQuery] = useState('')
 
   const selectedOrders = selectionList.filter(x => x.type === 'order').map(x => x.id)
   const selectedFavorites = selectionList.filter(x => x.type === 'favorite').map(x => x.id)
@@ -284,33 +285,33 @@ export default function DispatchMap() {
     })
 
     routes.forEach(route => {
-      if (route.status !== 'assigned' || !route.orders?.length) return
-      const driverName = route.orders[0]?.driver_name
-      if (!driverName) return
-      const colorIdx = Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0))
-      const color = getDriverColor(colorIdx)
+      const stopsToRender = route.route_stops || []
+      if (!stopsToRender.length) return
+      const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name ? route.orders[0].driver_name : null
+      const colorIdx = driverName ? Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0)) : 0
+      const color = driverName ? getDriverColor(colorIdx) : '#6a1b9a'
 
-      route.orders.forEach((order, stopIdx) => {
-        if (!order.address_lat || !order.address_lng) return
+      stopsToRender.forEach((stop, stopIdx) => {
+        if (!stop.lat || !stop.lng) return
 
         const marker = new window.google.maps.Marker({
-          position: { lat: order.address_lat, lng: order.address_lng },
+          position: { lat: stop.lat, lng: stop.lng },
           map: mapInstance.current,
           icon: {
             url: createNumberedIcon(stopIdx + 1, color),
             scaledSize: new window.google.maps.Size(36, 44),
             anchor: new window.google.maps.Point(18, 44)
           },
-          title: `${driverName} - ${order.customer_name || 'Sin nombre'}`,
+          title: `${stop.customer_name || 'Sin nombre'} - ${stop.address || ''}`,
           zIndex: 50
         })
 
         const infoContent = `
           <div style="font-family:sans-serif;min-width:200px">
-            <strong>${order.customer_name || 'Sin nombre'}</strong><br/>
-            <span style="color:#666">${order.address || ''}</span><br/>
+            <strong>${stop.customer_name || 'Sin nombre'}</strong><br/>
+            <span style="color:#666">${stop.address || ''}</span><br/>
             <span style="background:${color};color:white;padding:2px 8px;border-radius:4px;font-size:12px">
-              ${driverName} - Parada ${stopIdx + 1}
+              ${driverName ? driverName + ' - ' : ''}Parada ${stopIdx + 1}
             </span>
           </div>
         `
@@ -332,10 +333,17 @@ export default function DispatchMap() {
     favorites.filter(f => f.lat && f.lng).forEach(fav => {
       const selIndex = selectionList.findIndex(x => x.type === 'favorite' && x.id === fav.id)
       const isSelected = selIndex !== -1
+      const editFavIdx = editSelectedFavorites.indexOf(fav.id)
+      const isEditSelected = showAddStopsPanel !== null && editFavIdx !== -1
+
       const marker = new window.google.maps.Marker({
         position: { lat: fav.lat, lng: fav.lng },
         map: mapInstance.current,
-        icon: isSelected ? {
+        icon: isEditSelected ? {
+          url: createNumberedIcon(editFavIdx + 1, '#00897b'),
+          scaledSize: new window.google.maps.Size(36, 44),
+          anchor: new window.google.maps.Point(18, 44)
+        } : isSelected ? {
           url: createNumberedIcon(selIndex + 1, '#FFD600'),
           scaledSize: new window.google.maps.Size(36, 44),
           anchor: new window.google.maps.Point(18, 44)
@@ -345,7 +353,7 @@ export default function DispatchMap() {
           anchor: new window.google.maps.Point(19, 19)
         },
         title: fav.name,
-        zIndex: 200
+        zIndex: isEditSelected ? 250 : isSelected ? 200 : 200
       })
 
       const infoContent = `
@@ -360,11 +368,20 @@ export default function DispatchMap() {
         </div>
       `
       const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
-      marker.addListener('click', () => infoWindow.open(mapInstance.current, marker))
+
+      marker.addListener('click', () => {
+        if (isAdmin && showAddStopsPanel !== null) {
+          setEditSelectedFavorites(prev =>
+            prev.includes(fav.id) ? prev.filter(id => id !== fav.id) : [...prev, fav.id]
+          )
+        } else {
+          infoWindow.open(mapInstance.current, marker)
+        }
+      })
 
       markersRef.current.push(marker)
     })
-  }, [orders, selectionList, routes, favorites, showAddStopsPanel, editSelectedOrders])
+  }, [orders, selectionList, routes, favorites, showAddStopsPanel, editSelectedOrders, editSelectedFavorites])
 
   useEffect(() => {
     if (directionsRendererRef.current) {
@@ -1553,8 +1570,10 @@ export default function DispatchMap() {
                                   setShowAddStopsPanel(null)
                                   setEditSelectedOrders([])
                                   setEditSelectedFavorites([])
+                                  setEditSearchQuery('')
                                 } else {
                                   setShowAddStopsPanel(route.id)
+                                  setEditSearchQuery('')
                                 }
                               }}
                             >
@@ -1562,23 +1581,38 @@ export default function DispatchMap() {
                               {showAddStopsPanel === route.id ? 'Cancelar' : 'Agregar paradas'}
                             </button>
 
-                            {showAddStopsPanel === route.id && (
+                            {showAddStopsPanel === route.id && (() => {
+                              const q = editSearchQuery.toLowerCase()
+                              const filteredOrders = orders.filter(o =>
+                                !q || (o.customer_name || '').toLowerCase().includes(q) || (o.address || '').toLowerCase().includes(q)
+                              )
+                              const filteredFavs = favorites.filter(f =>
+                                !q || (f.name || '').toLowerCase().includes(q) || (f.address || '').toLowerCase().includes(q)
+                              )
+                              return (
                               <div className="dr-add-stops-picker">
                                 <div style={{ fontSize: 11, color: '#00897b', background: '#e0f2f1', borderRadius: 6, padding: '5px 8px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
                                   <span className="material-icons" style={{ fontSize: 13 }}>touch_app</span>
                                   Toca paradas en el mapa o selecciónalas aquí
                                   {editSelectedOrders.length + editSelectedFavorites.length > 0 && (
                                     <span style={{ marginLeft: 'auto', fontWeight: 'bold' }}>
-                                      {editSelectedOrders.length + editSelectedFavorites.length} seleccionada{(editSelectedOrders.length + editSelectedFavorites.length) > 1 ? 's' : ''}
+                                      {editSelectedOrders.length + editSelectedFavorites.length} sel.
                                     </span>
                                   )}
                                 </div>
-                                {orders.length > 0 && (
+                                <input
+                                  type="text"
+                                  value={editSearchQuery}
+                                  onChange={e => setEditSearchQuery(e.target.value)}
+                                  placeholder="Buscar por nombre o dirección..."
+                                  style={{ width: '100%', padding: '5px 8px', borderRadius: 6, border: '1px solid #ccc', fontSize: 12, marginBottom: 6, boxSizing: 'border-box' }}
+                                />
+                                {filteredOrders.length > 0 && (
                                   <>
                                     <div className="dr-add-stops-label">
                                       <span className="material-icons" style={{ fontSize: 13 }}>list_alt</span> Órdenes disponibles
                                     </div>
-                                    {orders.map(o => {
+                                    {filteredOrders.map(o => {
                                       const isSel = editSelectedOrders.includes(o.id)
                                       return (
                                         <div
@@ -1600,12 +1634,12 @@ export default function DispatchMap() {
                                     })}
                                   </>
                                 )}
-                                {favorites.length > 0 && (
+                                {filteredFavs.length > 0 && (
                                   <>
-                                    <div className="dr-add-stops-label" style={{ marginTop: 8 }}>
+                                    <div className="dr-add-stops-label" style={{ marginTop: filteredOrders.length ? 8 : 0 }}>
                                       <span className="material-icons" style={{ fontSize: 13, color: '#FFD600' }}>star</span> Favoritas
                                     </div>
-                                    {favorites.map(fav => {
+                                    {filteredFavs.map(fav => {
                                       const isSel = editSelectedFavorites.includes(fav.id)
                                       return (
                                         <div
@@ -1629,18 +1663,22 @@ export default function DispatchMap() {
                                     })}
                                   </>
                                 )}
+                                {filteredOrders.length === 0 && filteredFavs.length === 0 && (
+                                  <p style={{ fontSize: 12, color: '#888', textAlign: 'center', margin: '8px 0' }}>Sin resultados</p>
+                                )}
                                 {(editSelectedOrders.length > 0 || editSelectedFavorites.length > 0) && (
                                   <button
                                     className="dbtn green small full"
                                     style={{ marginTop: 8 }}
-                                    onClick={() => { handleAddOrdersToRoute(route.id); setShowAddStopsPanel(null) }}
+                                    onClick={() => { handleAddOrdersToRoute(route.id); setShowAddStopsPanel(null); setEditSearchQuery('') }}
                                   >
-                                    <span className="material-icons">add</span>
+                                    <span className="material-icons">save</span>
                                     Guardar {editSelectedOrders.length + editSelectedFavorites.length} parada{(editSelectedOrders.length + editSelectedFavorites.length) > 1 ? 's' : ''}
                                   </button>
                                 )}
                               </div>
-                            )}
+                              )
+                            })()}
 
                             <button className="dbtn red small full" onClick={() => handleDeleteRoute(route.id)}>
                               <span className="material-icons">delete_forever</span>
