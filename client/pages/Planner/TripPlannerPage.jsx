@@ -18,6 +18,7 @@ export default function TripPlannerPage() {
   const selectedMarkerRef = useRef(null)
   const navLineRef = useRef(null)
   const navRendererRef = useRef(null)
+  const pendingNavRestoreRef = useRef(false)
   const [userLocation, setUserLocation] = useState(null)
   const [selectedPoint, setSelectedPoint] = useState(null)
   
@@ -86,6 +87,19 @@ export default function TripPlannerPage() {
     loadDispatchRoutes()
   }, [])
 
+  useEffect(() => {
+    if (isOptimized && pendingNavRestoreRef.current) {
+      pendingNavRestoreRef.current = false
+      setNavigationMode(true)
+      setAutoFollow(true)
+      keepScreenAwake()
+      const savedStop = localStorage.getItem('selectedStop')
+      if (savedStop !== null && savedStop !== 'null') {
+        setSelectedStopIndex(parseInt(savedStop))
+      }
+    }
+  }, [isOptimized])
+
   const loadDispatchRoutes = async () => {
     try {
       setLoadingDispatch(true)
@@ -96,9 +110,15 @@ export default function TripPlannerPage() {
       if (savedRouteId) {
         const savedRoute = assigned.find(r => String(r.id) === String(savedRouteId))
         if (savedRoute) {
+          const wasNavigating = localStorage.getItem('navMode') === 'true'
+          if (wasNavigating) {
+            pendingNavRestoreRef.current = true
+          }
           loadDispatchRoute(savedRoute)
         } else {
           localStorage.removeItem('activeRouteId')
+          localStorage.removeItem('navMode')
+          localStorage.removeItem('selectedStop')
         }
       }
     } catch (err) {
@@ -786,6 +806,8 @@ export default function TripPlannerPage() {
       setShowEvidenceModal(null)
       setEvidencePreview(null)
       setEvidenceFile(null)
+      setSelectedStopIndex(null)
+      localStorage.removeItem('selectedStop')
     }
   }
 
@@ -1226,6 +1248,8 @@ export default function TripPlannerPage() {
     setNavigationMode(true)
     setSelectedStopIndex(null)
     setAutoFollow(true)
+    localStorage.setItem('navMode', 'true')
+    localStorage.removeItem('selectedStop')
     keepScreenAwake()
     if (userLocation && mapInstanceRef.current) {
       mapInstanceRef.current.panTo(userLocation)
@@ -1241,6 +1265,8 @@ export default function TripPlannerPage() {
     setCurrentStepIndex(0)
     setCurrentSpeed(null)
     lastSpokenStepRef.current = -1
+    localStorage.setItem('navMode', 'false')
+    localStorage.removeItem('selectedStop')
     allowScreenSleep()
     stopSpeaking()
     navLastRouteRef.current = null
@@ -1266,6 +1292,8 @@ export default function TripPlannerPage() {
     setNavigationMode(false)
     setCurrentRouteId(null)
     localStorage.removeItem('activeRouteId')
+    localStorage.removeItem('navMode')
+    localStorage.removeItem('selectedStop')
     setTotalDistance(0)
     setTotalDuration(0)
     setSavedDistance(0)
@@ -1496,7 +1524,15 @@ export default function TripPlannerPage() {
                   className={`stop-row ${navigationMode ? 'stop-row-nav' : ''} ${stop.skipped ? 'stop-row-skipped' : ''} ${navigationMode && selectedStopIndex === index ? 'stop-row-selected' : ''}`}
                   onClick={() => {
                     if (navigationMode && !stop.completed && !stop.skipped) {
-                      setSelectedStopIndex(prev => prev === index ? null : index)
+                      setSelectedStopIndex(prev => {
+                        const next = prev === index ? null : index
+                        if (next === null) {
+                          localStorage.removeItem('selectedStop')
+                        } else {
+                          localStorage.setItem('selectedStop', String(next))
+                        }
+                        return next
+                      })
                     }
                   }}
                 >
@@ -1616,7 +1652,7 @@ export default function TripPlannerPage() {
                     </button>
                     <button
                       className="btn-skip-nav"
-                      onClick={() => { skipStop(selectedStopIndex); setSelectedStopIndex(null) }}
+                      onClick={() => { skipStop(selectedStopIndex); setSelectedStopIndex(null); localStorage.removeItem('selectedStop') }}
                     >
                       <span className="material-icons">skip_next</span>
                       Saltar parada
