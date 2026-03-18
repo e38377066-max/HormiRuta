@@ -6,7 +6,8 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    cleartext: true
+    cleartext: true,
+    url: 'https://area862system.com'
   },
   plugins: {
     SplashScreen: {
