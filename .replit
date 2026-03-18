@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "swift-5.8", "java-graalvm22.3", "ruby-3.2", "postgresql-16"]
+modules = ["nodejs-20", "web", "swift-5.8", "java-graalvm22.3", "ruby-3.2"]
 [agent]
 expertMode = true
 
