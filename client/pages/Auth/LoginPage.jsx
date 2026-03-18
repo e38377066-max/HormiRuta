@@ -20,7 +20,8 @@ export default function LoginPage() {
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', email)
       }
-      navigate('/planner')
+      const role = result.user?.role
+      navigate(role === 'admin' ? '/messaging' : '/planner')
     }
   }
 

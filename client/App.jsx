@@ -21,6 +21,12 @@ import SettingsPage from './pages/Messaging/SettingsPage'
 import TripPlannerPage from './pages/Planner/TripPlannerPage'
 import DispatchMap from './pages/Dispatch/DispatchMap'
 
+function getDefaultRoute(user) {
+  if (!user) return '/login'
+  if (user.role === 'admin') return '/messaging'
+  return '/planner'
+}
+
 function ProtectedRoute({ children, adminOnly = false, allowedRoles = null }) {
   const { isAuthenticated, isAdmin, user, initializing } = useAuth()
 
@@ -40,18 +46,18 @@ function ProtectedRoute({ children, adminOnly = false, allowedRoles = null }) {
   }
   
   if (allowedRoles && !allowedRoles.includes(user?.role)) {
-    return <Navigate to="/messaging" replace />
+    return <Navigate to={getDefaultRoute(user)} replace />
   }
   
   if (adminOnly && !isAdmin) {
-    return <Navigate to="/messaging" replace />
+    return <Navigate to={getDefaultRoute(user)} replace />
   }
   
   return children
 }
 
 function PublicRoute({ children }) {
-  const { isAuthenticated, initializing } = useAuth()
+  const { isAuthenticated, user, initializing } = useAuth()
 
   if (initializing) {
     return (
@@ -65,20 +71,22 @@ function PublicRoute({ children }) {
   }
   
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to={getDefaultRoute(user)} replace />
   }
   
   return children
 }
 
 export default function App() {
+  const { user, isAuthenticated } = useAuth()
+
   return (
     <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       
       <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/messaging" replace />} />
+        <Route index element={<Navigate to={isAuthenticated ? getDefaultRoute(user) : '/login'} replace />} />
         <Route path="messaging" element={<OrdersPage />} />
         <Route path="messaging/coverage" element={<CoveragePage />} />
         <Route path="messaging/settings" element={<SettingsPage />} />
@@ -95,7 +103,7 @@ export default function App() {
         <Route index element={<TripPlannerPage />} />
       </Route>
       
-      <Route path="*" element={<Navigate to="/messaging" replace />} />
+      <Route path="*" element={<Navigate to={isAuthenticated ? getDefaultRoute(user) : '/login'} replace />} />
     </Routes>
   )
 }

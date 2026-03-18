@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import api from '../api'
+import { storageGet, storageSet, storageRemove, StorageKeys } from '../utils/storage'
 
 const AuthContext = createContext(null)
 
@@ -19,9 +20,9 @@ export function AuthProvider({ children }) {
     try {
       const response = await api.post('/api/auth/login', { email, password })
       setUser(response.data.user)
-      localStorage.setItem('user', JSON.stringify(response.data.user))
+      await storageSet(StorageKeys.USER, JSON.stringify(response.data.user))
       if (response.data.token) {
-        localStorage.setItem('authToken', response.data.token)
+        await storageSet(StorageKeys.AUTH_TOKEN, response.data.token)
       }
       return { success: true, user: response.data.user }
     } catch (err) {
@@ -46,9 +47,9 @@ export function AuthProvider({ children }) {
     try {
       const response = await api.post('/api/auth/register', userData)
       setUser(response.data.user)
-      localStorage.setItem('user', JSON.stringify(response.data.user))
+      await storageSet(StorageKeys.USER, JSON.stringify(response.data.user))
       if (response.data.token) {
-        localStorage.setItem('authToken', response.data.token)
+        await storageSet(StorageKeys.AUTH_TOKEN, response.data.token)
       }
       return { success: true, user: response.data.user }
     } catch (err) {
@@ -67,28 +68,37 @@ export function AuthProvider({ children }) {
       console.error('Error en logout:', err)
     } finally {
       setUser(null)
-      localStorage.removeItem('user')
-      localStorage.removeItem('authToken')
+      await storageRemove(StorageKeys.USER)
+      await storageRemove(StorageKeys.AUTH_TOKEN)
     }
   }
 
   const fetchCurrentUser = async () => {
     setInitializing(true)
     try {
-      const token = localStorage.getItem('authToken')
+      const token = await storageGet(StorageKeys.AUTH_TOKEN)
       if (!token) {
         setUser(null)
-        localStorage.removeItem('user')
         return null
       }
       const response = await api.get('/api/auth/me')
       setUser(response.data.user)
-      localStorage.setItem('user', JSON.stringify(response.data.user))
+      await storageSet(StorageKeys.USER, JSON.stringify(response.data.user))
       return response.data.user
-    } catch {
-      setUser(null)
-      localStorage.removeItem('user')
-      localStorage.removeItem('authToken')
+    } catch (err) {
+      const status = err.response?.status
+      if (status === 401 || status === 403) {
+        setUser(null)
+        await storageRemove(StorageKeys.USER)
+        await storageRemove(StorageKeys.AUTH_TOKEN)
+      } else {
+        const stored = await storageGet(StorageKeys.USER)
+        if (stored) {
+          try {
+            setUser(JSON.parse(stored))
+          } catch {}
+        }
+      }
       return null
     } finally {
       setInitializing(false)

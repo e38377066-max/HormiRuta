@@ -1,20 +1,58 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import User from '../models/User.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TOKEN_FILE = path.join(__dirname, '../../.token-store.json');
+
+const MAX_AGE = 365 * 24 * 60 * 60 * 1000;
+
 const tokenStore = new Map();
+
+const loadTokens = () => {
+  try {
+    if (fs.existsSync(TOKEN_FILE)) {
+      const data = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
+      const now = Date.now();
+      for (const [token, entry] of Object.entries(data)) {
+        if (now - entry.createdAt < MAX_AGE) {
+          tokenStore.set(token, entry);
+        }
+      }
+    }
+  } catch {}
+};
+
+const saveTokens = () => {
+  try {
+    const obj = {};
+    const now = Date.now();
+    for (const [token, entry] of tokenStore.entries()) {
+      if (now - entry.createdAt < MAX_AGE) {
+        obj[token] = entry;
+      }
+    }
+    fs.writeFileSync(TOKEN_FILE, JSON.stringify(obj), 'utf8');
+  } catch {}
+};
+
+loadTokens();
 
 export function generateToken(userId) {
   const token = crypto.randomBytes(32).toString('hex');
   tokenStore.set(token, { userId, createdAt: Date.now() });
+  saveTokens();
   return token;
 }
 
 export function getUserIdFromToken(token) {
   const entry = tokenStore.get(token);
   if (!entry) return null;
-  const MAX_AGE = 7 * 24 * 60 * 60 * 1000;
   if (Date.now() - entry.createdAt > MAX_AGE) {
     tokenStore.delete(token);
+    saveTokens();
     return null;
   }
   return entry.userId;
@@ -22,6 +60,7 @@ export function getUserIdFromToken(token) {
 
 export function removeToken(token) {
   tokenStore.delete(token);
+  saveTokens();
 }
 
 function resolveUserId(req) {

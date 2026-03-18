@@ -60,3 +60,4 @@ ios/DerivedData
 ios/*.xcworkspace
 ios/.xcodeproj
 *.xcuserstate
+.token-store.json

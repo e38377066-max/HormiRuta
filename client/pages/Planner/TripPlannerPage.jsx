@@ -92,6 +92,15 @@ export default function TripPlannerPage() {
       const res = await api.get('/api/dispatch/routes')
       const assigned = (res.data.routes || []).filter(r => r.status === 'assigned')
       setDispatchRoutes(assigned)
+      const savedRouteId = localStorage.getItem('activeRouteId')
+      if (savedRouteId) {
+        const savedRoute = assigned.find(r => String(r.id) === String(savedRouteId))
+        if (savedRoute) {
+          loadDispatchRoute(savedRoute)
+        } else {
+          localStorage.removeItem('activeRouteId')
+        }
+      }
     } catch (err) {
       console.error('Error loading dispatch routes:', err)
     } finally {
@@ -130,6 +139,7 @@ export default function TripPlannerPage() {
     setTotalDistance(route.total_distance || 0)
     setTotalDuration(route.total_duration || 0)
     setCurrentRouteId(route.id)
+    localStorage.setItem('activeRouteId', String(route.id))
     setRouteCommission(route.driver_commission_total || 0)
     setShowDispatchRoutes(false)
     updateMapMarkers(routeStops)
@@ -1255,6 +1265,7 @@ export default function TripPlannerPage() {
     setIsOptimized(false)
     setNavigationMode(false)
     setCurrentRouteId(null)
+    localStorage.removeItem('activeRouteId')
     setTotalDistance(0)
     setTotalDuration(0)
     setSavedDistance(0)

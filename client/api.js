@@ -18,8 +18,33 @@ const api = axios.create({
   }
 })
 
-api.interceptors.request.use(config => {
-  const token = localStorage.getItem('authToken')
+const getToken = async () => {
+  if (isNative) {
+    try {
+      const { Preferences } = await import('@capacitor/preferences')
+      const { value } = await Preferences.get({ key: 'authToken' })
+      return value || localStorage.getItem('authToken')
+    } catch {
+      return localStorage.getItem('authToken')
+    }
+  }
+  return localStorage.getItem('authToken')
+}
+
+const clearTokens = async () => {
+  localStorage.removeItem('user')
+  localStorage.removeItem('authToken')
+  if (isNative) {
+    try {
+      const { Preferences } = await import('@capacitor/preferences')
+      await Preferences.remove({ key: 'authToken' })
+      await Preferences.remove({ key: 'user' })
+    } catch {}
+  }
+}
+
+api.interceptors.request.use(async config => {
+  const token = await getToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -28,10 +53,9 @@ api.interceptors.request.use(config => {
 
 api.interceptors.response.use(
   response => response,
-  error => {
+  async error => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('user')
-      localStorage.removeItem('authToken')
+      await clearTokens()
     }
     return Promise.reject(error)
   }
