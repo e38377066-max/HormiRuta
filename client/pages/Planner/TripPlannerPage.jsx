@@ -80,7 +80,7 @@ export default function TripPlannerPage() {
   const isDragging = useRef(false)
   const startY = useRef(0)
   const startHeight = useRef(0)
-  const SNAP_POINTS = { min: 15, mid: 45, max: 80 }
+  const SNAP_POINTS = { min: 22, mid: 45, max: 80 }
 
   useEffect(() => {
     initMap()
