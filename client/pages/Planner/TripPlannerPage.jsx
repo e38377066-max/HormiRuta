@@ -80,7 +80,7 @@ export default function TripPlannerPage() {
   const isDragging = useRef(false)
   const startY = useRef(0)
   const startHeight = useRef(0)
-  const SNAP_POINTS = { min: 22, mid: 45, max: 80 }
+  const SNAP_POINTS = { min: 25, mid: 45, max: 80 }
 
   useEffect(() => {
     initMap()
@@ -1438,7 +1438,7 @@ export default function TripPlannerPage() {
         </div>
       </div>
       
-      <div className={`bottom-panel ${isDragging.current ? 'dragging' : ''}`} style={{ height: `${panelHeight}dvh` }}>
+      <div className={`bottom-panel ${isDragging.current ? 'dragging' : ''}`} style={{ height: `calc(${panelHeight}dvh - env(safe-area-inset-bottom))` }}>
         <div 
           className="panel-handle" 
           onMouseDown={handlePanelDragStart}
