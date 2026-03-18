@@ -7,6 +7,10 @@ import { MessagingProvider } from './contexts/MessagingContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
 
+import { SplashScreen } from '@capacitor/splash-screen'
+
+SplashScreen.hide().catch(() => {})
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
