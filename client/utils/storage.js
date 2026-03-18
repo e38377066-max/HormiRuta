@@ -17,12 +17,19 @@ export const StorageKeys = {
   USER: 'user',
 }
 
+const withTimeout = (promise, ms, fallback) =>
+  Promise.race([
+    promise,
+    new Promise(resolve => setTimeout(() => resolve(fallback), ms))
+  ])
+
 export const storageGet = async (key) => {
   if (isNative) {
     try {
-      const prefs = await getPreferences()
-      const { value } = await prefs.get({ key })
-      return value
+      const prefs = await withTimeout(getPreferences(), 3000, null)
+      if (!prefs) return localStorage.getItem(key)
+      const result = await withTimeout(prefs.get({ key }), 3000, { value: null })
+      return result.value
     } catch {
       return localStorage.getItem(key)
     }

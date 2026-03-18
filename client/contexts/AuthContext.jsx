@@ -106,7 +106,11 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    fetchCurrentUser()
+    const safetyTimeout = setTimeout(() => {
+      setInitializing(false)
+    }, 6000)
+
+    fetchCurrentUser().finally(() => clearTimeout(safetyTimeout))
   }, [])
 
   const value = {
