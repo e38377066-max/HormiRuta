@@ -1,137 +1,173 @@
-.dac-container {
+/* ─── Root / Container ────────────────────────────────────────── */
+.dac-root {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow-y: auto;
-  background: #0f172a;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0b1120;
   color: #e2e8f0;
-  padding: 0 0 40px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 
+/* ─── Header ──────────────────────────────────────────────────── */
 .dac-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 16px 12px;
-  background: #1e293b;
-  border-bottom: 1px solid #334155;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  padding: 12px 12px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  background: #111827;
+  border-bottom: 1px solid #1f2d45;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: 56px;
 }
 
-.dac-back-btn {
-  width: 40px;
-  height: 40px;
+.dac-back-btn,
+.dac-refresh-btn {
+  width: 44px;
+  height: 44px;
   border: none;
-  background: rgba(255,255,255,0.08);
-  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border-radius: 12px;
   color: #e2e8f0;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.2s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.dac-back-btn:hover {
-  background: rgba(255,255,255,0.15);
+.dac-back-btn:active,
+.dac-refresh-btn:active {
+  background: rgba(255,255,255,0.12);
 }
 
-.dac-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.dac-back-btn .material-icons,
+.dac-refresh-btn .material-icons {
+  font-size: 20px;
 }
 
-.dac-title-icon {
-  font-size: 22px;
-  color: #5b8def;
-}
-
-.dac-title h1 {
-  margin: 0;
-  font-size: 1.15rem;
+.dac-header-title {
+  flex: 1;
+  font-size: 17px;
   font-weight: 700;
   color: #f1f5f9;
+  text-align: center;
 }
 
-.dac-summary-cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 16px;
+/* ─── Scrollable body ─────────────────────────────────────────── */
+.dac-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
-.dac-card {
-  border-radius: 14px;
-  padding: 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* ─── Hero (big "A Entregar" number) ──────────────────────────── */
+.dac-hero {
+  background: linear-gradient(135deg, #1a2744 0%, #0d1f3c 100%);
+  border-bottom: 1px solid #1f2d45;
+  padding: 24px 20px 20px;
+  text-align: center;
 }
 
-.dac-card .material-icons {
-  font-size: 26px;
-  opacity: 0.85;
-}
-
-.dac-card-label {
-  font-size: 11px;
-  font-weight: 500;
-  opacity: 0.75;
+.dac-hero-label {
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.08em;
+  color: #fb923c;
+  margin-bottom: 6px;
+}
+
+.dac-hero-amount {
+  font-size: 44px;
+  font-weight: 800;
+  color: #fdba74;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.dac-hero-sub {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* ─── 3-stat row ──────────────────────────────────────────────── */
+.dac-stats-row {
+  display: flex;
+  align-items: stretch;
+  background: #111827;
+  border-bottom: 1px solid #1f2d45;
+}
+
+.dac-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 8px;
+}
+
+.dac-stat .material-icons {
+  font-size: 20px;
+  opacity: 0.7;
   margin-bottom: 2px;
 }
 
-.dac-card-value {
-  font-size: 1.25rem;
+.dac-stat-val {
+  font-size: 18px;
   font-weight: 700;
   line-height: 1;
 }
 
-.dac-card-green {
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  color: #86efac;
+.dac-stat-lbl {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+  text-align: center;
 }
 
-.dac-card-blue {
-  background: rgba(91, 141, 239, 0.15);
-  border: 1px solid rgba(91, 141, 239, 0.25);
-  color: #93c5fd;
+.dac-stat-green { color: #86efac; }
+.dac-stat-blue  { color: #93c5fd; }
+.dac-stat-gray  { color: #cbd5e1; }
+
+.dac-stat-divider {
+  width: 1px;
+  background: #1f2d45;
+  align-self: stretch;
+  margin: 12px 0;
 }
 
-.dac-card-orange {
-  background: rgba(251, 146, 60, 0.15);
-  border: 1px solid rgba(251, 146, 60, 0.25);
-  color: #fdba74;
+/* ─── Filter row ──────────────────────────────────────────────── */
+.dac-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 4px;
+  position: relative;
 }
 
-.dac-card-gray {
-  background: rgba(148, 163, 184, 0.12);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  color: #cbd5e1;
-}
-
-.dac-filter-row {
-  padding: 0 16px 12px;
+.dac-filter-icon {
+  font-size: 18px;
+  color: #64748b;
+  flex-shrink: 0;
 }
 
 .dac-month-select {
-  width: 100%;
-  padding: 10px 14px;
+  flex: 1;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 11px 36px 11px 14px;
   background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 10px;
+  border: 1px solid #2d3f58;
+  border-radius: 12px;
   color: #e2e8f0;
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
 }
 
@@ -140,10 +176,19 @@
   border-color: #5b8def;
 }
 
+.dac-select-arrow {
+  position: absolute;
+  right: 24px;
+  font-size: 20px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+/* ─── Tabs ────────────────────────────────────────────────────── */
 .dac-tabs {
   display: flex;
-  gap: 8px;
-  padding: 0 16px 14px;
+  gap: 10px;
+  padding: 12px 16px;
 }
 
 .dac-tab {
@@ -152,119 +197,133 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px;
-  border: 1px solid #334155;
-  border-radius: 10px;
-  background: #1e293b;
-  color: #94a3b8;
-  font-size: 13px;
-  font-weight: 500;
+  padding: 12px 8px;
+  border: 1.5px solid #2d3f58;
+  border-radius: 12px;
+  background: #111827;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 48px;
 }
 
 .dac-tab .material-icons {
-  font-size: 17px;
+  font-size: 18px;
 }
 
 .dac-tab.active {
-  background: #5b8def;
+  background: #1d3461;
   border-color: #5b8def;
-  color: #fff;
+  color: #93c5fd;
 }
 
+.dac-tab:active {
+  opacity: 0.75;
+}
+
+/* ─── List container ──────────────────────────────────────────── */
+.dac-list {
+  padding: 0 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ─── Loading ─────────────────────────────────────────────────── */
 .dac-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 60px 0;
-  color: #94a3b8;
+  gap: 14px;
+  padding: 64px 0;
+  color: #64748b;
   font-size: 14px;
 }
 
 .dac-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #334155;
+  width: 36px;
+  height: 36px;
+  border: 3px solid #1f2d45;
   border-top-color: #5b8def;
   border-radius: 50%;
   animation: dac-spin 0.8s linear infinite;
 }
 
-@keyframes dac-spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes dac-spin { to { transform: rotate(360deg); } }
 
+/* ─── Empty state ─────────────────────────────────────────────── */
 .dac-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
   padding: 60px 0;
-  color: #64748b;
+  color: #475569;
 }
 
 .dac-empty .material-icons {
-  font-size: 48px;
+  font-size: 52px;
 }
 
 .dac-empty p {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
 }
 
-.dac-months-list,
-.dac-deliveries-list {
-  padding: 0 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
+/* ─── Month Card ──────────────────────────────────────────────── */
 .dac-month-card {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 14px;
+  background: #111827;
+  border: 1px solid #1f2d45;
+  border-radius: 16px;
   overflow: hidden;
 }
 
 .dac-month-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
+  gap: 12px;
+  width: 100%;
+  padding: 16px;
+  background: transparent;
+  border: none;
+  color: inherit;
   cursor: pointer;
-  user-select: none;
-  transition: background 0.2s;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 72px;
 }
 
-.dac-month-header:hover {
-  background: rgba(255,255,255,0.04);
+.dac-month-header:active {
+  background: rgba(255,255,255,0.03);
 }
 
-.dac-month-left {
+.dac-month-info {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .dac-month-name {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: #f1f5f9;
 }
 
 .dac-month-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: #64748b;
 }
 
-.dac-month-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.dac-month-count .material-icons {
+  font-size: 14px;
 }
 
 .dac-month-amounts {
@@ -272,169 +331,108 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 3px;
+  flex-shrink: 0;
 }
 
-.dac-amount-green {
-  font-size: 13px;
-  font-weight: 600;
+.dac-month-comm {
+  font-size: 16px;
+  font-weight: 700;
   color: #86efac;
 }
 
-.dac-amount-orange {
+.dac-month-deliver {
   font-size: 12px;
   color: #fdba74;
 }
 
-.dac-expand-icon {
-  font-size: 20px;
-  color: #64748b;
-}
-
-.dac-month-detail {
-  border-top: 1px solid #334155;
-  padding: 14px 16px;
-}
-
-.dac-month-totals {
-  background: #0f172a;
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.dac-total-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: #94a3b8;
-}
-
-.dac-total-row-highlight {
-  padding-top: 8px;
-  border-top: 1px solid #334155;
-  color: #e2e8f0;
-  font-size: 14px;
-}
-
-.dac-color-green { color: #86efac; }
-.dac-color-blue  { color: #93c5fd; }
-.dac-color-orange { color: #fdba74; }
-
-.dac-deliveries-mini {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.dac-delivery-mini-item {
-  background: #0f172a;
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dac-del-mini-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.dac-del-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.dac-del-date {
-  font-size: 11px;
+.dac-chevron {
+  font-size: 22px;
   color: #64748b;
   flex-shrink: 0;
 }
 
-.dac-del-mini-bottom {
+/* ─── Month body (expanded) ───────────────────────────────────── */
+.dac-month-body {
+  border-top: 1px solid #1f2d45;
+  padding: 14px 16px;
   display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.dac-del-address {
-  font-size: 11px;
-  color: #64748b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dac-del-mini-amounts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 12px;
-  color: #94a3b8;
-  margin-top: 4px;
-}
-
-.dac-delivery-card {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 14px;
+.dac-month-totals {
+  background: #0b1120;
+  border-radius: 12px;
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.dac-del-header {
+.dac-tot-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.dac-tot-row strong {
+  font-size: 15px;
+}
+
+.dac-tot-highlight {
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top: 1px solid #1f2d45;
+  color: #e2e8f0;
+  font-size: 15px;
+}
+
+.dac-tot-highlight strong {
+  font-size: 17px;
+}
+
+/* ─── Mini delivery list inside month ────────────────────────── */
+.dac-mini-list {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.dac-del-customer {
+.dac-mini-item {
+  background: #0b1120;
+  border-radius: 12px;
+  padding: 12px 14px;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.dac-del-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #5b8def, #6200ea);
-  color: #fff;
-  font-weight: 700;
-  font-size: 15px;
+.dac-mini-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 8px;
 }
 
-.dac-del-name-full {
+.dac-mini-name {
   font-size: 14px;
   font-weight: 600;
-  color: #f1f5f9;
+  color: #e2e8f0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.dac-del-phone {
+.dac-mini-date {
   font-size: 12px;
   color: #64748b;
-}
-
-.dac-del-date-full {
-  font-size: 11px;
-  color: #64748b;
-  text-align: right;
   flex-shrink: 0;
 }
 
-.dac-del-address-full {
+.dac-mini-addr {
   display: flex;
   align-items: flex-start;
   gap: 4px;
@@ -442,82 +440,151 @@
   color: #64748b;
 }
 
-.dac-del-address-full .material-icons {
-  font-size: 14px;
+.dac-mini-addr .material-icons {
+  font-size: 13px;
   margin-top: 1px;
   flex-shrink: 0;
-  color: #475569;
 }
 
-.dac-del-amounts-grid {
+.dac-mini-amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dac-mini-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.06);
+}
+
+/* ─── Delivery Card (historial) ───────────────────────────────── */
+.dac-del-card {
+  background: #111827;
+  border: 1px solid #1f2d45;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dac-del-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dac-del-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5b8def, #6200ea);
+  color: #fff;
+  font-weight: 800;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dac-del-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dac-del-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dac-del-phone {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.dac-del-date {
+  font-size: 11px;
+  color: #64748b;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.dac-del-addr {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.dac-del-addr .material-icons {
+  font-size: 15px;
+  margin-top: 1px;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+/* ─── 2x2 amount grid ────────────────────────────────────────── */
+.dac-del-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.dac-del-amount-item {
-  background: #0f172a;
-  border-radius: 8px;
-  padding: 8px 10px;
+.dac-del-cell {
+  background: #0b1120;
+  border-radius: 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
-.dac-del-amount-label {
+.dac-del-cell-lbl {
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #64748b;
-  font-weight: 500;
-}
-
-.dac-del-amount-val {
-  font-size: 15px;
-  font-weight: 700;
-  color: #e2e8f0;
-}
-
-.dac-del-footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.dac-pmt-badge {
-  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #475569;
   font-weight: 600;
-  padding: 3px 8px;
+}
+
+.dac-del-cell-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: #e2e8f0;
+  line-height: 1;
+}
+
+/* ─── Badges ──────────────────────────────────────────────────── */
+.dac-del-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dac-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
   border-radius: 20px;
-  background: rgba(148,163,184,0.15);
-  color: #94a3b8;
+  letter-spacing: 0.01em;
 }
 
-.dac-pmt-badge.dac-pmt-cash {
-  background: rgba(34, 197, 94, 0.15);
-  color: #86efac;
-}
-
-.dac-pmt-badge.dac-pmt-card {
-  background: rgba(91, 141, 239, 0.15);
-  color: #93c5fd;
-}
-
-.dac-pmt-badge.dac-pmt-transfer {
-  background: rgba(167, 139, 250, 0.15);
-  color: #c4b5fd;
-}
-
-.dac-pmt-badge.dac-pmt-zelle {
-  background: rgba(251, 146, 60, 0.15);
-  color: #fdba74;
-}
-
-.dac-archived-badge {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 20px;
-  background: rgba(100, 116, 139, 0.2);
+.dac-badge-gray {
+  background: rgba(100,116,139,0.15);
   color: #64748b;
 }
+
+/* ─── Color helpers ───────────────────────────────────────────── */
+.c-green  { color: #86efac; }
+.c-blue   { color: #93c5fd; }
+.c-orange { color: #fdba74; }
