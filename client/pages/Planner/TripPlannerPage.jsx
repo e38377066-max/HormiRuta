@@ -1096,13 +1096,13 @@ export default function TripPlannerPage() {
     markersRef.current.forEach(marker => marker.setMap(null))
     markersRef.current = []
 
-    const visibleStops = navigationMode ? stopsList.filter(s => !s.completed && !s.skipped) : stopsList
+    const visibleStops = stopsList.filter(s => !s.completed && !s.skipped)
     const hasActivePending = stopsList.some(s => !s.completed && !s.skipped && !s.skippedOnce)
     let pendingIndex = 0
 
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
-        if (navigationMode && (stop.completed || stop.skipped)) return
+        if (stop.completed || stop.skipped) return
         if (navigationMode && stop.skippedOnce && hasActivePending) return
         pendingIndex++
         const color = '#EA4335'
@@ -1132,7 +1132,7 @@ export default function TripPlannerPage() {
       }
     })
 
-    const stopsForBounds = navigationMode ? visibleStops : stopsList
+    const stopsForBounds = visibleStops
     if (stopsForBounds.length > 1) {
       const bounds = new window.google.maps.LatLngBounds()
       stopsForBounds.forEach(stop => {
@@ -1438,7 +1438,7 @@ export default function TripPlannerPage() {
         </div>
       </div>
       
-      <div className={`bottom-panel ${isDragging.current ? 'dragging' : ''}`} style={{ height: `calc(${panelHeight}dvh - env(safe-area-inset-bottom))` }}>
+      <div className={`bottom-panel ${isDragging.current ? 'dragging' : ''}`} style={{ height: `${Math.floor(window.innerHeight * panelHeight / 100)}px` }}>
         <div 
           className="panel-handle" 
           onMouseDown={handlePanelDragStart}

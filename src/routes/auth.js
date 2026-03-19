@@ -39,7 +39,7 @@ router.post('/register', async (req, res) => {
     await user.save();
     
     if (req.session) req.session.userId = user.id;
-    const token = generateToken(user.id);
+    const token = await generateToken(user.id);
     
     res.status(201).json({
       success: true,
@@ -78,7 +78,7 @@ router.post('/login', async (req, res) => {
     }
     
     if (req.session) req.session.userId = user.id;
-    const token = generateToken(user.id);
+    const token = await generateToken(user.id);
     
     res.json({
       success: true,
@@ -92,10 +92,10 @@ router.post('/login', async (req, res) => {
   }
 });
 
-router.post('/logout', requireAuth, (req, res) => {
+router.post('/logout', requireAuth, async (req, res) => {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
-    removeToken(authHeader.slice(7));
+    await removeToken(authHeader.slice(7));
   }
   if (req.session?.destroy) {
     req.session.destroy(() => {});
