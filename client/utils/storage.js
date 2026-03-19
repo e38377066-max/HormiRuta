@@ -26,10 +26,13 @@ const withTimeout = (promise, ms, fallback) =>
 export const storageGet = async (key) => {
   if (isNative) {
     try {
-      const prefs = await withTimeout(getPreferences(), 3000, null)
+      const prefs = await withTimeout(getPreferences(), 5000, null)
       if (!prefs) return localStorage.getItem(key)
-      const result = await withTimeout(prefs.get({ key }), 3000, { value: null })
-      return result.value
+      const result = await withTimeout(prefs.get({ key }), 5000, null)
+      if (result && result.value !== null && result.value !== undefined) {
+        return result.value
+      }
+      return localStorage.getItem(key)
     } catch {
       return localStorage.getItem(key)
     }
