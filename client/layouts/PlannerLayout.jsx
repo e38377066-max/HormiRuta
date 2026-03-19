@@ -1,5 +1,5 @@
 import { useState, createContext, useContext } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import './PlannerLayout.css'
 
@@ -12,6 +12,7 @@ export function usePlanner() {
 export default function PlannerLayout() {
   const { user, logout, isAdmin } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   const handleLogout = async () => {
@@ -23,6 +24,8 @@ export default function PlannerLayout() {
   const closeDrawer = () => setDrawerOpen(false)
 
   const menuItems = [
+    { icon: 'map', label: 'Mi Ruta', path: '/planner' },
+    { icon: 'account_balance_wallet', label: 'Mi Contabilidad', path: '/planner/accounting' },
     { icon: 'admin_panel_settings', label: 'Panel Admin', path: '/messaging', adminOnly: true }
   ]
 
@@ -59,7 +62,7 @@ export default function PlannerLayout() {
               .map(item => (
               <button 
                 key={item.path + item.label} 
-                className="drawer-item"
+                className={`drawer-item${location.pathname === item.path ? ' active' : ''}`}
                 onClick={() => { navigate(item.path); closeDrawer() }}
               >
                 <span className="material-icons">{item.icon}</span>

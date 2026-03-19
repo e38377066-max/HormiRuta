@@ -1544,6 +1544,105 @@ router.post('/stops/:id/send-message', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/my-accounting', requireAuth, async (req, res) => {
+  try {
+    const { month_year, date_from, date_to } = req.query;
+
+    const where = { driver_id: req.userId };
+    if (month_year) {
+      where.month_year = month_year;
+    } else {
+      if (date_from) where.delivered_at = { ...where.delivered_at, [Op.gte]: new Date(date_from) };
+      if (date_to) where.delivered_at = { ...where.delivered_at, [Op.lte]: new Date(date_to + 'T23:59:59') };
+    }
+
+    const deliveries = await DeliveryHistory.findAll({
+      where,
+      order: [['delivered_at', 'DESC']]
+    });
+
+    const allMonths = await DeliveryHistory.findAll({
+      where: { driver_id: req.userId },
+      attributes: ['month_year'],
+      group: ['month_year'],
+      order: [['month_year', 'DESC']]
+    });
+
+    const byMonth = {};
+    for (const d of deliveries) {
+      const my = d.month_year || 'Sin fecha';
+      if (!byMonth[my]) {
+        byMonth[my] = {
+          month_year: my,
+          deliveries: [],
+          total_collected: 0,
+          total_commission: 0,
+          total_to_collect: 0,
+          stops_count: 0
+        };
+      }
+      byMonth[my].deliveries.push({
+        id: d.id,
+        customer_name: d.customer_name,
+        customer_phone: d.customer_phone,
+        address: d.address,
+        order_cost: Number(d.order_cost || 0),
+        deposit_amount: Number(d.deposit_amount || 0),
+        total_to_collect: Number(d.total_to_collect || 0),
+        amount_collected: Number(d.amount_collected || 0),
+        commission_per_stop: Number(d.commission_per_stop || 0),
+        payment_method: d.payment_method,
+        payment_status: d.payment_status,
+        delivered_at: d.delivered_at,
+        archived: d.archived
+      });
+      byMonth[my].total_collected += Number(d.amount_collected || 0);
+      byMonth[my].total_commission += Number(d.commission_per_stop || 0);
+      byMonth[my].total_to_collect += Number(d.total_to_collect || 0);
+      byMonth[my].stops_count += 1;
+    }
+
+    const months = Object.values(byMonth).map(m => ({
+      ...m,
+      to_deliver: m.total_collected - m.total_commission
+    }));
+
+    const totals = deliveries.reduce((acc, d) => ({
+      stops: acc.stops + 1,
+      collected: acc.collected + Number(d.amount_collected || 0),
+      commission: acc.commission + Number(d.commission_per_stop || 0),
+      to_collect: acc.to_collect + Number(d.total_to_collect || 0)
+    }), { stops: 0, collected: 0, commission: 0, to_collect: 0 });
+
+    totals.to_deliver = totals.collected - totals.commission;
+
+    res.json({
+      months,
+      totals,
+      deliveries: deliveries.map(d => ({
+        id: d.id,
+        customer_name: d.customer_name,
+        customer_phone: d.customer_phone,
+        address: d.address,
+        order_cost: Number(d.order_cost || 0),
+        deposit_amount: Number(d.deposit_amount || 0),
+        total_to_collect: Number(d.total_to_collect || 0),
+        amount_collected: Number(d.amount_collected || 0),
+        commission_per_stop: Number(d.commission_per_stop || 0),
+        payment_method: d.payment_method,
+        payment_status: d.payment_status,
+        delivered_at: d.delivered_at,
+        month_year: d.month_year,
+        archived: d.archived
+      })),
+      available_months: allMonths.map(m => m.month_year).filter(Boolean)
+    });
+  } catch (error) {
+    console.error('Error my-accounting:', error);
+    res.status(500).json({ error: 'Error al cargar tu contabilidad' });
+  }
+});
+
 router.get('/favorites', requireAdmin, async (req, res) => {
   try {
     const favorites = await FavoriteAddress.findAll({ order: [['created_at', 'DESC']] });

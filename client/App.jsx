@@ -19,6 +19,7 @@ import CoveragePage from './pages/Messaging/CoveragePage'
 import SettingsPage from './pages/Messaging/SettingsPage'
 
 import TripPlannerPage from './pages/Planner/TripPlannerPage'
+import DriverAccountingPage from './pages/Planner/DriverAccountingPage'
 import DispatchMap from './pages/Dispatch/DispatchMap'
 
 function getDefaultRoute(user) {
@@ -101,6 +102,7 @@ export default function App() {
       
       <Route path="/planner" element={<ProtectedRoute><PlannerLayout /></ProtectedRoute>}>
         <Route index element={<TripPlannerPage />} />
+        <Route path="accounting" element={<DriverAccountingPage />} />
       </Route>
       
       <Route path="*" element={<Navigate to={isAuthenticated ? getDefaultRoute(user) : '/login'} replace />} />

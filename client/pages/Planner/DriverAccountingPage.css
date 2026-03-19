@@ -1,0 +1,523 @@
+.dac-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0 0 40px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dac-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.dac-back-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: rgba(255,255,255,0.08);
+  border-radius: 50%;
+  color: #e2e8f0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.dac-back-btn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.dac-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dac-title-icon {
+  font-size: 22px;
+  color: #5b8def;
+}
+
+.dac-title h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.dac-summary-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 16px;
+}
+
+.dac-card {
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dac-card .material-icons {
+  font-size: 26px;
+  opacity: 0.85;
+}
+
+.dac-card-label {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
+.dac-card-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dac-card-green {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+.dac-card-blue {
+  background: rgba(91, 141, 239, 0.15);
+  border: 1px solid rgba(91, 141, 239, 0.25);
+  color: #93c5fd;
+}
+
+.dac-card-orange {
+  background: rgba(251, 146, 60, 0.15);
+  border: 1px solid rgba(251, 146, 60, 0.25);
+  color: #fdba74;
+}
+
+.dac-card-gray {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+}
+
+.dac-filter-row {
+  padding: 0 16px 12px;
+}
+
+.dac-month-select {
+  width: 100%;
+  padding: 10px 14px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #e2e8f0;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.dac-month-select:focus {
+  outline: none;
+  border-color: #5b8def;
+}
+
+.dac-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 14px;
+}
+
+.dac-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dac-tab .material-icons {
+  font-size: 17px;
+}
+
+.dac-tab.active {
+  background: #5b8def;
+  border-color: #5b8def;
+  color: #fff;
+}
+
+.dac-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.dac-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #334155;
+  border-top-color: #5b8def;
+  border-radius: 50%;
+  animation: dac-spin 0.8s linear infinite;
+}
+
+@keyframes dac-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dac-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: #64748b;
+}
+
+.dac-empty .material-icons {
+  font-size: 48px;
+}
+
+.dac-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.dac-months-list,
+.dac-deliveries-list {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dac-month-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.dac-month-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.dac-month-header:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.dac-month-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dac-month-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.dac-month-count {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dac-month-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dac-month-amounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.dac-amount-green {
+  font-size: 13px;
+  font-weight: 600;
+  color: #86efac;
+}
+
+.dac-amount-orange {
+  font-size: 12px;
+  color: #fdba74;
+}
+
+.dac-expand-icon {
+  font-size: 20px;
+  color: #64748b;
+}
+
+.dac-month-detail {
+  border-top: 1px solid #334155;
+  padding: 14px 16px;
+}
+
+.dac-month-totals {
+  background: #0f172a;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dac-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.dac-total-row-highlight {
+  padding-top: 8px;
+  border-top: 1px solid #334155;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.dac-color-green { color: #86efac; }
+.dac-color-blue  { color: #93c5fd; }
+.dac-color-orange { color: #fdba74; }
+
+.dac-deliveries-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dac-delivery-mini-item {
+  background: #0f172a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dac-del-mini-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.dac-del-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.dac-del-date {
+  font-size: 11px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.dac-del-mini-bottom {
+  display: flex;
+}
+
+.dac-del-address {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dac-del-mini-amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.dac-delivery-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dac-del-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dac-del-customer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dac-del-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5b8def, #6200ea);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dac-del-name-full {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.dac-del-phone {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dac-del-date-full {
+  font-size: 11px;
+  color: #64748b;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.dac-del-address-full {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dac-del-address-full .material-icons {
+  font-size: 14px;
+  margin-top: 1px;
+  flex-shrink: 0;
+  color: #475569;
+}
+
+.dac-del-amounts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.dac-del-amount-item {
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dac-del-amount-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.dac-del-amount-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.dac-del-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dac-pmt-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(148,163,184,0.15);
+  color: #94a3b8;
+}
+
+.dac-pmt-badge.dac-pmt-cash {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.dac-pmt-badge.dac-pmt-card {
+  background: rgba(91, 141, 239, 0.15);
+  color: #93c5fd;
+}
+
+.dac-pmt-badge.dac-pmt-transfer {
+  background: rgba(167, 139, 250, 0.15);
+  color: #c4b5fd;
+}
+
+.dac-pmt-badge.dac-pmt-zelle {
+  background: rgba(251, 146, 60, 0.15);
+  color: #fdba74;
+}
+
+.dac-archived-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(100, 116, 139, 0.2);
+  color: #64748b;
+}
