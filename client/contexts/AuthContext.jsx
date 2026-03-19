@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
+import { Capacitor } from '@capacitor/core'
 import api from '../api'
 import { storageGet, storageSet, storageRemove, StorageKeys } from '../utils/storage'
 
@@ -9,6 +10,7 @@ export function AuthProvider({ children }) {
   const [initializing, setInitializing] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const lastActiveRef = useRef(Date.now())
 
   const isAuthenticated = !!user
   const isAdmin = user?.role === 'admin'

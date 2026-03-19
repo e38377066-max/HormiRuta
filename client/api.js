@@ -31,18 +31,6 @@ const getToken = async () => {
   return localStorage.getItem('authToken')
 }
 
-const clearTokens = async () => {
-  localStorage.removeItem('user')
-  localStorage.removeItem('authToken')
-  if (isNative) {
-    try {
-      const { Preferences } = await import('@capacitor/preferences')
-      await Preferences.remove({ key: 'authToken' })
-      await Preferences.remove({ key: 'user' })
-    } catch {}
-  }
-}
-
 api.interceptors.request.use(async config => {
   const token = await getToken()
   if (token) {
@@ -53,12 +41,7 @@ api.interceptors.request.use(async config => {
 
 api.interceptors.response.use(
   response => response,
-  async error => {
-    if (error.response?.status === 401) {
-      await clearTokens()
-    }
-    return Promise.reject(error)
-  }
+  error => Promise.reject(error)
 )
 
 export default api
