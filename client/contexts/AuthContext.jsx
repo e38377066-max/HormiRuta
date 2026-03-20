@@ -5,62 +5,54 @@ import { storageGet, storageSet, storageRemove, StorageKeys } from '../utils/sto
 
 const AuthContext = createContext(null)
 
-// ─── Lee localStorage de forma síncrona antes del primer render ───
-// Esto hace que el usuario ya logueado NUNCA vea el spinner al abrir el app.
-const readSync = (key) => {
-  try { return localStorage.getItem(key) } catch { return null }
-}
-
-const parseSync = (raw) => {
+const tryParse = (raw) => {
   try { return raw ? JSON.parse(raw) : null } catch { return null }
 }
 
-const syncUser  = parseSync(readSync(StorageKeys.USER))
-const syncToken = readSync(StorageKeys.AUTH_TOKEN)
+// ─── Lectura síncrona al cargar el módulo ─────────────────────────────────
+// storageGet es síncrono (localStorage), así que esto ocurre ANTES del primer render.
+// Usuario ya logueado → cero pantalla de carga, abre directo.
+const cachedUser  = tryParse(storageGet(StorageKeys.USER))
+const cachedToken = storageGet(StorageKeys.AUTH_TOKEN)
 
 export function AuthProvider({ children }) {
-  // Si ya hay usuario guardado → arranca autenticado, sin spinner
-  const [user, setUser] = useState(syncUser)
-  const [initializing, setInitializing] = useState(!syncUser && !!syncToken)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [user,         setUser]         = useState(cachedUser)
+  const [initializing, setInitializing] = useState(!cachedUser && !!cachedToken)
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState(null)
 
-  const lastActiveRef    = useRef(Date.now())
-  const isValidatingRef  = useRef(false)
-  const isLoggedInRef    = useRef(!!syncUser)
+  const lastActiveRef   = useRef(Date.now())
+  const isValidatingRef = useRef(false)
+  const isLoggedInRef   = useRef(!!cachedUser)
 
   const isAuthenticated = !!user
-  const isAdmin  = user?.role === 'admin'
-  const isDriver = user?.role === 'driver'
+  const isAdmin         = user?.role === 'admin'
+  const isDriver        = user?.role === 'driver'
 
-  const clearSession = useCallback(async () => {
+  // ─── Limpiar sesión ────────────────────────────────────────────────────
+  const clearSession = useCallback(() => {
     setUser(null)
     isLoggedInRef.current = false
-    localStorage.removeItem(StorageKeys.USER)
-    localStorage.removeItem(StorageKeys.AUTH_TOKEN)
-    await Promise.allSettled([
-      storageRemove(StorageKeys.USER),
-      storageRemove(StorageKeys.AUTH_TOKEN),
-    ])
+    storageRemove(StorageKeys.USER)
+    storageRemove(StorageKeys.AUTH_TOKEN)
   }, [])
 
-  // ─── Login ─────────────────────────────────────────────────────
+  // ─── Guardar sesión ────────────────────────────────────────────────────
+  const saveSession = useCallback((u, token) => {
+    setUser(u)
+    isLoggedInRef.current = true
+    storageSet(StorageKeys.USER, JSON.stringify(u))
+    if (token) storageSet(StorageKeys.AUTH_TOKEN, token)
+  }, [])
+
+  // ─── Login ─────────────────────────────────────────────────────────────
   const login = async (email, password) => {
     setLoading(true)
     setError(null)
     try {
       const res = await api.post('/api/auth/login', { email, password })
-      const { user: u, token } = res.data
-      setUser(u)
-      isLoggedInRef.current = true
-      localStorage.setItem(StorageKeys.USER, JSON.stringify(u))
-      if (token) localStorage.setItem(StorageKeys.AUTH_TOKEN, token)
-      // Guardar en Preferences también (persistencia extra en iOS)
-      await Promise.allSettled([
-        storageSet(StorageKeys.USER, JSON.stringify(u)),
-        token ? storageSet(StorageKeys.AUTH_TOKEN, token) : Promise.resolve(),
-      ])
-      return { success: true, user: u }
+      saveSession(res.data.user, res.data.token)
+      return { success: true, user: res.data.user }
     } catch (err) {
       let msg = err.response?.data?.error || ''
       if (!msg) msg = err.code === 'ERR_NETWORK'
@@ -73,22 +65,14 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─── Register ──────────────────────────────────────────────────
+  // ─── Register ──────────────────────────────────────────────────────────
   const register = async (userData) => {
     setLoading(true)
     setError(null)
     try {
       const res = await api.post('/api/auth/register', userData)
-      const { user: u, token } = res.data
-      setUser(u)
-      isLoggedInRef.current = true
-      localStorage.setItem(StorageKeys.USER, JSON.stringify(u))
-      if (token) localStorage.setItem(StorageKeys.AUTH_TOKEN, token)
-      await Promise.allSettled([
-        storageSet(StorageKeys.USER, JSON.stringify(u)),
-        token ? storageSet(StorageKeys.AUTH_TOKEN, token) : Promise.resolve(),
-      ])
-      return { success: true, user: u }
+      saveSession(res.data.user, res.data.token)
+      return { success: true, user: res.data.user }
     } catch (err) {
       const msg = err.response?.data?.error || 'Error al registrar'
       setError(msg)
@@ -98,83 +82,69 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─── Logout ────────────────────────────────────────────────────
+  // ─── Logout ────────────────────────────────────────────────────────────
   const logout = async () => {
     try { await api.post('/api/auth/logout') } catch {}
-    await clearSession()
+    clearSession()
   }
 
-  // ─── Validación silenciosa al montar ──────────────────────────
-  // Solo corre si hay token pero NO había usuario en caché (caso raro).
-  // Si había usuario en caché, valida de todas formas pero sin bloquear UI.
+  // ─── Validación silenciosa al montar ──────────────────────────────────
+  // Si hay token → valida con servidor en segundo plano sin bloquear la UI.
+  // Si el usuario ya está en caché, la app ya está visible mientras esto corre.
   useEffect(() => {
     let cancelled = false
+    if (!cachedToken) { setInitializing(false); return }
 
-    const validate = async () => {
-      // Si no hay token no hay nada que validar
-      const token = syncToken || await storageGet(StorageKeys.AUTH_TOKEN)
-      if (!token) {
-        setInitializing(false)
-        return
-      }
-
-      try {
-        const res = await api.get('/api/auth/me')
+    api.get('/api/auth/me')
+      .then(res => {
+        if (cancelled) return
         const freshUser = res.data.user
-        if (!cancelled) {
-          setUser(freshUser)
-          isLoggedInRef.current = true
-          localStorage.setItem(StorageKeys.USER, JSON.stringify(freshUser))
-          storageSet(StorageKeys.USER, JSON.stringify(freshUser)).catch(() => {})
-        }
-      } catch (err) {
+        setUser(freshUser)
+        isLoggedInRef.current = true
+        storageSet(StorageKeys.USER, JSON.stringify(freshUser))
+      })
+      .catch(err => {
+        if (cancelled) return
         const status = err.response?.status
-        // Solo cerrar sesión si el servidor dice explícitamente que el token no vale
-        // Y solo si NO teníamos usuario en caché (para no desloguear al driver sin conexión)
-        if ((status === 401 || status === 403) && !syncUser && !cancelled) {
-          await clearSession()
+        // Solo cerrar sesión si el servidor dice explícitamente que el token es inválido
+        // Y no había usuario en caché (para no desloguear al driver sin wifi)
+        if ((status === 401 || status === 403) && !cachedUser) {
+          clearSession()
         }
-        // Con error de red o cualquier otro error → mantener sesión
-      } finally {
-        if (!cancelled) setInitializing(false)
-      }
-    }
+        // Con error de red → mantener sesión
+      })
+      .finally(() => { if (!cancelled) setInitializing(false) })
 
-    validate()
     return () => { cancelled = true }
   }, [])
 
-  // ─── Revalidar cuando app vuelve del fondo (solo nativo) ──────
+  // ─── Revalidar cuando app vuelve del fondo (solo iOS/Android) ─────────
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
 
     let listener = null
-
     const setup = async () => {
       try {
         const { App } = await import('@capacitor/app')
         listener = await App.addListener('appStateChange', async ({ isActive }) => {
-          if (!isActive) {
-            lastActiveRef.current = Date.now()
-            return
-          }
+          if (!isActive) { lastActiveRef.current = Date.now(); return }
+
+          const elapsed = Date.now() - lastActiveRef.current
           lastActiveRef.current = Date.now()
 
-          // Solo revalida si lleva más de 5 minutos en background
-          const elapsed = Date.now() - lastActiveRef.current
+          // Solo revalida si lleva más de 5 minutos en fondo
           if (!isLoggedInRef.current || elapsed < 5 * 60 * 1000 || isValidatingRef.current) return
 
           isValidatingRef.current = true
           try {
-            const token = await storageGet(StorageKeys.AUTH_TOKEN)
+            const token = storageGet(StorageKeys.AUTH_TOKEN)
             if (!token) return
             const res = await api.get('/api/auth/me')
             const freshUser = res.data.user
             setUser(freshUser)
-            localStorage.setItem(StorageKeys.USER, JSON.stringify(freshUser))
-            storageSet(StorageKeys.USER, JSON.stringify(freshUser)).catch(() => {})
+            storageSet(StorageKeys.USER, JSON.stringify(freshUser))
           } catch {
-            // Error de red o servidor → mantener sesión, NO cerrar
+            // Error de red → mantener sesión, no cerrar
           } finally {
             isValidatingRef.current = false
           }
@@ -188,16 +158,15 @@ export function AuthProvider({ children }) {
     return () => { if (listener) listener.remove().catch(() => {}) }
   }, [])
 
-  // ─── Interceptor 401 para llamadas activas ─────────────────────
-  // Si una llamada de API (no auth) devuelve 401 → cerrar sesión
+  // ─── Interceptor: si una llamada activa devuelve 401 → cerrar sesión ──
   useEffect(() => {
     const id = api.interceptors.response.use(
       res => res,
       async err => {
         const status = err.response?.status
-        const url = err.config?.url || ''
+        const url    = err.config?.url || ''
         if ((status === 401 || status === 403) && !url.includes('/api/auth/') && isLoggedInRef.current) {
-          await clearSession()
+          clearSession()
         }
         return Promise.reject(err)
       }
