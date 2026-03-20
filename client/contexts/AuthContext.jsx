@@ -5,149 +5,146 @@ import { storageGet, storageSet, storageRemove, StorageKeys } from '../utils/sto
 
 const AuthContext = createContext(null)
 
-const tryParse = (raw) => {
+// ─── Lee localStorage de forma síncrona antes del primer render ───
+// Esto hace que el usuario ya logueado NUNCA vea el spinner al abrir el app.
+const readSync = (key) => {
+  try { return localStorage.getItem(key) } catch { return null }
+}
+
+const parseSync = (raw) => {
   try { return raw ? JSON.parse(raw) : null } catch { return null }
 }
 
+const syncUser  = parseSync(readSync(StorageKeys.USER))
+const syncToken = readSync(StorageKeys.AUTH_TOKEN)
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [initializing, setInitializing] = useState(true)
+  // Si ya hay usuario guardado → arranca autenticado, sin spinner
+  const [user, setUser] = useState(syncUser)
+  const [initializing, setInitializing] = useState(!syncUser && !!syncToken)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const lastActiveRef = useRef(Date.now())
-  const isValidatingRef = useRef(false)
-  const isLoggedInRef = useRef(false)
+  const lastActiveRef    = useRef(Date.now())
+  const isValidatingRef  = useRef(false)
+  const isLoggedInRef    = useRef(!!syncUser)
 
   const isAuthenticated = !!user
-  const isAdmin = user?.role === 'admin'
+  const isAdmin  = user?.role === 'admin'
   const isDriver = user?.role === 'driver'
 
   const clearSession = useCallback(async () => {
     setUser(null)
     isLoggedInRef.current = false
-    await Promise.all([
+    localStorage.removeItem(StorageKeys.USER)
+    localStorage.removeItem(StorageKeys.AUTH_TOKEN)
+    await Promise.allSettled([
       storageRemove(StorageKeys.USER),
       storageRemove(StorageKeys.AUTH_TOKEN),
     ])
   }, [])
 
+  // ─── Login ─────────────────────────────────────────────────────
   const login = async (email, password) => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.post('/api/auth/login', { email, password })
-      const { user: loggedUser, token } = response.data
-      setUser(loggedUser)
+      const res = await api.post('/api/auth/login', { email, password })
+      const { user: u, token } = res.data
+      setUser(u)
       isLoggedInRef.current = true
-      await Promise.all([
-        storageSet(StorageKeys.USER, JSON.stringify(loggedUser)),
+      localStorage.setItem(StorageKeys.USER, JSON.stringify(u))
+      if (token) localStorage.setItem(StorageKeys.AUTH_TOKEN, token)
+      // Guardar en Preferences también (persistencia extra en iOS)
+      await Promise.allSettled([
+        storageSet(StorageKeys.USER, JSON.stringify(u)),
         token ? storageSet(StorageKeys.AUTH_TOKEN, token) : Promise.resolve(),
       ])
-      return { success: true, user: loggedUser }
+      return { success: true, user: u }
     } catch (err) {
-      let errorMsg = err.response?.data?.error || ''
-      if (!errorMsg) {
-        errorMsg = err.code === 'ERR_NETWORK'
-          ? 'No se pudo conectar al servidor. Verifica tu conexión.'
-          : `${err.message} [${err.code || 'UNKNOWN'}]`
-      }
-      setError(errorMsg)
-      return { success: false, error: errorMsg }
+      let msg = err.response?.data?.error || ''
+      if (!msg) msg = err.code === 'ERR_NETWORK'
+        ? 'No se pudo conectar al servidor. Verifica tu conexión.'
+        : `${err.message} [${err.code || 'UNKNOWN'}]`
+      setError(msg)
+      return { success: false, error: msg }
     } finally {
       setLoading(false)
     }
   }
 
+  // ─── Register ──────────────────────────────────────────────────
   const register = async (userData) => {
     setLoading(true)
     setError(null)
     try {
-      const response = await api.post('/api/auth/register', userData)
-      const { user: newUser, token } = response.data
-      setUser(newUser)
+      const res = await api.post('/api/auth/register', userData)
+      const { user: u, token } = res.data
+      setUser(u)
       isLoggedInRef.current = true
-      await Promise.all([
-        storageSet(StorageKeys.USER, JSON.stringify(newUser)),
+      localStorage.setItem(StorageKeys.USER, JSON.stringify(u))
+      if (token) localStorage.setItem(StorageKeys.AUTH_TOKEN, token)
+      await Promise.allSettled([
+        storageSet(StorageKeys.USER, JSON.stringify(u)),
         token ? storageSet(StorageKeys.AUTH_TOKEN, token) : Promise.resolve(),
       ])
-      return { success: true, user: newUser }
+      return { success: true, user: u }
     } catch (err) {
-      const errorMsg = err.response?.data?.error || 'Error al registrar'
-      setError(errorMsg)
-      return { success: false, error: errorMsg }
+      const msg = err.response?.data?.error || 'Error al registrar'
+      setError(msg)
+      return { success: false, error: msg }
     } finally {
       setLoading(false)
     }
   }
 
+  // ─── Logout ────────────────────────────────────────────────────
   const logout = async () => {
     try { await api.post('/api/auth/logout') } catch {}
     await clearSession()
   }
 
+  // ─── Validación silenciosa al montar ──────────────────────────
+  // Solo corre si hay token pero NO había usuario en caché (caso raro).
+  // Si había usuario en caché, valida de todas formas pero sin bloquear UI.
   useEffect(() => {
     let cancelled = false
 
-    const initialize = async () => {
+    const validate = async () => {
+      // Si no hay token no hay nada que validar
+      const token = syncToken || await storageGet(StorageKeys.AUTH_TOKEN)
+      if (!token) {
+        setInitializing(false)
+        return
+      }
+
       try {
-        const [token, storedUserRaw] = await Promise.all([
-          storageGet(StorageKeys.AUTH_TOKEN),
-          storageGet(StorageKeys.USER),
-        ])
-
-        const storedUser = tryParse(storedUserRaw)
-
-        if (!token && !storedUser) {
-          if (!cancelled) {
-            setUser(null)
-            setInitializing(false)
-          }
-          return
+        const res = await api.get('/api/auth/me')
+        const freshUser = res.data.user
+        if (!cancelled) {
+          setUser(freshUser)
+          isLoggedInRef.current = true
+          localStorage.setItem(StorageKeys.USER, JSON.stringify(freshUser))
+          storageSet(StorageKeys.USER, JSON.stringify(freshUser)).catch(() => {})
         }
-
-        if (storedUser) {
-          if (!cancelled) {
-            setUser(storedUser)
-            isLoggedInRef.current = true
-            setInitializing(false)
-          }
+      } catch (err) {
+        const status = err.response?.status
+        // Solo cerrar sesión si el servidor dice explícitamente que el token no vale
+        // Y solo si NO teníamos usuario en caché (para no desloguear al driver sin conexión)
+        if ((status === 401 || status === 403) && !syncUser && !cancelled) {
+          await clearSession()
         }
-
-        if (token) {
-          try {
-            const response = await api.get('/api/auth/me')
-            const freshUser = response.data.user
-            if (!cancelled) {
-              setUser(freshUser)
-              isLoggedInRef.current = true
-              await storageSet(StorageKeys.USER, JSON.stringify(freshUser))
-            }
-          } catch (err) {
-            const status = err.response?.status
-            if ((status === 401 || status === 403) && !storedUser) {
-              if (!cancelled) await clearSession()
-            }
-          }
-        }
-
-        if (!cancelled && !storedUser) {
-          setInitializing(false)
-        }
-      } catch {
+        // Con error de red o cualquier otro error → mantener sesión
+      } finally {
         if (!cancelled) setInitializing(false)
       }
     }
 
-    const safetyTimer = setTimeout(() => {
-      if (!cancelled) setInitializing(false)
-    }, 10000)
-
-    initialize().finally(() => clearTimeout(safetyTimer))
-
+    validate()
     return () => { cancelled = true }
   }, [])
 
+  // ─── Revalidar cuando app vuelve del fondo (solo nativo) ──────
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
 
@@ -161,29 +158,29 @@ export function AuthProvider({ children }) {
             lastActiveRef.current = Date.now()
             return
           }
-
-          const elapsed = Date.now() - lastActiveRef.current
           lastActiveRef.current = Date.now()
 
-          if (!isLoggedInRef.current || elapsed < 60 * 1000 || isValidatingRef.current) return
+          // Solo revalida si lleva más de 5 minutos en background
+          const elapsed = Date.now() - lastActiveRef.current
+          if (!isLoggedInRef.current || elapsed < 5 * 60 * 1000 || isValidatingRef.current) return
 
           isValidatingRef.current = true
           try {
             const token = await storageGet(StorageKeys.AUTH_TOKEN)
             if (!token) return
-
-            const response = await api.get('/api/auth/me')
-            const freshUser = response.data.user
+            const res = await api.get('/api/auth/me')
+            const freshUser = res.data.user
             setUser(freshUser)
-            await storageSet(StorageKeys.USER, JSON.stringify(freshUser))
+            localStorage.setItem(StorageKeys.USER, JSON.stringify(freshUser))
+            storageSet(StorageKeys.USER, JSON.stringify(freshUser)).catch(() => {})
           } catch {
-            // Red cayó o servidor no respondió — NO cerrar sesión
+            // Error de red o servidor → mantener sesión, NO cerrar
           } finally {
             isValidatingRef.current = false
           }
         })
       } catch (err) {
-        console.error('[Auth] Error configurando listener de estado:', err)
+        console.error('[Auth] Error configurando listener:', err)
       }
     }
 
@@ -191,42 +188,36 @@ export function AuthProvider({ children }) {
     return () => { if (listener) listener.remove().catch(() => {}) }
   }, [])
 
+  // ─── Interceptor 401 para llamadas activas ─────────────────────
+  // Si una llamada de API (no auth) devuelve 401 → cerrar sesión
   useEffect(() => {
-    const interceptor = api.interceptors.response.use(
+    const id = api.interceptors.response.use(
       res => res,
       async err => {
         const status = err.response?.status
         const url = err.config?.url || ''
-        const isAuthEndpoint = url.includes('/api/auth/')
-
-        if ((status === 401 || status === 403) && !isAuthEndpoint && isLoggedInRef.current) {
+        if ((status === 401 || status === 403) && !url.includes('/api/auth/') && isLoggedInRef.current) {
           await clearSession()
         }
-
         return Promise.reject(err)
       }
     )
-    return () => api.interceptors.response.eject(interceptor)
+    return () => api.interceptors.response.eject(id)
   }, [clearSession])
 
-  const value = {
-    user,
-    loading,
-    error,
-    initializing,
-    isAuthenticated,
-    isAdmin,
-    isDriver,
-    login,
-    register,
-    logout,
-  }
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{
+      user, loading, error, initializing,
+      isAuthenticated, isAdmin, isDriver,
+      login, register, logout,
+    }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) throw new Error('useAuth must be used within AuthProvider')
-  return context
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+  return ctx
 }
