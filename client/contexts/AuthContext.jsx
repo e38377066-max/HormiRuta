@@ -158,21 +158,9 @@ export function AuthProvider({ children }) {
     return () => { if (listener) listener.remove().catch(() => {}) }
   }, [])
 
-  // ─── Interceptor: si una llamada activa devuelve 401 → cerrar sesión ──
-  useEffect(() => {
-    const id = api.interceptors.response.use(
-      res => res,
-      async err => {
-        const status = err.response?.status
-        const url    = err.config?.url || ''
-        if ((status === 401 || status === 403) && !url.includes('/api/auth/') && isLoggedInRef.current) {
-          clearSession()
-        }
-        return Promise.reject(err)
-      }
-    )
-    return () => api.interceptors.response.eject(id)
-  }, [clearSession])
+  // No hay interceptor de 401 global.
+  // La sesión solo se cierra con logout() explícito del usuario.
+  // Los errores 401 en rutas individuales no cierran la sesión.
 
   return (
     <AuthContext.Provider value={{

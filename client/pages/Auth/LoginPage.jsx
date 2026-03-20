@@ -3,12 +3,17 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import './AuthPages.css'
 
+const REMEMBER_EMAIL_KEY = 'rem_email'
+const REMEMBER_PASS_KEY  = 'rem_pass'
+const REMEMBER_FLAG_KEY  = 'rem_on'
+
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === '1'
+  const [email,       setEmail]       = useState(remembered ? (localStorage.getItem(REMEMBER_EMAIL_KEY) || '') : '')
+  const [password,    setPassword]    = useState(remembered ? (localStorage.getItem(REMEMBER_PASS_KEY)  || '') : '')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
-  const [showTerms, setShowTerms] = useState(false)
+  const [rememberMe,  setRememberMe]  = useState(remembered)
+  const [showTerms,   setShowTerms]   = useState(false)
   const [showPrivacy, setShowPrivacy] = useState(false)
   const { login, loading, error } = useAuth()
   const navigate = useNavigate()
@@ -18,7 +23,13 @@ export default function LoginPage() {
     const result = await login(email, password)
     if (result.success) {
       if (rememberMe) {
-        localStorage.setItem('rememberedEmail', email)
+        localStorage.setItem(REMEMBER_FLAG_KEY,  '1')
+        localStorage.setItem(REMEMBER_EMAIL_KEY, email)
+        localStorage.setItem(REMEMBER_PASS_KEY,  password)
+      } else {
+        localStorage.removeItem(REMEMBER_FLAG_KEY)
+        localStorage.removeItem(REMEMBER_EMAIL_KEY)
+        localStorage.removeItem(REMEMBER_PASS_KEY)
       }
       const role = result.user?.role
       navigate(role === 'admin' ? '/messaging' : '/planner')
