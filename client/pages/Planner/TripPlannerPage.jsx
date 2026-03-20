@@ -2086,22 +2086,24 @@ export default function TripPlannerPage() {
             </div>
             </div>
             <div className="evidence-modal-footer">
-              <button className="btn-cancel" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); setSelectedPaymentMethod(''); setAmountCollected(''); }}>
-                Cancelar
-              </button>
-              <button
-                className="btn-skip-stop"
-                onClick={() => skipStop(showEvidenceModal)}
-                disabled={uploadingEvidence}
-              >
-                <span className="material-icons">skip_next</span>
-                {stops[showEvidenceModal]?.skippedOnce ? 'Saltar definitivo' : 'Mover al final'}
-              </button>
+              <div className="evidence-footer-row">
+                <button className="btn-cancel" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); setSelectedPaymentMethod(''); setAmountCollected(''); }}>
+                  Cancelar
+                </button>
+                <button
+                  className="btn-skip-stop"
+                  onClick={() => skipStop(showEvidenceModal)}
+                  disabled={uploadingEvidence}
+                >
+                  <span className="material-icons">skip_next</span>
+                  {stops[showEvidenceModal]?.skippedOnce ? 'Saltar definitivo' : 'Mover al final'}
+                </button>
+              </div>
               <button 
                 className="btn-optimize" 
                 onClick={confirmStopWithEvidence} 
                 disabled={uploadingEvidence}
-                style={{ flex: 1 }}
+                style={{ width: '100%' }}
               >
                 <span className="material-icons">{uploadingEvidence ? 'hourglass_empty' : 'check'}</span>
                 {uploadingEvidence ? 'Subiendo...' : evidenceFile ? 'Confirmar con foto' : 'Confirmar entrega'}
