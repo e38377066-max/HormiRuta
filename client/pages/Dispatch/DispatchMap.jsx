@@ -911,7 +911,22 @@ export default function DispatchMap() {
     }
   }
 
-  const getStatusConfig = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.approved
+  const getStatusConfig = (status) => STATUS_CONFIG[status] || { label: '', color: '#9e9e9e', icon: 'circle' }
+
+  const getStopStatusColor = (status) => {
+    const map = {
+      pending: '#9e9e9e',
+      completed: '#4caf50',
+      skipped: '#f44336',
+      in_progress: '#2196f3',
+      ordered: '#2196f3',
+      approved: '#ffc107',
+      on_delivery: '#ffffff',
+      delivered: '#ff6d00',
+      ups_shipped: '#9c27b0'
+    }
+    return map[status] || '#9e9e9e'
+  }
 
   const openManualOrderModal = () => {
     setManualOrderForm({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
@@ -1690,15 +1705,24 @@ export default function DispatchMap() {
                     </div>
                   )}
 
-                  {!isEditing && route.orders?.length > 0 && (
+                  {!isEditing && (route.route_stops?.length > 0 || route.orders?.length > 0) && (
                     <div className="dr-orders">
-                      {route.orders.map(o => (
-                        <div key={o.id} className="dr-order-mini">
-                          <span className="dr-dot" style={{ backgroundColor: getStatusConfig(o.order_status).color, border: getStatusConfig(o.order_status).color === '#ffffff' ? '1.5px solid #aaa' : 'none' }}></span>
-                          <span>{o.customer_name || 'Sin nombre'}</span>
-                          <span className="dr-order-status">{getStatusConfig(o.order_status).label}</span>
-                        </div>
-                      ))}
+                      <div className="dr-orders-scroll">
+                        {(route.route_stops?.length > 0 ? route.route_stops : route.orders).map((s, i) => {
+                          const name = s.customer_name || s.name || 'Sin nombre'
+                          const statusKey = s.status || s.order_status || 'pending'
+                          const dotColor = getStopStatusColor(statusKey)
+                          const statusLabel = STATUS_CONFIG[statusKey]?.label || ''
+                          return (
+                            <div key={s.id || i} className="dr-order-mini">
+                              <span className="dr-stop-num">{i + 1}</span>
+                              <span className="dr-dot" style={{ backgroundColor: dotColor, border: dotColor === '#ffffff' ? '1.5px solid #aaa' : 'none', flexShrink: 0 }}></span>
+                              <span className="dr-stop-name-text">{name}</span>
+                              {statusLabel && <span className="dr-order-status">{statusLabel}</span>}
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                   {route.is_optimized && (
