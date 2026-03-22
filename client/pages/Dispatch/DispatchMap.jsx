@@ -272,9 +272,11 @@ export default function DispatchMap() {
 
       marker.addListener('click', () => {
         if (isAdmin && showAddStopsPanel !== null) {
-          setEditSelectedOrders(prev =>
-            prev.includes(order.id) ? prev.filter(id => id !== order.id) : [...prev, order.id]
-          )
+          if (!isPending) {
+            setEditSelectedOrders(prev =>
+              prev.includes(order.id) ? prev.filter(id => id !== order.id) : [...prev, order.id]
+            )
+          }
         } else {
           infoWindow.open(mapInstance.current, marker)
           if (isAdmin) toggleOrderSelection(order.id)

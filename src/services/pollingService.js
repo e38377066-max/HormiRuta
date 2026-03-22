@@ -1147,7 +1147,7 @@ class PollingService {
 
         const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
         const orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
-        const excludedLifecycles = ['New Lead', 'Pending', 'Impropos'];
+        const excludedLifecycles = ['New Lead', 'Impropos'];
         const isExcluded = excludedLifecycles.some(ex => ex.toLowerCase() === contactLifecycle.toLowerCase());
         if (!orderStatus && contactLifecycle && isExcluded) {
           if (!existing.route_id) {
@@ -1174,6 +1174,8 @@ class PollingService {
             updateFields.dispatch_status = 'available';
           }
           console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
+        } else if (orderStatus && existing.dispatch_status === 'archived') {
+          updateFields.dispatch_status = 'available';
         }
 
         if (Object.keys(updateFields).length > 0) {
@@ -1753,7 +1755,7 @@ class PollingService {
               syncedCount++;
             }
           } else if (!newStatus && contactLifecycle) {
-            const archiveLifecycles = ['new lead', 'pending'];
+            const archiveLifecycles = ['new lead'];
             const deleteLifecycles = ['impropos', 'closed'];
             const lcNorm = contactLifecycle.toLowerCase();
             if (archiveLifecycles.some(ex => ex === lcNorm)) {
@@ -2040,7 +2042,7 @@ class PollingService {
   }
 
   statusCanAdvance(currentStatus, newStatus) {
-    const STATUS_ORDER = ['approved', 'ordered', 'on_delivery', 'ups_shipped', 'delivered'];
+    const STATUS_ORDER = ['pending', 'approved', 'ordered', 'on_delivery', 'ups_shipped', 'delivered'];
     const currentIdx = STATUS_ORDER.indexOf(currentStatus);
     const newIdx = STATUS_ORDER.indexOf(newStatus);
     if (currentIdx === -1 || newIdx === -1) return newIdx !== -1;
@@ -2051,6 +2053,7 @@ class PollingService {
     if (!lifecycle) return null;
     const lc = lifecycle.toLowerCase();
     const map = {
+      'pending': 'pending',
       'approved': 'approved',
       'ordered': 'ordered',
       'on delivery': 'on_delivery',
