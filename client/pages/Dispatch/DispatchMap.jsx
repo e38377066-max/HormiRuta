@@ -272,7 +272,9 @@ export default function DispatchMap() {
 
       marker.addListener('click', () => {
         if (isAdmin && showAddStopsPanel !== null) {
-          if (!isPending) {
+          if (isPending) {
+            alert('Los pedidos Pendientes no se pueden agregar a rutas hasta que sean aprobados.')
+          } else {
             setEditSelectedOrders(prev =>
               prev.includes(order.id) ? prev.filter(id => id !== order.id) : [...prev, order.id]
             )
