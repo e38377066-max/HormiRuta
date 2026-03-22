@@ -1278,10 +1278,17 @@ class PollingService {
         }
       }
 
+      const excludedScanLifecycles = ['new lead', 'pending', 'impropos'];
+
       for (let i = 0; i < batch.length; i++) {
         const contact = batch[i];
         const contactIdStr = contact.id.toString();
         this.addressScannedContacts.add(contactIdStr);
+
+        const contactLifecycleEarly = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
+        if (excludedScanLifecycles.includes(contactLifecycleEarly)) {
+          continue;
+        }
 
         if (i > 0) {
           await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CONTACTS_MS));
@@ -2056,12 +2063,17 @@ class PollingService {
       if (!record && contact.phone) {
         const phoneNorm = contact.phone.replace(/\D/g, '');
         const byPhone = await ValidatedAddress.findAll({
-          where: { user_id: userId, respond_contact_id: null }
+          where: { user_id: userId, customer_phone: { [Op.ne]: null } }
         });
-        record = byPhone.find(r => r.customer_phone && r.customer_phone.replace(/\D/g, '') === phoneNorm) || null;
-        if (record) {
-          await record.update({ respond_contact_id: contactIdStr });
-          console.log(`[ValidatedAddr] Vinculado registro manual de ${customerName} al contacto ${contactIdStr}`);
+        const phoneMatch = byPhone.find(r => r.customer_phone && r.customer_phone.replace(/\D/g, '') === phoneNorm) || null;
+        if (phoneMatch) {
+          record = phoneMatch;
+          if (!record.respond_contact_id) {
+            await record.update({ respond_contact_id: contactIdStr });
+            console.log(`[ValidatedAddr] Vinculado registro manual de ${customerName} al contacto ${contactIdStr}`);
+          } else {
+            console.log(`[ValidatedAddr] Reutilizando registro existente de ${customerName} (mismo teléfono, evitando duplicado)`);
+          }
         }
       }
 
