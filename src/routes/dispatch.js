@@ -123,6 +123,8 @@ router.get('/orders', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permisos' });
     }
 
+    where.dispatch_status = { [Op.ne]: 'archived' };
+
     const orders = await ValidatedAddress.findAll({
       where,
       order: [['customer_name', 'ASC'], ['created_at', 'DESC']]

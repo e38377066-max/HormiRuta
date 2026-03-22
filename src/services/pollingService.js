@@ -1152,19 +1152,27 @@ class PollingService {
         if (!orderStatus && contactLifecycle && isExcluded) {
           if (!existing.route_id) {
             try {
-              await ValidatedAddress.destroy({ where: { id: existing.id } });
-              console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" eliminada (lifecycle=${contactLifecycle}) (${contactIdStr})`);
-              updatedCount++;
+              if (existing.dispatch_status !== 'archived') {
+                await ValidatedAddress.update(
+                  { dispatch_status: 'archived' },
+                  { where: { id: existing.id } }
+                );
+                console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" archivada (lifecycle=${contactLifecycle}) (${contactIdStr})`);
+                updatedCount++;
+              }
             } catch (err) {
-              console.error(`[AddressScan] Error eliminando ${contactIdStr}:`, err.message);
+              console.error(`[AddressScan] Error archivando ${contactIdStr}:`, err.message);
             }
           } else {
-            console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" lifecycle=${contactLifecycle} pero tiene ruta asignada, no se elimina (${contactIdStr})`);
+            console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" lifecycle=${contactLifecycle} pero tiene ruta asignada, no se archiva (${contactIdStr})`);
           }
           continue;
         }
         if (orderStatus && existing.order_status !== orderStatus && this.statusCanAdvance(existing.order_status, orderStatus)) {
           updateFields.order_status = orderStatus;
+          if (existing.dispatch_status === 'archived') {
+            updateFields.dispatch_status = 'available';
+          }
           console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
         }
 
@@ -1278,17 +1286,10 @@ class PollingService {
         }
       }
 
-      const excludedScanLifecycles = ['new lead', 'pending', 'impropos'];
-
       for (let i = 0; i < batch.length; i++) {
         const contact = batch[i];
         const contactIdStr = contact.id.toString();
         this.addressScannedContacts.add(contactIdStr);
-
-        const contactLifecycleEarly = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
-        if (excludedScanLifecycles.includes(contactLifecycleEarly)) {
-          continue;
-        }
 
         if (i > 0) {
           await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CONTACTS_MS));
@@ -1738,13 +1739,30 @@ class PollingService {
             console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando (terminal, route_id=${order.route_id || 'ninguna'})`);
             await order.destroy();
             syncedCount++;
-          } else if (newStatus && newStatus !== order.order_status && this.statusCanAdvance(order.order_status, newStatus)) {
-            await order.update({ order_status: newStatus });
-            console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
-            syncedCount++;
+          } else if (newStatus) {
+            const closedUpdateFields = {};
+            if (newStatus !== order.order_status && this.statusCanAdvance(order.order_status, newStatus)) {
+              closedUpdateFields.order_status = newStatus;
+            }
+            if (order.dispatch_status === 'archived') {
+              closedUpdateFields.dispatch_status = 'available';
+            }
+            if (Object.keys(closedUpdateFields).length > 0) {
+              await order.update(closedUpdateFields);
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
+              syncedCount++;
+            }
           } else if (!newStatus && contactLifecycle) {
-            const excludedLifecycles = ['new lead', 'pending', 'impropos', 'closed'];
-            if (excludedLifecycles.some(ex => ex === contactLifecycle.toLowerCase())) {
+            const archiveLifecycles = ['new lead', 'pending'];
+            const deleteLifecycles = ['impropos', 'closed'];
+            const lcNorm = contactLifecycle.toLowerCase();
+            if (archiveLifecycles.some(ex => ex === lcNorm)) {
+              if (!order.route_id && order.dispatch_status !== 'archived') {
+                await order.update({ dispatch_status: 'archived' });
+                console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, archivada del dispatch`);
+                syncedCount++;
+              }
+            } else if (deleteLifecycles.some(ex => ex === lcNorm)) {
               console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando del dispatch`);
               if (!order.route_id) {
                 await order.destroy();
