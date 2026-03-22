@@ -90,6 +90,22 @@ const Route = sequelize.define('Route', {
       model: 'users',
       key: 'id'
     }
+  },
+  payment_delivered: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  payment_delivery_method: {
+    type: DataTypes.STRING(30),
+    allowNull: true
+  },
+  payment_delivered_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  route_total_collected: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true
   }
 }, {
   tableName: 'routes',

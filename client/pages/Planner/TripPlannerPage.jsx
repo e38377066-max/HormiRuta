@@ -76,6 +76,9 @@ export default function TripPlannerPage() {
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [messageSuccess, setMessageSuccess] = useState('')
+  const [payDeliveryModal, setPayDeliveryModal] = useState(null)
+  const [payDeliveryMethod, setPayDeliveryMethod] = useState('')
+  const [deliveringPay, setDeliveringPay] = useState(false)
   const fileInputRef = useRef(null)
   const isDragging = useRef(false)
   const startY = useRef(0)
@@ -100,15 +103,33 @@ export default function TripPlannerPage() {
     }
   }, [isOptimized])
 
+  const deliverRoutePayment = async () => {
+    if (!payDeliveryModal || !payDeliveryMethod) return
+    setDeliveringPay(true)
+    try {
+      await api.put(`/api/dispatch/routes/${payDeliveryModal.id}/deliver-payment`, { payment_method: payDeliveryMethod })
+      setPayDeliveryModal(null)
+      setPayDeliveryMethod('')
+      loadDispatchRoutes()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al registrar entrega de pago')
+    } finally {
+      setDeliveringPay(false)
+    }
+  }
+
   const loadDispatchRoutes = async () => {
     try {
       setLoadingDispatch(true)
       const res = await api.get('/api/dispatch/routes')
-      const assigned = (res.data.routes || []).filter(r => r.status === 'assigned')
-      setDispatchRoutes(assigned)
+      const relevant = (res.data.routes || []).filter(r =>
+        r.status === 'assigned' ||
+        (r.status === 'completed' && !r.payment_delivered)
+      )
+      setDispatchRoutes(relevant)
       const savedRouteId = localStorage.getItem('activeRouteId')
       if (savedRouteId) {
-        const savedRoute = assigned.find(r => String(r.id) === String(savedRouteId))
+        const savedRoute = relevant.find(r => String(r.id) === String(savedRouteId))
         if (savedRoute) {
           const wasNavigating = localStorage.getItem('navMode') === 'true'
           if (wasNavigating) {
@@ -1476,24 +1497,49 @@ export default function TripPlannerPage() {
               {loadingDispatch ? (
                 <div className="dispatch-loading">Cargando...</div>
               ) : (
-                dispatchRoutes.map(dr => (
-                  <div key={dr.id} className="dispatch-route-item" onClick={() => loadDispatchRoute(dr)}>
+                dispatchRoutes.map(dr => {
+                  const isCompleted = dr.status === 'completed'
+                  return (
+                  <div
+                    key={dr.id}
+                    className={`dispatch-route-item${isCompleted ? ' completed-pending-pay' : ''}`}
+                    onClick={() => !isCompleted && loadDispatchRoute(dr)}
+                    style={isCompleted ? { cursor: 'default', borderLeft: '4px solid #f59e0b' } : {}}
+                  >
                     <div className="dispatch-route-top">
                       <span className="dispatch-route-name">{dr.name}</span>
-                      {dr.is_optimized && <span className="dispatch-badge-opt">Optimizada</span>}
+                      {isCompleted
+                        ? <span className="dispatch-badge-opt" style={{ background: '#f59e0b', color: '#fff' }}>Completada</span>
+                        : dr.is_optimized && <span className="dispatch-badge-opt">Optimizada</span>
+                      }
                     </div>
                     <div className="dispatch-route-meta">
                       <span>{dr.stops_count} parada{dr.stops_count !== 1 ? 's' : ''}</span>
                       {dr.total_distance > 0 && <span> - {dr.total_distance} km</span>}
-                      {dr.total_duration > 0 && <span> - ~{dr.total_duration} min</span>}
                     </div>
-                    {dr.driver_commission_total > 0 && (
+                    {isCompleted && dr.route_total_collected > 0 && (
+                      <div className="dispatch-route-pay-pending">
+                        <span className="material-icons" style={{ fontSize: 15 }}>payments</span>
+                        Total cobrado: <strong>${Number(dr.route_total_collected).toFixed(2)}</strong>
+                      </div>
+                    )}
+                    {!isCompleted && dr.driver_commission_total > 0 && (
                       <div className="dispatch-route-commission">
                         <span className="material-icons">paid</span> Tu comisión: ${dr.driver_commission_total.toFixed(2)}
                       </div>
                     )}
+                    {isCompleted && (
+                      <button
+                        className="btn-deliver-payment"
+                        onClick={e => { e.stopPropagation(); setPayDeliveryModal(dr); setPayDeliveryMethod('') }}
+                      >
+                        <span className="material-icons">local_atm</span>
+                        Entregar Pago
+                      </button>
+                    )}
                   </div>
-                ))
+                  )
+                })
               )}
             </div>
           )}
@@ -2121,6 +2167,63 @@ export default function TripPlannerPage() {
         style={{ display: 'none' }}
         onChange={handleEvidencePhoto}
       />
+
+      {payDeliveryModal && (
+        <div className="evidence-modal-overlay" onClick={() => setPayDeliveryModal(null)}>
+          <div className="evidence-modal" onClick={e => e.stopPropagation()}>
+            <div className="evidence-modal-header">
+              <h3 style={{ margin: 0, fontSize: 17 }}>Entregar Pago</h3>
+              <button className="evidence-close-btn" onClick={() => setPayDeliveryModal(null)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+
+            <div className="evidence-modal-body" style={{ paddingTop: 12 }}>
+              <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>Ruta: {payDeliveryModal.name}</div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: '#22c55e' }}>
+                  ${Number(payDeliveryModal.route_total_collected || 0).toFixed(2)}
+                </div>
+                <div style={{ fontSize: 12, color: '#666' }}>Total cobrado a entregar a la empresa</div>
+              </div>
+
+              <div className="evidence-payment-section">
+                <div className="payment-method-label">Método de entrega</div>
+                <div className="payment-methods-grid">
+                  {[
+                    { key: 'cash', label: 'Efectivo', icon: 'payments' },
+                    { key: 'card', label: 'Tarjeta', icon: 'credit_card' },
+                    { key: 'transfer', label: 'Transferencia', icon: 'account_balance' },
+                    { key: 'check', label: 'Cheque', icon: 'description' },
+                    { key: 'zelle', label: 'Zelle', icon: 'send_to_mobile' }
+                  ].map(m => (
+                    <button
+                      key={m.key}
+                      className={`payment-method-btn${payDeliveryMethod === m.key ? ' selected' : ''}`}
+                      onClick={() => setPayDeliveryMethod(m.key)}
+                    >
+                      <span className="material-icons">{m.icon}</span>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="evidence-modal-footer">
+              <button
+                className="btn-confirm-delivery"
+                disabled={!payDeliveryMethod || deliveringPay}
+                onClick={deliverRoutePayment}
+                style={{ background: payDeliveryMethod ? '#22c55e' : '#ccc' }}
+              >
+                <span className="material-icons">check_circle</span>
+                {deliveringPay ? 'Registrando...' : 'Confirmar entrega de pago'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

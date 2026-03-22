@@ -1558,6 +1558,33 @@ export default function DispatchMap() {
                     )}
                   </div>
 
+                  {route.status === 'completed' && route.route_total_collected > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      {route.payment_delivered ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#22c55e', fontWeight: 600 }}>
+                          <span className="material-icons" style={{ fontSize: 15 }}>check_circle</span>
+                          Entregado: ${Number(route.route_total_collected).toFixed(2)}
+                          {route.payment_delivery_method && (
+                            <span style={{ fontWeight: 400, color: '#555', marginLeft: 2 }}>
+                              ({route.payment_delivery_method === 'cash' ? 'Efectivo' :
+                                route.payment_delivery_method === 'card' ? 'Tarjeta' :
+                                route.payment_delivery_method === 'transfer' ? 'Transferencia' :
+                                route.payment_delivery_method === 'check' ? 'Cheque' :
+                                route.payment_delivery_method === 'zelle' ? 'Zelle' :
+                                route.payment_delivery_method})
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#ef4444', fontWeight: 600 }}>
+                          <span className="material-icons" style={{ fontSize: 15 }}>pending</span>
+                          Total a Cobrar: ${Number(route.route_total_collected).toFixed(2)}
+                          <span style={{ fontWeight: 400, color: '#888' }}>(pendiente)</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {isEditing && isAdmin && (
                     <div className="dr-edit-panel">
                       {loadingRouteStops === route.id ? (

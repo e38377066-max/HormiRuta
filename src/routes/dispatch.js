@@ -938,6 +938,10 @@ router.get('/routes', requireAuth, async (req, res) => {
       routeDict.total_amount = routeOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
       routeDict.driver_commission_per_stop = r.assigned_driver_id ? (driverCommissionMap[r.assigned_driver_id] || 0) : 0;
       routeDict.driver_commission_total = routeDict.driver_commission_per_stop * (routeDict.stops_count || 0);
+      routeDict.route_total_collected = routeAllStops.reduce((sum, s) => sum + (Number(s.amount_collected) || 0), 0);
+      routeDict.payment_delivered = r.payment_delivered || false;
+      routeDict.payment_delivery_method = r.payment_delivery_method || null;
+      routeDict.payment_delivered_at = r.payment_delivered_at || null;
       return routeDict;
     }));
 
@@ -1292,6 +1296,41 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error completing route:', error);
     res.status(500).json({ error: 'Error al finalizar ruta' });
+  }
+});
+
+router.put('/routes/:id/deliver-payment', requireAuth, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    if (route.assigned_driver_id !== req.userId) {
+      const user = await User.findByPk(req.userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: 'No tienes permisos' });
+      }
+    }
+
+    if (route.status !== 'completed') {
+      return res.status(400).json({ error: 'La ruta debe estar completada primero' });
+    }
+
+    const { payment_method } = req.body;
+    if (!payment_method) return res.status(400).json({ error: 'Selecciona un método de pago' });
+
+    const allStops = await Stop.findAll({ where: { route_id: route.id } });
+    const totalCollected = allStops.reduce((sum, s) => sum + (Number(s.amount_collected) || 0), 0);
+
+    route.payment_delivered = true;
+    route.payment_delivery_method = payment_method;
+    route.payment_delivered_at = new Date();
+    route.route_total_collected = totalCollected;
+    await route.save();
+
+    res.json({ success: true, total_collected: totalCollected, payment_delivery_method: payment_method });
+  } catch (error) {
+    console.error('Error registrando entrega de pago:', error);
+    res.status(500).json({ error: 'Error al registrar entrega de pago' });
   }
 });
 
