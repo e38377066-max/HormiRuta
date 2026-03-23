@@ -33,6 +33,13 @@ export default function AccountingPage() {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [archivingMonth, setArchivingMonth] = useState(false)
 
+  const [routePayments, setRoutePayments] = useState([])
+  const [loadingPayments, setLoadingPayments] = useState(false)
+  const [payDriver, setPayDriver] = useState('')
+  const [payDateFrom, setPayDateFrom] = useState('')
+  const [payDateTo, setPayDateTo] = useState('')
+  const [payFilter, setPayFilter] = useState('all')
+
   useEffect(() => {
     fetchDrivers()
     fetchReport()
@@ -40,6 +47,7 @@ export default function AccountingPage() {
 
   useEffect(() => {
     if (activeTab === 'deliveries') fetchDeliveries()
+    if (activeTab === 'payments') fetchRoutePayments()
   }, [activeTab])
 
   const fetchDrivers = async () => {
@@ -107,6 +115,25 @@ export default function AccountingPage() {
       alert(JSON.parse(msg)?.error || msg)
     } finally {
       setArchivingMonth(false)
+    }
+  }
+
+  const fetchRoutePayments = async (overrides = {}) => {
+    setLoadingPayments(true)
+    try {
+      const params = {}
+      const d = overrides.driver !== undefined ? overrides.driver : payDriver
+      const df = overrides.dateFrom !== undefined ? overrides.dateFrom : payDateFrom
+      const dt = overrides.dateTo !== undefined ? overrides.dateTo : payDateTo
+      if (d) params.driver_id = d
+      if (df) params.date_from = df
+      if (dt) params.date_to = dt
+      const res = await api.get('/api/dispatch/routes/payment-status', { params })
+      setRoutePayments(res.data.routes || [])
+    } catch (e) {
+      console.error('Error cargando pagos de rutas:', e)
+    } finally {
+      setLoadingPayments(false)
     }
   }
 
@@ -215,6 +242,13 @@ export default function AccountingPage() {
         >
           <span className="material-icons">local_shipping</span>
           Reporte de Entregas
+        </button>
+        <button
+          className={`accounting-tab ${activeTab === 'payments' ? 'active' : ''}`}
+          onClick={() => setActiveTab('payments')}
+        >
+          <span className="material-icons">payments</span>
+          Pagos a Empresa
         </button>
       </div>
 
@@ -377,6 +411,154 @@ export default function AccountingPage() {
               </table>
             </div>
           )}
+        </>
+      )}
+
+      {activeTab === 'payments' && (
+        <>
+          <div className="content-card" style={{ marginBottom: 16 }}>
+            <form className="accounting-filter-form" onSubmit={e => { e.preventDefault(); fetchRoutePayments() }}>
+              <div className="accounting-filter-fields del-filter-grid">
+                <div className="field-group">
+                  <label>Chofer</label>
+                  <select value={payDriver} onChange={e => setPayDriver(e.target.value)}>
+                    <option value="">Todos los choferes</option>
+                    {drivers.map(d => (
+                      <option key={d.id} value={d.id}>{d.username || d.email}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field-group">
+                  <label>Desde</label>
+                  <input type="date" value={payDateFrom} onChange={e => setPayDateFrom(e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label>Hasta</label>
+                  <input type="date" value={payDateTo} onChange={e => setPayDateTo(e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label>Estado</label>
+                  <select value={payFilter} onChange={e => setPayFilter(e.target.value)}>
+                    <option value="all">Todos</option>
+                    <option value="pending">Pendientes</option>
+                    <option value="delivered">Pagados</option>
+                  </select>
+                </div>
+              </div>
+              <div className="accounting-filter-actions">
+                <button type="submit" className="btn-primary" disabled={loadingPayments}>
+                  <span className="material-icons">filter_list</span>
+                  Filtrar
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {loadingPayments ? (
+            <div className="loading-container"><div className="spinner"></div></div>
+          ) : (() => {
+            const filtered = routePayments.filter(r =>
+              payFilter === 'all' ? true :
+              payFilter === 'pending' ? !r.payment_delivered :
+              r.payment_delivered
+            )
+            return filtered.length === 0 ? (
+              <div className="content-card">
+                <div className="empty-state">
+                  <span className="material-icons">payments</span>
+                  <p>No hay rutas completadas que coincidan con los filtros</p>
+                </div>
+              </div>
+            ) : (
+              <div className="content-card" style={{ overflowX: 'auto' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Ruta</th>
+                      <th>Chofer</th>
+                      <th style={{ textAlign: 'right' }}>Total Cobrado</th>
+                      <th>Pago a la empresa</th>
+                      <th>Método</th>
+                      <th>Fecha Finalización</th>
+                      <th>Fecha Pago</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map(r => (
+                      <tr key={r.id}>
+                        <td>
+                          <strong>{r.name || `Ruta #${r.id}`}</strong>
+                          {r.stops_count > 0 && (
+                            <span style={{ marginLeft: 6, fontSize: 12, color: '#888' }}>
+                              ({r.stops_count} paradas)
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="del-driver-cell">
+                            <div className="avatar-sm" style={{ background: '#6200ea', color: '#fff' }}>
+                              {(r.driver_name || '?')[0].toUpperCase()}
+                            </div>
+                            <span>{r.driver_name}</span>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#2e7d32' }}>
+                          {fmt(r.route_total_collected)}
+                        </td>
+                        <td>
+                          {r.payment_delivered ? (
+                            <span style={{
+                              background: '#e8f5e9', color: '#2e7d32', fontWeight: 700,
+                              padding: '3px 10px', borderRadius: 12, fontSize: 13
+                            }}>
+                              Pagada
+                            </span>
+                          ) : (
+                            <span style={{
+                              background: '#fff3e0', color: '#e65100', fontWeight: 700,
+                              padding: '3px 10px', borderRadius: 12, fontSize: 13
+                            }}>
+                              Pendiente
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {r.payment_delivery_method ? (
+                            <span className={`payment-method-tag ${r.payment_delivery_method}`}>
+                              {r.payment_delivery_method}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#bbb' }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ color: '#666', fontSize: 13 }}>
+                          {r.completed_at ? fmtDate(r.completed_at) : '—'}
+                        </td>
+                        <td style={{ color: '#666', fontSize: 13 }}>
+                          {r.payment_delivered_at ? fmtDate(r.payment_delivered_at) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="accounting-totals">
+                      <td colSpan={2}><strong>TOTAL ({filtered.length} rutas)</strong></td>
+                      <td style={{ textAlign: 'right', color: '#2e7d32' }}>
+                        <strong>{fmt(filtered.reduce((s, r) => s + r.route_total_collected, 0))}</strong>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 12, color: '#888' }}>
+                          {filtered.filter(r => !r.payment_delivered).length} pendiente(s) &nbsp;·&nbsp;
+                          {filtered.filter(r => r.payment_delivered).length} pagada(s)
+                        </span>
+                      </td>
+                      <td colSpan={3}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )
+          })()}
         </>
       )}
 

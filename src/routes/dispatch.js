@@ -952,6 +952,62 @@ router.get('/routes', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/routes/payment-status', requireAdmin, async (req, res) => {
+  try {
+    const { driver_id, date_from, date_to } = req.query;
+
+    const where = { status: 'completed' };
+    if (driver_id) where.assigned_driver_id = parseInt(driver_id);
+    if (date_from || date_to) {
+      where.completed_at = {};
+      if (date_from) where.completed_at[Op.gte] = new Date(date_from + 'T00:00:00');
+      if (date_to) where.completed_at[Op.lte] = new Date(date_to + 'T23:59:59');
+    }
+
+    const routes = await Route.findAll({ where, order: [['completed_at', 'DESC']] });
+
+    const driverIds = [...new Set(routes.map(r => r.assigned_driver_id).filter(Boolean))];
+    const drivers = driverIds.length > 0
+      ? await User.findAll({ where: { id: { [Op.in]: driverIds } }, attributes: ['id', 'username', 'email'] })
+      : [];
+    const driverMap = {};
+    drivers.forEach(d => { driverMap[d.id] = d; });
+
+    const routeIds = routes.map(r => r.id);
+    const stopCounts = routeIds.length > 0
+      ? await Stop.findAll({
+          attributes: ['route_id', [Stop.sequelize.fn('COUNT', Stop.sequelize.col('id')), 'cnt']],
+          where: { route_id: { [Op.in]: routeIds } },
+          group: ['route_id'],
+          raw: true
+        })
+      : [];
+    const stopCountMap = {};
+    stopCounts.forEach(s => { stopCountMap[s.route_id] = parseInt(s.cnt || 0); });
+
+    const result = routes.map(r => {
+      const driver = r.assigned_driver_id ? driverMap[r.assigned_driver_id] : null;
+      return {
+        id: r.id,
+        name: r.name,
+        driver_id: r.assigned_driver_id,
+        driver_name: driver ? (driver.username || driver.email) : 'Sin chofer',
+        completed_at: r.completed_at,
+        stops_count: stopCountMap[r.id] || 0,
+        route_total_collected: Number(r.route_total_collected || 0),
+        payment_delivered: r.payment_delivered || false,
+        payment_delivery_method: r.payment_delivery_method || null,
+        payment_delivered_at: r.payment_delivered_at || null
+      };
+    });
+
+    res.json({ routes: result });
+  } catch (error) {
+    console.error('Error fetching route payment status:', error);
+    res.status(500).json({ error: 'Error al cargar pagos de rutas' });
+  }
+});
+
 router.post('/routes/:id/optimize', requireAdmin, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
