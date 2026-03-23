@@ -40,6 +40,12 @@ export default function AccountingPage() {
   const [payDateTo, setPayDateTo] = useState('')
   const [payFilter, setPayFilter] = useState('all')
 
+  const [confirmModal, setConfirmModal] = useState(null)
+  const [confirmType, setConfirmType] = useState('full')
+  const [confirmAmount, setConfirmAmount] = useState('')
+  const [confirmMethod, setConfirmMethod] = useState('cash')
+  const [confirmLoading, setConfirmLoading] = useState(false)
+
   useEffect(() => {
     fetchDrivers()
     fetchReport()
@@ -134,6 +140,35 @@ export default function AccountingPage() {
       console.error('Error cargando pagos de rutas:', e)
     } finally {
       setLoadingPayments(false)
+    }
+  }
+
+  const openConfirmModal = (route) => {
+    setConfirmModal(route)
+    setConfirmType('full')
+    setConfirmAmount('')
+    setConfirmMethod(route.payment_delivery_method || 'cash')
+  }
+
+  const handleAdminConfirm = async () => {
+    if (!confirmModal) return
+    if (confirmType === 'partial' && (!confirmAmount || isNaN(Number(confirmAmount)) || Number(confirmAmount) <= 0)) {
+      alert('Ingresa un monto válido mayor a 0')
+      return
+    }
+    setConfirmLoading(true)
+    try {
+      await api.put(`/api/dispatch/routes/${confirmModal.id}/admin-confirm-payment`, {
+        type: confirmType,
+        amount: confirmType === 'partial' ? Number(confirmAmount) : undefined,
+        method: confirmMethod
+      })
+      setConfirmModal(null)
+      await fetchRoutePayments()
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error al confirmar pago')
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
@@ -440,8 +475,10 @@ export default function AccountingPage() {
                   <label>Estado</label>
                   <select value={payFilter} onChange={e => setPayFilter(e.target.value)}>
                     <option value="all">Todos</option>
-                    <option value="pending">Pendientes</option>
-                    <option value="delivered">Pagados</option>
+                    <option value="pending">Sin entregar</option>
+                    <option value="to_confirm">Por confirmar</option>
+                    <option value="partial">Parciales</option>
+                    <option value="confirmed">Confirmados</option>
                   </select>
                 </div>
               </div>
@@ -457,11 +494,39 @@ export default function AccountingPage() {
           {loadingPayments ? (
             <div className="loading-container"><div className="spinner"></div></div>
           ) : (() => {
-            const filtered = routePayments.filter(r =>
-              payFilter === 'all' ? true :
-              payFilter === 'pending' ? !r.payment_delivered :
-              r.payment_delivered
-            )
+            const filtered = routePayments.filter(r => {
+              if (payFilter === 'all') return true
+              if (payFilter === 'pending') return !r.payment_delivered
+              if (payFilter === 'to_confirm') return r.payment_delivered && !r.admin_confirmed && r.admin_amount_received === 0
+              if (payFilter === 'partial') return r.payment_delivered && !r.admin_confirmed && r.admin_amount_received > 0
+              if (payFilter === 'confirmed') return r.admin_confirmed
+              return true
+            })
+            const getStatusBadge = (r) => {
+              if (!r.payment_delivered) return (
+                <span style={{ background: '#fff3e0', color: '#e65100', fontWeight: 700, padding: '3px 10px', borderRadius: 12, fontSize: 13 }}>
+                  Sin entregar
+                </span>
+              )
+              if (r.admin_confirmed) return (
+                <span style={{ background: '#e8f5e9', color: '#2e7d32', fontWeight: 700, padding: '3px 10px', borderRadius: 12, fontSize: 13 }}>
+                  ✓ Confirmado
+                </span>
+              )
+              if (r.admin_amount_received > 0) return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ background: '#e3f2fd', color: '#1565c0', fontWeight: 700, padding: '3px 10px', borderRadius: 12, fontSize: 13 }}>
+                    Parcial: {fmt(r.admin_amount_received)}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#e65100' }}>Debe: {fmt(r.admin_remaining)}</span>
+                </div>
+              )
+              return (
+                <span style={{ background: '#ede7f6', color: '#4527a0', fontWeight: 700, padding: '3px 10px', borderRadius: 12, fontSize: 13 }}>
+                  Por confirmar
+                </span>
+              )
+            }
             return filtered.length === 0 ? (
               <div className="content-card">
                 <div className="empty-state">
@@ -477,10 +542,10 @@ export default function AccountingPage() {
                       <th>Ruta</th>
                       <th>Chofer</th>
                       <th style={{ textAlign: 'right' }}>Total Cobrado</th>
-                      <th>Pago a la empresa</th>
-                      <th>Método</th>
+                      <th>Estado del pago</th>
+                      <th>Método chofer</th>
                       <th>Fecha Finalización</th>
-                      <th>Fecha Pago</th>
+                      <th>Acción</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -505,23 +570,7 @@ export default function AccountingPage() {
                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#2e7d32' }}>
                           {fmt(r.route_total_collected)}
                         </td>
-                        <td>
-                          {r.payment_delivered ? (
-                            <span style={{
-                              background: '#e8f5e9', color: '#2e7d32', fontWeight: 700,
-                              padding: '3px 10px', borderRadius: 12, fontSize: 13
-                            }}>
-                              Pagada
-                            </span>
-                          ) : (
-                            <span style={{
-                              background: '#fff3e0', color: '#e65100', fontWeight: 700,
-                              padding: '3px 10px', borderRadius: 12, fontSize: 13
-                            }}>
-                              Pendiente
-                            </span>
-                          )}
-                        </td>
+                        <td>{getStatusBadge(r)}</td>
                         <td>
                           {r.payment_delivery_method ? (
                             <span className={`payment-method-tag ${r.payment_delivery_method}`}>
@@ -534,8 +583,17 @@ export default function AccountingPage() {
                         <td style={{ color: '#666', fontSize: 13 }}>
                           {r.completed_at ? fmtDate(r.completed_at) : '—'}
                         </td>
-                        <td style={{ color: '#666', fontSize: 13 }}>
-                          {r.payment_delivered_at ? fmtDate(r.payment_delivered_at) : '—'}
+                        <td>
+                          {r.payment_delivered && !r.admin_confirmed && (
+                            <button
+                              className="btn-primary"
+                              style={{ fontSize: 12, padding: '4px 12px' }}
+                              onClick={() => openConfirmModal(r)}
+                            >
+                              <span className="material-icons" style={{ fontSize: 14 }}>check_circle</span>
+                              {r.admin_amount_received > 0 ? 'Confirmar saldo' : 'Confirmar'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -548,8 +606,8 @@ export default function AccountingPage() {
                       </td>
                       <td>
                         <span style={{ fontSize: 12, color: '#888' }}>
-                          {filtered.filter(r => !r.payment_delivered).length} pendiente(s) &nbsp;·&nbsp;
-                          {filtered.filter(r => r.payment_delivered).length} pagada(s)
+                          {filtered.filter(r => !r.admin_confirmed).length} por confirmar&nbsp;·&nbsp;
+                          {filtered.filter(r => r.admin_confirmed).length} confirmada(s)
                         </span>
                       </td>
                       <td colSpan={3}></td>
@@ -712,6 +770,133 @@ export default function AccountingPage() {
             </div>
           )}
         </>
+      )}
+      {confirmModal && (
+        <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
+          <div className="modal-content" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirmar recepción de pago</h3>
+              <button className="icon-btn" onClick={() => setConfirmModal(null)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ background: '#f5f5f5', borderRadius: 8, padding: '12px 16px' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+                  {confirmModal.name || `Ruta #${confirmModal.id}`}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span style={{ color: '#555' }}>Total cobrado por chofer:</span>
+                  <strong style={{ color: '#2e7d32' }}>{fmt(confirmModal.route_total_collected)}</strong>
+                </div>
+                {confirmModal.admin_amount_received > 0 && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4 }}>
+                      <span style={{ color: '#555' }}>Ya confirmado:</span>
+                      <strong style={{ color: '#1565c0' }}>{fmt(confirmModal.admin_amount_received)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4 }}>
+                      <span style={{ color: '#555' }}>Aún pendiente:</span>
+                      <strong style={{ color: '#e65100' }}>{fmt(confirmModal.admin_remaining)}</strong>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 600, fontSize: 13, display: 'block', marginBottom: 8 }}>¿Cómo recibiste el pago?</label>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmType('full')}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 8, border: '2px solid',
+                      borderColor: confirmType === 'full' ? '#2e7d32' : '#ddd',
+                      background: confirmType === 'full' ? '#e8f5e9' : '#fff',
+                      color: confirmType === 'full' ? '#2e7d32' : '#555',
+                      fontWeight: 700, cursor: 'pointer', fontSize: 13
+                    }}
+                  >
+                    ✓ Pago total
+                    {confirmModal.admin_amount_received > 0
+                      ? <div style={{ fontSize: 11, fontWeight: 400 }}>{fmt(confirmModal.admin_remaining)}</div>
+                      : <div style={{ fontSize: 11, fontWeight: 400 }}>{fmt(confirmModal.route_total_collected)}</div>
+                    }
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmType('partial')}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 8, border: '2px solid',
+                      borderColor: confirmType === 'partial' ? '#1565c0' : '#ddd',
+                      background: confirmType === 'partial' ? '#e3f2fd' : '#fff',
+                      color: confirmType === 'partial' ? '#1565c0' : '#555',
+                      fontWeight: 700, cursor: 'pointer', fontSize: 13
+                    }}
+                  >
+                    Pago parcial
+                    <div style={{ fontSize: 11, fontWeight: 400 }}>Ingresa el monto</div>
+                  </button>
+                </div>
+              </div>
+
+              {confirmType === 'partial' && (
+                <div>
+                  <label style={{ fontWeight: 600, fontSize: 13, display: 'block', marginBottom: 6 }}>
+                    Monto recibido en este pago
+                  </label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="Ej: 50.00"
+                    value={confirmAmount}
+                    onChange={e => setConfirmAmount(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+                    autoFocus
+                  />
+                  {confirmAmount && Number(confirmAmount) > 0 && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: '#888' }}>
+                      Quedaría pendiente: <strong style={{ color: '#e65100' }}>
+                        {fmt(Math.max(0, confirmModal.admin_remaining - Number(confirmAmount)))}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontWeight: 600, fontSize: 13, display: 'block', marginBottom: 8 }}>Método de pago recibido</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['cash', 'card', 'transfer', 'check', 'zelle'].map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setConfirmMethod(m)}
+                      className={`payment-method-tag ${m}`}
+                      style={{
+                        cursor: 'pointer', border: '2px solid',
+                        borderColor: confirmMethod === m ? '#1565c0' : 'transparent',
+                        opacity: confirmMethod === m ? 1 : 0.6,
+                        transform: confirmMethod === m ? 'scale(1.05)' : 'scale(1)'
+                      }}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setConfirmModal(null)} disabled={confirmLoading}>
+                Cancelar
+              </button>
+              <button className="btn-primary" onClick={handleAdminConfirm} disabled={confirmLoading}>
+                {confirmLoading ? 'Guardando...' : 'Confirmar recepción'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

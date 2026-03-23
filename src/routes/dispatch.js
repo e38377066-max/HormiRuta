@@ -987,6 +987,8 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
 
     const result = routes.map(r => {
       const driver = r.assigned_driver_id ? driverMap[r.assigned_driver_id] : null;
+      const total = Number(r.route_total_collected || 0);
+      const received = Number(r.admin_amount_received || 0);
       return {
         id: r.id,
         name: r.name,
@@ -994,10 +996,14 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
         driver_name: driver ? (driver.username || driver.email) : 'Sin chofer',
         completed_at: r.completed_at,
         stops_count: stopCountMap[r.id] || 0,
-        route_total_collected: Number(r.route_total_collected || 0),
+        route_total_collected: total,
         payment_delivered: r.payment_delivered || false,
         payment_delivery_method: r.payment_delivery_method || null,
-        payment_delivered_at: r.payment_delivered_at || null
+        payment_delivered_at: r.payment_delivered_at || null,
+        admin_confirmed: r.admin_confirmed || false,
+        admin_amount_received: received,
+        admin_payment_records: Array.isArray(r.admin_payment_records) ? r.admin_payment_records : [],
+        admin_remaining: Math.max(0, total - received)
       };
     });
 
@@ -1387,6 +1393,57 @@ router.put('/routes/:id/deliver-payment', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error registrando entrega de pago:', error);
     res.status(500).json({ error: 'Error al registrar entrega de pago' });
+  }
+});
+
+router.put('/routes/:id/admin-confirm-payment', requireAdmin, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+    if (!route.payment_delivered) {
+      return res.status(400).json({ error: 'El chofer aún no ha marcado el pago como entregado' });
+    }
+
+    const { type, amount, method } = req.body;
+    if (!method) return res.status(400).json({ error: 'Selecciona un método de pago' });
+
+    const total = Number(route.route_total_collected || 0);
+    const alreadyReceived = Number(route.admin_amount_received || 0);
+    const records = Array.isArray(route.admin_payment_records) ? [...route.admin_payment_records] : [];
+
+    let amountToAdd;
+    if (type === 'full') {
+      amountToAdd = total - alreadyReceived;
+    } else {
+      amountToAdd = Number(amount);
+      if (isNaN(amountToAdd) || amountToAdd <= 0) {
+        return res.status(400).json({ error: 'Ingresa un monto válido mayor a 0' });
+      }
+    }
+
+    const newTotal = alreadyReceived + amountToAdd;
+    records.push({ amount: amountToAdd, method, date: new Date().toISOString() });
+
+    route.admin_amount_received = newTotal;
+    route.admin_payment_records = records;
+    route.payment_delivery_method = method;
+
+    if (newTotal >= total) {
+      route.admin_confirmed = true;
+    }
+
+    await route.save();
+
+    res.json({
+      success: true,
+      admin_confirmed: route.admin_confirmed,
+      admin_amount_received: Number(route.admin_amount_received),
+      admin_payment_records: route.admin_payment_records,
+      remaining: Math.max(0, total - Number(route.admin_amount_received))
+    });
+  } catch (error) {
+    console.error('Error confirmando pago admin:', error);
+    res.status(500).json({ error: 'Error al confirmar pago' });
   }
 });
 

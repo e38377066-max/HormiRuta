@@ -106,6 +106,18 @@ const Route = sequelize.define('Route', {
   route_total_collected: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true
+  },
+  admin_confirmed: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  admin_amount_received: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 0
+  },
+  admin_payment_records: {
+    type: DataTypes.JSON,
+    defaultValue: []
   }
 }, {
   tableName: 'routes',
