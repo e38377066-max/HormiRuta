@@ -257,15 +257,20 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
       saveToDeliveryHistory(order);
     }
 
-    if (order.respond_contact_id) {
+    const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
+    if (lifecycleName && (order.respond_contact_id || order.customer_phone)) {
       try {
         const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
         if (settings?.respond_api_token) {
           respondApiService.setContext(order.user_id, settings.respond_api_token);
-          const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
-          if (lifecycleName) {
-            await respondApiService.updateLifecycle(order.respond_contact_id, lifecycleName);
-            console.log(`[Dispatch] Lifecycle actualizado en Respond.io: ${order.customer_name} -> ${lifecycleName}`);
+          let identifier = order.respond_contact_id || null;
+          if (!identifier && order.customer_phone) {
+            const phone = order.customer_phone.replace(/\s+/g, '');
+            identifier = `phone:${phone.startsWith('+') ? phone : '+' + phone}`;
+          }
+          if (identifier) {
+            await respondApiService.updateLifecycle(identifier, lifecycleName);
+            console.log(`[Dispatch] Lifecycle actualizado en Respond.io: ${order.customer_name} -> ${lifecycleName} (id: ${identifier})`);
           }
         }
       } catch (lcError) {

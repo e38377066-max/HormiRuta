@@ -17,22 +17,33 @@
 }
 
 .menu-fab {
-  position: absolute;
-  top: 16px;
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
   left: 16px;
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: rgba(40, 40, 60, 0.95);
+  background: rgba(30, 30, 60, 0.97);
   border: none;
   color: white;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
-  z-index: 1001;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.5);
+  z-index: 9999;
   pointer-events: all;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (min-width: 769px) {
+  .menu-fab {
+    position: absolute;
+    top: 16px;
+  }
 }
 
 .map-controls {

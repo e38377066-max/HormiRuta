@@ -1389,7 +1389,12 @@ export default function TripPlannerPage() {
       <div className="map-section">
         <div id="trip-map" className="map-container" ref={mapRef}></div>
         
-        <button className="menu-fab" onClick={onToggleDrawer}>
+        <button
+          className="menu-fab"
+          onClick={onToggleDrawer}
+          onTouchStart={(e) => { e.stopPropagation(); }}
+          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onToggleDrawer(); }}
+        >
           <span className="material-icons">menu</span>
         </button>
 
