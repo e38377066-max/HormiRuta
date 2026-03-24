@@ -843,6 +843,7 @@ router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
     if (Array.isArray(order_ids) && order_ids.length > 0) {
       const dbOrders = await ValidatedAddress.findAll({ where: { id: { [Op.in]: order_ids } } });
       for (const order of dbOrders) {
+        if (order.route_id === route.id) continue;
         await Stop.create({
           route_id: route.id,
           address: order.validated_address,

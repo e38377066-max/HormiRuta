@@ -60,6 +60,7 @@ export default function DispatchMap() {
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('')
   const [isCreatingRoute, setIsCreatingRoute] = useState(false)
+  const [isAddingOrders, setIsAddingOrders] = useState(false)
   const [showCreateRoute, setShowCreateRoute] = useState(false)
   const [showAssignDriver, setShowAssignDriver] = useState(null)
   const [routeName, setRouteName] = useState('')
@@ -619,6 +620,8 @@ export default function DispatchMap() {
       alert('Selecciona órdenes o favoritas primero')
       return
     }
+    if (isAddingOrders) return
+    setIsAddingOrders(true)
     try {
       const favStops = editSelectedFavorites.map(fid => favorites.find(f => f.id === fid)).filter(Boolean)
       await api.post(`/api/dispatch/routes/${routeId}/orders`, {
@@ -631,6 +634,8 @@ export default function DispatchMap() {
       fetchData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al agregar paradas')
+    } finally {
+      setIsAddingOrders(false)
     }
   }
 
@@ -1721,10 +1726,11 @@ export default function DispatchMap() {
                                   <button
                                     className="dbtn green small full"
                                     style={{ marginTop: 8 }}
+                                    disabled={isAddingOrders}
                                     onClick={() => { handleAddOrdersToRoute(route.id); setShowAddStopsPanel(null); setEditSearchQuery('') }}
                                   >
                                     <span className="material-icons">save</span>
-                                    Guardar {editSelectedOrders.length + editSelectedFavorites.length} parada{(editSelectedOrders.length + editSelectedFavorites.length) > 1 ? 's' : ''}
+                                    {isAddingOrders ? 'Guardando...' : `Guardar ${editSelectedOrders.length + editSelectedFavorites.length} parada${(editSelectedOrders.length + editSelectedFavorites.length) > 1 ? 's' : ''}`}
                                   </button>
                                 )}
                               </div>
