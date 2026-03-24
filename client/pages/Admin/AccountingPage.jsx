@@ -780,8 +780,8 @@ export default function AccountingPage() {
         </>
       )}
       {confirmModal && (
-        <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
-          <div className="modal-content" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop" onClick={() => setConfirmModal(null)}>
+          <div className="modal" style={{ maxWidth: 440, overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Confirmar recepción de pago</h3>
               <button className="icon-btn" onClick={() => setConfirmModal(null)}>
