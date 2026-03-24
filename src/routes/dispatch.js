@@ -1797,6 +1797,63 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/my-completed-routes', requireAuth, async (req, res) => {
+  try {
+    const routes = await Route.findAll({
+      where: {
+        assigned_driver_id: req.userId,
+        status: 'completed'
+      },
+      order: [['completed_at', 'DESC']],
+      limit: 60
+    });
+
+    if (routes.length === 0) {
+      return res.json({ routes: [] });
+    }
+
+    const routeIds = routes.map(r => r.id);
+    const stops = await Stop.findAll({ where: { route_id: { [Op.in]: routeIds } } });
+
+    const driver = await User.findByPk(req.userId, { attributes: ['commission_per_stop'] });
+    const commissionPerStop = Number(driver?.commission_per_stop || 0);
+
+    const stopMap = {};
+    stops.forEach(s => {
+      if (!stopMap[s.route_id]) stopMap[s.route_id] = [];
+      stopMap[s.route_id].push(s);
+    });
+
+    const result = routes.map(r => {
+      const routeStops = stopMap[r.id] || [];
+      const totalCollected = Number(r.route_total_collected || 0) || routeStops.reduce((sum, s) => sum + Number(s.amount_collected || 0), 0);
+      const commission = commissionPerStop * routeStops.length;
+      const toDeliver = totalCollected - commission;
+      const received = Number(r.admin_amount_received || 0);
+      return {
+        id: r.id,
+        name: r.name,
+        completed_at: r.completed_at,
+        stops_count: routeStops.length,
+        total_collected: totalCollected,
+        commission,
+        to_deliver: toDeliver,
+        payment_delivered: r.payment_delivered || false,
+        payment_delivery_method: r.payment_delivery_method || null,
+        payment_delivered_at: r.payment_delivered_at || null,
+        admin_confirmed: r.admin_confirmed || false,
+        admin_amount_received: received,
+        admin_remaining: toDeliver - received
+      };
+    });
+
+    res.json({ routes: result });
+  } catch (error) {
+    console.error('Error my-completed-routes:', error);
+    res.status(500).json({ error: 'Error al cargar rutas completadas' });
+  }
+});
+
 router.get('/favorites', requireAdmin, async (req, res) => {
   try {
     const favorites = await FavoriteAddress.findAll({ order: [['created_at', 'DESC']] });

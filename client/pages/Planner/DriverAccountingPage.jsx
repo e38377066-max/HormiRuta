@@ -37,7 +37,7 @@ const pmtConfig = {
 
 export default function DriverAccountingPage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('months')
+  const [activeTab, setActiveTab] = useState('routes')
   const [months, setMonths] = useState([])
   const [deliveries, setDeliveries] = useState([])
   const [totals, setTotals] = useState({ stops: 0, collected: 0, commission: 0, to_deliver: 0 })
@@ -45,6 +45,8 @@ export default function DriverAccountingPage() {
   const [selectedMonth, setSelectedMonth] = useState('')
   const [loading, setLoading] = useState(false)
   const [expandedMonth, setExpandedMonth] = useState(null)
+  const [completedRoutes, setCompletedRoutes] = useState([])
+  const [loadingRoutes, setLoadingRoutes] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -63,7 +65,20 @@ export default function DriverAccountingPage() {
     }
   }, [selectedMonth])
 
+  const fetchCompletedRoutes = useCallback(async () => {
+    setLoadingRoutes(true)
+    try {
+      const res = await api.get('/api/dispatch/my-completed-routes')
+      setCompletedRoutes(res.data.routes || [])
+    } catch (e) {
+      console.error('Error cargando rutas:', e)
+    } finally {
+      setLoadingRoutes(false)
+    }
+  }, [])
+
   useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { fetchCompletedRoutes() }, [fetchCompletedRoutes])
 
   const getPmt = (method) => pmtConfig[method] || { label: method, color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' }
 
@@ -106,7 +121,7 @@ export default function DriverAccountingPage() {
           </div>
         </div>
 
-        {availableMonths.length > 0 && (
+        {activeTab !== 'routes' && availableMonths.length > 0 && (
           <div className="dac-filter">
             <span className="material-icons dac-filter-icon">filter_list</span>
             <select
@@ -125,6 +140,13 @@ export default function DriverAccountingPage() {
 
         <div className="dac-tabs">
           <button
+            className={`dac-tab ${activeTab === 'routes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('routes')}
+          >
+            <span className="material-icons">route</span>
+            Mis Rutas
+          </button>
+          <button
             className={`dac-tab ${activeTab === 'months' ? 'active' : ''}`}
             onClick={() => setActiveTab('months')}
           >
@@ -140,7 +162,23 @@ export default function DriverAccountingPage() {
           </button>
         </div>
 
-        {loading ? (
+        {activeTab === 'routes' ? (
+          loadingRoutes ? (
+            <div className="dac-loading">
+              <div className="dac-spinner" />
+              <span>Cargando...</span>
+            </div>
+          ) : (
+            <div className="dac-list">
+              {completedRoutes.length === 0
+                ? <EmptyState text="No tienes rutas completadas" />
+                : completedRoutes.map(r => (
+                  <CompletedRouteCard key={r.id} r={r} onRefresh={fetchCompletedRoutes} />
+                ))
+              }
+            </div>
+          )
+        ) : loading ? (
           <div className="dac-loading">
             <div className="dac-spinner" />
             <span>Cargando...</span>
@@ -174,11 +212,141 @@ export default function DriverAccountingPage() {
   )
 }
 
-function EmptyState() {
+function EmptyState({ text = 'No hay entregas en este periodo' }) {
   return (
     <div className="dac-empty">
       <span className="material-icons">inbox</span>
-      <p>No hay entregas en este periodo</p>
+      <p>{text}</p>
+    </div>
+  )
+}
+
+function CompletedRouteCard({ r, onRefresh }) {
+  const [delivering, setDelivering] = useState(false)
+  const [method, setMethod] = useState('')
+  const [showPayForm, setShowPayForm] = useState(false)
+
+  const handleDeliver = async () => {
+    if (!method) return
+    setDelivering(true)
+    try {
+      await api.put(`/api/dispatch/routes/${r.id}/deliver-payment`, { payment_method: method })
+      setShowPayForm(false)
+      setMethod('')
+      if (onRefresh) onRefresh()
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error al registrar entrega')
+    } finally {
+      setDelivering(false)
+    }
+  }
+
+  const paymentStatus = () => {
+    if (r.admin_confirmed) return { label: 'Confirmado por admin', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', icon: 'verified' }
+    if (r.payment_delivered) return { label: 'Entregado a admin', color: '#5b8def', bg: 'rgba(91,141,239,0.12)', icon: 'check_circle' }
+    return { label: 'Pendiente de entrega', color: '#fb923c', bg: 'rgba(251,146,60,0.12)', icon: 'pending' }
+  }
+
+  const status = paymentStatus()
+
+  return (
+    <div className="dac-route-card">
+      <div className="dac-route-top">
+        <div className="dac-route-info">
+          <div className="dac-route-name">{r.name || `Ruta #${r.id}`}</div>
+          <div className="dac-route-meta">
+            <span className="material-icons">local_shipping</span>
+            {r.stops_count} parada{r.stops_count !== 1 ? 's' : ''}
+            {r.completed_at && (
+              <span style={{ marginLeft: 8, color: '#888' }}>
+                · {new Date(r.completed_at).toLocaleDateString('es', { day: '2-digit', month: 'short' })}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="dac-route-badge" style={{ color: status.color, background: status.bg }}>
+          <span className="material-icons" style={{ fontSize: 14 }}>{status.icon}</span>
+          {status.label}
+        </div>
+      </div>
+
+      <div className="dac-del-grid">
+        <div className="dac-del-cell">
+          <div className="dac-del-cell-lbl">Cobrado</div>
+          <div className="dac-del-cell-val c-green">{fmt(r.total_collected)}</div>
+        </div>
+        <div className="dac-del-cell">
+          <div className="dac-del-cell-lbl">Mi Comisión</div>
+          <div className="dac-del-cell-val c-blue">{fmt(r.commission)}</div>
+        </div>
+        <div className="dac-del-cell">
+          <div className="dac-del-cell-lbl">A Entregar</div>
+          <div className="dac-del-cell-val c-orange">{fmt(r.to_deliver)}</div>
+        </div>
+        {r.admin_amount_received > 0 && (
+          <div className="dac-del-cell">
+            <div className="dac-del-cell-lbl">Recibido</div>
+            <div className="dac-del-cell-val" style={{ color: '#22c55e' }}>{fmt(r.admin_amount_received)}</div>
+          </div>
+        )}
+      </div>
+
+      {r.payment_delivered && r.payment_delivery_method && (
+        <div className="dac-del-badges" style={{ marginTop: 8 }}>
+          <span className="dac-badge" style={{ color: '#5b8def', background: 'rgba(91,141,239,0.12)' }}>
+            Método: {r.payment_delivery_method}
+          </span>
+          {r.payment_delivered_at && (
+            <span className="dac-badge dac-badge-gray">
+              {new Date(r.payment_delivered_at).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+      )}
+
+      {!r.payment_delivered && (
+        <div style={{ marginTop: 10 }}>
+          {!showPayForm ? (
+            <button
+              className="dac-deliver-btn"
+              onClick={() => setShowPayForm(true)}
+            >
+              <span className="material-icons">payments</span>
+              Marcar como entregado a admin
+            </button>
+          ) : (
+            <div className="dac-pay-form">
+              <select
+                className="dac-month-select"
+                value={method}
+                onChange={e => setMethod(e.target.value)}
+                style={{ flex: 1 }}
+              >
+                <option value="">Método de pago...</option>
+                <option value="cash">Efectivo</option>
+                <option value="card">Tarjeta</option>
+                <option value="transfer">Transferencia</option>
+                <option value="check">Cheque</option>
+                <option value="zelle">Zelle</option>
+              </select>
+              <button
+                className="dac-deliver-btn"
+                onClick={handleDeliver}
+                disabled={!method || delivering}
+                style={{ minWidth: 90 }}
+              >
+                {delivering ? '...' : 'Confirmar'}
+              </button>
+              <button
+                className="dac-cancel-btn"
+                onClick={() => { setShowPayForm(false); setMethod('') }}
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

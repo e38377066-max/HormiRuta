@@ -56,6 +56,14 @@ export default function AccountingPage() {
     if (activeTab === 'payments') fetchRoutePayments()
   }, [activeTab])
 
+  useEffect(() => {
+    if (activeTab !== 'summary') return
+    const interval = setInterval(() => {
+      fetchReport()
+    }, 90000)
+    return () => clearInterval(interval)
+  }, [activeTab, selectedDriver, dateFrom, dateTo])
+
   const fetchDrivers = async () => {
     try {
       const res = await api.get('/api/admin/users', { params: { role: 'driver' } })

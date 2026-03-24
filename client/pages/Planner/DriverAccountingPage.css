@@ -588,3 +588,110 @@
 .c-green  { color: #86efac; }
 .c-blue   { color: #93c5fd; }
 .c-orange { color: #fdba74; }
+
+/* ─── Completed Route Card ─────────────────────────────────────── */
+.dac-route-card {
+  background: #111827;
+  border: 1px solid #1f2d45;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dac-route-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dac-route-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dac-route-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dac-route-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.dac-route-meta .material-icons {
+  font-size: 14px;
+  color: #475569;
+}
+
+.dac-route-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dac-deliver-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  background: rgba(251,146,60,0.15);
+  border: 1px solid rgba(251,146,60,0.3);
+  border-radius: 12px;
+  color: #fdba74;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dac-deliver-btn:active {
+  background: rgba(251,146,60,0.25);
+}
+
+.dac-deliver-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dac-deliver-btn .material-icons {
+  font-size: 18px;
+}
+
+.dac-pay-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dac-cancel-btn {
+  padding: 10px 14px;
+  background: rgba(100,116,139,0.15);
+  border: 1px solid rgba(100,116,139,0.2);
+  border-radius: 12px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
