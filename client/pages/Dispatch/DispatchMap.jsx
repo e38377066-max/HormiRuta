@@ -59,6 +59,7 @@ export default function DispatchMap() {
   const [routes, setRoutes] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('')
+  const [isCreatingRoute, setIsCreatingRoute] = useState(false)
   const [showCreateRoute, setShowCreateRoute] = useState(false)
   const [showAssignDriver, setShowAssignDriver] = useState(null)
   const [routeName, setRouteName] = useState('')
@@ -544,6 +545,8 @@ export default function DispatchMap() {
 
   const handleCreateRoute = async () => {
     if (!selectedOrders.length && !selectedFavorites.length) return
+    if (isCreatingRoute) return
+    setIsCreatingRoute(true)
     try {
       let orderedIds = [...selectedOrders]
       let isPreOptimized = false
@@ -569,6 +572,8 @@ export default function DispatchMap() {
       fetchData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al crear ruta')
+    } finally {
+      setIsCreatingRoute(false)
     }
   }
 
@@ -1257,8 +1262,8 @@ export default function DispatchMap() {
                   />
                   <div className="create-route-btns">
                     <button className="dbtn outline" onClick={() => { setShowCreateRoute(false); setRouteName('') }}>Cancelar</button>
-                    <button className="dbtn purple" onClick={handleCreateRoute}>
-                      <span className="material-icons">check</span> Crear
+                    <button className="dbtn purple" onClick={handleCreateRoute} disabled={isCreatingRoute}>
+                      <span className="material-icons">check</span> {isCreatingRoute ? 'Creando...' : 'Crear'}
                     </button>
                   </div>
                 </div>
