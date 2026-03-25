@@ -64,6 +64,15 @@ Area 862 System is a route planning and optimization application for delivery se
 - **Notes Field**: Orders use a notes field (replacing amount/$) for internal notes. Editable by admins in dispatch, visible to drivers.
 - **Apartment/Unit Number**: Separate `apartment_number` field on orders and stops. Editable in both manual order creation and edit modals. Displayed in blue next to the address in dispatch cards and driver planner. Does not affect geocoding — the address stays clean for map routing while apartment info is visible.
 
+## Gmail Integration
+
+- **Method**: OAuth2 manual (Google Cloud Console + OAuth Playground) — NOT via Replit integration system
+- **Library**: `nodemailer` with OAuth2 transport
+- **Service file**: `src/services/gmailService.js` — exports `sendEmail()` and `verifyGmailConnection()`
+- **API routes**: `src/routes/email.js` → `/api/email/verify` (GET, admin) and `/api/email/send` (POST, admin)
+- **Required secrets**: `GMAIL_USER`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`
+- **Note**: Refresh token expires if unused. If email stops working, regenerate token at OAuth Playground with same credentials.
+
 ## External Dependencies
 
 - **Google Maps Platform**:

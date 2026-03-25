@@ -27,6 +27,7 @@ import messagingRoutes from './routes/messaging.js';
 import adminRoutes from './routes/admin.js';
 import dispatchRoutes from './routes/dispatch.js';
 import pollingService from './services/pollingService.js';
+import emailRoutes from './routes/email.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,6 +83,7 @@ app.use('/api/history', historyRoutes);
 app.use('/api/messaging', messagingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/dispatch', dispatchRoutes);
+app.use('/api/email', emailRoutes);
 
 const uploadsPath = path.join(__dirname, '..', 'uploads');
 app.use('/uploads', express.static(uploadsPath));
@@ -105,7 +107,7 @@ async function startServer() {
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
     
-    await sequelize.sync({ alter: true });
+    await sequelize.sync({ alter: { drop: false } });
     console.log('Database tables synchronized.');
 
     pollingService.cleanupDeliveredOrders().catch(e => console.error('[Cleanup] Error inicial:', e.message));
