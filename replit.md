@@ -63,6 +63,7 @@ Area 862 System is a route planning and optimization application for delivery se
 - **Zelle Evidence Photos**: Photos are specifically for Zelle payment evidence (constancia). When payment method = Zelle, camera capture is shown. For other payment methods, no photo is required. Backend and frontend both accept empty evidence.
 - **Notes Field**: Orders use a notes field (replacing amount/$) for internal notes. Editable by admins in dispatch, visible to drivers.
 - **Apartment/Unit Number**: Separate `apartment_number` field on orders and stops. Editable in both manual order creation and edit modals. Displayed in blue next to the address in dispatch cards and driver planner. Does not affect geocoding — the address stays clean for map routing while apartment info is visible.
+- **Pickup Ready Badge (Orden Lista)**: The dispatch reads Gmail (area862system@gmail.com) for "Pickup Ready" emails from 4over. Email subject format: "Pickup Ready: 4over order XXXXXXX, bc [Customer Name] - Shipment X - Set X". Customer name is also extracted from `Project/PO:` field in email body. A navy blue "Orden Lista" badge (`#0d2a6e`) appears next to the lifecycle button on order cards when a fuzzy name match is found. Matching uses word-level comparison allowing minor variations (e.g. "Andrews" vs "Andrew"). Gmail is polled on dispatch load and every 5 minutes. Cache TTL is 5 minutes. Service: `src/services/gmailReadService.js`. Endpoint: `GET /api/email/pickup-ready`.
 
 ## Gmail Integration
 

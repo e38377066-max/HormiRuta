@@ -117,6 +117,8 @@ export default function DispatchMap() {
   const [loadingRouteStops, setLoadingRouteStops] = useState(null)
   const [showAddStopsPanel, setShowAddStopsPanel] = useState(null)
   const [editSearchQuery, setEditSearchQuery] = useState('')
+  const [pickupReadyNames, setPickupReadyNames] = useState([])
+  const [loadingPickupReady, setLoadingPickupReady] = useState(false)
 
   const selectedOrders = selectionList.filter(x => x.type === 'order').map(x => x.id)
   const selectedFavorites = selectionList.filter(x => x.type === 'favorite').map(x => x.id)
@@ -172,12 +174,27 @@ export default function DispatchMap() {
     }
   }, [])
 
+  const fetchPickupReady = useCallback(async (forceRefresh = false) => {
+    try {
+      setLoadingPickupReady(true)
+      const res = await api.get('/api/email/pickup-ready', { params: forceRefresh ? { refresh: 'true' } : {} })
+      const names = (res.data.orders || []).map(o => o.clientName).filter(Boolean)
+      setPickupReadyNames(names)
+    } catch (error) {
+      console.error('Error fetching pickup-ready orders:', error)
+    } finally {
+      setLoadingPickupReady(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchData()
     fetchFavorites()
+    fetchPickupReady()
     const interval = setInterval(fetchData, 180000)
-    return () => clearInterval(interval)
-  }, [fetchData, fetchFavorites])
+    const pickupInterval = setInterval(() => fetchPickupReady(), 5 * 60 * 1000)
+    return () => { clearInterval(interval); clearInterval(pickupInterval) }
+  }, [fetchData, fetchFavorites, fetchPickupReady])
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
@@ -1066,6 +1083,40 @@ export default function DispatchMap() {
 
   const getNextStatus = (currentStatus) => ADMIN_TRANSITIONS[currentStatus] || null
 
+  const normalizeForMatch = (name) => {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  const isOrderReady = (orderName) => {
+    if (!orderName || !pickupReadyNames.length) return false
+    const normOrder = normalizeForMatch(orderName)
+    const orderWords = normOrder.split(' ').filter(w => w.length > 2)
+    if (!orderWords.length) return false
+    for (const readyName of pickupReadyNames) {
+      const normReady = normalizeForMatch(readyName)
+      const readyWords = normReady.split(' ').filter(w => w.length > 2)
+      if (!readyWords.length) continue
+      let matches = 0
+      for (const rw of readyWords) {
+        for (const ow of orderWords) {
+          if (rw === ow || rw.startsWith(ow) || ow.startsWith(rw)) {
+            matches++
+            break
+          }
+        }
+      }
+      const minWords = Math.min(orderWords.length, readyWords.length)
+      if (minWords > 0 && matches >= Math.max(1, Math.ceil(minWords * 0.6))) {
+        return true
+      }
+    }
+    return false
+  }
+
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
 
   return (
@@ -1362,20 +1413,28 @@ export default function DispatchMap() {
 
                       {isAdmin && (
                         <div className="do-actions" onClick={e => e.stopPropagation()}>
-                          {getNextStatus(order.order_status) && (() => {
-                            const nextCfg = getStatusConfig(getNextStatus(order.order_status))
-                            const isWhiteBg = nextCfg.color === '#ffffff'
-                            return (
-                              <button
-                                className="dbtn full"
-                                style={{ backgroundColor: nextCfg.color, color: isWhiteBg ? '#333' : '#fff', border: isWhiteBg ? '1px solid #bbb' : 'none' }}
-                                onClick={() => handleUpdateStatus(order.id, getNextStatus(order.order_status))}
-                              >
-                                <span className="material-icons" style={{ fontSize: '16px', color: isWhiteBg ? '#333' : '#fff' }}>{nextCfg.icon}</span>
-                                {nextCfg.label}
-                              </button>
-                            )
-                          })()}
+                          <div className="do-lifecycle-row">
+                            {getNextStatus(order.order_status) && (() => {
+                              const nextCfg = getStatusConfig(getNextStatus(order.order_status))
+                              const isWhiteBg = nextCfg.color === '#ffffff'
+                              return (
+                                <button
+                                  className="dbtn do-lifecycle-btn"
+                                  style={{ backgroundColor: nextCfg.color, color: isWhiteBg ? '#333' : '#fff', border: isWhiteBg ? '1px solid #bbb' : 'none' }}
+                                  onClick={() => handleUpdateStatus(order.id, getNextStatus(order.order_status))}
+                                >
+                                  <span className="material-icons" style={{ fontSize: '16px', color: isWhiteBg ? '#333' : '#fff' }}>{nextCfg.icon}</span>
+                                  {nextCfg.label}
+                                </button>
+                              )
+                            })()}
+                            {isOrderReady(order.customer_name) && (
+                              <span className="orden-lista-badge">
+                                <span className="material-icons" style={{ fontSize: '14px' }}>inventory_2</span>
+                                Orden Lista
+                              </span>
+                            )}
+                          </div>
                           {editingNotes === order.id ? (
                             <div className="do-notes-edit">
                               <textarea
