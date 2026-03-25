@@ -54,6 +54,14 @@ let cachedPickupReady = null;
 let cacheTime = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+export class GmailScopeError extends Error {
+  constructor() {
+    super('El token de Gmail no tiene permisos suficientes. Se necesita el scope https://mail.google.com/ para buscar correos. Por favor regenera el GMAIL_REFRESH_TOKEN con el scope completo.');
+    this.name = 'GmailScopeError';
+    this.isScopeError = true;
+  }
+}
+
 export async function getPickupReadyOrders(forceRefresh = false) {
   const now = Date.now();
   if (!forceRefresh && cachedPickupReady && (now - cacheTime) < CACHE_TTL_MS) {
@@ -66,11 +74,20 @@ export async function getPickupReadyOrders(forceRefresh = false) {
   // Search for Pickup Ready emails from 4over in the last 7 days
   const query = 'subject:"Pickup Ready" from:4over newer_than:7d';
 
-  const listRes = await gmail.users.messages.list({
-    userId: 'me',
-    q: query,
-    maxResults: 100
-  });
+  let listRes;
+  try {
+    listRes = await gmail.users.messages.list({
+      userId: 'me',
+      q: query,
+      maxResults: 100
+    });
+  } catch (err) {
+    const msg = err.message || '';
+    if (msg.includes('Metadata scope does not support') || msg.includes('insufficient authentication scopes')) {
+      throw new GmailScopeError();
+    }
+    throw err;
+  }
 
   const messages = listRes.data.messages || [];
   const readyOrders = [];

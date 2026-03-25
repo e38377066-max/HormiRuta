@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { sendEmail, verifyGmailConnection } from '../services/gmailService.js';
-import { getPickupReadyOrders, clearPickupCache } from '../services/gmailReadService.js';
+import { getPickupReadyOrders, clearPickupCache, GmailScopeError } from '../services/gmailReadService.js';
 
 const router = express.Router();
 
@@ -36,6 +36,9 @@ router.get('/pickup-ready', requireAuth, async (req, res) => {
     res.json({ success: true, orders });
   } catch (error) {
     console.error('[Email] Error obteniendo pickup-ready:', error);
+    if (error instanceof GmailScopeError) {
+      return res.json({ success: false, scopeError: true, error: error.message, orders: [] });
+    }
     res.status(500).json({ success: false, error: error.message, orders: [] });
   }
 });
@@ -47,6 +50,9 @@ router.post('/pickup-ready/refresh', requireAdmin, async (req, res) => {
     res.json({ success: true, orders });
   } catch (error) {
     console.error('[Email] Error refrescando pickup-ready:', error);
+    if (error instanceof GmailScopeError) {
+      return res.json({ success: false, scopeError: true, error: error.message, orders: [] });
+    }
     res.status(500).json({ success: false, error: error.message, orders: [] });
   }
 });
