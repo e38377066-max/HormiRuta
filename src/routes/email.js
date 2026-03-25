@@ -2,7 +2,6 @@ import express from 'express';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { sendEmail, verifyGmailConnection } from '../services/gmailService.js';
 import { getPickupReadyOrders, clearPickupCache, GmailScopeError } from '../services/gmailReadService.js';
-import { google } from 'googleapis';
 
 const router = express.Router();
 
@@ -55,33 +54,6 @@ router.post('/pickup-ready/refresh', requireAdmin, async (req, res) => {
       return res.json({ success: false, scopeError: true, error: error.message, orders: [] });
     }
     res.status(500).json({ success: false, error: error.message, orders: [] });
-  }
-});
-
-router.get('/diagnose-token', requireAdmin, async (req, res) => {
-  try {
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GMAIL_CLIENT_ID,
-      process.env.GMAIL_CLIENT_SECRET,
-      'https://developers.google.com/oauthplayground'
-    );
-    oauth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
-
-    const tokenResponse = await oauth2Client.getAccessToken();
-    const accessToken = tokenResponse.token;
-
-    const tokenInfoRes = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`);
-    const tokenInfo = await tokenInfoRes.json();
-
-    res.json({
-      success: true,
-      scope: tokenInfo.scope,
-      email: tokenInfo.email,
-      expires_in: tokenInfo.expires_in,
-      hasFullScope: (tokenInfo.scope || '').includes('https://mail.google.com/')
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 
