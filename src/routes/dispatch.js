@@ -258,9 +258,11 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
     }
 
     const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
+    console.log(`[Dispatch] Status cambiado: ${order.customer_name} -> ${order_status} | lifecycle: ${lifecycleName || 'ninguno'} | contact_id: ${order.respond_contact_id || 'null'} | phone: ${order.customer_phone || 'null'} | user_id: ${order.user_id}`);
     if (lifecycleName && (order.respond_contact_id || order.customer_phone)) {
       try {
         const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
+        console.log(`[Dispatch] MessagingSettings para user_id ${order.user_id}: ${settings ? (settings.respond_api_token ? 'token OK' : 'sin token') : 'no encontrado'}`);
         if (settings?.respond_api_token) {
           respondApiService.setContext(order.user_id, settings.respond_api_token);
           let identifier = order.respond_contact_id || null;
@@ -276,6 +278,8 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
       } catch (lcError) {
         console.error(`[Dispatch] Error actualizando lifecycle en Respond.io:`, lcError.message);
       }
+    } else {
+      console.log(`[Dispatch] Lifecycle NO actualizado: lifecycleName=${lifecycleName}, contact_id=${order.respond_contact_id}, phone=${order.customer_phone}`);
     }
 
     res.json({ success: true, order: order.toDict() });
