@@ -7,15 +7,12 @@ function getOAuth2Client() {
     'https://developers.google.com/oauthplayground'
   );
   oauth2Client.setCredentials({
-    refresh_token: process.env.GMAIL_REFRESH_TOKEN,
-    scope: 'https://mail.google.com/'
+    refresh_token: process.env.GMAIL_REFRESH_TOKEN
   });
   return oauth2Client;
 }
 
 function extractClientNameFromSubject(subject) {
-  // Subject format: "Pickup Ready: 4over order 014983094, bc Andrews Renovation - Shipment 1 - Set 1"
-  // Also could be without "bc " prefix
   const match = subject.match(/,\s*(?:bc\s+)?(.+?)(?:\s+-\s+Shipment|\s+-\s+Set|$)/i);
   if (match) {
     return match[1].trim();
@@ -24,7 +21,6 @@ function extractClientNameFromSubject(subject) {
 }
 
 function extractClientNameFromBody(body) {
-  // Body has: Project/PO: bc Andrews Renovation - Shipment 1 - Set 1
   const match = body.match(/Project\/PO:\s*(?:bc\s+)?(.+?)(?:\s+-\s+Shipment|\s+-\s+Set|\n|$)/i);
   if (match) {
     return match[1].trim();
@@ -53,11 +49,11 @@ function extractTextFromPayload(payload) {
 
 let cachedPickupReady = null;
 let cacheTime = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export class GmailScopeError extends Error {
-  constructor() {
-    super('El token de Gmail no tiene permisos suficientes. Se necesita el scope https://mail.google.com/ para buscar correos. Por favor regenera el GMAIL_REFRESH_TOKEN con el scope completo.');
+  constructor(detail = '') {
+    super(`El token de Gmail no tiene permisos suficientes. Se necesita el scope https://mail.google.com/ para buscar correos.${detail ? ' Detalle: ' + detail : ''}`);
     this.name = 'GmailScopeError';
     this.isScopeError = true;
   }
@@ -70,44 +66,55 @@ export async function getPickupReadyOrders(forceRefresh = false) {
   }
 
   const auth = getOAuth2Client();
-  const gmail = google.gmail({ version: 'v1', auth });
 
-  // Search for Pickup Ready emails from 4over in the last 7 days
-  const query = 'subject:"Pickup Ready" from:4over newer_than:7d';
+  const tokenResponse = await auth.getAccessToken();
+  const accessToken = tokenResponse.token;
 
-  let listRes;
-  try {
-    listRes = await gmail.users.messages.list({
-      userId: 'me',
-      q: query,
-      maxResults: 100
-    });
-  } catch (err) {
-    const msg = err.message || '';
-    if (msg.includes('Metadata scope does not support') || msg.includes('insufficient authentication scopes')) {
-      throw new GmailScopeError();
-    }
-    throw err;
+  const tokenInfoRes = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`);
+  const tokenInfo = await tokenInfoRes.json();
+  const grantedScope = tokenInfo.scope || '';
+  console.log(`[GmailRead] Access token scope: ${grantedScope}`);
+
+  if (!grantedScope.includes('mail.google.com') && !grantedScope.includes('gmail.readonly')) {
+    console.error(`[GmailRead] Scope insuficiente detectado: ${grantedScope}`);
+    throw new GmailScopeError(`scope recibido: ${grantedScope}`);
   }
 
-  const messages = listRes.data.messages || [];
+  const query = encodeURIComponent('subject:"Pickup Ready" from:4over newer_than:7d');
+  const listApiRes = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=100`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!listApiRes.ok) {
+    const errBody = await listApiRes.text();
+    console.error(`[GmailRead] Error en lista de mensajes: ${listApiRes.status} ${errBody}`);
+    if (errBody.includes('Metadata scope') || errBody.includes('insufficient')) {
+      throw new GmailScopeError(errBody);
+    }
+    throw new Error(`Gmail API error ${listApiRes.status}: ${errBody}`);
+  }
+
+  const listData = await listApiRes.json();
+  const messages = listData.messages || [];
   const readyOrders = [];
 
   for (const msg of messages) {
     try {
-      const detail = await gmail.users.messages.get({
-        userId: 'me',
-        id: msg.id,
-        format: 'full'
-      });
+      const detailRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!detailRes.ok) continue;
+      const detail = await detailRes.json();
 
-      const headers = detail.data.payload?.headers || [];
+      const headers = detail.payload?.headers || [];
       const subject = headers.find(h => h.name.toLowerCase() === 'subject')?.value || '';
 
       let clientName = extractClientNameFromSubject(subject);
 
       if (!clientName) {
-        const body = extractTextFromPayload(detail.data.payload);
+        const body = extractTextFromPayload(detail.payload);
         clientName = extractClientNameFromBody(body);
       }
 
