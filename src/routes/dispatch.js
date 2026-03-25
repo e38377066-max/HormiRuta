@@ -258,13 +258,17 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
     }
 
     const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
-    console.log(`[Dispatch] Status cambiado: ${order.customer_name} -> ${order_status} | lifecycle: ${lifecycleName || 'ninguno'} | contact_id: ${order.respond_contact_id || 'null'} | phone: ${order.customer_phone || 'null'} | user_id: ${order.user_id}`);
     if (lifecycleName && (order.respond_contact_id || order.customer_phone)) {
       try {
-        const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
-        console.log(`[Dispatch] MessagingSettings para user_id ${order.user_id}: ${settings ? (settings.respond_api_token ? 'token OK' : 'sin token') : 'no encontrado'}`);
+        let settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
+        if (!settings?.respond_api_token) {
+          settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+        }
+        if (!settings?.respond_api_token) {
+          settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+        }
         if (settings?.respond_api_token) {
-          respondApiService.setContext(order.user_id, settings.respond_api_token);
+          respondApiService.setContext(settings.user_id, settings.respond_api_token);
           let identifier = order.respond_contact_id || null;
           if (!identifier && order.customer_phone) {
             const phone = order.customer_phone.replace(/\s+/g, '');
@@ -274,12 +278,12 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
             await respondApiService.updateLifecycle(identifier, lifecycleName);
             console.log(`[Dispatch] Lifecycle actualizado en Respond.io: ${order.customer_name} -> ${lifecycleName} (id: ${identifier})`);
           }
+        } else {
+          console.warn(`[Dispatch] No se encontro MessagingSettings con token valido para actualizar lifecycle de ${order.customer_name}`);
         }
       } catch (lcError) {
         console.error(`[Dispatch] Error actualizando lifecycle en Respond.io:`, lcError.message);
       }
-    } else {
-      console.log(`[Dispatch] Lifecycle NO actualizado: lifecycleName=${lifecycleName}, contact_id=${order.respond_contact_id}, phone=${order.customer_phone}`);
     }
 
     res.json({ success: true, order: order.toDict() });
@@ -712,14 +716,31 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
 
     const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
     if (lifecycleName) {
+      let cachedSettings = null;
       for (const o of ordersToUpdate) {
-        if (!o.respond_contact_id) continue;
+        if (!o.respond_contact_id && !o.customer_phone) continue;
         try {
-          const settings = await MessagingSettings.findOne({ where: { user_id: o.user_id } });
+          let settings = await MessagingSettings.findOne({ where: { user_id: o.user_id } });
+          if (!settings?.respond_api_token) {
+            settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+          }
+          if (!settings?.respond_api_token) {
+            if (!cachedSettings) {
+              cachedSettings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+            }
+            settings = cachedSettings;
+          }
           if (settings?.respond_api_token) {
-            respondApiService.setContext(o.user_id, settings.respond_api_token);
-            await respondApiService.updateLifecycle(o.respond_contact_id, lifecycleName);
-            console.log(`[Dispatch] Lifecycle bulk: ${o.customer_name} -> ${lifecycleName}`);
+            respondApiService.setContext(settings.user_id, settings.respond_api_token);
+            let identifier = o.respond_contact_id || null;
+            if (!identifier && o.customer_phone) {
+              const phone = o.customer_phone.replace(/\s+/g, '');
+              identifier = `phone:${phone.startsWith('+') ? phone : '+' + phone}`;
+            }
+            if (identifier) {
+              await respondApiService.updateLifecycle(identifier, lifecycleName);
+              console.log(`[Dispatch] Lifecycle bulk: ${o.customer_name} -> ${lifecycleName}`);
+            }
           }
         } catch (lcErr) {
           console.error(`[Dispatch] Error lifecycle bulk ${o.customer_name}:`, lcErr.message);
