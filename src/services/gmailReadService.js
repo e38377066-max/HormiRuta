@@ -7,7 +7,8 @@ function getOAuth2Client() {
     'https://developers.google.com/oauthplayground'
   );
   oauth2Client.setCredentials({
-    refresh_token: process.env.GMAIL_REFRESH_TOKEN
+    refresh_token: process.env.GMAIL_REFRESH_TOKEN,
+    scope: 'https://mail.google.com/'
   });
   return oauth2Client;
 }
