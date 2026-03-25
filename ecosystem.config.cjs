@@ -8,7 +8,7 @@ module.exports = {
     max_memory_restart: '500M',
     env: {
       NODE_ENV: 'production',
-      PORT: 5000
+      PORT: 5001
     },
     error_file: '/var/log/area862/error.log',
     out_file: '/var/log/area862/output.log',
