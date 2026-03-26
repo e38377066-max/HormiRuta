@@ -1080,7 +1080,8 @@ export default function DispatchMap() {
 
   const ADMIN_TRANSITIONS = {
     approved: 'ordered',
-    ordered: 'on_delivery',
+    ordered: 'pickup_ready',
+    pickup_ready: 'on_delivery',
     on_delivery: 'delivered'
   }
 
