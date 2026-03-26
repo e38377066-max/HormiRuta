@@ -1,7 +1,10 @@
 import express from 'express';
+import { Op } from 'sequelize';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { sendEmail, verifyGmailConnection } from '../services/gmailService.js';
 import { getPickupReadyOrders, clearPickupCache, GmailScopeError } from '../services/gmailReadService.js';
+import { ValidatedAddress, MessagingSettings } from '../models/index.js';
+import respondApiService from '../services/respondApiService.js';
 
 const router = express.Router();
 
@@ -54,6 +57,102 @@ router.post('/pickup-ready/refresh', requireAdmin, async (req, res) => {
       return res.json({ success: false, scopeError: true, error: error.message, orders: [] });
     }
     res.status(500).json({ success: false, error: error.message, orders: [] });
+  }
+});
+
+function normalizeForMatch(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function namesMatch(orderName, gmailName) {
+  const normOrder = normalizeForMatch(orderName);
+  const normGmail = normalizeForMatch(gmailName);
+  const orderWords = normOrder.split(' ').filter(w => w.length > 2);
+  const gmailWords = normGmail.split(' ').filter(w => w.length > 2);
+  if (!orderWords.length || !gmailWords.length) return false;
+  let matches = 0;
+  for (const gw of gmailWords) {
+    for (const ow of orderWords) {
+      if (gw === ow || gw.startsWith(ow) || ow.startsWith(gw)) {
+        matches++;
+        break;
+      }
+    }
+  }
+  const minWords = Math.min(orderWords.length, gmailWords.length);
+  return minWords > 0 && matches >= Math.max(1, Math.ceil(minWords * 0.6));
+}
+
+router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
+  try {
+    clearPickupCache();
+    const gmailOrders = await getPickupReadyOrders(true);
+
+    if (!gmailOrders.length) {
+      return res.json({ success: true, synced: 0, message: 'No hay correos Pickup Ready en Gmail' });
+    }
+
+    const candidates = await ValidatedAddress.findAll({
+      where: { order_status: { [Op.in]: ['ordered', 'approved'] } }
+    });
+
+    const settings = await MessagingSettings.findOne({
+      where: { respond_api_token: { [Op.ne]: null } }
+    });
+
+    const synced = [];
+    const skipped = [];
+
+    for (const gmailOrder of gmailOrders) {
+      const match = candidates.find(c =>
+        c.customer_name && namesMatch(c.customer_name, gmailOrder.clientName)
+      );
+
+      if (!match) {
+        skipped.push(gmailOrder.clientName);
+        continue;
+      }
+
+      if (match.order_status === 'pickup_ready') {
+        skipped.push(match.customer_name + ' (ya estaba listo)');
+        continue;
+      }
+
+      match.order_status = 'pickup_ready';
+      await match.save();
+
+      if (settings?.respond_api_token) {
+        try {
+          respondApiService.setContext(settings.user_id, settings.respond_api_token);
+          let identifier = match.respond_contact_id || null;
+          if (!identifier && match.customer_phone) {
+            const phone = match.customer_phone.replace(/\s+/g, '');
+            identifier = `phone:${phone.startsWith('+') ? phone : '+' + phone}`;
+          }
+          if (identifier) {
+            await respondApiService.updateLifecycle(identifier, 'Pickup Ready');
+            console.log(`[Email Sync] Lifecycle Pickup Ready: ${match.customer_name}`);
+          }
+        } catch (lcErr) {
+          console.error(`[Email Sync] Error lifecycle ${match.customer_name}:`, lcErr.message);
+        }
+      }
+
+      synced.push(match.customer_name);
+    }
+
+    console.log(`[Email Sync] Sincronizados: ${synced.length}, Omitidos: ${skipped.length}`);
+    res.json({ success: true, synced: synced.length, syncedNames: synced, skipped });
+  } catch (error) {
+    console.error('[Email] Error sincronizando pickup-ready:', error);
+    if (error instanceof GmailScopeError) {
+      return res.json({ success: false, scopeError: true, error: error.message });
+    }
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

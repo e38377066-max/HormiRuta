@@ -8,6 +8,7 @@ const STATUS_CONFIG = {
   pending: { label: 'Pendiente', color: '#9e9e9e', icon: 'hourglass_empty' },
   approved: { label: 'Aprobada', color: '#ffc107', icon: 'check_circle' },
   ordered: { label: 'Ordenada', color: '#2196f3', icon: 'shopping_cart' },
+  pickup_ready: { label: 'Listo p/Recoger', color: '#0d47a1', icon: 'inventory_2' },
   on_delivery: { label: 'En Entrega', color: '#ffffff', icon: 'delivery_dining' },
   ups_shipped: { label: 'UPS Shipped', color: '#9c27b0', icon: 'local_shipping' },
   delivered: { label: 'Entregada', color: '#ff6d00', icon: 'done_all' }
@@ -119,6 +120,8 @@ export default function DispatchMap() {
   const [editSearchQuery, setEditSearchQuery] = useState('')
   const [pickupReadyNames, setPickupReadyNames] = useState([])
   const [loadingPickupReady, setLoadingPickupReady] = useState(false)
+  const [syncingPickupReady, setSyncingPickupReady] = useState(false)
+  const [pickupSyncResult, setPickupSyncResult] = useState(null)
 
   const selectedOrders = selectionList.filter(x => x.type === 'order').map(x => x.id)
   const selectedFavorites = selectionList.filter(x => x.type === 'favorite').map(x => x.id)
@@ -1091,6 +1094,23 @@ export default function DispatchMap() {
       .trim()
   }
 
+  const syncPickupReadyFromGmail = async () => {
+    setSyncingPickupReady(true)
+    setPickupSyncResult(null)
+    try {
+      const res = await api.post('/api/email/pickup-ready/sync')
+      setPickupSyncResult(res.data)
+      if (res.data.synced > 0) {
+        await fetchData()
+        await fetchPickupReady(true)
+      }
+    } catch (error) {
+      setPickupSyncResult({ success: false, error: error.response?.data?.error || 'Error al sincronizar' })
+    } finally {
+      setSyncingPickupReady(false)
+    }
+  }
+
   const isOrderReady = (orderName) => {
     if (!orderName || !pickupReadyNames.length) return false
     const normOrder = normalizeForMatch(orderName)
@@ -1138,6 +1158,10 @@ export default function DispatchMap() {
             <div className="dstat" style={{ borderColor: '#2196f3' }}>
               <span className="dstat-val">{stats.ordered || 0}</span>
               <span className="dstat-label">Ordenadas</span>
+            </div>
+            <div className="dstat" style={{ borderColor: '#0d47a1' }}>
+              <span className="dstat-val">{stats.pickup_ready || 0}</span>
+              <span className="dstat-label">Listo Recoger</span>
             </div>
             <div className="dstat" style={{ borderColor: '#ff9800' }}>
               <span className="dstat-val">{stats.on_delivery || 0}</span>
@@ -1204,14 +1228,44 @@ export default function DispatchMap() {
                 <option value="pending">Pendientes</option>
                 <option value="approved">Aprobadas</option>
                 <option value="ordered">Ordenadas</option>
+                <option value="pickup_ready">Listo p/Recoger</option>
                 <option value="on_delivery">En Entrega</option>
                 <option value="ups_shipped">UPS Shipped</option>
                 <option value="delivered">Entregadas</option>
               </select>
+              <button
+                className="btn-add-manual-order"
+                onClick={syncPickupReadyFromGmail}
+                disabled={syncingPickupReady}
+                title="Sincronizar Gmail Pickup Ready"
+                style={{ background: '#0d47a1', marginRight: 4 }}
+              >
+                <span className="material-icons" style={{ fontSize: 18 }}>
+                  {syncingPickupReady ? 'hourglass_empty' : 'mark_email_read'}
+                </span>
+              </button>
               <button className="btn-add-manual-order" onClick={openManualOrderModal} title="Agregar orden manual">
                 <span className="material-icons">add</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {isAdmin && pickupSyncResult && (
+          <div className="pickup-sync-result" style={{
+            padding: '8px 12px', margin: '4px 8px', borderRadius: 8,
+            background: pickupSyncResult.success ? '#0d47a1' : '#c62828',
+            color: '#fff', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6
+          }}>
+            <span className="material-icons" style={{ fontSize: 16 }}>
+              {pickupSyncResult.success ? 'check_circle' : 'error'}
+            </span>
+            {pickupSyncResult.success
+              ? `${pickupSyncResult.synced} orden(es) marcadas como Listo p/Recoger`
+              : (pickupSyncResult.error || 'Error al sincronizar')}
+            <button onClick={() => setPickupSyncResult(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+              <span className="material-icons" style={{ fontSize: 14 }}>close</span>
+            </button>
           </div>
         )}
 

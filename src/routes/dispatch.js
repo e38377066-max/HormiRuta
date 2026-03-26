@@ -14,6 +14,7 @@ import geocodingService from '../services/geocodingService.js';
 const ORDER_STATUS_TO_LIFECYCLE = {
   approved: 'Approved',
   ordered: 'Ordered',
+  pickup_ready: 'Pickup Ready',
   on_delivery: 'On Delivery',
   ups_shipped: 'UPS Shipped',
   delivered: 'Delivered'
@@ -46,13 +47,14 @@ const upload = multer({
 
 const router = Router();
 
-const VALID_ORDER_STATUSES = ['approved', 'ordered', 'on_delivery', 'ups_shipped', 'delivered'];
-const ADMIN_STATUSES = ['approved', 'ordered', 'on_delivery', 'ups_shipped', 'delivered'];
+const VALID_ORDER_STATUSES = ['approved', 'ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'];
+const ADMIN_STATUSES = ['approved', 'ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'];
 const DRIVER_STATUSES = ['delivered'];
 
 const VALID_TRANSITIONS = {
   approved: ['ordered'],
-  ordered: ['on_delivery'],
+  ordered: ['pickup_ready', 'on_delivery'],
+  pickup_ready: ['on_delivery'],
   on_delivery: ['ups_shipped', 'delivered'],
   ups_shipped: ['delivered'],
   delivered: []
@@ -139,10 +141,11 @@ router.get('/orders', requireAuth, async (req, res) => {
 
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
-    const [total, approved, ordered, onDelivery, upsShipped, delivered] = await Promise.all([
+    const [total, approved, ordered, pickupReady, onDelivery, upsShipped, delivered] = await Promise.all([
       ValidatedAddress.count(),
       ValidatedAddress.count({ where: { order_status: 'approved' } }),
       ValidatedAddress.count({ where: { order_status: 'ordered' } }),
+      ValidatedAddress.count({ where: { order_status: 'pickup_ready' } }),
       ValidatedAddress.count({ where: { order_status: 'on_delivery' } }),
       ValidatedAddress.count({ where: { order_status: 'ups_shipped' } }),
       ValidatedAddress.count({ where: { order_status: 'delivered' } })
@@ -152,6 +155,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
       total,
       approved,
       ordered,
+      pickup_ready: pickupReady,
       on_delivery: onDelivery,
       ups_shipped: upsShipped,
       delivered

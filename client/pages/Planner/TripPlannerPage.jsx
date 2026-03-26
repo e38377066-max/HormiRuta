@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { usePlanner } from '../../layouts/PlannerLayout'
-import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking, openNativeNavigation } from '../../utils/capacitor'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 export default function TripPlannerPage() {
@@ -79,6 +79,8 @@ export default function TripPlannerPage() {
   const [payDeliveryModal, setPayDeliveryModal] = useState(null)
   const [payDeliveryMethod, setPayDeliveryMethod] = useState('')
   const [deliveringPay, setDeliveringPay] = useState(false)
+  const [navChooserOpen, setNavChooserOpen] = useState(false)
+  const [navChooserStop, setNavChooserStop] = useState(null)
   const fileInputRef = useRef(null)
   const isDragging = useRef(false)
   const startY = useRef(0)
@@ -544,12 +546,14 @@ export default function TripPlannerPage() {
         map: mapInstanceRef.current,
         icon: {
           url: 'data:image/svg+xml,' + encodeURIComponent(`
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="8" fill="#4285F4" stroke="white" stroke-width="3"/>
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+              <circle cx="16" cy="16" r="14" fill="#4285F4" fill-opacity="0.2" stroke="#4285F4" stroke-width="1.5"/>
+              <circle cx="16" cy="16" r="9" fill="#4285F4" stroke="white" stroke-width="3"/>
+              <circle cx="16" cy="16" r="4" fill="white"/>
             </svg>
           `),
-          anchor: new window.google.maps.Point(12, 12),
-          scaledSize: new window.google.maps.Size(24, 24)
+          anchor: new window.google.maps.Point(16, 16),
+          scaledSize: new window.google.maps.Size(32, 32)
         },
         zIndex: 999,
         clickable: false
@@ -969,7 +973,7 @@ export default function TripPlannerPage() {
           console.log('Backend save error, continuing with local GPS sort')
         }
 
-        await calculateRoute(sorted)
+        await calculateRoute(sorted, userLocation)
         if (oldDistance > 0) setSavedDistance(0)
         setIsOptimized(true)
         setOptimizing(false)
@@ -1227,20 +1231,24 @@ export default function TripPlannerPage() {
     }
   }
 
-  const calculateRoute = async (stopsList) => {
-    if (stopsList.length < 2) return
+  const calculateRoute = async (stopsList, gpsOrigin = null) => {
+    if (stopsList.length < 1) return
+    if (!gpsOrigin && stopsList.length < 2) return
 
     const directionsService = new window.google.maps.DirectionsService()
-    
-    const waypoints = stopsList.slice(1, -1).map(stop => ({
+
+    const origin = gpsOrigin || { lat: stopsList[0].latitude, lng: stopsList[0].longitude }
+    const destination = { lat: stopsList[stopsList.length - 1].latitude, lng: stopsList[stopsList.length - 1].longitude }
+    const middleStops = gpsOrigin ? stopsList.slice(0, -1) : stopsList.slice(1, -1)
+    const waypoints = middleStops.map(stop => ({
       location: { lat: stop.latitude, lng: stop.longitude },
       stopover: true
     }))
 
     try {
       const result = await directionsService.route({
-        origin: { lat: stopsList[0].latitude, lng: stopsList[0].longitude },
-        destination: { lat: stopsList[stopsList.length - 1].latitude, lng: stopsList[stopsList.length - 1].longitude },
+        origin,
+        destination,
         waypoints,
         travelMode: window.google.maps.TravelMode[travelMode],
         avoidHighways,
@@ -1377,6 +1385,34 @@ export default function TripPlannerPage() {
   const formatTime = (date) => {
     if (!date) return ''
     return new Date(date).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const openNavChooser = (stop) => {
+    vibrate('light')
+    setNavChooserStop(stop)
+    setNavChooserOpen(true)
+  }
+
+  const launchNavApp = (app) => {
+    setNavChooserOpen(false)
+    const stop = navChooserStop
+    if (!stop) return
+    const lat = stop.latitude
+    const lng = stop.longitude
+    const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
+
+    if (app === 'google') {
+      let url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`
+      if (loc) url += `&origin=${loc.lat},${loc.lng}`
+      window.open(url, '_system')
+    } else if (app === 'waze') {
+      const url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes${loc ? `&from=${loc.lat},${loc.lng}` : ''}`
+      window.open(url, '_system')
+    } else if (app === 'apple') {
+      let url = `maps://?daddr=${lat},${lng}&dirflg=d`
+      if (loc) url += `&saddr=${loc.lat},${loc.lng}`
+      window.open(url, '_system')
+    }
   }
 
   const activePendingStops = stops.filter(s => !s.completed && !s.skipped && !s.skippedOnce)
@@ -1693,10 +1729,7 @@ export default function TripPlannerPage() {
                   <>
                     <button
                       className="btn-native-nav"
-                      onClick={() => {
-                        const loc = userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null
-                        openNativeNavigation([stops[selectedStopIndex]], loc)
-                      }}
+                      onClick={() => openNavChooser(stops[selectedStopIndex])}
                     >
                       <span className="material-icons">near_me</span>
                       Navegar
@@ -2226,6 +2259,35 @@ export default function TripPlannerPage() {
                 {deliveringPay ? 'Registrando...' : 'Confirmar entrega de pago'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {navChooserOpen && navChooserStop && (
+        <div className="modal-overlay" onClick={() => setNavChooserOpen(false)}>
+          <div className="modal-card nav-chooser-card" onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Navegar con...</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
+              {navChooserStop.name || navChooserStop.address}
+            </div>
+            <div className="nav-chooser-options">
+              <button className="nav-app-btn" onClick={() => launchNavApp('google')}>
+                <span className="material-icons" style={{ color: '#4285F4', fontSize: 28 }}>map</span>
+                <span>Google Maps</span>
+              </button>
+              <button className="nav-app-btn" onClick={() => launchNavApp('waze')}>
+                <span className="material-icons" style={{ color: '#06C3E6', fontSize: 28 }}>directions_car</span>
+                <span>Waze</span>
+              </button>
+              {platform === 'ios' && (
+                <button className="nav-app-btn" onClick={() => launchNavApp('apple')}>
+                  <span className="material-icons" style={{ color: '#888', fontSize: 28 }}>map</span>
+                  <span>Apple Maps</span>
+                </button>
+              )}
+            </div>
+            <button className="btn-flat" style={{ marginTop: 12, width: '100%' }} onClick={() => setNavChooserOpen(false)}>
+              Cancelar
+            </button>
           </div>
         </div>
       )}

@@ -1721,3 +1721,34 @@
   border-left: 4px solid #f59e0b !important;
   background: #2a2a3e;
 }
+
+.nav-chooser-card {
+  max-width: 320px;
+  width: 90%;
+}
+
+.nav-chooser-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-app-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #1e1e2e;
+  border: 1px solid #333;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+}
+
+.nav-app-btn:active {
+  background: #2a2a3e;
+}

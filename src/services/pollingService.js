@@ -2042,7 +2042,7 @@ class PollingService {
   }
 
   statusCanAdvance(currentStatus, newStatus) {
-    const STATUS_ORDER = ['pending', 'approved', 'ordered', 'on_delivery', 'ups_shipped', 'delivered'];
+    const STATUS_ORDER = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'];
     const currentIdx = STATUS_ORDER.indexOf(currentStatus);
     const newIdx = STATUS_ORDER.indexOf(newStatus);
     if (currentIdx === -1 || newIdx === -1) return newIdx !== -1;
@@ -2056,6 +2056,7 @@ class PollingService {
       'pending': 'pending',
       'approved': 'approved',
       'ordered': 'ordered',
+      'pickup ready': 'pickup_ready',
       'on delivery': 'on_delivery',
       'delivered': 'delivered',
       'ups shipped': 'ups_shipped'
