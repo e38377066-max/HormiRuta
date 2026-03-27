@@ -926,8 +926,11 @@ router.get('/stats', requireAuth, async (req, res) => {
 router.get('/polling/status', requireAuth, async (req, res) => {
   try {
     let status = pollingService.getPollingStatus(req.userId);
-    if (!status.active && await isAdminUser(req.userId)) {
-      status = pollingService.getAnyActivePollingStatus();
+    if (!status.active) {
+      const user = await User.findByPk(req.userId);
+      if (user?.role === 'admin') {
+        status = pollingService.getAnyActivePollingStatus();
+      }
     }
     res.json(status);
   } catch (error) {
@@ -939,7 +942,8 @@ router.get('/polling/status', requireAuth, async (req, res) => {
 router.post('/polling/start', requireAuth, async (req, res) => {
   try {
     const intervalSeconds = req.body.interval || 30;
-    if (admin) {
+    const user = await User.findByPk(req.userId);
+    if (user?.role === 'admin') {
       const anyActive = pollingService.getAnyActivePollingStatus();
       if (anyActive.active) {
         return res.json({ success: true, message: 'Polling ya está activo' });
