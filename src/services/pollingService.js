@@ -13,12 +13,15 @@ import ConversationState from '../models/ConversationState.js';
 import ValidatedAddress from '../models/ValidatedAddress.js';
 import User from '../models/User.js';
 
-async function getGlobalSettings(userId) {
-  const user = await User.findByPk(userId);
-  if (user?.role === 'admin') {
-    return await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
-  }
-  return await MessagingSettings.findOne({ where: { user_id: userId } });
+async function getGlobalSettings() {
+  return await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
+}
+
+async function getSystemUserId() {
+  const settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
+  if (settings?.user_id) return settings.user_id;
+  const admin = await User.findOne({ where: { role: 'admin' } });
+  return admin?.id || 1;
 }
 
 class PollingService {
@@ -38,14 +41,16 @@ class PollingService {
   }
 
   async startPolling(userId, intervalSeconds = 30) {
-    console.log(`[Polling] Iniciando polling para usuario ${userId}...`);
+    const sysUserId = await getSystemUserId();
+    userId = sysUserId;
+    console.log(`[Polling] Iniciando polling (admin global)...`);
     
     if (this.activePollers.has(userId)) {
-      console.log(`[Polling] Ya está activo para usuario ${userId}`);
+      console.log(`[Polling] Ya está activo (admin global)`);
       return { success: true, message: 'Polling ya está activo' };
     }
 
-    const settings = await getGlobalSettings(userId);
+    const settings = await getGlobalSettings();
     
     if (!settings) {
       console.log(`[Polling] ERROR: No hay configuración de mensajería para usuario ${userId}`);
@@ -155,7 +160,7 @@ class PollingService {
     if (!poller) return;
 
     try {
-      const settings = await getGlobalSettings(userId);
+      const settings = await getGlobalSettings();
       if (!settings?.respond_api_token) return;
 
       const respondio = this.getRespondioInstance(settings.respond_api_token);
@@ -221,7 +226,7 @@ class PollingService {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = this.getRespondioInstance(apiToken);
     
-    const settings = await getGlobalSettings(userId);
+    const settings = await getGlobalSettings();
     const messageLimit = settings?.message_history_limit || 50;
     
     // MODO PRUEBA: Solo procesar un contacto específico
@@ -292,7 +297,7 @@ class PollingService {
           
           // Rastrear estado abierto/cerrado del contacto de prueba en la BD
           const [convState] = await ConversationState.findOrCreate({
-            where: { user_id: userId, contact_id: contact.id.toString() },
+            where: { contact_id: contact.id.toString() },
             defaults: { state: 'initial' }
           });
           
@@ -481,7 +486,7 @@ class PollingService {
 
     if (!isTestMode) {
       const convState = await ConversationState.findOne({
-        where: { user_id: userId, contact_id: contact.id.toString() }
+        where: { contact_id: contact.id.toString() }
       });
       if (convState && convState.agent_active) {
         const wasClosedAndReopened = this.detectCloseReopenInMessages(messages, convState.last_agent_message_at);
@@ -516,7 +521,7 @@ class PollingService {
 
     this.addressScannedContacts.delete(contact.id.toString());
 
-    const settings = await getGlobalSettings(userId);
+    const settings = await getGlobalSettings();
     const isAutomatic = settings?.attention_mode === 'automatic';
 
     const latestMessage = incomingMessages[incomingMessages.length - 1];
@@ -628,7 +633,7 @@ class PollingService {
         const contactId = contact.id.toString();
         if (!trackedContactIds.has(contactId)) {
           await ConversationState.findOrCreate({
-            where: { user_id: userId, contact_id: contactId },
+            where: { contact_id: contactId },
             defaults: {
               user_id: userId,
               contact_id: contactId,
@@ -749,7 +754,7 @@ class PollingService {
   async markAgentActivity(userId, contactId) {
     try {
       const [state, created] = await ConversationState.findOrCreate({
-        where: { user_id: userId, contact_id: contactId.toString() },
+        where: { contact_id: contactId.toString() },
         defaults: {
           user_id: userId,
           contact_id: contactId.toString(),
@@ -781,7 +786,7 @@ class PollingService {
 
   async processIncomingMessage(userId, contact, message, respondio, useAutomaticMode = false, isTestMode = false) {
     try {
-      const settings = await getGlobalSettings(userId);
+      const settings = await getGlobalSettings();
       if (!settings) return;
 
       const messageText = message.message?.text || '';
@@ -811,7 +816,7 @@ class PollingService {
         
         await MessageLog.update(
           { processed: true },
-          { where: { respond_message_id: message.messageId?.toString(), user_id: userId } }
+          { where: { respond_message_id: message.messageId?.toString() } }
         );
         return;
       }
@@ -877,7 +882,7 @@ class PollingService {
 
         await MessageLog.update(
           { processed: true, order_id: order.id },
-          { where: { respond_message_id: message.messageId?.toString(), user_id: userId } }
+          { where: { respond_message_id: message.messageId?.toString() } }
         );
       }
     } catch (error) {
@@ -960,7 +965,7 @@ class PollingService {
       if (!finalAddress) return;
 
       const existingAddr = await ValidatedAddress.findOne({
-        where: { user_id: userId, respond_contact_id: contact.id.toString() },
+        where: { respond_contact_id: contact.id.toString() },
         order: [['created_at', 'DESC']]
       });
 
@@ -1662,12 +1667,7 @@ class PollingService {
           const existingAny = await ValidatedAddress.findOne({
             where: { respond_contact_id: contactIdStr }
           });
-          if (existingAny) {
-            if (existingAny.user_id !== userId) {
-              await existingAny.update({ user_id: userId });
-            }
-            continue;
-          }
+          if (existingAny) continue;
           await ValidatedAddress.create({
             user_id: userId,
             respond_contact_id: contactIdStr,
@@ -1821,12 +1821,11 @@ class PollingService {
             if (!keeper.apartment_number && old.apartment_number) mergeFields.apartment_number = old.apartment_number;
             if (!keeper.validated_address && old.validated_address) mergeFields.validated_address = old.validated_address;
             if (!keeper.route_id && old.route_id) mergeFields.route_id = old.route_id;
-            if (keeper.user_id !== userId) mergeFields.user_id = userId;
             if (Object.keys(mergeFields).length > 0) await keeper.update(mergeFields);
             try {
               await old.destroy();
               totalCleaned++;
-              console.log(`[AddressScan] Duplicado cross-user: eliminado ${old.customer_name} (id=${old.id}, user_id=${old.user_id}), keeper id=${keeper.id}, user_id=${keeper.user_id}`);
+              console.log(`[AddressScan] Duplicado eliminado: ${old.customer_name} (id=${old.id}), conservado id=${keeper.id}`);
             } catch (destroyErr) {
               console.error(`[AddressScan] No se pudo eliminar duplicado id=${old.id}:`, destroyErr.message);
             }
@@ -1837,14 +1836,13 @@ class PollingService {
       const [nameDups] = await ValidatedAddress.sequelize.query(`
         SELECT customer_name, validated_address, COUNT(*) as cnt
         FROM validated_addresses
-        WHERE user_id = :userId
         GROUP BY customer_name, validated_address
         HAVING COUNT(*) > 1
-      `, { replacements: { userId } });
+      `, { replacements: {} });
 
       for (const dup of nameDups) {
         const records = await ValidatedAddress.findAll({
-          where: { user_id: userId, customer_name: dup.customer_name, validated_address: dup.validated_address },
+          where: { customer_name: dup.customer_name, validated_address: dup.validated_address },
           order: [['created_at', 'DESC']]
         });
         const keeper = records.find(r => r.respond_contact_id) || records[0];
@@ -1869,8 +1867,8 @@ class PollingService {
         SELECT id, customer_phone,
                REGEXP_REPLACE(customer_phone, '[^0-9]', '', 'g') as phone_digits
         FROM validated_addresses
-        WHERE user_id = :userId AND customer_phone IS NOT NULL AND customer_phone != ''
-      `, { replacements: { userId } });
+        WHERE customer_phone IS NOT NULL AND customer_phone != ''
+      `, { replacements: {} });
 
       const phoneDigitGroups = {};
       for (const row of allWithPhone) {
@@ -1883,7 +1881,7 @@ class PollingService {
       for (const [digits, ids] of Object.entries(phoneDigitGroups)) {
         if (ids.length < 2) continue;
         const records = await ValidatedAddress.findAll({
-          where: { user_id: userId, id: { [Op.in]: ids } },
+          where: { id: { [Op.in]: ids } },
           order: [['created_at', 'DESC']]
         });
         if (records.length < 2) continue;
@@ -2097,28 +2095,15 @@ class PollingService {
       }
 
       let record = await ValidatedAddress.findOne({
-        where: { user_id: userId, respond_contact_id: contactIdStr }
+        where: { respond_contact_id: contactIdStr }
       });
 
       let created = false;
 
-      if (!record) {
-        const crossUserRecord = await ValidatedAddress.findOne({
-          where: { respond_contact_id: contactIdStr }
-        });
-        if (crossUserRecord) {
-          record = crossUserRecord;
-          if (crossUserRecord.user_id !== userId) {
-            await crossUserRecord.update({ user_id: userId });
-            console.log(`[ValidatedAddr] Registro de ${customerName} (${contactIdStr}) reasignado de user_id=${crossUserRecord.user_id} a user_id=${userId} para evitar duplicado`);
-          }
-        }
-      }
-
       if (!record && contact.phone) {
         const phoneNorm = contact.phone.replace(/\D/g, '');
         const byPhone = await ValidatedAddress.findAll({
-          where: { user_id: userId, customer_phone: { [Op.ne]: null } }
+          where: { customer_phone: { [Op.ne]: null } }
         });
         const phoneMatch = byPhone.find(r => r.customer_phone && r.customer_phone.replace(/\D/g, '') === phoneNorm) || null;
         if (phoneMatch) {
