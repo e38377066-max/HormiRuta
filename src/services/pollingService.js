@@ -1253,7 +1253,6 @@ class PollingService {
       const batchContactIds = batch.map(c => c.id.toString());
       const existingAddresses = await ValidatedAddress.findAll({
         where: {
-          user_id: userId,
           respond_contact_id: { [Op.in]: batchContactIds }
         }
       });
@@ -1660,27 +1659,30 @@ class PollingService {
         if (!orderStatus) continue;
 
         try {
-          const [record, created] = await ValidatedAddress.findOrCreate({
-            where: {
-              user_id: userId,
-              respond_contact_id: contactIdStr
-            },
-            defaults: {
-              customer_name: customerName,
-              customer_phone: contact.phone || null,
-              original_address: null,
-              validated_address: null,
-              address_lat: null,
-              address_lng: null,
-              zip_code: null,
-              source: 'placeholder',
-              order_status: orderStatus
-            }
+          const existingAny = await ValidatedAddress.findOne({
+            where: { respond_contact_id: contactIdStr }
           });
-          if (created) {
-            placeholderCount++;
-            console.log(`[AddressScan] Placeholder creado para ${customerName} (${contactIdStr}) [${orderStatus}] - sin direccion detectada`);
+          if (existingAny) {
+            if (existingAny.user_id !== userId) {
+              await existingAny.update({ user_id: userId });
+            }
+            continue;
           }
+          await ValidatedAddress.create({
+            user_id: userId,
+            respond_contact_id: contactIdStr,
+            customer_name: customerName,
+            customer_phone: contact.phone || null,
+            original_address: null,
+            validated_address: null,
+            address_lat: null,
+            address_lng: null,
+            zip_code: null,
+            source: 'placeholder',
+            order_status: orderStatus
+          });
+          placeholderCount++;
+          console.log(`[AddressScan] Placeholder creado para ${customerName} (${contactIdStr}) [${orderStatus}] - sin direccion detectada`);
         } catch (phErr) {
           console.error(`[AddressScan] Error creando placeholder ${contactIdStr}:`, phErr.message);
         }
@@ -1798,19 +1800,37 @@ class PollingService {
       const [contactDups] = await ValidatedAddress.sequelize.query(`
         SELECT respond_contact_id, COUNT(*) as cnt
         FROM validated_addresses
-        WHERE user_id = :userId AND respond_contact_id IS NOT NULL
+        WHERE respond_contact_id IS NOT NULL
         GROUP BY respond_contact_id
         HAVING COUNT(*) > 1
-      `, { replacements: { userId } });
+      `, { replacements: {} });
 
       for (const dup of contactDups) {
         const records = await ValidatedAddress.findAll({
-          where: { user_id: userId, respond_contact_id: dup.respond_contact_id },
+          where: { respond_contact_id: dup.respond_contact_id },
           order: [['created_at', 'DESC']]
         });
-        for (const old of records.slice(1)) {
-          await old.destroy();
-          totalCleaned++;
+        const keeper = records.find(r => r.route_id) || records[0];
+        for (const old of records.filter(r => r.id !== keeper.id)) {
+          if (keeper.id !== old.id) {
+            const mergeFields = {};
+            if (!keeper.order_cost && old.order_cost) mergeFields.order_cost = old.order_cost;
+            if (!keeper.deposit_amount && old.deposit_amount) mergeFields.deposit_amount = old.deposit_amount;
+            if (!keeper.total_to_collect && old.total_to_collect) mergeFields.total_to_collect = old.total_to_collect;
+            if (!keeper.notes && old.notes) mergeFields.notes = old.notes;
+            if (!keeper.apartment_number && old.apartment_number) mergeFields.apartment_number = old.apartment_number;
+            if (!keeper.validated_address && old.validated_address) mergeFields.validated_address = old.validated_address;
+            if (!keeper.route_id && old.route_id) mergeFields.route_id = old.route_id;
+            if (keeper.user_id !== userId) mergeFields.user_id = userId;
+            if (Object.keys(mergeFields).length > 0) await keeper.update(mergeFields);
+            try {
+              await old.destroy();
+              totalCleaned++;
+              console.log(`[AddressScan] Duplicado cross-user: eliminado ${old.customer_name} (id=${old.id}, user_id=${old.user_id}), keeper id=${keeper.id}, user_id=${keeper.user_id}`);
+            } catch (destroyErr) {
+              console.error(`[AddressScan] No se pudo eliminar duplicado id=${old.id}:`, destroyErr.message);
+            }
+          }
         }
       }
 
@@ -2081,6 +2101,19 @@ class PollingService {
       });
 
       let created = false;
+
+      if (!record) {
+        const crossUserRecord = await ValidatedAddress.findOne({
+          where: { respond_contact_id: contactIdStr }
+        });
+        if (crossUserRecord) {
+          record = crossUserRecord;
+          if (crossUserRecord.user_id !== userId) {
+            await crossUserRecord.update({ user_id: userId });
+            console.log(`[ValidatedAddr] Registro de ${customerName} (${contactIdStr}) reasignado de user_id=${crossUserRecord.user_id} a user_id=${userId} para evitar duplicado`);
+          }
+        }
+      }
 
       if (!record && contact.phone) {
         const phoneNorm = contact.phone.replace(/\D/g, '');
