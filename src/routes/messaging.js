@@ -120,7 +120,6 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
     // Borrar el estado de conversación
     await ConversationState.destroy({
       where: { 
-        user_id: req.userId,
         contact_id: contact.id.toString() 
       }
     });
@@ -128,7 +127,6 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
     // Borrar pedidos del contacto de prueba (para que no lo detecte como cliente existente)
     await MessagingOrder.destroy({
       where: { 
-        user_id: req.userId,
         respond_contact_id: contact.id.toString() 
       }
     });
@@ -136,7 +134,6 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
     // Borrar logs de mensajes del contacto
     await MessageLog.destroy({
       where: { 
-        user_id: req.userId,
         respond_contact_id: contact.id.toString() 
       }
     });
@@ -441,7 +438,8 @@ router.delete('/orders/:id', requireAuth, async (req, res) => {
 
 router.post('/orders/revalidate', requireAuth, async (req, res) => {
   try {
-    if (!admin) return res.status(403).json({ error: 'Solo admin' });
+    const requestingUser = await User.findByPk(req.userId);
+    if (!requestingUser || requestingUser.role !== 'admin') return res.status(403).json({ error: 'Solo admin' });
 
     const noCoverageOrders = await MessagingOrder.findAll({
       where: { validation_status: 'no_coverage' }

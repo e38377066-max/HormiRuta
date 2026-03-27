@@ -344,7 +344,6 @@ class PollingService {
 
     const pendingConversations = await ConversationState.findAll({
       where: {
-        user_id: userId,
         bot_paused: false,
         agent_active: false,
         last_bot_message_at: { [Op.ne]: null, [Op.lt]: cutoffTime },
@@ -532,8 +531,7 @@ class PollingService {
     
     const alreadyProcessed = await MessageLog.findOne({
       where: { 
-        respond_message_id: latestMessage.messageId?.toString(),
-        user_id: userId
+        respond_message_id: latestMessage.messageId?.toString()
       }
     });
     
@@ -601,7 +599,6 @@ class PollingService {
 
       const trackedStates = await ConversationState.findAll({
         where: {
-          user_id: userId,
           state: { [Op.notIn]: ['completed'] }
         }
       });
@@ -710,7 +707,6 @@ class PollingService {
 
       const trackedStates = await ConversationState.findAll({
         where: {
-          user_id: userId,
           state: { [Op.notIn]: ['completed'] }
         }
       });
@@ -844,7 +840,6 @@ class PollingService {
         
         let order = await MessagingOrder.findOne({
           where: {
-            user_id: userId,
             respond_contact_id: contact.id.toString(),
             status: 'pending'
           }
@@ -1087,7 +1082,6 @@ class PollingService {
         try {
           const deletedCount = await ValidatedAddress.destroy({
             where: {
-              user_id: userId,
               respond_contact_id: { [Op.in]: tagExcludedIds }
             }
           });
@@ -1126,7 +1120,6 @@ class PollingService {
       const contactIds = contacts.map(c => c.id.toString());
       const existingAddresses = await ValidatedAddress.findAll({
         where: {
-          user_id: userId,
           respond_contact_id: { [Op.in]: contactIds }
         }
       });
@@ -1225,7 +1218,6 @@ class PollingService {
       if (contactIds.length > 0) {
         const busyConversations = await ConversationState.findAll({
           where: {
-            user_id: userId,
             contact_id: { [Op.in]: contactIds },
             state: { [Op.notIn]: terminalStates }
           }
@@ -1706,7 +1698,6 @@ class PollingService {
 
       const allOrders = await ValidatedAddress.findAll({
         where: {
-          user_id: userId,
           respond_contact_id: { [Op.ne]: null }
         }
       });
@@ -2120,7 +2111,6 @@ class PollingService {
       if (!record) {
         const byName = await ValidatedAddress.findOne({
           where: {
-            user_id: userId,
             respond_contact_id: null,
             customer_name: customerName
           }

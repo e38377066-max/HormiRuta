@@ -173,7 +173,7 @@ class ChatbotService {
   async isConversationReopened(contactId) {
     try {
       const convState = await ConversationState.findOne({
-        where: { user_id: this.userId, contact_id: contactId.toString() }
+        where: { contact_id: contactId.toString() }
       });
 
       if (!convState) {
@@ -258,7 +258,7 @@ class ChatbotService {
 
   async getOrCreateConversationState(contactId) {
     let state = await ConversationState.findOne({
-      where: { user_id: this.userId, contact_id: contactId.toString() }
+      where: { contact_id: contactId.toString() }
     });
 
     if (!state) {
@@ -281,14 +281,13 @@ class ChatbotService {
     
     await ConversationState.update(
       finalUpdates,
-      { where: { user_id: this.userId, contact_id: contactId.toString() } }
+      { where: { contact_id: contactId.toString() } }
     );
   }
 
   async checkIfExistingCustomer(contact) {
     const existingOrder = await MessagingOrder.findOne({
       where: {
-        user_id: this.userId,
         respond_contact_id: contact.id.toString()
       }
     });
@@ -1390,7 +1389,7 @@ class ChatbotService {
   async findAgentForProduct(productName) {
     try {
       const agents = await ServiceAgent.findAll({
-        where: { user_id: this.userId, is_active: true }
+        where: { is_active: true }
       });
 
       const productLower = productName.toLowerCase();
@@ -1416,7 +1415,6 @@ class ChatbotService {
     try {
       let order = await MessagingOrder.findOne({
         where: {
-          user_id: this.userId,
           respond_contact_id: contact.id.toString(),
           status: 'pending'
         }
