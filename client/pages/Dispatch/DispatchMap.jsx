@@ -310,7 +310,7 @@ export default function DispatchMap() {
       markersRef.current.push(marker)
     })
 
-    routes.forEach(route => {
+    routes.filter(route => route.status !== 'completed').forEach(route => {
       const stopsToRender = route.route_stops || []
       if (!stopsToRender.length) return
       const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name ? route.orders[0].driver_name : null
@@ -1639,13 +1639,15 @@ export default function DispatchMap() {
               )
             })()
           ) : activeTab === 'routes' ? (
-            routes.length === 0 ? (
+            (() => {
+              const activeRoutes = routes.filter(route => route.status !== 'completed')
+              return activeRoutes.length === 0 ? (
               <div className="empty-dispatch">
                 <span className="material-icons">route</span>
-                <p>No hay rutas creadas</p>
+                <p>No hay rutas activas</p>
               </div>
             ) : (
-              routes.map((route) => {
+              activeRoutes.map((route) => {
                 const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name ? route.orders[0].driver_name : null
                 const driverColorIdx = driverName ? Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0)) : 0
                 const driverColor = driverName ? getDriverColor(driverColorIdx) : '#999'
@@ -1921,6 +1923,7 @@ export default function DispatchMap() {
                 </div>
               )})
             )
+          })()
           ) : activeTab === 'favorites' ? (
             <div className="favorites-tab">
               <div className="fav-tab-header">
