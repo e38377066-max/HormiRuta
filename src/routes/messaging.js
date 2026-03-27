@@ -18,6 +18,11 @@ import pollingService from '../services/pollingService.js';
 
 const router = express.Router();
 
+const isAdminUser = async (userId) => {
+  const user = await User.findByPk(userId);
+  return user?.role === 'admin';
+};
+
 async function getSettingsForUser() {
   let settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
   if (!settings) {
@@ -926,11 +931,8 @@ router.get('/stats', requireAuth, async (req, res) => {
 router.get('/polling/status', requireAuth, async (req, res) => {
   try {
     let status = pollingService.getPollingStatus(req.userId);
-    if (!status.active) {
-      const user = await User.findByPk(req.userId);
-      if (user?.role === 'admin') {
-        status = pollingService.getAnyActivePollingStatus();
-      }
+    if (!status.active && await isAdminUser(req.userId)) {
+      status = pollingService.getAnyActivePollingStatus();
     }
     res.json(status);
   } catch (error) {
@@ -942,8 +944,8 @@ router.get('/polling/status', requireAuth, async (req, res) => {
 router.post('/polling/start', requireAuth, async (req, res) => {
   try {
     const intervalSeconds = req.body.interval || 30;
-    const user = await User.findByPk(req.userId);
-    if (user?.role === 'admin') {
+    const admin = await isAdminUser(req.userId);
+    if (admin) {
       const anyActive = pollingService.getAnyActivePollingStatus();
       if (anyActive.active) {
         return res.json({ success: true, message: 'Polling ya está activo' });
