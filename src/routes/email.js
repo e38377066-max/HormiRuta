@@ -74,23 +74,29 @@ function namesMatch(orderName, gmailName) {
 
   if (!normOrder || !normGmail) return false;
 
-  if (normOrder.includes(normGmail) || normGmail.includes(normOrder)) return true;
+  if (normOrder === normGmail) return true;
 
-  const orderWords = normOrder.split(' ').filter(w => w.length >= 2);
-  const gmailWords = normGmail.split(' ').filter(w => w.length >= 2);
+  if (normOrder.includes(normGmail) && normGmail.length >= 6) return true;
+  if (normGmail.includes(normOrder) && normOrder.length >= 6) return true;
+
+  const STOP_WORDS = new Set(['the', 'and', 'for', 'las', 'los', 'del', 'por', 'con', 'una', 'uno']);
+  const orderWords = normOrder.split(' ').filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+  const gmailWords = normGmail.split(' ').filter(w => w.length >= 3 && !STOP_WORDS.has(w));
   if (!orderWords.length || !gmailWords.length) return false;
 
   let matches = 0;
   for (const gw of gmailWords) {
     for (const ow of orderWords) {
-      if (gw === ow || gw.startsWith(ow) || ow.startsWith(gw)) {
+      if (gw === ow) {
         matches++;
         break;
       }
     }
   }
+
   const minWords = Math.min(orderWords.length, gmailWords.length);
-  return minWords > 0 && matches >= Math.max(1, Math.ceil(minWords * 0.5));
+  const required = minWords === 1 ? 1 : Math.ceil(minWords * 0.75);
+  return matches >= required;
 }
 
 router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
