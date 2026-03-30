@@ -103,7 +103,7 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
     }
 
     const candidates = await ValidatedAddress.findAll({
-      where: { order_status: { [Op.in]: ['ordered', 'approved'] } }
+      where: { order_status: 'ordered' }
     });
 
     const settings = await MessagingSettings.findOne({
