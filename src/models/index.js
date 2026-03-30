@@ -13,6 +13,7 @@ import ValidatedAddress from './ValidatedAddress.js';
 import DeliveryHistory from './DeliveryHistory.js';
 import FavoriteAddress from './FavoriteAddress.js';
 import UserToken from './UserToken.js';
+import WholesaleClient from './WholesaleClient.js';
 
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
 Route.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
