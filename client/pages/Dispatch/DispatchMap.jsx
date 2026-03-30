@@ -183,12 +183,22 @@ export default function DispatchMap() {
       const res = await api.get('/api/email/pickup-ready', { params: forceRefresh ? { refresh: 'true' } : {} })
       const names = (res.data.orders || []).map(o => o.clientName).filter(Boolean)
       setPickupReadyNames(names)
+      if (names.length > 0) {
+        try {
+          const syncRes = await api.post('/api/email/pickup-ready/sync')
+          if (syncRes.data?.synced > 0) {
+            await fetchData()
+          }
+        } catch (syncErr) {
+          console.error('Error en auto-sync pickup-ready:', syncErr)
+        }
+      }
     } catch (error) {
       console.error('Error fetching pickup-ready orders:', error)
     } finally {
       setLoadingPickupReady(false)
     }
-  }, [])
+  }, [fetchData])
 
   useEffect(() => {
     fetchData()
@@ -1087,50 +1097,6 @@ export default function DispatchMap() {
 
   const getNextStatus = (currentStatus) => ADMIN_TRANSITIONS[currentStatus] || null
 
-  const normalizeForMatch = (name) => {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-
-  const isOrderReady = (orderName) => {
-    if (!orderName || !pickupReadyNames.length) return false
-    const normOrder = normalizeForMatch(orderName)
-    if (!normOrder) return false
-    for (const readyName of pickupReadyNames) {
-      const normReady = normalizeForMatch(readyName)
-      if (!normReady) continue
-      if (normOrder.includes(normReady) || normReady.includes(normOrder)) return true
-      const orderWords = normOrder.split(' ').filter(w => w.length >= 2)
-      const readyWords = normReady.split(' ').filter(w => w.length >= 2)
-      if (!orderWords.length || !readyWords.length) continue
-      let matches = 0
-      for (const rw of readyWords) {
-        for (const ow of orderWords) {
-          if (rw === ow || rw.startsWith(ow) || ow.startsWith(rw)) {
-            matches++
-            break
-          }
-        }
-      }
-      const minWords = Math.min(orderWords.length, readyWords.length)
-      if (minWords > 0 && matches >= Math.max(1, Math.ceil(minWords * 0.5))) return true
-    }
-    return false
-  }
-
-  const handleMarkPickupReady = async (orderId) => {
-    try {
-      await api.put(`/api/dispatch/orders/${orderId}/status`, { order_status: 'pickup_ready' })
-      await fetchData()
-    } catch (error) {
-      console.error('Error marcando orden como pickup_ready:', error)
-      await syncPickupReadyFromGmail()
-    }
-  }
-
   const syncPickupReadyFromGmail = async () => {
     setSyncingPickupReady(true)
     setPickupSyncResult(null)
@@ -1493,17 +1459,6 @@ export default function DispatchMap() {
                                 </button>
                               )
                             })()}
-                            {isOrderReady(order.customer_name) && order.order_status !== 'pickup_ready' && (
-                              <button
-                                className="dbtn orden-lista-badge"
-                                style={{ cursor: 'pointer' }}
-                                title="Gmail detectó esta orden como lista. Haz clic para marcarla como Listo p/Recoger"
-                                onClick={() => handleMarkPickupReady(order.id)}
-                              >
-                                <span className="material-icons" style={{ fontSize: '14px' }}>inventory_2</span>
-                                Orden Lista
-                              </button>
-                            )}
                           </div>
                           {editingNotes === order.id ? (
                             <div className="do-notes-edit">
