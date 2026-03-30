@@ -106,5 +106,6 @@ export {
   ValidatedAddress,
   DeliveryHistory,
   FavoriteAddress,
-  UserToken
+  UserToken,
+  WholesaleClient
 };

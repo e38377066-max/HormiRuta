@@ -139,6 +139,16 @@ export default function AdminDashboard() {
             <h3>Rutas y Entregas</h3>
           </div>
           <div className="section-items">
+            <Link to="/admin/wholesale" className="section-item">
+              <div className="item-icon" style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}>
+                <span className="material-icons" style={{ color: '#fff' }}>store</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Clientes Mayoristas (MAY)</div>
+                <div className="item-subtitle">Gestionar clientes de alto volumen</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
             <Link to="/admin/routes" className="section-item">
               <div className="item-icon blue">
                 <span className="material-icons">history</span>

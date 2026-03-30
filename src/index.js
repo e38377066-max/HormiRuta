@@ -28,6 +28,7 @@ import adminRoutes from './routes/admin.js';
 import dispatchRoutes from './routes/dispatch.js';
 import pollingService from './services/pollingService.js';
 import emailRoutes from './routes/email.js';
+import wholesaleRoutes from './routes/wholesale.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,6 +85,7 @@ app.use('/api/messaging', messagingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/dispatch', dispatchRoutes);
 app.use('/api/email', emailRoutes);
+app.use('/api/wholesale', wholesaleRoutes);
 
 const uploadsPath = path.join(__dirname, '..', 'uploads');
 app.use('/uploads', express.static(uploadsPath));

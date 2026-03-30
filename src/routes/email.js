@@ -3,8 +3,9 @@ import { Op } from 'sequelize';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { sendEmail, verifyGmailConnection } from '../services/gmailService.js';
 import { getPickupReadyOrders, clearPickupCache, GmailScopeError } from '../services/gmailReadService.js';
-import { ValidatedAddress, MessagingSettings } from '../models/index.js';
+import { ValidatedAddress, MessagingSettings, WholesaleClient } from '../models/index.js';
 import respondApiService from '../services/respondApiService.js';
+import geocodingService from '../services/geocodingService.js';
 
 const router = express.Router();
 
@@ -68,6 +69,17 @@ function normalizeForMatch(name) {
     .trim();
 }
 
+const STOP_WORDS = new Set([
+  'the', 'and', 'for', 'las', 'los', 'del', 'por', 'con', 'una', 'uno',
+  'de', 'la', 'el', 'en', 'bc', 'from', 'to', 'set', 'shipment'
+]);
+
+function getSignificantWords(name) {
+  return normalizeForMatch(name)
+    .split(' ')
+    .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+}
+
 function namesMatch(orderName, gmailName) {
   const normOrder = normalizeForMatch(orderName);
   const normGmail = normalizeForMatch(gmailName);
@@ -76,18 +88,23 @@ function namesMatch(orderName, gmailName) {
 
   if (normOrder === normGmail) return true;
 
-  if (normOrder.includes(normGmail) && normGmail.length >= 6) return true;
-  if (normGmail.includes(normOrder) && normOrder.length >= 6) return true;
+  if (normOrder.includes(normGmail) && normGmail.length >= 5) return true;
+  if (normGmail.includes(normOrder) && normOrder.length >= 5) return true;
 
-  const STOP_WORDS = new Set(['the', 'and', 'for', 'las', 'los', 'del', 'por', 'con', 'una', 'uno']);
-  const orderWords = normOrder.split(' ').filter(w => w.length >= 3 && !STOP_WORDS.has(w));
-  const gmailWords = normGmail.split(' ').filter(w => w.length >= 3 && !STOP_WORDS.has(w));
-  if (!orderWords.length || !gmailWords.length) return false;
+  const orderWords = getSignificantWords(orderName);
+  const gmailWords = getSignificantWords(gmailName);
+
+  if (!orderWords.length || !gmailWords.length) {
+    const rawOrderWords = normOrder.split(' ').filter(w => w.length >= 3);
+    const rawGmailWords = normGmail.split(' ').filter(w => w.length >= 3);
+    if (!rawOrderWords.length || !rawGmailWords.length) return false;
+    return rawOrderWords.some(ow => rawGmailWords.some(gw => ow === gw || ow.includes(gw) || gw.includes(ow)));
+  }
 
   let matches = 0;
   for (const gw of gmailWords) {
     for (const ow of orderWords) {
-      if (gw === ow) {
+      if (gw === ow || (gw.length >= 5 && ow.includes(gw)) || (ow.length >= 5 && gw.includes(ow))) {
         matches++;
         break;
       }
@@ -95,8 +112,12 @@ function namesMatch(orderName, gmailName) {
   }
 
   const minWords = Math.min(orderWords.length, gmailWords.length);
-  const required = minWords === 1 ? 1 : Math.ceil(minWords * 0.75);
+  const required = minWords === 1 ? 1 : Math.ceil(minWords * 0.5);
   return matches >= required;
+}
+
+function isWholesaleName(name) {
+  return /\bMAY\b/i.test(name) || /\-MAY\b/i.test(name) || /\bMAY\-/i.test(name);
 }
 
 router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
@@ -112,57 +133,147 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
       where: { order_status: 'ordered' }
     });
 
+    const wholesaleClients = await WholesaleClient.findAll({
+      where: { is_active: true }
+    });
+
     const settings = await MessagingSettings.findOne({
       where: { respond_api_token: { [Op.ne]: null } }
     });
 
     const synced = [];
     const skipped = [];
+    const wholesaleSynced = [];
 
-    console.log(`[Email Sync] Cotejando ${gmailOrders.length} correos vs ${candidates.length} ordenes en sistema...`);
+    console.log(`[Email Sync] Cotejando ${gmailOrders.length} correos vs ${candidates.length} órdenes en sistema...`);
+    console.log(`[Email Sync] Mayoristas registrados: ${wholesaleClients.length}`);
+
+    const processedGmailOrders = new Set();
 
     for (const gmailOrder of gmailOrders) {
+      if (processedGmailOrders.has(gmailOrder.messageId)) continue;
+
       const match = candidates.find(c =>
         c.customer_name && namesMatch(c.customer_name, gmailOrder.clientName)
       );
 
-      if (!match) {
+      if (match) {
+        processedGmailOrders.add(gmailOrder.messageId);
+        if (match.order_status === 'pickup_ready') {
+          skipped.push(match.customer_name + ' (ya estaba listo)');
+          continue;
+        }
+
+        console.log(`[Email Sync] Coincidencia encontrada: Gmail="${gmailOrder.clientName}" -> Sistema="${match.customer_name}"`);
+        match.order_status = 'pickup_ready';
+        await match.save();
+
+        if (settings?.respond_api_token) {
+          try {
+            respondApiService.setContext(settings.user_id, settings.respond_api_token);
+            let identifier = match.respond_contact_id || null;
+            if (!identifier && match.customer_phone) {
+              const phone = match.customer_phone.replace(/\s+/g, '');
+              identifier = `phone:${phone.startsWith('+') ? phone : '+' + phone}`;
+            }
+            if (identifier) {
+              await respondApiService.updateLifecycle(identifier, 'Pickup Ready');
+              console.log(`[Email Sync] Lifecycle Pickup Ready: ${match.customer_name}`);
+            }
+          } catch (lcErr) {
+            console.error(`[Email Sync] Error lifecycle ${match.customer_name}:`, lcErr.message);
+          }
+        }
+
+        synced.push(match.customer_name);
+        continue;
+      }
+
+      if (isWholesaleName(gmailOrder.clientName)) {
+        const wClient = wholesaleClients.find(wc =>
+          namesMatch(wc.customer_name, gmailOrder.clientName)
+        );
+
+        if (wClient) {
+          processedGmailOrders.add(gmailOrder.messageId);
+
+          const activeOrder = await ValidatedAddress.findOne({
+            where: {
+              customer_name: wClient.customer_name,
+              order_status: { [Op.in]: ['pickup_ready', 'on_delivery', 'ordered'] },
+              dispatch_status: { [Op.ne]: 'archived' }
+            }
+          });
+
+          if (activeOrder) {
+            console.log(`[Email Sync MAY] ${wClient.customer_name} ya tiene orden activa (${activeOrder.order_status}), omitiendo`);
+            skipped.push(`${wClient.customer_name} (MAY - ya activo)`);
+            continue;
+          }
+
+          if (!wClient.validated_address) {
+            console.log(`[Email Sync MAY] ${wClient.customer_name} no tiene dirección registrada, omitiendo`);
+            skipped.push(`${wClient.customer_name} (MAY - sin dirección)`);
+            continue;
+          }
+
+          await ValidatedAddress.create({
+            user_id: settings?.user_id || 1,
+            respond_contact_id: wClient.respond_contact_id || null,
+            customer_name: wClient.customer_name,
+            customer_phone: wClient.customer_phone || null,
+            original_address: wClient.validated_address,
+            validated_address: wClient.validated_address,
+            address_lat: wClient.address_lat || null,
+            address_lng: wClient.address_lng || null,
+            zip_code: wClient.zip_code || null,
+            city: wClient.city || null,
+            state: wClient.state || null,
+            confidence: 'high',
+            source: 'wholesale_email',
+            order_status: 'pickup_ready',
+            order_cost: null,
+            deposit_amount: null,
+            total_to_collect: null,
+            notes: `Auto-generado desde correo Pickup Ready (${gmailOrder.date || 'sin fecha'})`
+          });
+
+          await wClient.update({
+            last_pickup_at: new Date(),
+            pickup_count: (wClient.pickup_count || 0) + 1
+          });
+
+          if (settings?.respond_api_token && wClient.respond_contact_id) {
+            try {
+              respondApiService.setContext(settings.user_id, settings.respond_api_token);
+              await respondApiService.updateLifecycle(wClient.respond_contact_id, 'Pickup Ready');
+            } catch (lcErr) {
+              console.error(`[Email Sync MAY] Error lifecycle ${wClient.customer_name}:`, lcErr.message);
+            }
+          }
+
+          console.log(`[Email Sync MAY] Orden creada automáticamente para mayorista: ${wClient.customer_name}`);
+          wholesaleSynced.push(wClient.customer_name);
+        } else {
+          console.log(`[Email Sync] Nombre MAY sin registro de mayorista: "${gmailOrder.clientName}"`);
+          skipped.push(`${gmailOrder.clientName} (MAY - no registrado)`);
+        }
+      } else {
         console.log(`[Email Sync] Sin coincidencia para Gmail: "${gmailOrder.clientName}"`);
         skipped.push(gmailOrder.clientName);
-        continue;
       }
-
-      if (match.order_status === 'pickup_ready') {
-        skipped.push(match.customer_name + ' (ya estaba listo)');
-        continue;
-      }
-
-      console.log(`[Email Sync] Coincidencia encontrada: Gmail="${gmailOrder.clientName}" -> Sistema="${match.customer_name}"`);
-      match.order_status = 'pickup_ready';
-      await match.save();
-
-      if (settings?.respond_api_token) {
-        try {
-          respondApiService.setContext(settings.user_id, settings.respond_api_token);
-          let identifier = match.respond_contact_id || null;
-          if (!identifier && match.customer_phone) {
-            const phone = match.customer_phone.replace(/\s+/g, '');
-            identifier = `phone:${phone.startsWith('+') ? phone : '+' + phone}`;
-          }
-          if (identifier) {
-            await respondApiService.updateLifecycle(identifier, 'Pickup Ready');
-            console.log(`[Email Sync] Lifecycle Pickup Ready: ${match.customer_name}`);
-          }
-        } catch (lcErr) {
-          console.error(`[Email Sync] Error lifecycle ${match.customer_name}:`, lcErr.message);
-        }
-      }
-
-      synced.push(match.customer_name);
     }
 
-    console.log(`[Email Sync] Sincronizados: ${synced.length}, Omitidos: ${skipped.length}`);
-    res.json({ success: true, synced: synced.length, syncedNames: synced, skipped });
+    const totalSynced = synced.length + wholesaleSynced.length;
+    console.log(`[Email Sync] Sincronizados: ${totalSynced} (regulares: ${synced.length}, mayoristas: ${wholesaleSynced.length}), Omitidos: ${skipped.length}`);
+
+    res.json({
+      success: true,
+      synced: totalSynced,
+      syncedNames: synced,
+      wholesaleSynced: wholesaleSynced,
+      skipped
+    });
   } catch (error) {
     console.error('[Email] Error sincronizando pickup-ready:', error);
     if (error instanceof GmailScopeError) {
