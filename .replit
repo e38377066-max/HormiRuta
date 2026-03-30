@@ -58,5 +58,3 @@ Qv09iRFp7Jz1dbRsGX/9AAAADmFyZWE4NjItcmVwbGl0AQIDBAUGBw==
 """
 
 [userenv.development]
-SERVER_DOMAIN = "95c1c039-4b17-4002-a537-211e69bdb49c-00-2yeuxj4vk5tvz.picard.replit.dev"
-VITE_API_URL = "https://95c1c039-4b17-4002-a537-211e69bdb49c-00-2yeuxj4vk5tvz.picard.replit.dev"
