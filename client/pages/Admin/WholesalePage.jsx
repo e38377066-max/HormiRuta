@@ -151,12 +151,12 @@ export default function WholesalePage() {
         <div style={{ flex: 1 }}>
           <h1>Clientes Mayoristas (MAY)</h1>
           <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>
-            Contactos con "MAY" en el nombre — el sistema los agrega automáticamente al despachador cuando llega un correo Pickup Ready
+            Se detectan automáticamente desde Pecky — cualquier contacto con "MAY" en su nombre aparece aquí solo. Cuando llega un correo Pickup Ready, el sistema los pone directo en el despachador.
           </p>
         </div>
-        <button className="action-btn primary" onClick={openAdd}>
+        <button className="action-btn primary" onClick={openAdd} title="Agregar manualmente si el contacto aún no aparece en Pecky">
           <span className="material-icons">add</span>
-          Agregar Mayorista
+          Agregar manual
         </button>
       </div>
 
@@ -183,13 +183,14 @@ export default function WholesalePage() {
           border: '2px dashed #e2e8f0'
         }}>
           <span className="material-icons" style={{ fontSize: 48, color: '#94a3b8', display: 'block', marginBottom: 12 }}>store</span>
-          <p style={{ margin: 0, color: '#64748b', fontSize: 15 }}>No hay mayoristas registrados aún.</p>
+          <p style={{ margin: 0, color: '#64748b', fontSize: 15 }}>Aún no hay mayoristas detectados.</p>
           <p style={{ margin: '8px 0 20px', color: '#94a3b8', fontSize: 13 }}>
-            Agrega los contactos que tienen "MAY" en su nombre en Pecky/Respond.io
+            El sistema detecta automáticamente los contactos con "MAY" en el nombre cuando el bot de Pecky está activo.
+            Si necesitas agregar uno manualmente antes de que aparezca en Pecky, usa el botón de abajo.
           </p>
           <button className="action-btn primary" onClick={openAdd}>
             <span className="material-icons">add</span>
-            Agregar primer mayorista
+            Agregar manual
           </button>
         </div>
       ) : (

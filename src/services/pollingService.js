@@ -11,7 +11,12 @@ import MessageLog from '../models/MessageLog.js';
 import CoverageZone from '../models/CoverageZone.js';
 import ConversationState from '../models/ConversationState.js';
 import ValidatedAddress from '../models/ValidatedAddress.js';
+import WholesaleClient from '../models/WholesaleClient.js';
 import User from '../models/User.js';
+
+function contactIsWholesale(name) {
+  return /\bMAY\b/i.test(name) || /\-MAY\b/i.test(name) || /\bMAY\-/i.test(name);
+}
 
 async function getGlobalSettings() {
   return await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
@@ -1094,6 +1099,7 @@ class PollingService {
       }
 
       await this.syncContactNames(userId, tagFilteredContacts);
+      await this.autoRegisterWholesaleClients(userId, tagFilteredContacts);
       await this.syncClosedConversationLifecycles(userId, apiToken, tagFilteredContacts);
       await this.cleanupDuplicateAddresses(userId);
       await this.cleanupDeliveredOrders();
@@ -2167,8 +2173,112 @@ class PollingService {
         await record.update(updateData);
         console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})${sourceOverride ? ` [${sourceOverride}]` : ''}`);
       }
+
+      if (contactIsWholesale(customerName)) {
+        await this.updateWholesaleClientAddress(userId, contact, finalAddress, geocoded);
+      }
     } catch (error) {
       console.error(`[ValidatedAddr] Error guardando direccion validada:`, error.message);
+    }
+  }
+
+  async autoRegisterWholesaleClients(userId, contacts) {
+    try {
+      const mayContacts = contacts.filter(c => {
+        const name = `${c.firstName || ''} ${c.lastName || ''}`.trim();
+        return contactIsWholesale(name);
+      });
+
+      if (mayContacts.length === 0) return;
+
+      for (const contact of mayContacts) {
+        const contactIdStr = contact.id.toString();
+        const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+        const customerPhone = contact.phone || null;
+
+        const existingById = await WholesaleClient.findOne({
+          where: { respond_contact_id: contactIdStr }
+        });
+        if (existingById) {
+          const updateFields = {};
+          if (existingById.customer_name !== customerName && customerName !== 'Sin nombre') {
+            updateFields.customer_name = customerName;
+          }
+          if (customerPhone && existingById.customer_phone !== customerPhone) {
+            updateFields.customer_phone = customerPhone;
+          }
+          if (Object.keys(updateFields).length > 0) {
+            await existingById.update(updateFields);
+            console.log(`[Wholesale] Mayorista actualizado desde Pecky: ${customerName} (id=${contactIdStr})`);
+          }
+          continue;
+        }
+
+        const existingByName = await WholesaleClient.findOne({
+          where: { customer_name: customerName }
+        });
+        if (existingByName) {
+          if (!existingByName.respond_contact_id) {
+            await existingByName.update({
+              respond_contact_id: contactIdStr,
+              customer_phone: customerPhone || existingByName.customer_phone
+            });
+            console.log(`[Wholesale] Mayorista vinculado a contacto Pecky: ${customerName} (id=${contactIdStr})`);
+          }
+          continue;
+        }
+
+        const adminUser = await User.findOne({ where: { role: 'admin' } });
+        await WholesaleClient.create({
+          user_id: adminUser?.id || userId,
+          respond_contact_id: contactIdStr,
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          is_active: true
+        });
+        console.log(`[Wholesale] Nuevo mayorista detectado y registrado: ${customerName} (id=${contactIdStr})`);
+      }
+    } catch (error) {
+      console.error(`[Wholesale] Error en autoRegisterWholesaleClients:`, error.message);
+    }
+  }
+
+  async updateWholesaleClientAddress(userId, contact, finalAddress, geocoded) {
+    try {
+      const contactIdStr = contact.id.toString();
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+
+      const wClient = await WholesaleClient.findOne({
+        where: {
+          [Op.or]: [
+            { respond_contact_id: contactIdStr },
+            { customer_name: customerName }
+          ]
+        }
+      });
+
+      if (!wClient) return;
+
+      const updateData = {
+        validated_address: finalAddress,
+        address_lat: geocoded?.latitude || null,
+        address_lng: geocoded?.longitude || null,
+        zip_code: geocoded?.zip || wClient.zip_code,
+        city: geocoded?.city || wClient.city,
+        state: geocoded?.stateShort || geocoded?.state || wClient.state
+      };
+
+      if (!wClient.respond_contact_id) {
+        updateData.respond_contact_id = contactIdStr;
+      }
+      if (!wClient.customer_phone && contact.phone) {
+        updateData.customer_phone = contact.phone;
+      }
+
+      await wClient.update(updateData);
+      console.log(`[Wholesale] Dirección actualizada para mayorista ${customerName}: "${finalAddress}"`);
+    } catch (error) {
+      console.error(`[Wholesale] Error actualizando dirección de mayorista:`, error.message);
     }
   }
 }

@@ -219,7 +219,7 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
 
           await ValidatedAddress.create({
             user_id: settings?.user_id || 1,
-            respond_contact_id: wClient.respond_contact_id || null,
+            respond_contact_id: null,
             customer_name: wClient.customer_name,
             customer_phone: wClient.customer_phone || null,
             original_address: wClient.validated_address,
