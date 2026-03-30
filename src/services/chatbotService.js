@@ -4,6 +4,7 @@ import MessagingOrder from '../models/MessagingOrder.js';
 import ServiceAgent from '../models/ServiceAgent.js';
 import AddressValidationService from './addressValidation.js';
 import respondApiService from './respondApiService.js';
+import AIService from './aiService.js';
 
 class ChatbotService {
   constructor(userId, settings, isTestMode = false) {
@@ -16,6 +17,13 @@ class ChatbotService {
     
     // Tiempo de abandono en minutos (configurable)
     this.abandonmentMinutes = settings.abandonment_minutes || 30;
+
+    // Cerebro de IA — se activa solo si hay API key y está habilitado
+    const aiKey = settings.ai_enabled && settings.openai_api_key ? settings.openai_api_key : null;
+    this.ai = new AIService(aiKey, settings);
+    if (aiKey) {
+      console.log('[Bot] Cerebro IA activado con OpenAI');
+    }
   }
 
   // ==================== UTILIDADES DE ENVÍO ====================
@@ -296,9 +304,18 @@ class ChatbotService {
 
   // ==================== PARSERS ====================
 
-  parseYesNoResponse(text) {
+  async parseYesNoResponse(text) {
+    // Intentar con IA primero (entiende "simon", "nel", "ta bien", etc.)
+    if (this.ai.isAvailable) {
+      const aiResult = await this.ai.classifyYesNo(text);
+      if (aiResult === 'yes' || aiResult === 'no') {
+        console.log(`[Bot-IA] parseYesNo: "${text}" → ${aiResult}`);
+        return aiResult;
+      }
+    }
+
+    // Fallback a regex
     const cleanText = text.trim().toLowerCase();
-    
     const yesPatterns = ['si', 'sí', 'yes', 'ya', 'claro', 'correcto', 'afirmativo', 'ok', 'okay', 'dale', 'simon', 'seee', 'sep', 'sip', 'aja', 'ajá', 'exacto', 'asi es', 'así es'];
     const noPatterns = ['no', 'nop', 'nope', 'nel', 'negativo', 'todavia no', 'aun no', 'todavía no', 'aún no', 'not yet', 'nada', 'nunca'];
     
@@ -350,7 +367,40 @@ class ChatbotService {
     return combined >= (threshold || 0.55);
   }
 
-  parseProductSelection(text) {
+  async parseProductSelection(text) {
+    // Construir lista de productos para la IA
+    let productsList = [];
+    try {
+      let rawList = this.settings.products_list;
+      if (typeof rawList === 'string') rawList = JSON.parse(rawList);
+      if (Array.isArray(rawList) && rawList.length > 0) {
+        productsList = rawList.map((p, i) => ({ id: i + 1, name: p.name, message: p.message }));
+      }
+    } catch (e) {}
+    if (productsList.length === 0) {
+      productsList = [
+        { id: 1, name: 'Tarjetas' },
+        { id: 2, name: 'Magnéticos' },
+        { id: 3, name: 'Post cards' },
+        { id: 4, name: 'Playeras' }
+      ];
+    }
+
+    // Intentar con IA primero
+    if (this.ai.isAvailable) {
+      const aiNum = await this.ai.extractProductSelection(text, productsList);
+      if (aiNum !== null) {
+        console.log(`[Bot-IA] parseProduct: "${text}" → opción ${aiNum}`);
+        if (aiNum >= 1 && aiNum <= productsList.length) {
+          return productsList[aiNum - 1];
+        }
+        if (aiNum === productsList.length + 1) {
+          return { id: aiNum, name: 'Otros', isOther: true };
+        }
+      }
+    }
+
+    // Fallback a lógica original
     const cleanText = text.trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     
@@ -369,32 +419,6 @@ class ChatbotService {
       'wraps': ['wrap', 'wraps', 'rotulado', 'rotulados', 'vinilo', 'vinilos', 'forrado', 'forrados', 'vehicular', 'vehiculares']
     };
     
-    let productsList = [];
-    try {
-      let rawList = this.settings.products_list;
-      if (typeof rawList === 'string') {
-        rawList = JSON.parse(rawList);
-      }
-      if (Array.isArray(rawList) && rawList.length > 0) {
-        productsList = rawList.map((p, i) => ({
-          id: i + 1,
-          name: p.name,
-          message: p.message
-        }));
-      }
-    } catch (e) {
-      console.error('Error parsing products_list:', e);
-    }
-    
-    if (productsList.length === 0) {
-      productsList = [
-        { id: 1, name: 'Tarjetas' },
-        { id: 2, name: 'Magnéticos' },
-        { id: 3, name: 'Post cards' },
-        { id: 4, name: 'Playeras' }
-      ];
-    }
-
     const numMatch = cleanText.match(/\b(\d+)\b/);
     if (numMatch) {
       const num = parseInt(numMatch[1]);
@@ -491,22 +515,29 @@ class ChatbotService {
     return null;
   }
 
-  detectFrustration(text) {
+  async detectFrustration(text) {
     const cleanText = text.trim();
-    
-    // Detectar mayúsculas excesivas
+
+    // Detección rápida por regex (sin costo de IA)
     const upperCount = (cleanText.match(/[A-Z]/g) || []).length;
     const letterCount = (cleanText.match(/[a-zA-Z]/g) || []).length;
     if (letterCount > 5 && upperCount / letterCount > 0.7) {
       return true;
     }
-    
-    // Palabras de frustración
     const frustrationWords = ['molesto', 'enojado', 'frustrado', 'terrible', 'pesimo', 'pésimo', 'horrible', 'mal servicio', 'no sirve'];
     if (frustrationWords.some(w => cleanText.toLowerCase().includes(w))) {
       return true;
     }
-    
+
+    // Si la IA está disponible, validar casos ambiguos
+    if (this.ai.isAvailable) {
+      const aiResult = await this.ai.detectFrustration(text);
+      if (aiResult) {
+        console.log(`[Bot-IA] Frustración detectada en: "${text}"`);
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -704,6 +735,35 @@ class ChatbotService {
       }
     }
 
+    // VERIFICACIÓN CON IA: Si hay agente activo, preguntar a la IA si puede intervenir
+    if (convState.agent_active && this.ai.isAvailable) {
+      let recentMessages = [];
+      try {
+        const histResult = await this.api.listMessages(`id:${contact.id}`, 10);
+        if (histResult.success && histResult.items) {
+          recentMessages = histResult.items.map(m => ({
+            text: m.body?.text || m.text || '',
+            isFromBot: m.sender?.source === 'bot' || m.sender?.source === 'automation',
+            isFromAgent: m.sender?.source === 'user' && m.traffic === 'outgoing',
+            isFromCustomer: m.traffic === 'incoming'
+          })).filter(m => m.text);
+        }
+      } catch (e) {
+        console.error('[Bot-IA] Error obteniendo historial para intervención:', e.message);
+      }
+
+      const intervention = await this.ai.evaluateAgentIntervention(messageText, recentMessages, convState);
+      if (intervention.shouldIntervene && intervention.response) {
+        console.log(`[Bot-IA] Interviniendo durante agente: ${intervention.reason}`);
+        await this.sendMessage(contact.id, intervention.response);
+        await this.addComment(contact.id, `[Bot-IA] Respondió FAQ durante atención de agente: "${messageText}"`);
+        return { handled: true, action: 'ai_faq_during_agent', reason: intervention.reason };
+      } else {
+        console.log(`[Bot-IA] No intervenir durante agente: ${intervention.reason}`);
+        return { handled: false, reason: 'agent_active_ai_decided_no_intervene' };
+      }
+    }
+
     // Verificar si el bot debe responder
     const shouldRespond = this.shouldBotRespond(convState);
     if (!shouldRespond.respond) {
@@ -712,7 +772,7 @@ class ChatbotService {
     }
 
     // Detectar frustración - pasar a agente inmediatamente
-    if (this.detectFrustration(messageText)) {
+    if (await this.detectFrustration(messageText)) {
       await this.sendMessage(contact.id, msgs.frustratedCustomer);
       await this.assignToDefaultAgent(contact.id);
       await this.addTrackingTag(contact.id, 'ClienteFrustrado');
@@ -935,7 +995,7 @@ class ChatbotService {
 
   async handleAwaitingPriorInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
-    const response = this.parseYesNoResponse(messageText);
+    const response = await this.parseYesNoResponse(messageText);
     
     if (response === 'yes') {
       // Ya tiene info - preguntar qué producto le interesa usando el menú dinámico
@@ -969,7 +1029,7 @@ class ChatbotService {
   async handleAwaitingProductSelection(contact, messageText, convState) {
     // Este handler es para clientes que YA tienen información
     const msgs = this.getMessages();
-    const product = this.parseProductSelection(messageText);
+    const product = await this.parseProductSelection(messageText);
     
     if (product) {
       // Si seleccionó "Otros", asignar a agente directamente
@@ -1191,7 +1251,7 @@ class ChatbotService {
   // Handler para usuarios SIN información seleccionando producto
   async handleAwaitingProductNoInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
-    const product = this.parseProductSelection(messageText);
+    const product = await this.parseProductSelection(messageText);
     
     if (product) {
       // Si seleccionó "Otros", asignar a agente directamente
@@ -1306,7 +1366,7 @@ class ChatbotService {
 
   async handleAwaitingProduct(contact, messageText, convState) {
     const msgs = this.getMessages();
-    const product = this.parseProductSelection(messageText);
+    const product = await this.parseProductSelection(messageText);
     
     if (product) {
       // Cliente NO tenía información - enviar información específica del producto
@@ -1351,7 +1411,7 @@ class ChatbotService {
 
   async handleAwaitingContinuation(contact, messageText, convState) {
     const msgs = this.getMessages();
-    const response = this.parseYesNoResponse(messageText);
+    const response = await this.parseYesNoResponse(messageText);
     
     if (response === 'yes') {
       // Quiere continuar, verificar dónde quedó

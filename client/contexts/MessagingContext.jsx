@@ -38,6 +38,11 @@ export function MessagingProvider({ children }) {
     return response.data
   }
 
+  const testOpenAI = async (apiKey) => {
+    const response = await api.post('/api/messaging/settings/test-openai', { openai_api_key: apiKey })
+    return response.data
+  }
+
   const resetTest = async () => {
     const response = await api.post('/api/messaging/settings/reset-test')
     return response.data
@@ -188,6 +193,7 @@ export function MessagingProvider({ children }) {
     fetchSettings,
     updateSettings,
     testConnection,
+    testOpenAI,
     resetTest,
     fetchOrders,
     fetchOrder,

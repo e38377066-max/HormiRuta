@@ -216,6 +216,15 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
   followup_message_2: {
     type: DataTypes.TEXT,
     defaultValue: 'Hola de nuevo! Como no recibimos respuesta, pausaremos la conversacion. Cuando gustes, escribenos y con gusto te atendemos!'
+  },
+  // IA con OpenAI
+  ai_enabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  openai_api_key: {
+    type: DataTypes.STRING(200),
+    allowNull: true
   }
 }, {
   tableName: 'messaging_settings',
@@ -273,6 +282,8 @@ MessagingSettings.prototype.toDict = function() {
     followup_timeout_minutes: this.followup_timeout_minutes,
     followup_message: this.followup_message,
     followup_message_2: this.followup_message_2,
+    ai_enabled: this.ai_enabled,
+    has_openai_key: !!this.openai_api_key,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

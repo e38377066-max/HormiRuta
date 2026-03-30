@@ -24,7 +24,7 @@ const parseProducts = (products) => {
 
 export default function SettingsPage() {
   const navigate = useNavigate()
-  const { fetchSettings, updateSettings, testConnection, resetTest, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip, fetchAgents, createAgent, updateAgent, deleteAgent } = useMessaging()
+  const { fetchSettings, updateSettings, testConnection, testOpenAI, resetTest, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip, fetchAgents, createAgent, updateAgent, deleteAgent } = useMessaging()
   
   const [saving, setSaving] = useState(false)
   const [agents, setAgents] = useState([])
@@ -52,6 +52,10 @@ export default function SettingsPage() {
   const [validationResult, setValidationResult] = useState(null)
   const [validationHistory, setValidationHistory] = useState([])
   const [copySuccess, setCopySuccess] = useState(false)
+  const [testingOpenAI, setTestingOpenAI] = useState(false)
+  const [openAIStatus, setOpenAIStatus] = useState(null)
+  const [showOpenAIKey, setShowOpenAIKey] = useState(false)
+  const [hasOpenAIKey, setHasOpenAIKey] = useState(false)
 
   const pollingIntervals = [
     { label: '15 segundos', value: 15 },
@@ -97,7 +101,9 @@ export default function SettingsPage() {
     followup_message: '',
     followup_message_2: '',
     test_mode: false,
-    test_contact_id: ''
+    test_contact_id: '',
+    ai_enabled: false,
+    openai_api_key: ''
   })
   const [hasExistingToken, setHasExistingToken] = useState(false)
 
@@ -247,8 +253,11 @@ export default function SettingsPage() {
           followup_message: settings.followup_message || '',
           followup_message_2: settings.followup_message_2 || '',
           test_mode: settings.test_mode || false,
-          test_contact_id: settings.test_contact_id || ''
+          test_contact_id: settings.test_contact_id || '',
+          ai_enabled: settings.ai_enabled || false,
+          openai_api_key: ''
         })
+        setHasOpenAIKey(settings.has_openai_key || false)
       }
     } catch (err) {
       console.error('Error loading settings:', err)
@@ -291,17 +300,34 @@ export default function SettingsPage() {
       } else {
         setHasExistingToken(true)
       }
-      // Serialize products_list to JSON string
+      if (!dataToSave.openai_api_key) {
+        delete dataToSave.openai_api_key
+      } else {
+        setHasOpenAIKey(true)
+      }
       if (dataToSave.products_list) {
         dataToSave.products_list = JSON.stringify(dataToSave.products_list)
       }
       await updateSettings(dataToSave)
-      setForm(prev => ({ ...prev, respond_api_token: '' }))
+      setForm(prev => ({ ...prev, respond_api_token: '', openai_api_key: '' }))
       alert('Configuracion guardada')
     } catch (err) {
       alert('Error al guardar')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleTestOpenAI = async () => {
+    setTestingOpenAI(true)
+    setOpenAIStatus(null)
+    try {
+      const result = await testOpenAI(form.openai_api_key)
+      setOpenAIStatus(result?.success ? 'ok' : 'error')
+    } catch (err) {
+      setOpenAIStatus('error')
+    } finally {
+      setTestingOpenAI(false)
     }
   }
 
@@ -402,7 +428,8 @@ export default function SettingsPage() {
     { id: 'connection', label: 'Conexion', icon: 'link' },
     { id: 'chatbot', label: 'Chatbot', icon: 'smart_toy' },
     { id: 'messages', label: 'Mensajes', icon: 'chat' },
-    { id: 'automation', label: 'Automatizacion', icon: 'auto_fix_high' }
+    { id: 'automation', label: 'Automatizacion', icon: 'auto_fix_high' },
+    { id: 'ia', label: 'Cerebro IA', icon: 'psychology' }
   ]
 
   return (
@@ -1245,6 +1272,155 @@ export default function SettingsPage() {
                 </label>
               </div>
             </div>
+          </>
+        )}
+        {activeTab === 'ia' && (
+          <>
+            <div className="settings-card">
+              <h3>
+                <span className="material-icons" style={{color: '#a78bfa'}}>psychology</span>
+                Cerebro de Inteligencia Artificial
+              </h3>
+              <p className="description">
+                Conecta OpenAI (ChatGPT) al bot para que entienda mensajes naturales, detecte intenciones y sepa exactamente cuando intervenir en los chats sin interrumpir a los agentes.
+              </p>
+
+              <div className="checkbox-row" style={{marginBottom: '20px'}}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={form.ai_enabled}
+                    onChange={(e) => handleInputChange('ai_enabled', e.target.checked)}
+                  />
+                  <span style={{fontWeight: 600}}>Activar Cerebro IA</span>
+                </label>
+              </div>
+
+              {form.ai_enabled && (
+                <>
+                  <div className="field-group">
+                    <label>API Key de OpenAI</label>
+                    <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                      <input
+                        type={showOpenAIKey ? 'text' : 'password'}
+                        value={form.openai_api_key}
+                        onChange={(e) => handleInputChange('openai_api_key', e.target.value)}
+                        placeholder={hasOpenAIKey ? '••••••••••••••••••••••• (guardada)' : 'sk-proj-...'}
+                        style={{flex: 1}}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowOpenAIKey(!showOpenAIKey)}
+                        style={{padding: '8px', background: '#2d2d2d', border: '1px solid #444', borderRadius: '6px', cursor: 'pointer', color: '#fff'}}
+                      >
+                        <span className="material-icons" style={{fontSize: '18px'}}>
+                          {showOpenAIKey ? 'visibility_off' : 'visibility'}
+                        </span>
+                      </button>
+                    </div>
+                    <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
+                      {hasOpenAIKey ? 'Ya tienes una API key guardada. Ingresa una nueva solo si quieres cambiarla.' : 'Obtén tu API key en platform.openai.com → API Keys'}
+                    </small>
+                  </div>
+
+                  <div style={{display: 'flex', gap: '12px', alignItems: 'center', marginTop: '16px'}}>
+                    <button
+                      className="btn-secondary"
+                      onClick={handleTestOpenAI}
+                      disabled={testingOpenAI || (!form.openai_api_key && !hasOpenAIKey)}
+                    >
+                      <span className="material-icons">bolt</span>
+                      {testingOpenAI ? 'Probando...' : 'Probar Conexion'}
+                    </button>
+                    {openAIStatus === 'ok' && (
+                      <span style={{color: '#4ade80', display: 'flex', alignItems: 'center', gap: '4px'}}>
+                        <span className="material-icons">check_circle</span>
+                        Conexion exitosa con OpenAI
+                      </span>
+                    )}
+                    {openAIStatus === 'error' && (
+                      <span style={{color: '#f87171', display: 'flex', alignItems: 'center', gap: '4px'}}>
+                        <span className="material-icons">error</span>
+                        Error de conexion. Verifica tu API key
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {form.ai_enabled && (
+              <>
+                <div className="settings-card">
+                  <h3>
+                    <span className="material-icons" style={{color: '#60a5fa'}}>auto_awesome</span>
+                    Que puede hacer el Cerebro IA
+                  </h3>
+                  <div style={{display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '8px'}}>
+                    <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                      <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
+                      <div>
+                        <strong>Entiende lenguaje natural</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>Interpreta "simon", "nel", "ta bien", "qro me intereza tarjetas" y cualquier variante del español</p>
+                      </div>
+                    </div>
+                    <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                      <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
+                      <div>
+                        <strong>Interviene solo cuando debe</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>Si hay un agente atendiendo y el cliente pregunta "tienen gorras?" o "a que hora cierran?", responde eso sin interferir con el agente</p>
+                      </div>
+                    </div>
+                    <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                      <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
+                      <div>
+                        <strong>Detecta frustracion con mas precision</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>Identifica cuando un cliente esta molesto aunque no use palabras exactas de frustración</p>
+                      </div>
+                    </div>
+                    <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                      <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
+                      <div>
+                        <strong>Conoce el negocio</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>Tiene todo el contexto de Area 862 Graphics: productos, zona DFW, horarios, telefonos — y no inventa informacion que no sabe</p>
+                      </div>
+                    </div>
+                    <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                      <span className="material-icons" style={{color: '#f59e0b', flexShrink: 0}}>info</span>
+                      <div>
+                        <strong>El flujo del bot NO cambia</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>El bot sigue el mismo proceso (ZIP → productos → agente). La IA solo hace que lo entienda mejor y sea mas inteligente en casos especiales</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="settings-card">
+                  <h3>
+                    <span className="material-icons" style={{color: '#f59e0b'}}>attach_money</span>
+                    Costo estimado de OpenAI
+                  </h3>
+                  <p className="description">El modelo que usa el bot es <strong>gpt-4o-mini</strong>, el mas economico y rapido de OpenAI.</p>
+                  <div style={{background: '#1a1a1a', borderRadius: '8px', padding: '16px', marginTop: '12px'}}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px'}}>
+                      <span style={{color: '#aaa'}}>Costo por 1,000 conversaciones</span>
+                      <span style={{color: '#4ade80', fontWeight: 600}}>~$0.50 USD</span>
+                    </div>
+                    <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px'}}>
+                      <span style={{color: '#aaa'}}>Costo mensual tipico (bajo volumen)</span>
+                      <span style={{color: '#4ade80', fontWeight: 600}}>$1 - $5 USD</span>
+                    </div>
+                    <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                      <span style={{color: '#aaa'}}>Costo mensual tipico (alto volumen)</span>
+                      <span style={{color: '#f59e0b', fontWeight: 600}}>$10 - $30 USD</span>
+                    </div>
+                  </div>
+                  <small style={{color: '#666', marginTop: '8px', display: 'block'}}>
+                    El costo exacto depende del volumen de mensajes. Puedes monitorear el uso en tu cuenta de OpenAI en platform.openai.com/usage
+                  </small>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

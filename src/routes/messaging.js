@@ -58,7 +58,8 @@ router.put('/settings', requireAuth, async (req, res) => {
       'has_info_response', 'request_zip_message', 'remind_zip_message',
       'product_menu_message', 'excluded_tags', 'products',
       'test_mode', 'test_contact_id', 'catalog_link', 'products_list',
-      'followup_enabled', 'followup_timeout_minutes', 'followup_message', 'followup_message_2'
+      'followup_enabled', 'followup_timeout_minutes', 'followup_message', 'followup_message_2',
+      'ai_enabled', 'openai_api_key'
     ];
 
     for (const field of allowedFields) {
@@ -100,6 +101,27 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
     console.error('[Test Connection] ERROR:', error.message);
     console.error(error.stack);
     res.status(500).json({ error: 'Error al probar conexion: ' + error.message });
+  }
+});
+
+// Probar conexión con OpenAI
+router.post('/settings/test-openai', requireAuth, async (req, res) => {
+  try {
+    const { settings } = await getSettingsForUser();
+    const apiKey = req.body.openai_api_key || settings.openai_api_key;
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'No hay API key de OpenAI configurada' });
+    }
+
+    const { default: AIService } = await import('../services/aiService.js');
+    const ai = new AIService(apiKey, settings.toDict());
+    const result = await ai.testConnection();
+
+    res.json(result);
+  } catch (error) {
+    console.error('[OpenAI Test] ERROR:', error.message);
+    res.status(500).json({ error: 'Error al probar conexión con OpenAI: ' + error.message });
   }
 });
 
