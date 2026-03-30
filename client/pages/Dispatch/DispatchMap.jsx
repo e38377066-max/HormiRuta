@@ -1095,6 +1095,42 @@ export default function DispatchMap() {
       .trim()
   }
 
+  const isOrderReady = (orderName) => {
+    if (!orderName || !pickupReadyNames.length) return false
+    const normOrder = normalizeForMatch(orderName)
+    if (!normOrder) return false
+    for (const readyName of pickupReadyNames) {
+      const normReady = normalizeForMatch(readyName)
+      if (!normReady) continue
+      if (normOrder.includes(normReady) || normReady.includes(normOrder)) return true
+      const orderWords = normOrder.split(' ').filter(w => w.length >= 2)
+      const readyWords = normReady.split(' ').filter(w => w.length >= 2)
+      if (!orderWords.length || !readyWords.length) continue
+      let matches = 0
+      for (const rw of readyWords) {
+        for (const ow of orderWords) {
+          if (rw === ow || rw.startsWith(ow) || ow.startsWith(rw)) {
+            matches++
+            break
+          }
+        }
+      }
+      const minWords = Math.min(orderWords.length, readyWords.length)
+      if (minWords > 0 && matches >= Math.max(1, Math.ceil(minWords * 0.5))) return true
+    }
+    return false
+  }
+
+  const handleMarkPickupReady = async (orderId) => {
+    try {
+      await api.put(`/api/dispatch/orders/${orderId}/status`, { order_status: 'pickup_ready' })
+      await fetchData()
+    } catch (error) {
+      console.error('Error marcando orden como pickup_ready:', error)
+      await syncPickupReadyFromGmail()
+    }
+  }
+
   const syncPickupReadyFromGmail = async () => {
     setSyncingPickupReady(true)
     setPickupSyncResult(null)
@@ -1110,32 +1146,6 @@ export default function DispatchMap() {
     } finally {
       setSyncingPickupReady(false)
     }
-  }
-
-  const isOrderReady = (orderName) => {
-    if (!orderName || !pickupReadyNames.length) return false
-    const normOrder = normalizeForMatch(orderName)
-    const orderWords = normOrder.split(' ').filter(w => w.length > 2)
-    if (!orderWords.length) return false
-    for (const readyName of pickupReadyNames) {
-      const normReady = normalizeForMatch(readyName)
-      const readyWords = normReady.split(' ').filter(w => w.length > 2)
-      if (!readyWords.length) continue
-      let matches = 0
-      for (const rw of readyWords) {
-        for (const ow of orderWords) {
-          if (rw === ow || rw.startsWith(ow) || ow.startsWith(rw)) {
-            matches++
-            break
-          }
-        }
-      }
-      const minWords = Math.min(orderWords.length, readyWords.length)
-      if (minWords > 0 && matches >= Math.max(1, Math.ceil(minWords * 0.6))) {
-        return true
-      }
-    }
-    return false
   }
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
@@ -1483,11 +1493,16 @@ export default function DispatchMap() {
                                 </button>
                               )
                             })()}
-                            {isOrderReady(order.customer_name) && (
-                              <span className="orden-lista-badge">
+                            {isOrderReady(order.customer_name) && order.order_status !== 'pickup_ready' && (
+                              <button
+                                className="dbtn orden-lista-badge"
+                                style={{ cursor: 'pointer' }}
+                                title="Gmail detectó esta orden como lista. Haz clic para marcarla como Listo p/Recoger"
+                                onClick={() => handleMarkPickupReady(order.id)}
+                              >
                                 <span className="material-icons" style={{ fontSize: '14px' }}>inventory_2</span>
                                 Orden Lista
-                              </span>
+                              </button>
                             )}
                           </div>
                           {editingNotes === order.id ? (

@@ -71,9 +71,15 @@ function normalizeForMatch(name) {
 function namesMatch(orderName, gmailName) {
   const normOrder = normalizeForMatch(orderName);
   const normGmail = normalizeForMatch(gmailName);
-  const orderWords = normOrder.split(' ').filter(w => w.length > 2);
-  const gmailWords = normGmail.split(' ').filter(w => w.length > 2);
+
+  if (!normOrder || !normGmail) return false;
+
+  if (normOrder.includes(normGmail) || normGmail.includes(normOrder)) return true;
+
+  const orderWords = normOrder.split(' ').filter(w => w.length >= 2);
+  const gmailWords = normGmail.split(' ').filter(w => w.length >= 2);
   if (!orderWords.length || !gmailWords.length) return false;
+
   let matches = 0;
   for (const gw of gmailWords) {
     for (const ow of orderWords) {
@@ -84,7 +90,7 @@ function namesMatch(orderName, gmailName) {
     }
   }
   const minWords = Math.min(orderWords.length, gmailWords.length);
-  return minWords > 0 && matches >= Math.max(1, Math.ceil(minWords * 0.6));
+  return minWords > 0 && matches >= Math.max(1, Math.ceil(minWords * 0.5));
 }
 
 router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
@@ -107,12 +113,15 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
     const synced = [];
     const skipped = [];
 
+    console.log(`[Email Sync] Cotejando ${gmailOrders.length} correos vs ${candidates.length} ordenes en sistema...`);
+
     for (const gmailOrder of gmailOrders) {
       const match = candidates.find(c =>
         c.customer_name && namesMatch(c.customer_name, gmailOrder.clientName)
       );
 
       if (!match) {
+        console.log(`[Email Sync] Sin coincidencia para Gmail: "${gmailOrder.clientName}"`);
         skipped.push(gmailOrder.clientName);
         continue;
       }
@@ -122,6 +131,7 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
         continue;
       }
 
+      console.log(`[Email Sync] Coincidencia encontrada: Gmail="${gmailOrder.clientName}" -> Sistema="${match.customer_name}"`);
       match.order_status = 'pickup_ready';
       await match.save();
 
