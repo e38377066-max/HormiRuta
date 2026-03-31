@@ -787,7 +787,9 @@ class ChatbotService {
 
     // Detectar frustración - pasar a agente inmediatamente
     if (await this.detectFrustration(messageText)) {
-      await this.sendMessage(contact.id, msgs.frustratedCustomer);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const frustMsg = await this.getAIMsg('frustrated', { customerName }, msgs.frustratedCustomer);
+      await this.sendMessage(contact.id, frustMsg);
       await this.assignToDefaultAgent(contact.id);
       await this.addTrackingTag(contact.id, 'ClienteFrustrado');
       await this.updateConversationState(contact.id, { state: 'assigned' });
@@ -797,7 +799,9 @@ class ChatbotService {
     // Verificar horario de atención
     if (!this.isWithinBusinessHours()) {
       if (!convState.out_of_hours_notified) {
-        await this.sendMessage(contact.id, msgs.outOfHours);
+        const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+        const outMsg = await this.getAIMsg('out_of_hours', { customerName }, msgs.outOfHours);
+        await this.sendMessage(contact.id, outMsg);
         await this.updateConversationState(contact.id, { out_of_hours_notified: true });
         await this.assignToDefaultAgent(contact.id);
         await this.addTrackingTag(contact.id, 'FueraDeHorario');
@@ -813,7 +817,9 @@ class ChatbotService {
 
     // Verificar si conversación fue abandonada
     if (this.isConversationAbandoned(convState)) {
-      await this.sendMessage(contact.id, msgs.abandonedConversation);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const abandonMsg = await this.getAIMsg('abandoned', { customerName, lastMessage: messageText }, msgs.abandonedConversation);
+      await this.sendMessage(contact.id, abandonMsg);
       await this.updateConversationState(contact.id, { 
         state: 'awaiting_continuation',
         agent_active: false 
@@ -1073,8 +1079,13 @@ class ChatbotService {
       }
       
       // Cliente YA tiene información - preguntar sobre diseño
-      const designQuestion = msgs.productSelectedAskDesign?.replace('{{product}}', product.name || product) ||
-        `Perfecto, ${product.name || product} 👍\n\n¿Ya tienes un diseño en mente o te gustaría que te ayudemos a crear uno desde cero?`;
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const designQuestion = await this.getAIMsg(
+        'product_selected_ask_design',
+        { customerName, product: product.name || product },
+        msgs.productSelectedAskDesign?.replace('{{product}}', product.name || product) ||
+          `Perfecto, ${product.name || product} 👍\n\n¿Ya tienes un diseño en mente o te gustaría que te ayudemos a crear uno desde cero?`
+      );
       
       await this.sendMessage(contact.id, designQuestion);
       
@@ -1087,7 +1098,9 @@ class ChatbotService {
       return { handled: true, action: 'product_selected_ask_design' };
     } else {
       // No entendió, mostrar menú de nuevo
-      await this.sendMessage(contact.id, msgs.remindProduct);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const remindMsg = await this.getAIMsg('remind_product', { customerName, lastMessage: messageText }, msgs.remindProduct);
+      await this.sendMessage(contact.id, remindMsg);
       const productMenu = this.generateProductMenu();
       await this.sendMessage(contact.id, productMenu);
       return { handled: true, action: 'remind_product' };
@@ -1097,16 +1110,15 @@ class ChatbotService {
   async handleAwaitingDesignInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
     const hasDesign = this.parseDesignResponse(messageText);
-    
-    if (hasDesign === 'yes') {
-      // Tiene diseño
-      await this.sendMessage(contact.id, msgs.hasDesignResponse);
-    } else if (hasDesign === 'no') {
-      // Necesita diseño nuevo
-      await this.sendMessage(contact.id, msgs.needsDesignResponse);
+    const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+
+    if (hasDesign === 'no') {
+      const needsMsg = await this.getAIMsg('needs_design', { customerName }, msgs.needsDesignResponse);
+      await this.sendMessage(contact.id, needsMsg);
     } else {
-      // Respuesta ambigua - asumir que está dando info
-      await this.sendMessage(contact.id, msgs.hasDesignResponse);
+      // Tiene diseño o respuesta ambigua (asumir que sí tiene)
+      const hasMsg = await this.getAIMsg('has_design', { customerName }, msgs.hasDesignResponse);
+      await this.sendMessage(contact.id, hasMsg);
     }
     
     // Asignar a agente
@@ -1150,15 +1162,15 @@ class ChatbotService {
   async handleAwaitingZip(contact, messageText, convState) {
     const msgs = this.getMessages();
     
-    // Verificar si parece un ZIP
     const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
     const isCityMessage = this.addressValidation.isCityMessage(messageText);
     
     if (isZipMessage || isCityMessage) {
       return await this.handleZipValidation(contact, messageText, convState);
     } else {
-      // No parece ZIP, dar ayuda
-      await this.sendMessage(contact.id, msgs.remindZip);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const remindMsg = await this.getAIMsg('remind_zip', { customerName, lastMessage: messageText }, msgs.remindZip);
+      await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'remind_zip' };
     }
   }
@@ -1167,17 +1179,21 @@ class ChatbotService {
     const msgs = this.getMessages();
     const validation = await this.addressValidation.validateZipOrCity(messageText);
     const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+    const name = customerName !== 'Sin nombre' ? customerName : null;
     
     if (validation.valid) {
-      // Con cobertura
-      const coverageMsg = msgs.hasCoverage
+      const fallbackCoverage = msgs.hasCoverage
         .replace('{{zip_code}}', validation.value)
         .replace('{{city}}', validation.zone?.city || '')
         .replace('{{zone}}', validation.zone?.zone_name || '');
+      const coverageMsg = await this.getAIMsg('zip_covered', {
+        customerName: name,
+        zipCode: validation.value,
+        city: validation.zone?.city || null,
+        zone: validation.zone?.zone_name || null
+      }, fallbackCoverage);
       
       await this.sendMessage(contact.id, coverageMsg);
-      
-      // Enviar menú de productos generado dinámicamente
       await this.sendMessage(contact.id, this.generateProductMenu());
       
       await this.createOrUpdateOrder(contact, validation.value, customerName, 'covered', validation.zone);
@@ -1194,17 +1210,19 @@ class ChatbotService {
       return { handled: true, action: 'zip_validated_show_menu' };
       
     } else {
-      // Sin cobertura - cerrar flujo sin asignar agente
-      const noCoverageMsg = msgs.noCoverage
+      const fallbackNoCoverage = msgs.noCoverage
         .replace('{{zip_code}}', validation.value)
         .replace('{{city}}', validation.value);
+      const noCoverageMsg = await this.getAIMsg('zip_no_coverage', {
+        customerName: name,
+        zipCode: validation.value
+      }, fallbackNoCoverage);
       
       await this.sendMessage(contact.id, noCoverageMsg);
       await this.createOrUpdateOrder(contact, validation.value, customerName, 'no_coverage', null);
       await this.addTrackingTag(contact.id, 'SinCobertura');
       await this.addComment(contact.id, `[Bot] Cliente en zona sin cobertura. ZIP: ${validation.value}`);
       
-      // Cerrar flujo - no asignar a nadie
       await this.updateConversationState(contact.id, { state: 'closed_no_coverage' });
       
       return { handled: true, action: 'zip_no_coverage_closed' };
@@ -1214,59 +1232,19 @@ class ChatbotService {
   // Handler para usuarios SIN información esperando ZIP
   async handleAwaitingZipNoInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
-    
-    // Verificar si parece un ZIP
     const isZipMessage = this.addressValidation.isZipCodeMessage(messageText);
     const isCityMessage = this.addressValidation.isCityMessage(messageText);
     
     if (isZipMessage || isCityMessage) {
-      // Validar ZIP
-      const validation = await this.addressValidation.validateZipOrCity(messageText);
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
-      
-      if (validation.valid) {
-        // Con cobertura - mostrar menú de productos
-        const coverageMsg = msgs.hasCoverage
-          .replace('{{zip_code}}', validation.value)
-          .replace('{{city}}', validation.zone?.city || '')
-          .replace('{{zone}}', validation.zone?.zone_name || '');
-        
-        await this.sendMessage(contact.id, coverageMsg);
-        await this.sendMessage(contact.id, this.generateProductMenu());
-        
-        await this.createOrUpdateOrder(contact, validation.value, customerName, 'covered', validation.zone);
-        
-        await this.updateConversationState(contact.id, {
-          state: 'awaiting_product_no_info',
-          validated_zip: validation.value,
-          has_prior_info: false,
-          awaiting_response: 'product_selection'
-        });
-        
-        await this.addTrackingTag(contact.id, 'ConCobertura');
-        
-        return { handled: true, action: 'zip_validated_show_menu' };
-        
-      } else {
-        // Sin cobertura - cerrar flujo sin asignar agente
-        const noCoverageMsg = msgs.noCoverage
-          .replace('{{zip_code}}', validation.value)
-          .replace('{{city}}', validation.value);
-        
-        await this.sendMessage(contact.id, noCoverageMsg);
-        await this.createOrUpdateOrder(contact, validation.value, customerName, 'no_coverage', null);
-        await this.addTrackingTag(contact.id, 'SinCobertura');
-        await this.addComment(contact.id, `[Bot] Cliente en zona sin cobertura. ZIP: ${validation.value}`);
-        
-        // Cerrar flujo - no asignar a nadie
-        await this.updateConversationState(contact.id, { state: 'closed_no_coverage' });
-        
-        return { handled: true, action: 'zip_no_coverage_closed' };
-      }
+      return await this.handleZipValidation(contact, messageText, convState);
     } else {
-      // No parece ZIP - insistir en pedir ZIP
-      const insistZipMsg = 'Por favor, antes de continuar necesito que me envies tu codigo postal (ZIP) para validar si tenemos cobertura en tu zona 📍\n\nPor ejemplo: 75208';
-      await this.sendMessage(contact.id, insistZipMsg);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const insistMsg = await this.getAIMsg(
+        'remind_zip',
+        { customerName, lastMessage: messageText },
+        'Por favor, antes de continuar necesito que me envies tu codigo postal (ZIP) para validar si tenemos cobertura en tu zona 📍\n\nPor ejemplo: 75208'
+      );
+      await this.sendMessage(contact.id, insistMsg);
       return { handled: true, action: 'insist_zip' };
     }
   }
@@ -1296,12 +1274,16 @@ class ChatbotService {
       
       // Obtener mensaje de información del producto
       const productInfo = this.getProductInfoMessage(product.name);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
       
       if (productInfo) {
         await this.sendMessage(contact.id, productInfo);
       } else {
-        // Si no hay mensaje configurado, usar mensaje genérico
-        const genericMsg = `Excelente eleccion! 👍 Has seleccionado: ${product.name}\n\nUn agente te atendera en breve para darte mas informacion.`;
+        const genericMsg = await this.getAIMsg(
+          'product_info_sent',
+          { customerName, product: product.name },
+          `Excelente eleccion! 👍 Has seleccionado: ${product.name}\n\nUn agente te atendera en breve para darte mas informacion.`
+        );
         await this.sendMessage(contact.id, genericMsg);
       }
       
@@ -1314,7 +1296,9 @@ class ChatbotService {
       return { handled: true, action: 'product_info_sent' };
     } else {
       // No entendió - recordar menú
-      await this.sendMessage(contact.id, msgs.remindProduct);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const remindMsg = await this.getAIMsg('remind_product', { customerName, lastMessage: messageText }, msgs.remindProduct);
+      await this.sendMessage(contact.id, remindMsg);
       await this.sendMessage(contact.id, this.generateProductMenu());
       return { handled: true, action: 'remind_product' };
     }
@@ -1425,7 +1409,9 @@ class ChatbotService {
       
     } else {
       // No entendió, mostrar menú de nuevo
-      await this.sendMessage(contact.id, msgs.remindProduct);
+      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const remindMsg = await this.getAIMsg('remind_product', { customerName, lastMessage: messageText }, msgs.remindProduct);
+      await this.sendMessage(contact.id, remindMsg);
       const productMenu = this.generateProductMenu();
       await this.sendMessage(contact.id, productMenu);
       return { handled: true, action: 'remind_product' };
