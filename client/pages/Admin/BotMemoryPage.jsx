@@ -43,11 +43,20 @@ function ContextBadge({ type }) {
   )
 }
 
+const KNOWLEDGE_TYPES = [
+  { value: 'document', label: 'Documento', icon: 'description', color: '#5b8def' },
+  { value: 'prompt', label: 'Prompt / Instrucción', icon: 'psychology', color: '#a855f7' },
+  { value: 'instruction', label: 'Regla de Comportamiento', icon: 'rule', color: '#f59e0b' },
+  { value: 'product_info', label: 'Info de Producto', icon: 'inventory_2', color: '#22c55e' },
+  { value: 'faq', label: 'Preguntas Frecuentes', icon: 'quiz', color: '#06b6d4' },
+]
+
 export default function BotMemoryPage() {
   const navigate = useNavigate()
   const [memories, setMemories] = useState([])
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
+  const [mainSection, setMainSection] = useState('lessons')
   const [activeTab, setActiveTab] = useState('active')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -57,9 +66,94 @@ export default function BotMemoryPage() {
   const [analyzeResult, setAnalyzeResult] = useState(null)
   const [analyzeError, setAnalyzeError] = useState(null)
 
+  const [knowledge, setKnowledge] = useState([])
+  const [kLoading, setKLoading] = useState(false)
+  const [showKForm, setShowKForm] = useState(false)
+  const [editingKId, setEditingKId] = useState(null)
+  const [kForm, setKForm] = useState({ title: '', content: '', knowledge_type: 'document' })
+  const [kSaving, setKSaving] = useState(false)
+  const [kUploading, setKUploading] = useState(false)
+  const [kFileRef] = useState(() => ({ current: null }))
+
   useEffect(() => {
     loadData()
+    loadKnowledge()
   }, [])
+
+  const loadKnowledge = async () => {
+    setKLoading(true)
+    try {
+      const res = await api.get('/api/bot-memory/knowledge')
+      setKnowledge(res.data)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setKLoading(false)
+    }
+  }
+
+  const handleKSave = async () => {
+    if (!kForm.title.trim()) return alert('El título es obligatorio')
+    if (!kForm.content.trim()) return alert('El contenido es obligatorio')
+    setKSaving(true)
+    try {
+      if (editingKId) {
+        await api.put(`/api/bot-memory/knowledge/${editingKId}`, kForm)
+      } else {
+        await api.post('/api/bot-memory/knowledge', kForm)
+      }
+      setShowKForm(false)
+      setEditingKId(null)
+      setKForm({ title: '', content: '', knowledge_type: 'document' })
+      await loadKnowledge()
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error guardando')
+    } finally {
+      setKSaving(false)
+    }
+  }
+
+  const handleKEdit = (doc) => {
+    setEditingKId(doc.id)
+    setKForm({ title: doc.title, content: doc.content, knowledge_type: doc.knowledge_type })
+    setShowKForm(true)
+  }
+
+  const handleKDelete = async (id) => {
+    if (!confirm('¿Eliminar este documento?')) return
+    try {
+      await api.delete(`/api/bot-memory/knowledge/${id}`)
+      await loadKnowledge()
+    } catch (e) { alert('Error eliminando') }
+  }
+
+  const handleKToggle = async (doc) => {
+    try {
+      await api.put(`/api/bot-memory/knowledge/${doc.id}`, { is_active: !doc.is_active })
+      await loadKnowledge()
+    } catch (e) { alert('Error actualizando') }
+  }
+
+  const handleKUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setKUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('knowledge_type', 'document')
+      const res = await api.post('/api/bot-memory/knowledge/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      await loadKnowledge()
+      alert(`✅ Archivo "${res.data.title}" importado correctamente`)
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error subiendo archivo')
+    } finally {
+      setKUploading(false)
+      e.target.value = ''
+    }
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -164,7 +258,7 @@ export default function BotMemoryPage() {
       </div>
 
       {/* Stats */}
-      <div className="stats-grid" style={{ marginBottom: 24 }}>
+      <div className="stats-grid" style={{ marginBottom: 20 }}>
         <div className="stat-card blue">
           <div className="stat-icon"><span className="material-icons">psychology</span></div>
           <div className="stat-value">{stats.active || 0}</div>
@@ -173,19 +267,238 @@ export default function BotMemoryPage() {
         <div className="stat-card orange">
           <div className="stat-icon"><span className="material-icons">pending_actions</span></div>
           <div className="stat-value">{stats.pending || 0}</div>
-          <div className="stat-label">Pendientes de Revisión</div>
+          <div className="stat-label">Pendientes</div>
         </div>
         <div className="stat-card purple">
-          <div className="stat-icon"><span className="material-icons">edit_note</span></div>
-          <div className="stat-value">{stats.manual || 0}</div>
-          <div className="stat-label">Manuales</div>
+          <div className="stat-icon"><span className="material-icons">library_books</span></div>
+          <div className="stat-value">{knowledge.filter(k => k.is_active).length}</div>
+          <div className="stat-label">Documentos Activos</div>
         </div>
         <div className="stat-card green">
-          <div className="stat-icon"><span className="material-icons">auto_fix_high</span></div>
-          <div className="stat-value">{stats.total || 0}</div>
-          <div className="stat-label">Total</div>
+          <div className="stat-icon"><span className="material-icons">record_voice_over</span></div>
+          <div className="stat-value">Auto</div>
+          <div className="stat-label">Audio e Imágenes</div>
         </div>
       </div>
+
+      {/* Selector de sección principal */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#0f172a', borderRadius: 10, padding: 4 }}>
+        {[
+          { key: 'lessons', label: 'Lecciones del Bot', icon: 'school' },
+          { key: 'docs', label: 'Documentos y Prompts', icon: 'library_books' },
+          { key: 'media', label: 'Audio e Imágenes', icon: 'perm_media' },
+        ].map(s => (
+          <button
+            key={s.key}
+            onClick={() => setMainSection(s.key)}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '10px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              background: mainSection === s.key ? '#1e293b' : 'transparent',
+              color: mainSection === s.key ? '#e2e8f0' : '#64748b',
+              transition: 'all 0.2s'
+            }}
+          >
+            <span className="material-icons" style={{ fontSize: 17 }}>{s.icon}</span>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ===== SECCIÓN: AUDIO E IMÁGENES ===== */}
+      {mainSection === 'media' && (
+        <div>
+          <div className="admin-section" style={{ marginBottom: 20 }}>
+            <div className="section-header">
+              <span className="material-icons">mic</span>
+              <h3>Mensajes de Voz (Audio)</h3>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 16 }}>
+                Cuando un cliente envíe un <strong style={{ color: '#e2e8f0' }}>mensaje de voz</strong> por WhatsApp, el bot lo transcribirá automáticamente usando <strong style={{ color: '#5b8def' }}>OpenAI Whisper</strong> y procesará el texto como si fuera un mensaje normal.
+              </p>
+              <div style={{ background: '#0f172a', borderRadius: 10, padding: 16, border: '1px solid #1e293b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span className="material-icons" style={{ color: '#22c55e', fontSize: 20 }}>check_circle</span>
+                  <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14 }}>Activado automáticamente</span>
+                </div>
+                <ul style={{ color: '#94a3b8', fontSize: 13, lineHeight: 2, paddingLeft: 20, margin: 0 }}>
+                  <li>Detecta mensajes de tipo <code style={{ background: '#1e293b', padding: '1px 6px', borderRadius: 4 }}>audio</code> o <code style={{ background: '#1e293b', padding: '1px 6px', borderRadius: 4 }}>voice</code> de Respond.io</li>
+                  <li>Descarga el archivo de audio y lo transcribe en español</li>
+                  <li>El texto transcrito se pasa al bot como si fuera un mensaje de texto normal</li>
+                  <li>Requiere que tengas configurada la <strong style={{ color: '#5b8def' }}>clave de OpenAI</strong> en Ajustes</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="admin-section">
+            <div className="section-header">
+              <span className="material-icons">image</span>
+              <h3>Imágenes y Diseños</h3>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 16 }}>
+                Cuando un cliente envíe una <strong style={{ color: '#e2e8f0' }}>imagen</strong> (logo, diseño, referencia), el bot la analizará con <strong style={{ color: '#5b8def' }}>GPT-4o Vision</strong> y comprenderá lo que el cliente está mostrando para dar una respuesta contextual.
+              </p>
+              <div style={{ background: '#0f172a', borderRadius: 10, padding: 16, border: '1px solid #1e293b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span className="material-icons" style={{ color: '#22c55e', fontSize: 20 }}>check_circle</span>
+                  <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14 }}>Activado automáticamente</span>
+                </div>
+                <ul style={{ color: '#94a3b8', fontSize: 13, lineHeight: 2, paddingLeft: 20, margin: 0 }}>
+                  <li>Detecta mensajes de tipo <code style={{ background: '#1e293b', padding: '1px 6px', borderRadius: 4 }}>image</code> de Respond.io</li>
+                  <li>Analiza si la imagen es un diseño, logo, producto impreso o referencia visual</li>
+                  <li>El bot puede responder entendiendo qué tiene en mente el cliente</li>
+                  <li>Requiere que tengas configurada la <strong style={{ color: '#5b8def' }}>clave de OpenAI</strong> en Ajustes</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== SECCIÓN: DOCUMENTOS Y PROMPTS ===== */}
+      {mainSection === 'docs' && (
+        <div>
+          <div style={{ marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              onClick={() => { setShowKForm(!showKForm); setEditingKId(null); setKForm({ title: '', content: '', knowledge_type: 'document' }) }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+                background: showKForm ? '#334155' : 'linear-gradient(135deg, #5b8def, #3b70d4)',
+                color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer'
+              }}
+            >
+              <span className="material-icons">{showKForm ? 'close' : 'add'}</span>
+              {showKForm ? 'Cancelar' : 'Agregar Texto / Prompt'}
+            </button>
+
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+              background: kUploading ? '#1e293b' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+              color: kUploading ? '#64748b' : '#fff', border: kUploading ? '1px solid #334155' : 'none',
+              borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: kUploading ? 'not-allowed' : 'pointer'
+            }}>
+              <span className="material-icons" style={{ fontSize: 18 }}>{kUploading ? 'autorenew' : 'upload_file'}</span>
+              {kUploading ? 'Subiendo...' : 'Subir Archivo .txt'}
+              <input type="file" accept=".txt,.md" onChange={handleKUpload} style={{ display: 'none' }} disabled={kUploading} />
+            </label>
+          </div>
+
+          {showKForm && (
+            <div className="admin-section" style={{ marginBottom: 20 }}>
+              <div className="section-header">
+                <span className="material-icons">edit_document</span>
+                <h3>{editingKId ? 'Editar Documento' : 'Nuevo Documento / Prompt'}</h3>
+              </div>
+              <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div>
+                    <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Título</label>
+                    <input
+                      type="text"
+                      value={kForm.title}
+                      onChange={e => setKForm(f => ({ ...f, title: e.target.value }))}
+                      placeholder="Ej: Precios de playeras, FAQ envíos, etc."
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 14, boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Tipo</label>
+                    <select
+                      value={kForm.knowledge_type}
+                      onChange={e => setKForm(f => ({ ...f, knowledge_type: e.target.value }))}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 14 }}
+                    >
+                      {KNOWLEDGE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>
+                    Contenido — este texto será parte del contexto que el bot usará para responder
+                  </label>
+                  <textarea
+                    value={kForm.content}
+                    onChange={e => setKForm(f => ({ ...f, content: e.target.value }))}
+                    placeholder="Escribe aquí precios, instrucciones, respuestas frecuentes, cómo debe comportarse el bot, información de productos, etc."
+                    rows={10}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 13, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
+                  />
+                  <p style={{ color: '#475569', fontSize: 12, marginTop: 6 }}>{kForm.content.length} caracteres</p>
+                </div>
+                <button
+                  onClick={handleKSave}
+                  disabled={kSaving}
+                  style={{ alignSelf: 'flex-start', background: 'linear-gradient(135deg, #5b8def, #3b70d4)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: kSaving ? 'not-allowed' : 'pointer', opacity: kSaving ? 0.7 : 1 }}
+                >
+                  {kSaving ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {kLoading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
+              <span className="material-icons" style={{ fontSize: 40, animation: 'spin 1s linear infinite' }}>autorenew</span>
+            </div>
+          ) : knowledge.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+              <span className="material-icons" style={{ fontSize: 48, display: 'block', marginBottom: 12 }}>library_books</span>
+              <p style={{ fontSize: 16, marginBottom: 4 }}>Sin documentos aún</p>
+              <p style={{ fontSize: 13, color: '#475569' }}>Agrega prompts, instrucciones, precios, FAQ o sube archivos .txt para que el bot tenga más contexto</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {knowledge.map(doc => {
+                const kType = KNOWLEDGE_TYPES.find(t => t.value === doc.knowledge_type) || KNOWLEDGE_TYPES[0]
+                return (
+                  <div key={doc.id} style={{
+                    background: '#1e293b', borderRadius: 12, padding: 20,
+                    border: doc.is_active ? `1px solid ${kType.color}33` : '1px solid #334155',
+                    opacity: doc.is_active ? 1 : 0.5
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span className="material-icons" style={{ color: kType.color, fontSize: 22 }}>{kType.icon}</span>
+                        <div>
+                          <h4 style={{ color: '#e2e8f0', margin: 0, fontSize: 15 }}>{doc.title}</h4>
+                          <span style={{ fontSize: 11, color: kType.color, fontWeight: 600 }}>{kType.label}</span>
+                          {doc.file_name && (
+                            <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>📄 {doc.file_name}</span>
+                          )}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 12, color: '#475569', flexShrink: 0 }}>
+                        {new Date(doc.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                      </span>
+                    </div>
+                    <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6, marginBottom: 14, maxHeight: 80, overflow: 'hidden', whiteSpace: 'pre-wrap' }}>
+                      {doc.content.substring(0, 300)}{doc.content.length > 300 ? '...' : ''}
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => handleKEdit(doc)} style={{ background: '#5b8def22', color: '#5b8def', border: '1px solid #5b8def44', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span className="material-icons" style={{ fontSize: 15 }}>edit</span>Editar
+                      </button>
+                      <button onClick={() => handleKToggle(doc)} style={{ background: doc.is_active ? '#ef444422' : '#22c55e22', color: doc.is_active ? '#ef4444' : '#22c55e', border: `1px solid ${doc.is_active ? '#ef444444' : '#22c55e44'}`, borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span className="material-icons" style={{ fontSize: 15 }}>{doc.is_active ? 'pause' : 'play_arrow'}</span>
+                        {doc.is_active ? 'Desactivar' : 'Activar'}
+                      </button>
+                      <button onClick={() => handleKDelete(doc.id)} style={{ background: '#ef444422', color: '#ef4444', border: '1px solid #ef444444', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span className="material-icons" style={{ fontSize: 15 }}>delete</span>Eliminar
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== SECCIÓN: LECCIONES ===== */}
+      {mainSection === 'lessons' && <>
 
       {/* Botones de acción */}
       <div style={{ marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -491,6 +804,8 @@ export default function BotMemoryPage() {
           <li>Con el tiempo, el bot se va puliendo solo basado en los patrones que van aprendiendo.</li>
         </ul>
       </div>
+      </>}
+
     </div>
   )
 }

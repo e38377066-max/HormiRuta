@@ -1,5 +1,8 @@
 import https from 'https';
+import axios from 'axios';
+import FormData from 'form-data';
 import BotMemory from '../models/BotMemory.js';
+import BotKnowledge from '../models/BotKnowledge.js';
 
 class AIService {
   constructor(apiKey, settings, userId = null) {
@@ -10,6 +13,8 @@ class AIService {
     this.userId = userId;
     this._memoriesCache = null;
     this._memoriesCacheAt = 0;
+    this._knowledgeCache = null;
+    this._knowledgeCacheAt = 0;
   }
 
   // Carga las lecciones activas y aprobadas (con cache de 5 min para no abusar la DB)
@@ -36,6 +41,90 @@ class AIService {
   invalidateMemoryCache() {
     this._memoriesCache = null;
     this._memoriesCacheAt = 0;
+  }
+
+  // Carga documentos de conocimiento activos (cache 5 min)
+  async loadKnowledge(userId) {
+    const now = Date.now();
+    if (this._knowledgeCache && (now - this._knowledgeCacheAt) < 5 * 60 * 1000) {
+      return this._knowledgeCache;
+    }
+    try {
+      const where = { is_active: true };
+      if (userId) where.user_id = userId;
+      const docs = await BotKnowledge.findAll({ where, order: [['created_at', 'ASC']] });
+      this._knowledgeCache = docs;
+      this._knowledgeCacheAt = now;
+      return docs;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Transcribe audio de WhatsApp usando OpenAI Whisper
+  async transcribeAudio(audioUrl) {
+    if (!this.isAvailable) return null;
+    try {
+      const audioResponse = await axios.get(audioUrl, { responseType: 'arraybuffer', timeout: 15000 });
+      const buffer = Buffer.from(audioResponse.data);
+
+      const form = new FormData();
+      form.append('file', buffer, { filename: 'audio.ogg', contentType: audioResponse.headers['content-type'] || 'audio/ogg' });
+      form.append('model', 'whisper-1');
+      form.append('language', 'es');
+
+      const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', form, {
+        headers: {
+          ...form.getHeaders(),
+          Authorization: `Bearer ${this.apiKey}`
+        },
+        timeout: 30000
+      });
+
+      const transcription = response.data?.text?.trim();
+      console.log(`[AI-Audio] Transcripción: "${transcription?.substring(0, 80)}..."`);
+      return transcription || null;
+    } catch (e) {
+      console.error('[AI-Audio] Error transcribiendo audio:', e.message);
+      return null;
+    }
+  }
+
+  // Analiza una imagen enviada por el cliente usando GPT-4o vision
+  async describeImage(imageUrl) {
+    if (!this.isAvailable) return null;
+    try {
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: 'gpt-4o',
+        max_tokens: 300,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'El cliente de Area 862 Graphics (imprenta en Dallas) te envió esta imagen. Describe brevemente en español qué ves: ¿es un diseño/logo/arte? ¿un producto impreso? ¿un documento o referencia? ¿algo relacionado con su pedido? Sé conciso (2-3 líneas).'
+            },
+            {
+              type: 'image_url',
+              image_url: { url: imageUrl, detail: 'low' }
+            }
+          ]
+        }]
+      }, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 20000
+      });
+
+      const description = response.data?.choices?.[0]?.message?.content?.trim();
+      console.log(`[AI-Vision] Imagen descrita: "${description?.substring(0, 80)}..."`);
+      return description || null;
+    } catch (e) {
+      console.error('[AI-Vision] Error describiendo imagen:', e.message);
+      return null;
+    }
   }
 
   // Registra automáticamente una lección cuando el agente corrige al bot
@@ -84,12 +173,17 @@ class AIService {
 - Diseño gráfico personalizado`;
   }
 
-  getSystemPrompt(memories = []) {
+  getSystemPrompt(memories = [], knowledge = []) {
     const products = this.getProductsList();
     let memoriesSection = '';
     if (memories && memories.length > 0) {
       const lessonsText = memories.map((m, i) => `${i + 1}. [${m.context_type}] ${m.lesson}`).join('\n');
       memoriesSection = `\n\n## LECCIONES APRENDIDAS DE CONVERSACIONES REALES\nEstas son correcciones y patrones aprendidos de interacciones con clientes reales de Area 862. DEBES aplicarlos:\n${lessonsText}`;
+    }
+    let knowledgeSection = '';
+    if (knowledge && knowledge.length > 0) {
+      const docs = knowledge.map(k => `### ${k.title} [${k.knowledge_type}]\n${k.content}`).join('\n\n');
+      knowledgeSection = `\n\n## BASE DE CONOCIMIENTO DEL NEGOCIO\nUsa esta información para responder con mayor precisión y contexto:\n\n${docs}`;
     }
     return `Eres el asistente inteligente de Area 862 Graphics LLC, una empresa de diseño gráfico e impresión ubicada en Dallas, Texas.
 
@@ -119,7 +213,7 @@ Eres el cerebro del bot de WhatsApp/Facebook Messenger. Tu trabajo es:
 - Siempre en español
 - Tono amigable, cálido y profesional
 - Si no estás seguro, indica que un agente ayudará
-- El negocio atiende a la comunidad hispana de DFW${memoriesSection}`;
+- El negocio atiende a la comunidad hispana de DFW${knowledgeSection}${memoriesSection}`;
   }
 
   async callOpenAI(messages, maxTokens = 300) {
@@ -581,10 +675,11 @@ Responde de forma natural y entusiasta: confirma que lo puedes ayudar con eso, d
 
     try {
       const memories = await this.loadActiveMemories(this.userId || null);
+      const knowledge = await this.loadKnowledge(this.userId || null);
       const messages = [
         {
           role: 'system',
-          content: `${this.getSystemPrompt(memories)}
+          content: `${this.getSystemPrompt(memories, knowledge)}
 
 ## REGLAS PARA GENERAR MENSAJES
 - Responde SOLO con el mensaje para enviar al cliente, sin explicaciones adicionales

@@ -812,8 +812,52 @@ class PollingService {
       const settings = await getGlobalSettings();
       if (!settings) return;
 
-      const messageText = message.message?.text || '';
-      
+      const msgType = message.message?.type || 'text';
+      let messageText = message.message?.text || '';
+      let mediaDescription = '';
+
+      // --- Procesar audio (transcribir con Whisper) ---
+      if ((msgType === 'audio' || msgType === 'voice') && !messageText) {
+        const mediaUrl = message.message?.url || message.message?.attachment?.url;
+        if (mediaUrl) {
+          const aiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
+          if (aiKey) {
+            const ai = new AIService(aiKey, settings, userId);
+            const transcription = await ai.transcribeAudio(mediaUrl);
+            if (transcription) {
+              messageText = transcription;
+              mediaDescription = `[Audio transcrito]: ${transcription}`;
+              console.log(`[Polling] Audio de ${contact.firstName} transcrito: "${transcription.substring(0, 60)}..."`);
+            } else {
+              messageText = '[El cliente envió un mensaje de voz]';
+            }
+          } else {
+            messageText = '[El cliente envió un mensaje de voz]';
+          }
+        }
+      }
+
+      // --- Procesar imágenes (describir con GPT-4o vision) ---
+      if ((msgType === 'image' || msgType === 'sticker') && !messageText) {
+        const mediaUrl = message.message?.url || message.message?.attachment?.url || message.message?.imageUrl;
+        if (mediaUrl) {
+          const aiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
+          if (aiKey) {
+            const ai = new AIService(aiKey, settings, userId);
+            const description = await ai.describeImage(mediaUrl);
+            if (description) {
+              messageText = `[El cliente envió una imagen: ${description}]`;
+              mediaDescription = `[Imagen analizada]: ${description}`;
+              console.log(`[Polling] Imagen de ${contact.firstName} descrita: "${description.substring(0, 60)}..."`);
+            } else {
+              messageText = '[El cliente envió una imagen]';
+            }
+          } else {
+            messageText = '[El cliente envió una imagen]';
+          }
+        }
+      }
+
       await MessageLog.create({
         user_id: userId,
         contact_id: contact.id.toString(),
@@ -821,8 +865,8 @@ class PollingService {
         contact_phone: contact.phone || null,
         channel: 'respond.io',
         direction: 'incoming',
-        message_type: message.message?.type || 'text',
-        message_content: messageText,
+        message_type: msgType,
+        message_content: mediaDescription || messageText,
         respond_message_id: message.messageId?.toString(),
         processed: false
       });

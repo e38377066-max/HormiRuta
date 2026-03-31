@@ -1,9 +1,24 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import BotMemory from '../models/BotMemory.js';
+import BotKnowledge from '../models/BotKnowledge.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import RespondioService from '../services/respondio.js';
 import AIService from '../services/aiService.js';
 import { Op } from 'sequelize';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.txt', '.md'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Solo se permiten archivos .txt o .md'));
+  }
+});
 
 const router = express.Router();
 
@@ -315,6 +330,97 @@ router.delete('/:id', requireAuth, async (req, res) => {
     });
     if (!memory) return res.status(404).json({ error: 'No encontrado' });
     await memory.destroy();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== KNOWLEDGE (Documentos y Prompts) ====================
+
+// GET /api/bot-memory/knowledge
+router.get('/knowledge', requireAuth, async (req, res) => {
+  try {
+    const docs = await BotKnowledge.findAll({
+      where: { user_id: req.session.userId },
+      order: [['created_at', 'DESC']]
+    });
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/bot-memory/knowledge — crear desde texto
+router.post('/knowledge', requireAuth, async (req, res) => {
+  try {
+    const { title, content, knowledge_type } = req.body;
+    if (!title?.trim()) return res.status(400).json({ error: 'El título es obligatorio' });
+    if (!content?.trim()) return res.status(400).json({ error: 'El contenido es obligatorio' });
+
+    const doc = await BotKnowledge.create({
+      user_id: req.session.userId,
+      title: title.trim(),
+      content: content.trim(),
+      knowledge_type: knowledge_type || 'document',
+      is_active: true
+    });
+    res.json(doc);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/bot-memory/knowledge/upload — subir archivo .txt
+router.post('/knowledge/upload', requireAuth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
+
+    const content = req.file.buffer.toString('utf8');
+    if (!content.trim()) return res.status(400).json({ error: 'El archivo está vacío' });
+
+    const title = req.body.title?.trim() || path.basename(req.file.originalname, path.extname(req.file.originalname));
+
+    const doc = await BotKnowledge.create({
+      user_id: req.session.userId,
+      title,
+      content: content.trim(),
+      knowledge_type: req.body.knowledge_type || 'document',
+      file_name: req.file.originalname,
+      is_active: true
+    });
+    res.json(doc);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/bot-memory/knowledge/:id
+router.put('/knowledge/:id', requireAuth, async (req, res) => {
+  try {
+    const doc = await BotKnowledge.findOne({ where: { id: req.params.id, user_id: req.session.userId } });
+    if (!doc) return res.status(404).json({ error: 'No encontrado' });
+
+    const { title, content, knowledge_type, is_active } = req.body;
+    const updates = {};
+    if (title !== undefined) updates.title = title.trim();
+    if (content !== undefined) updates.content = content.trim();
+    if (knowledge_type !== undefined) updates.knowledge_type = knowledge_type;
+    if (is_active !== undefined) updates.is_active = is_active;
+
+    await doc.update(updates);
+    res.json(doc);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/bot-memory/knowledge/:id
+router.delete('/knowledge/:id', requireAuth, async (req, res) => {
+  try {
+    const doc = await BotKnowledge.findOne({ where: { id: req.params.id, user_id: req.session.userId } });
+    if (!doc) return res.status(404).json({ error: 'No encontrado' });
+    await doc.destroy();
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
