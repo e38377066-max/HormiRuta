@@ -34,7 +34,9 @@ async function getSettingsForUser() {
 router.get('/settings', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
-    res.json(settings.toDict());
+    const dict = settings.toDict();
+    dict.has_openai_env_key = !!process.env.OPENAI_API_KEY;
+    res.json(dict);
   } catch (error) {
     console.error('Get messaging settings error:', error);
     res.status(500).json({ error: 'Error al obtener configuracion' });
@@ -108,7 +110,7 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
 router.post('/settings/test-openai', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
-    const apiKey = req.body.openai_api_key || settings.openai_api_key;
+    const apiKey = req.body.openai_api_key || settings.openai_api_key || process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
       return res.status(400).json({ error: 'No hay API key de OpenAI configurada' });

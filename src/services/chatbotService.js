@@ -18,11 +18,14 @@ class ChatbotService {
     // Tiempo de abandono en minutos (configurable)
     this.abandonmentMinutes = settings.abandonment_minutes || 30;
 
-    // Cerebro de IA — se activa solo si hay API key y está habilitado
-    const aiKey = settings.ai_enabled && settings.openai_api_key ? settings.openai_api_key : null;
-    this.ai = new AIService(aiKey, settings);
-    if (aiKey) {
-      console.log('[Bot] Cerebro IA activado con OpenAI');
+    // Cerebro de IA — usa key de settings o del entorno (OPENAI_API_KEY)
+    const envKey = process.env.OPENAI_API_KEY || null;
+    const dbKey = settings.openai_api_key || null;
+    const aiKey = dbKey || envKey;
+    const aiActive = settings.ai_enabled || !!envKey;
+    this.ai = new AIService(aiActive ? aiKey : null, settings);
+    if (aiActive && aiKey) {
+      console.log(`[Bot] Cerebro IA activado con OpenAI (fuente: ${dbKey ? 'base de datos' : 'entorno'})`);
     }
   }
 

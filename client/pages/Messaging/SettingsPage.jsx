@@ -257,7 +257,10 @@ export default function SettingsPage() {
           ai_enabled: settings.ai_enabled || false,
           openai_api_key: ''
         })
-        setHasOpenAIKey(settings.has_openai_key || false)
+        setHasOpenAIKey(settings.has_openai_key || settings.has_openai_env_key || false)
+        if (settings.has_openai_env_key && !settings.ai_enabled) {
+          setForm(prev => ({ ...prev, ai_enabled: true }))
+        }
       }
     } catch (err) {
       console.error('Error loading settings:', err)
@@ -1298,14 +1301,23 @@ export default function SettingsPage() {
 
               {form.ai_enabled && (
                 <>
+                  {hasOpenAIKey && (
+                    <div style={{background: '#052e16', border: '1px solid #16a34a', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px'}}>
+                      <span className="material-icons" style={{color: '#4ade80'}}>verified</span>
+                      <div>
+                        <strong style={{color: '#4ade80'}}>API Key de OpenAI configurada</strong>
+                        <p style={{color: '#86efac', margin: '2px 0 0', fontSize: '13px'}}>La clave ya esta activa. El cerebro IA esta listo para usarse.</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="field-group">
-                    <label>API Key de OpenAI</label>
+                    <label>API Key de OpenAI {hasOpenAIKey ? '(opcional — solo si quieres cambiarla)' : ''}</label>
                     <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
                       <input
                         type={showOpenAIKey ? 'text' : 'password'}
                         value={form.openai_api_key}
                         onChange={(e) => handleInputChange('openai_api_key', e.target.value)}
-                        placeholder={hasOpenAIKey ? '••••••••••••••••••••••• (guardada)' : 'sk-proj-...'}
+                        placeholder={hasOpenAIKey ? '••••••••••••••••••••••• (ya configurada)' : 'sk-proj-...'}
                         style={{flex: 1}}
                       />
                       <button
@@ -1318,9 +1330,11 @@ export default function SettingsPage() {
                         </span>
                       </button>
                     </div>
-                    <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
-                      {hasOpenAIKey ? 'Ya tienes una API key guardada. Ingresa una nueva solo si quieres cambiarla.' : 'Obtén tu API key en platform.openai.com → API Keys'}
-                    </small>
+                    {!hasOpenAIKey && (
+                      <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
+                        Obtén tu API key en platform.openai.com → API Keys
+                      </small>
+                    )}
                   </div>
 
                   <div style={{display: 'flex', gap: '12px', alignItems: 'center', marginTop: '16px'}}>
