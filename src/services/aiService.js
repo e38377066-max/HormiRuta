@@ -95,14 +95,14 @@ class AIService {
     if (!this.isAvailable) return null;
     try {
       const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-        model: 'gpt-4o',
-        max_tokens: 300,
+        model: 'gpt-4o-mini',
+        max_tokens: 100,
         messages: [{
           role: 'user',
           content: [
             {
               type: 'text',
-              text: 'El cliente de Area 862 Graphics (imprenta en Dallas) te envió esta imagen. Describe brevemente en español qué ves: ¿es un diseño/logo/arte? ¿un producto impreso? ¿un documento o referencia? ¿algo relacionado con su pedido? Sé conciso (2-3 líneas).'
+              text: 'Describe en 1-2 líneas en español qué muestra esta imagen para una imprenta: ¿diseño/logo, producto impreso, referencia visual u otro? Sé muy breve.'
             },
             {
               type: 'image_url',
@@ -182,8 +182,22 @@ class AIService {
     }
     let knowledgeSection = '';
     if (knowledge && knowledge.length > 0) {
-      const docs = knowledge.map(k => `### ${k.title} [${k.knowledge_type}]\n${k.content}`).join('\n\n');
-      knowledgeSection = `\n\n## BASE DE CONOCIMIENTO DEL NEGOCIO\nUsa esta información para responder con mayor precisión y contexto:\n\n${docs}`;
+      const MAX_DOC_CHARS = 1500;
+      const MAX_TOTAL_CHARS = 6000;
+      let totalChars = 0;
+      const docLines = [];
+      for (const k of knowledge) {
+        const content = k.content.length > MAX_DOC_CHARS
+          ? k.content.substring(0, MAX_DOC_CHARS) + '...[truncado]'
+          : k.content;
+        const entry = `### ${k.title} [${k.knowledge_type}]\n${content}`;
+        if (totalChars + entry.length > MAX_TOTAL_CHARS) break;
+        docLines.push(entry);
+        totalChars += entry.length;
+      }
+      if (docLines.length > 0) {
+        knowledgeSection = `\n\n## BASE DE CONOCIMIENTO DEL NEGOCIO\nUsa esta información para responder con mayor precisión:\n\n${docLines.join('\n\n')}`;
+      }
     }
     return `Eres el asistente inteligente de Area 862 Graphics LLC, una empresa de diseño gráfico e impresión ubicada en Dallas, Texas.
 

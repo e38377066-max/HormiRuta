@@ -439,6 +439,29 @@ export default function BotMemoryPage() {
             </div>
           )}
 
+          {/* Indicador de uso de tokens */}
+          {!kLoading && knowledge.length > 0 && (() => {
+            const activeChars = knowledge.filter(k => k.is_active).reduce((acc, k) => acc + k.content.length, 0)
+            const capChars = 6000
+            const pct = Math.min(100, Math.round((activeChars / capChars) * 100))
+            const color = pct < 50 ? '#22c55e' : pct < 85 ? '#f59e0b' : '#ef4444'
+            const label = pct < 50 ? 'Uso bajo — excelente para el consumo de créditos' : pct < 85 ? 'Uso moderado — considera reducir documentos grandes' : 'Límite alto — los documentos se truncarán automáticamente'
+            return (
+              <div style={{ marginBottom: 16, background: '#0f172a', borderRadius: 10, padding: '12px 16px', border: `1px solid ${color}33` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="material-icons" style={{ fontSize: 15, color }}>token</span>
+                    Contexto inyectado por mensaje: <strong style={{ color }}>{activeChars.toLocaleString()} / {capChars.toLocaleString()} caracteres ({pct}%)</strong>
+                  </span>
+                </div>
+                <div style={{ height: 6, background: '#1e293b', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 4, transition: 'width 0.4s' }} />
+                </div>
+                <p style={{ margin: '6px 0 0', fontSize: 11, color: '#64748b' }}>{label}</p>
+              </div>
+            )
+          })()}
+
           {kLoading ? (
             <div style={{ textAlign: 'center', padding: 40, color: '#64748b' }}>
               <span className="material-icons" style={{ fontSize: 40, animation: 'spin 1s linear infinite' }}>autorenew</span>
