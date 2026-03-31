@@ -421,6 +421,135 @@ Genera la respuesta más apropiada:`
     }
   }
 
+  // Generate a natural conversational message for a specific flow intent
+  // The AI speaks naturally but always achieves the required goal of each step
+  async generateFlowMessage(intent, params = {}) {
+    if (!this.isAvailable) return null;
+
+    const { customerName, zipCode, city, product, zone, lastMessage } = params;
+    const name = customerName && customerName !== 'Sin nombre' ? customerName.split(' ')[0] : null;
+
+    const intentPrompts = {
+      welcome_new: `El cliente acaba de escribir por primera vez. Saluda de forma cálida y amigable en nombre de Area 862 Graphics. 
+Luego pregúntale de manera natural: ¿ya alguno de nuestros agentes le brindó información sobre los productos y precios?
+Mensaje del cliente: "${lastMessage || 'Hola'}"
+${name ? `El nombre del cliente es: ${name}` : ''}
+Importante: Tu respuesta DEBE terminar con una pregunta clara de sí o no sobre si ya recibió información previa.`,
+
+      welcome_existing: `El cliente es un cliente recurrente que ya ha ordenado antes. Salúdalo de forma cálida y personal.
+${name ? `Su nombre es ${name}.` : ''}
+Mensaje del cliente: "${lastMessage || 'Hola'}"
+Hazle saber que es un placer volver a atenderlo y pregúntale en qué lo puedes ayudar hoy.`,
+
+      ask_zip_no_info: `El cliente aún no tiene información sobre nuestros servicios. Dile de forma amigable que para ayudarlo necesitas verificar si tienen cobertura en su zona.
+Pídele su código postal (ZIP) de 5 dígitos. Menciona un ejemplo como 75208 para que sepa el formato.
+${name ? `Nombre del cliente: ${name}` : ''}
+Sé breve y directo, máximo 3 líneas.`,
+
+      ask_zip_has_info: `El cliente ya tiene información sobre los productos. Ahora necesitas su código postal (ZIP) para verificar la zona de entrega y continuar con su pedido.
+${name ? `Nombre del cliente: ${name}` : ''}
+Pídelo de forma natural y breve. Menciona el ejemplo 75208.`,
+
+      zip_covered: `¡Excelente noticia! El cliente tiene cobertura en su zona.
+ZIP/Ciudad: ${zipCode || city || 'su zona'}
+Zona: ${zone || 'Dallas-Fort Worth'}
+${name ? `Nombre: ${name}` : ''}
+Dales la buena noticia de forma entusiasta. Luego diles que van a ver los productos disponibles. Sé breve (2 líneas máx).`,
+
+      zip_no_coverage: `Informa al cliente de forma amable que por el momento no tienen cobertura en su zona (${zipCode || city || 'su área'}).
+Discúlpate brevemente y hazle saber que cuando amplíen el área de servicio lo contactarán.
+${name ? `Nombre: ${name}` : ''}
+Sé empático pero breve.`,
+
+      product_selected_ask_design: `El cliente seleccionó el producto: ${product}. 
+${name ? `Nombre: ${name}` : ''}
+Confirma su elección de forma entusiasta y pregúntale si ya tiene un diseño listo o si necesita que le ayuden a crear uno desde cero.`,
+
+      has_design: `El cliente dice que ya tiene un diseño. 
+${name ? `Nombre: ${name}` : ''}
+Responde de forma positiva. Diles que envíen su diseño o la información que necesitan incluir. Menciona que un agente les atenderá en breve para continuar con su pedido.`,
+
+      needs_design: `El cliente necesita que le hagan un diseño desde cero.
+${name ? `Nombre: ${name}` : ''}
+Responde con entusiasmo. Diles que cuenten qué información quieren en el diseño (nombre, teléfono, logo, etc.) y que un agente les ayudará a crear algo profesional.`,
+
+      passing_to_agent: `Informa al cliente de forma amigable que lo estás conectando con uno de los agentes especializados del equipo.
+${name ? `Nombre: ${name}` : ''}
+Sé breve y positivo, 1-2 líneas máximo.`,
+
+      out_of_hours: `Informa al cliente que en este momento están fuera del horario de atención.
+Horario: Lunes-Viernes 9AM-6PM, Sábados 9AM-4PM (hora de Dallas/Texas).
+${name ? `Nombre: ${name}` : ''}
+Diles que dejen su mensaje y que en cuanto abran se lo responden. Sé amigable y tranquilizador.`,
+
+      frustrated: `El cliente está molesto o frustrado. 
+${name ? `Nombre: ${name}` : ''}
+Responde con empatía genuina, discúlpate brevemente sin dramatizar. Diles que vas a conectarlos de inmediato con un agente para resolver su situación. Sé calmado y profesional.`,
+
+      remind_yes_no: `El cliente no respondió claramente sí o no. 
+Mensaje del cliente: "${lastMessage || ''}"
+Recuérdale amablemente que necesitas saber si ya recibió información previa sobre los productos y precios. Hazlo simple y sin presionar.`,
+
+      remind_zip: `El cliente no envió su código postal o lo que envió no parece ser un ZIP válido.
+Mensaje del cliente: "${lastMessage || ''}"
+Pídele amablemente que envíe su código postal de 5 dígitos. Usa el ejemplo 75208. Sé paciente y claro.`,
+
+      remind_product: `El cliente no seleccionó un producto claramente.
+Mensaje del cliente: "${lastMessage || ''}"
+Recuérdale amablemente que responda con el número del producto que le interesa. Sé breve.`,
+
+      abandoned: `El cliente había estado en conversación pero dejó de responder. Ahora escribe de nuevo.
+${name ? `Nombre: ${name}` : ''}
+Mensaje del cliente: "${lastMessage || ''}"
+Retoma la conversación de forma cálida. Pregunta si quiere continuar o necesita ayuda con algo.`,
+
+      facebook_ad_welcome: `El cliente viene de un anuncio de Facebook/Instagram. Es su primer contacto.
+${name ? `Nombre: ${name}` : ''}
+Mensaje del cliente: "${lastMessage || ''}"
+Salúdalo calurosamente, agradece su interés. Dile que para verificar si tienen cobertura en su zona necesitas su código postal (ZIP). Ejemplo: 75208.`,
+
+      product_info_sent: `Se le envió información sobre el producto ${product} al cliente.
+${name ? `Nombre: ${name}` : ''}
+Ahora pregúntale brevemente si tiene alguna pregunta o si quiere continuar con ese producto. Sé natural y breve.`
+    };
+
+    const promptForIntent = intentPrompts[intent];
+    if (!promptForIntent) return null;
+
+    try {
+      const messages = [
+        {
+          role: 'system',
+          content: `${this.getSystemPrompt()}
+
+## REGLAS PARA GENERAR MENSAJES
+- Responde SOLO con el mensaje para enviar al cliente, sin explicaciones adicionales
+- Usa un tono conversacional, cálido y profesional 
+- Máximo 4 líneas de texto
+- Usa emojis con moderación (1-3 máximo por mensaje)
+- NO uses asteriscos ni formato markdown
+- Siempre en español
+- NO menciones precios exactos
+- NO inventes información del negocio que no conozcas`
+        },
+        {
+          role: 'user',
+          content: promptForIntent
+        }
+      ];
+
+      const response = await this.callOpenAI(messages, 200);
+      if (response.success && response.content) {
+        console.log(`[Bot-IA] Mensaje generado para intent "${intent}": ${response.content.substring(0, 60)}...`);
+        return response.content;
+      }
+      return null;
+    } catch (e) {
+      console.error(`[Bot-IA] Error generando mensaje para "${intent}":`, e.message);
+      return null;
+    }
+  }
+
   // Test if API key is valid
   async testConnection() {
     if (!this.isAvailable) {

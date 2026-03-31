@@ -544,6 +544,17 @@ class ChatbotService {
     return false;
   }
 
+  // ==================== HELPER IA ====================
+
+  // Genera un mensaje con IA o usa el fallback del template si la IA no está disponible
+  async getAIMsg(intent, params, fallbackMsg) {
+    if (this.ai.isAvailable) {
+      const aiMsg = await this.ai.generateFlowMessage(intent, params);
+      if (aiMsg) return aiMsg;
+    }
+    return fallbackMsg;
+  }
+
   // ==================== MENSAJES CONFIGURABLES ====================
 
   getMessages() {
@@ -941,9 +952,11 @@ class ChatbotService {
     const isExisting = isExistingFromDB || convState.is_existing_customer || convState.is_reopened;
     const intent = this.detectMessageIntent(messageText);
     const isFromFacebookAd = this.detectFacebookAdOrigin(contact);
+    const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
     
     if (isExisting) {
-      await this.sendMessage(contact.id, msgs.welcomeExisting);
+      const welcomeMsg = await this.getAIMsg('welcome_existing', { customerName, lastMessage: messageText }, msgs.welcomeExisting);
+      await this.sendMessage(contact.id, welcomeMsg);
       
       const productMenu = this.generateProductMenu();
       await this.sendMessage(contact.id, productMenu);
@@ -964,8 +977,11 @@ class ChatbotService {
     // Cliente nuevo
     // Si viene de Facebook Ad, saludar y pedir ZIP directo (flujo sin info)
     if (isFromFacebookAd || intent === 'wants_order') {
-      // Saludar primero
-      const greeting = this.settings.welcome_from_ads || 'Hola! 👋 Gracias por tu interes.\n\nPara verificar si tenemos cobertura en tu zona, por favor enviame tu codigo postal (ZIP) 📍\n\nPor ejemplo: 75208';
+      const greeting = await this.getAIMsg(
+        'facebook_ad_welcome',
+        { customerName, lastMessage: messageText },
+        this.settings.welcome_from_ads || 'Hola! 👋 Gracias por tu interes.\n\nPara verificar si tenemos cobertura en tu zona, por favor enviame tu codigo postal (ZIP) 📍\n\nPor ejemplo: 75208'
+      );
       await this.sendMessage(contact.id, greeting);
       
       await this.updateConversationState(contact.id, {
@@ -982,7 +998,8 @@ class ChatbotService {
     
     // Para cualquier mensaje (quiere info, saludo, o genérico):
     // Siempre saludar y preguntar si ya tiene información previa
-    await this.sendMessage(contact.id, msgs.welcomeNew);
+    const welcomeMsg = await this.getAIMsg('welcome_new', { customerName, lastMessage: messageText }, msgs.welcomeNew);
+    await this.sendMessage(contact.id, welcomeMsg);
     await this.updateConversationState(contact.id, {
       state: 'awaiting_prior_info',
       awaiting_response: 'yes_no',
@@ -999,9 +1016,10 @@ class ChatbotService {
   async handleAwaitingPriorInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
     const response = await this.parseYesNoResponse(messageText);
+    const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
     
     if (response === 'yes') {
-      // Ya tiene info - preguntar qué producto le interesa usando el menú dinámico
+      // Ya tiene info - mostrar menú de productos
       const productMenu = this.generateProductMenu();
       await this.sendMessage(contact.id, productMenu);
       
@@ -1014,7 +1032,8 @@ class ChatbotService {
       
     } else if (response === 'no') {
       // No tiene info - pedir ZIP primero para validar cobertura
-      await this.sendMessage(contact.id, msgs.noInfoRequestZip);
+      const zipMsg = await this.getAIMsg('ask_zip_no_info', { customerName }, msgs.noInfoRequestZip);
+      await this.sendMessage(contact.id, zipMsg);
       await this.updateConversationState(contact.id, {
         state: 'awaiting_zip_no_info',
         has_prior_info: false,
@@ -1024,7 +1043,8 @@ class ChatbotService {
       
     } else {
       // No entendió, recordar
-      await this.sendMessage(contact.id, msgs.remindYesNo);
+      const remindMsg = await this.getAIMsg('remind_yes_no', { customerName, lastMessage: messageText }, msgs.remindYesNo);
+      await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'remind_yes_no' };
     }
   }
