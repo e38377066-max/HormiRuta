@@ -303,7 +303,7 @@ class PollingService {
           // Rastrear estado abierto/cerrado del contacto de prueba en la BD
           const [convState] = await ConversationState.findOrCreate({
             where: { contact_id: contact.id.toString() },
-            defaults: { state: 'initial' }
+            defaults: { user_id: userId, state: 'initial' }
           });
           
           if (!isOpen && !convState.conversation_closed_at) {
