@@ -1,11 +1,63 @@
 import https from 'https';
+import BotMemory from '../models/BotMemory.js';
 
 class AIService {
-  constructor(apiKey, settings) {
+  constructor(apiKey, settings, userId = null) {
     this.apiKey = apiKey;
     this.settings = settings || {};
     this.isAvailable = !!apiKey;
     this.model = 'gpt-4o-mini';
+    this.userId = userId;
+    this._memoriesCache = null;
+    this._memoriesCacheAt = 0;
+  }
+
+  // Carga las lecciones activas y aprobadas (con cache de 5 min para no abusar la DB)
+  async loadActiveMemories(userId) {
+    const now = Date.now();
+    if (this._memoriesCache && (now - this._memoriesCacheAt) < 5 * 60 * 1000) {
+      return this._memoriesCache;
+    }
+    try {
+      const where = { is_active: true, is_approved: true };
+      if (userId) where.user_id = userId;
+      const memories = await BotMemory.findAll({ where, order: [['created_at', 'ASC']] });
+      this._memoriesCache = memories;
+      this._memoriesCacheAt = now;
+      if (memories.length > 0) {
+        await BotMemory.increment('times_applied', { by: 0, where }); // no-op to keep reference
+      }
+      return memories;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  invalidateMemoryCache() {
+    this._memoriesCache = null;
+    this._memoriesCacheAt = 0;
+  }
+
+  // Registra automáticamente una lección cuando el agente corrige al bot
+  static async autoLearnFromCorrection(userId, contactId, botMessage, agentMessage) {
+    try {
+      if (!botMessage || !agentMessage) return;
+      await BotMemory.create({
+        user_id: userId,
+        lesson: `Cuando el bot dijo: "${botMessage.substring(0, 200)}", el agente tuvo que intervenir y respondió: "${agentMessage.substring(0, 200)}". Aprende de este patrón para mejorar tu respuesta.`,
+        context_type: 'correction',
+        trigger_example: botMessage.substring(0, 300),
+        bot_response_example: botMessage.substring(0, 500),
+        agent_correction: agentMessage.substring(0, 500),
+        source: 'auto_detected',
+        is_approved: false,
+        is_active: true,
+        contact_id: contactId ? contactId.toString() : null
+      });
+      console.log(`[Bot-IA] Lección auto-detectada guardada para revisión (contacto ${contactId})`);
+    } catch (e) {
+      console.error('[Bot-IA] Error guardando lección auto-detectada:', e.message);
+    }
   }
 
   getProductsList() {
@@ -32,8 +84,13 @@ class AIService {
 - Diseño gráfico personalizado`;
   }
 
-  getSystemPrompt() {
+  getSystemPrompt(memories = []) {
     const products = this.getProductsList();
+    let memoriesSection = '';
+    if (memories && memories.length > 0) {
+      const lessonsText = memories.map((m, i) => `${i + 1}. [${m.context_type}] ${m.lesson}`).join('\n');
+      memoriesSection = `\n\n## LECCIONES APRENDIDAS DE CONVERSACIONES REALES\nEstas son correcciones y patrones aprendidos de interacciones con clientes reales de Area 862. DEBES aplicarlos:\n${lessonsText}`;
+    }
     return `Eres el asistente inteligente de Area 862 Graphics LLC, una empresa de diseño gráfico e impresión ubicada en Dallas, Texas.
 
 ## INFORMACIÓN DEL NEGOCIO
@@ -62,7 +119,7 @@ Eres el cerebro del bot de WhatsApp/Facebook Messenger. Tu trabajo es:
 - Siempre en español
 - Tono amigable, cálido y profesional
 - Si no estás seguro, indica que un agente ayudará
-- El negocio atiende a la comunidad hispana de DFW`;
+- El negocio atiende a la comunidad hispana de DFW${memoriesSection}`;
   }
 
   async callOpenAI(messages, maxTokens = 300) {
@@ -523,10 +580,11 @@ Responde de forma natural y entusiasta: confirma que lo puedes ayudar con eso, d
     if (!promptForIntent) return null;
 
     try {
+      const memories = await this.loadActiveMemories(this.userId || null);
       const messages = [
         {
           role: 'system',
-          content: `${this.getSystemPrompt()}
+          content: `${this.getSystemPrompt(memories)}
 
 ## REGLAS PARA GENERAR MENSAJES
 - Responde SOLO con el mensaje para enviar al cliente, sin explicaciones adicionales

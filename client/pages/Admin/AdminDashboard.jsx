@@ -184,6 +184,25 @@ export default function AdminDashboard() {
 
         <div className="admin-section">
           <div className="section-header">
+            <span className="material-icons">psychology</span>
+            <h3>Inteligencia del Bot</h3>
+          </div>
+          <div className="section-items">
+            <Link to="/admin/bot-memory" className="section-item">
+              <div className="item-icon" style={{ background: 'linear-gradient(135deg, #5b8def, #3b70d4)' }}>
+                <span className="material-icons" style={{ color: '#fff' }}>school</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Memoria del Bot</div>
+                <div className="item-subtitle">Lecciones aprendidas y auto-aprendizaje</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="admin-section">
+          <div className="section-header">
             <span className="material-icons">monitor_heart</span>
             <h3>Sistema</h3>
           </div>

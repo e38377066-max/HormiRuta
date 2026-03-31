@@ -23,7 +23,7 @@ class ChatbotService {
     const dbKey = settings.openai_api_key || null;
     const aiKey = dbKey || envKey;
     const aiActive = settings.ai_enabled || !!envKey;
-    this.ai = new AIService(aiActive ? aiKey : null, settings);
+    this.ai = new AIService(aiActive ? aiKey : null, settings, userId);
     if (aiActive && aiKey) {
       console.log(`[Bot] Cerebro IA activado con OpenAI (fuente: ${dbKey ? 'base de datos' : 'entorno'})`);
     }

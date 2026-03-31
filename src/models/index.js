@@ -14,6 +14,7 @@ import DeliveryHistory from './DeliveryHistory.js';
 import FavoriteAddress from './FavoriteAddress.js';
 import UserToken from './UserToken.js';
 import WholesaleClient from './WholesaleClient.js';
+import BotMemory from './BotMemory.js';
 
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
 Route.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -91,6 +92,9 @@ Route.prototype.toDict = async function() {
   };
 };
 
+User.hasMany(BotMemory, { foreignKey: 'user_id', as: 'botMemories', onDelete: 'CASCADE' });
+BotMemory.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
 export { 
   sequelize, 
   User, 
@@ -107,5 +111,6 @@ export {
   DeliveryHistory,
   FavoriteAddress,
   UserToken,
-  WholesaleClient
+  WholesaleClient,
+  BotMemory
 };

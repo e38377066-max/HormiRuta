@@ -15,6 +15,7 @@ import RouteHistory from './pages/Admin/RouteHistory'
 import AdminLogs from './pages/Admin/AdminLogs'
 import AccountingPage from './pages/Admin/AccountingPage'
 import WholesalePage from './pages/Admin/WholesalePage'
+import BotMemoryPage from './pages/Admin/BotMemoryPage'
 
 import CoveragePage from './pages/Messaging/CoveragePage'
 import SettingsPage from './pages/Messaging/SettingsPage'
@@ -99,6 +100,7 @@ export default function App() {
         <Route path="admin/logs" element={<ProtectedRoute adminOnly><AdminLogs /></ProtectedRoute>} />
         <Route path="admin/accounting" element={<ProtectedRoute adminOnly><AccountingPage /></ProtectedRoute>} />
         <Route path="admin/wholesale" element={<ProtectedRoute adminOnly><WholesalePage /></ProtectedRoute>} />
+        <Route path="admin/bot-memory" element={<ProtectedRoute adminOnly><BotMemoryPage /></ProtectedRoute>} />
         <Route path="dispatch" element={<ProtectedRoute allowedRoles={['admin', 'driver']}><DispatchMap /></ProtectedRoute>} />
       </Route>
       

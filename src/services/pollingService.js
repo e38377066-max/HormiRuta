@@ -5,6 +5,7 @@ import AddressValidationService from './addressValidation.js';
 import AddressExtractorService from './addressExtractorService.js';
 import geocodingService from './geocodingService.js';
 import ChatbotService from './chatbotService.js';
+import AIService from './aiService.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import MessagingOrder from '../models/MessagingOrder.js';
 import MessageLog from '../models/MessageLog.js';
@@ -770,6 +771,27 @@ class PollingService {
       });
 
       if (!created) {
+        // Auto-aprendizaje: si el bot envió algo recientemente y el agente jumpeó, log para revisión
+        if (!state.agent_active && state.last_bot_message_at) {
+          const botMsgAt = new Date(state.last_bot_message_at);
+          const minutesSinceBotMsg = (Date.now() - botMsgAt.getTime()) / 1000 / 60;
+          if (minutesSinceBotMsg <= 3) {
+            try {
+              const lastBotLog = await MessageLog.findOne({
+                where: { contact_id: contactId.toString(), direction: 'outgoing' },
+                order: [['created_at', 'DESC']]
+              });
+              if (lastBotLog?.message_content) {
+                await AIService.autoLearnFromCorrection(
+                  userId, contactId, lastBotLog.message_content, null
+                );
+              }
+            } catch (learnErr) {
+              // No crítico — no interrumpir el flujo principal
+            }
+          }
+        }
+
         await state.update({
           agent_active: true,
           last_agent_message_at: new Date(),
@@ -1053,6 +1075,13 @@ class PollingService {
       message_content: text,
       processed: true
     });
+    // Actualiza timestamp del último mensaje del bot para auto-aprendizaje
+    try {
+      await ConversationState.update(
+        { last_bot_message_at: new Date() },
+        { where: { contact_id: contact.id.toString() } }
+      );
+    } catch (_) {}
   }
 
   async runAddressScanCycle(userId, apiToken, settings) {
