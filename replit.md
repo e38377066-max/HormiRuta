@@ -7,6 +7,19 @@ Area 862 System is a route planning and optimization application for delivery se
 **Market Potential**: Significant demand in urban logistics for tools that improve delivery speed and accuracy.
 **Project Ambitions**: Expand service areas, integrate with more third-party logistics tools, and incorporate advanced AI for predictive route adjustments.
 
+## Cerebro IA (OpenAI Integration)
+- **Archivo principal**: `src/services/aiService.js` — servicio completo de IA con OpenAI gpt-4o-mini
+- **Campos en DB**: `messaging_settings.ai_enabled` (boolean), `messaging_settings.openai_api_key` (varchar 200)
+- **Integración**: `chatbotService.js` importa `AIService` y lo usa como cerebro principal con fallback a regex
+- **Funciones IA activas**:
+  - `parseYesNoResponse()` — IA entiende "simon", "nel", "ta bien", etc.
+  - `detectFrustration()` — IA detecta frustración en casos ambiguos
+  - `parseProductSelection()` — IA identifica producto por contexto natural
+  - `evaluateAgentIntervention()` — IA decide si puede responder FAQs cuando agente está activo
+- **UI**: Tab "Cerebro IA" en la página de configuración de mensajería
+- **Endpoint de prueba**: `POST /api/messaging/settings/test-openai`
+- **Seguridad**: Si no hay API key o `ai_enabled=false`, todos los parsers caen a lógica regex original
+
 ## User Preferences
 - Comunicacion en español
 - El cliente NO debe ver ninguna referencia a Replit en el codigo ni archivos entregables (es secreto de desarrollo)
