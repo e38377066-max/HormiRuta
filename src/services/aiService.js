@@ -510,7 +510,13 @@ Salúdalo calurosamente, agradece su interés. Dile que para verificar si tienen
 
       product_info_sent: `Se le envió información sobre el producto ${product} al cliente.
 ${name ? `Nombre: ${name}` : ''}
-Ahora pregúntale brevemente si tiene alguna pregunta o si quiere continuar con ese producto. Sé natural y breve.`
+Ahora pregúntale brevemente si tiene alguna pregunta o si quiere continuar con ese producto. Sé natural y breve.`,
+
+      direct_order: `El cliente llegó directamente pidiendo un producto específico sin necesitar que le expliques nada.
+Producto solicitado: ${product || 'el servicio mencionado'}
+Mensaje del cliente: "${lastMessage || ''}"
+${name ? `Nombre: ${name}` : ''}
+Responde de forma natural y entusiasta: confirma que lo puedes ayudar con eso, dile que vas a conectarlo con uno de los especialistas del equipo que le dará todos los detalles (precio, tiempo de entrega, diseño, etc.). No hagas preguntas de validación ni pidas ZIP. Sé cálido, directo y breve (2-3 líneas máximo).`
     };
 
     const promptForIntent = intentPrompts[intent];

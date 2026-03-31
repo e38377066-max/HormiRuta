@@ -956,10 +956,18 @@ class ChatbotService {
     const msgs = this.getMessages();
     const isExistingFromDB = await this.checkIfExistingCustomer(contact);
     const isExisting = isExistingFromDB || convState.is_existing_customer || convState.is_reopened;
-    const intent = this.detectMessageIntent(messageText);
     const isFromFacebookAd = this.detectFacebookAdOrigin(contact);
     const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
-    
+
+    // ─── DETECCIÓN DE PEDIDO DIRECTO ─────────────────────────────────────────
+    // Si el cliente ya menciona un producto específico desde el primer mensaje,
+    // no hay que hacerle el flujo completo — ya sabe lo que quiere.
+    const directProduct = await this.parseProductSelection(messageText);
+    if (directProduct && !directProduct.isOther) {
+      return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     if (isExisting) {
       const welcomeMsg = await this.getAIMsg('welcome_existing', { customerName, lastMessage: messageText }, msgs.welcomeExisting);
       await this.sendMessage(contact.id, welcomeMsg);
@@ -980,9 +988,8 @@ class ChatbotService {
       return { handled: true, action: 'welcome_existing_show_menu' };
     }
     
-    // Cliente nuevo
     // Si viene de Facebook Ad, saludar y pedir ZIP directo (flujo sin info)
-    if (isFromFacebookAd || intent === 'wants_order') {
+    if (isFromFacebookAd) {
       const greeting = await this.getAIMsg(
         'facebook_ad_welcome',
         { customerName, lastMessage: messageText },
@@ -997,13 +1004,12 @@ class ChatbotService {
         awaiting_response: 'zip_code',
         greeting_sent: true
       });
-      await this.addTrackingTag(contact.id, isFromFacebookAd ? 'FacebookAd' : 'QuiereOrdenar');
+      await this.addTrackingTag(contact.id, 'FacebookAd');
       
       return { handled: true, action: 'facebook_ad_direct_zip' };
     }
     
-    // Para cualquier mensaje (quiere info, saludo, o genérico):
-    // Siempre saludar y preguntar si ya tiene información previa
+    // Para cualquier mensaje genérico: saludar y preguntar si ya tiene información previa
     const welcomeMsg = await this.getAIMsg('welcome_new', { customerName, lastMessage: messageText }, msgs.welcomeNew);
     await this.sendMessage(contact.id, welcomeMsg);
     await this.updateConversationState(contact.id, {
@@ -1012,17 +1018,57 @@ class ChatbotService {
       greeting_sent: true
     });
     
-    if (intent === 'wants_info') {
-      await this.addTrackingTag(contact.id, 'QuiereInfo');
+    return { handled: true, action: 'welcome_new' };
+  }
+
+  // Maneja el caso donde el cliente llega ya sabiendo lo que quiere
+  async handleDirectOrderRequest(contact, messageText, product, customerName) {
+    const directMsg = await this.getAIMsg(
+      'direct_order',
+      { customerName, product: product.name, lastMessage: messageText },
+      `¡Hola! Claro que te ayudamos con ${product.name} 😊\n\nTe conecto de inmediato con uno de nuestros especialistas que te dará todos los detalles sobre precio, tiempo de entrega y diseño.`
+    );
+    await this.sendMessage(contact.id, directMsg);
+    
+    // Enviar info del producto si está configurada
+    const productInfo = this.getProductInfoMessage(product.name);
+    if (productInfo) {
+      await this.sendMessage(contact.id, productInfo);
     }
     
-    return { handled: true, action: 'welcome_new' };
+    await this.updateConversationState(contact.id, {
+      state: 'assigned',
+      selected_product: product.name,
+      has_prior_info: true,
+      greeting_sent: true
+    });
+    
+    const agent = await this.findAgentForProduct(product.name);
+    if (agent) {
+      await this.assignToAgent(contact.id, agent.respond_agent_id || agent.agent_id, agent.agent_name);
+    } else {
+      await this.assignToDefaultAgent(contact.id);
+    }
+    
+    await this.addTrackingTag(contact.id, 'PedidoDirecto');
+    await this.addTrackingTag(contact.id, `Producto_${product.name}`);
+    await this.addComment(contact.id, `[Bot] Cliente llegó directo con pedido de: ${product.name}. Mensaje: "${messageText}"`);
+    
+    console.log(`[Bot] Pedido directo detectado: "${product.name}" desde mensaje: "${messageText}"`);
+    return { handled: true, action: 'direct_order_assigned', product: product.name };
   }
 
   async handleAwaitingPriorInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
-    const response = await this.parseYesNoResponse(messageText);
     const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+
+    // Si el cliente menciona un producto directamente, cortocircuitar el flujo
+    const directProduct = await this.parseProductSelection(messageText);
+    if (directProduct && !directProduct.isOther) {
+      return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName);
+    }
+
+    const response = await this.parseYesNoResponse(messageText);
     
     if (response === 'yes') {
       // Ya tiene info - mostrar menú de productos
