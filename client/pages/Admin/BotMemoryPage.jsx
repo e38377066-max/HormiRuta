@@ -53,6 +53,9 @@ export default function BotMemoryPage() {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState({ lesson: '', context_type: 'general', trigger_example: '' })
   const [saving, setSaving] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeResult, setAnalyzeResult] = useState(null)
+  const [analyzeError, setAnalyzeError] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -122,6 +125,22 @@ export default function BotMemoryPage() {
     }
   }
 
+  const handleAnalyzeHistory = async () => {
+    if (!confirm('¿Analizar el historial completo de Respond.io? Esto puede tardar varios minutos dependiendo de la cantidad de contactos.')) return
+    setAnalyzing(true)
+    setAnalyzeResult(null)
+    setAnalyzeError(null)
+    try {
+      const res = await api.post('/api/bot-memory/analyze-history')
+      setAnalyzeResult(res.data)
+      await loadData()
+    } catch (e) {
+      setAnalyzeError(e.response?.data?.error || 'Error al analizar historial')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   const filteredMemories = memories.filter(m => {
     if (activeTab === 'pending') return m.source === 'auto_detected' && !m.is_approved
     if (activeTab === 'active') return m.is_approved && m.is_active
@@ -168,8 +187,8 @@ export default function BotMemoryPage() {
         </div>
       </div>
 
-      {/* Botón agregar */}
-      <div style={{ marginBottom: 16 }}>
+      {/* Botones de acción */}
+      <div style={{ marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <button
           className="btn-primary"
           onClick={() => { setShowForm(!showForm); setEditingId(null); setForm({ lesson: '', context_type: 'general', trigger_example: '' }) }}
@@ -178,7 +197,89 @@ export default function BotMemoryPage() {
           <span className="material-icons">{showForm ? 'close' : 'add'}</span>
           {showForm ? 'Cancelar' : 'Agregar Lección Manual'}
         </button>
+
+        <button
+          onClick={handleAnalyzeHistory}
+          disabled={analyzing}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px',
+            background: analyzing ? '#1e293b' : 'linear-gradient(135deg, #a855f7, #7c3aed)',
+            color: analyzing ? '#64748b' : '#fff',
+            border: analyzing ? '1px solid #334155' : 'none',
+            borderRadius: 8, fontSize: 14, fontWeight: 600,
+            cursor: analyzing ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          {analyzing ? (
+            <>
+              <span className="material-icons" style={{ fontSize: 18, animation: 'spin 1s linear infinite' }}>autorenew</span>
+              Analizando conversaciones...
+            </>
+          ) : (
+            <>
+              <span className="material-icons" style={{ fontSize: 18 }}>manage_search</span>
+              Analizar Historial de Chats
+            </>
+          )}
+        </button>
       </div>
+
+      {/* Resultado del análisis */}
+      {analyzing && (
+        <div style={{ marginBottom: 20, background: '#1e293b', borderRadius: 12, padding: 20, border: '1px solid #a855f744', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span className="material-icons" style={{ color: '#a855f7', fontSize: 32, animation: 'spin 2s linear infinite' }}>psychology</span>
+          <div>
+            <p style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: 4 }}>Analizando historial de conversaciones con IA...</p>
+            <p style={{ color: '#64748b', fontSize: 13 }}>Esto puede tardar varios minutos. No cierres esta ventana.</p>
+          </div>
+        </div>
+      )}
+
+      {analyzeResult && !analyzing && (
+        <div style={{ marginBottom: 20, background: '#1e293b', borderRadius: 12, padding: 20, border: '1px solid #22c55e44' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span className="material-icons" style={{ color: '#22c55e' }}>check_circle</span>
+            <h4 style={{ color: '#e2e8f0', margin: 0 }}>Análisis completado</h4>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 12 }}>
+            <div style={{ background: '#0f172a', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#a855f7' }}>{analyzeResult.lessons_created}</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Lecciones extraídas</div>
+            </div>
+            <div style={{ background: '#0f172a', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#5b8def' }}>{analyzeResult.contacts_analyzed}</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Conversaciones analizadas</div>
+            </div>
+            <div style={{ background: '#0f172a', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#94a3b8' }}>{analyzeResult.total_contacts}</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Contactos totales</div>
+            </div>
+          </div>
+          <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>{analyzeResult.message}</p>
+          {analyzeResult.lessons_created > 0 && (
+            <p style={{ color: '#f59e0b', fontSize: 13, marginTop: 8 }}>
+              Las lecciones nuevas están en la pestaña <strong>Pendientes</strong> para que las revises y apruebes.
+            </p>
+          )}
+          <button onClick={() => setAnalyzeResult(null)} style={{ marginTop: 12, background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer' }}>
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      {analyzeError && !analyzing && (
+        <div style={{ marginBottom: 20, background: '#1e293b', borderRadius: 12, padding: 20, border: '1px solid #ef444444' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span className="material-icons" style={{ color: '#ef4444' }}>error</span>
+            <h4 style={{ color: '#e2e8f0', margin: 0 }}>Error en el análisis</h4>
+          </div>
+          <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>{analyzeError}</p>
+          <button onClick={() => setAnalyzeError(null)} style={{ marginTop: 12, background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer' }}>
+            Cerrar
+          </button>
+        </div>
+      )}
 
       {/* Formulario */}
       {showForm && (
