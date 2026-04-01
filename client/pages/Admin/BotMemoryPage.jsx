@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../../api'
 import './AdminPages.css'
 
@@ -53,10 +53,14 @@ const KNOWLEDGE_TYPES = [
 
 export default function BotMemoryPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [memories, setMemories] = useState([])
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
-  const [mainSection, setMainSection] = useState('lessons')
+  const [mainSection, setMainSection] = useState(() => {
+    const tab = searchParams.get('tab')
+    return ['lessons', 'docs', 'media'].includes(tab) ? tab : 'lessons'
+  })
   const [activeTab, setActiveTab] = useState('active')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)

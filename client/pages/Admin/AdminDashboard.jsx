@@ -29,7 +29,7 @@ export default function AdminDashboard() {
     if (!confirmed) return
     const doubleConfirm = window.confirm('ULTIMA CONFIRMACION: Se borraran todos los datos del dispatch permanentemente. ¿Continuar?')
     if (!doubleConfirm) return
-    
+
     setResetting(true)
     try {
       const res = await api.delete('/api/admin/dispatch/reset')
@@ -94,6 +94,78 @@ export default function AdminDashboard() {
       </div>
 
       <div className="admin-sections">
+
+        {/* Cerebro AI */}
+        <div className="admin-section">
+          <div className="section-header">
+            <span className="material-icons">psychology</span>
+            <h3>Cerebro AI del Bot</h3>
+          </div>
+          <div className="section-items">
+            <Link to="/admin/bot-memory?tab=lessons" className="section-item">
+              <div className="item-icon" style={{ background: 'linear-gradient(135deg, #5b8def, #3b70d4)' }}>
+                <span className="material-icons" style={{ color: '#fff' }}>school</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Lecciones del Bot</div>
+                <div className="item-subtitle">Aprendizaje automatico y correcciones manuales</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+            <Link to="/admin/bot-memory?tab=docs" className="section-item">
+              <div className="item-icon" style={{ background: 'linear-gradient(135deg, #a855f7, #7c3aed)' }}>
+                <span className="material-icons" style={{ color: '#fff' }}>library_books</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Documentos y Prompts</div>
+                <div className="item-subtitle">Precios, FAQ, instrucciones y base de conocimiento</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+            <Link to="/admin/bot-memory?tab=media" className="section-item">
+              <div className="item-icon" style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                <span className="material-icons" style={{ color: '#fff' }}>perm_media</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Audio e Imagenes</div>
+                <div className="item-subtitle">Transcripcion de voz y analisis de imagenes con IA</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Configuracion */}
+        <div className="admin-section">
+          <div className="section-header">
+            <span className="material-icons">settings</span>
+            <h3>Configuracion</h3>
+          </div>
+          <div className="section-items">
+            <Link to="/messaging/settings" className="section-item">
+              <div className="item-icon" style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                <span className="material-icons" style={{ color: '#fff' }}>smart_toy</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Configuracion del Bot y IA</div>
+                <div className="item-subtitle">API Keys, Respond.io, agentes y productos</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+            <Link to="/messaging/coverage" className="section-item">
+              <div className="item-icon cyan">
+                <span className="material-icons">map</span>
+              </div>
+              <div className="item-content">
+                <div className="item-title">Zonas de Cobertura</div>
+                <div className="item-subtitle">Administrar codigos postales de entrega</div>
+              </div>
+              <span className="material-icons item-arrow">chevron_right</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Usuarios */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">people</span>
@@ -133,6 +205,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Rutas y Entregas */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">route</span>
@@ -182,25 +255,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="admin-section">
-          <div className="section-header">
-            <span className="material-icons">psychology</span>
-            <h3>Inteligencia del Bot</h3>
-          </div>
-          <div className="section-items">
-            <Link to="/admin/bot-memory" className="section-item">
-              <div className="item-icon" style={{ background: 'linear-gradient(135deg, #5b8def, #3b70d4)' }}>
-                <span className="material-icons" style={{ color: '#fff' }}>school</span>
-              </div>
-              <div className="item-content">
-                <div className="item-title">Memoria del Bot</div>
-                <div className="item-subtitle">Lecciones aprendidas y auto-aprendizaje</div>
-              </div>
-              <span className="material-icons item-arrow">chevron_right</span>
-            </Link>
-          </div>
-        </div>
-
+        {/* Sistema */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">monitor_heart</span>
@@ -229,34 +284,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="admin-section">
-          <div className="section-header">
-            <span className="material-icons">settings</span>
-            <h3>Configuracion</h3>
-          </div>
-          <div className="section-items">
-            <Link to="/messaging/coverage" className="section-item">
-              <div className="item-icon cyan">
-                <span className="material-icons">map</span>
-              </div>
-              <div className="item-content">
-                <div className="item-title">Zonas de Cobertura</div>
-                <div className="item-subtitle">Administrar codigos postales</div>
-              </div>
-              <span className="material-icons item-arrow">chevron_right</span>
-            </Link>
-            <Link to="/messaging/settings" className="section-item">
-              <div className="item-icon green">
-                <span className="material-icons">message</span>
-              </div>
-              <div className="item-content">
-                <div className="item-title">Integracion Respond.io</div>
-                <div className="item-subtitle">Configurar mensajeria</div>
-              </div>
-              <span className="material-icons item-arrow">chevron_right</span>
-            </Link>
-          </div>
-        </div>
       </div>
     </div>
   )
