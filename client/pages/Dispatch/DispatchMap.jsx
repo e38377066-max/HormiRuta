@@ -48,6 +48,7 @@ export default function DispatchMap() {
   const mapInstance = useRef(null)
   const markersRef = useRef([])
   const polylineRef = useRef(null)
+  const routePolylinesRef = useRef([])
   const directionsRendererRef = useRef(null)
   const optimizeTimerRef = useRef(null)
 
@@ -241,6 +242,8 @@ export default function DispatchMap() {
 
     markersRef.current.forEach(m => m.setMap(null))
     markersRef.current = []
+    routePolylinesRef.current.forEach(p => p.setMap(null))
+    routePolylinesRef.current = []
 
     const ordersToShow = orders.filter(o => o.address_lat && o.address_lng)
 
@@ -323,9 +326,15 @@ export default function DispatchMap() {
     routes.filter(route => route.status !== 'completed').forEach(route => {
       const stopsToRender = route.route_stops || []
       if (!stopsToRender.length) return
-      const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name ? route.orders[0].driver_name : null
-      const colorIdx = driverName ? Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0)) : 0
+      const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name
+        ? route.orders[0].driver_name
+        : (route.driver_name || null)
+      const colorIdx = driverName
+        ? Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0))
+        : 0
       const color = driverName ? getDriverColor(colorIdx) : '#6a1b9a'
+
+      const validStops = stopsToRender.filter(s => s.lat && s.lng)
 
       stopsToRender.forEach((stop, stopIdx) => {
         if (!stop.lat || !stop.lng) return
@@ -347,8 +356,9 @@ export default function DispatchMap() {
             <strong>${stop.customer_name || 'Sin nombre'}</strong><br/>
             <span style="color:#666">${stop.address || ''}</span><br/>
             <span style="background:${color};color:white;padding:2px 8px;border-radius:4px;font-size:12px">
-              ${driverName ? driverName + ' - ' : ''}Parada ${stopIdx + 1}
+              ${driverName ? driverName + ' — ' : ''}Parada ${stopIdx + 1}
             </span>
+            <br/><span style="color:#888;font-size:11px">${route.name || ''}</span>
           </div>
         `
         const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
@@ -356,6 +366,45 @@ export default function DispatchMap() {
 
         markersRef.current.push(marker)
       })
+
+      // Polilínea coloreada conectando todas las paradas en orden
+      if (validStops.length >= 2) {
+        const path = validStops.map(s => ({ lat: s.lat, lng: s.lng }))
+        const polyline = new window.google.maps.Polyline({
+          path,
+          map: mapInstance.current,
+          strokeColor: color,
+          strokeOpacity: 0.75,
+          strokeWeight: 4,
+          icons: [{
+            icon: {
+              path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+              scale: 3,
+              strokeColor: color,
+              strokeOpacity: 1,
+              fillColor: color,
+              fillOpacity: 1
+            },
+            offset: '100%',
+            repeat: '120px'
+          }],
+          zIndex: 40
+        })
+
+        const infoWindowLine = new window.google.maps.InfoWindow({
+          content: `<div style="font-family:sans-serif;padding:4px 2px">
+            <strong style="color:${color}">&#9632; ${route.name || 'Ruta'}</strong><br/>
+            ${driverName ? `<span style="color:#555">Chofer: <strong>${driverName}</strong></span><br/>` : ''}
+            <span style="color:#888;font-size:12px">${validStops.length} paradas</span>
+          </div>`
+        })
+        polyline.addListener('click', (e) => {
+          infoWindowLine.setPosition(e.latLng)
+          infoWindowLine.open(mapInstance.current)
+        })
+
+        routePolylinesRef.current.push(polyline)
+      }
     })
 
     window.__dispatchToggleFav = (favId) => {
@@ -2209,6 +2258,36 @@ export default function DispatchMap() {
             </div>
           ))}
         </div>
+        {/* Leyenda de choferes por color */}
+        {(() => {
+          const activeRoutes = routes.filter(r => r.status !== 'completed' && (r.route_stops?.length >= 2 || []))
+          const driverEntries = []
+          const seen = new Set()
+          activeRoutes.forEach(route => {
+            const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name
+              ? route.orders[0].driver_name
+              : (route.driver_name || null)
+            if (!driverName || seen.has(driverName)) return
+            seen.add(driverName)
+            const colorIdx = Math.abs([...driverName].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0))
+            driverEntries.push({ name: driverName, color: getDriverColor(colorIdx) })
+          })
+          if (driverEntries.length === 0) return null
+          return (
+            <div className="map-driver-legend">
+              <div className="map-driver-legend-title">
+                <span className="material-icons" style={{ fontSize: 14 }}>directions_car</span>
+                Choferes
+              </div>
+              {driverEntries.map(({ name, color }) => (
+                <div key={name} className="legend-item">
+                  <span className="legend-dot" style={{ backgroundColor: color, width: 16, height: 16, borderRadius: 3 }}></span>
+                  <span>{name}</span>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
       </div>
 
       {showAssignDriver && (
