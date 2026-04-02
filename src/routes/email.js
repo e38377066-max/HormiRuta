@@ -120,6 +120,10 @@ function isWholesaleName(name) {
   return /\bMAY\b/i.test(name) || /\-MAY\b/i.test(name) || /\bMAY\-/i.test(name);
 }
 
+const ALREADY_PROCESSED_STATUSES = new Set([
+  'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'
+]);
+
 router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
   try {
     clearPickupCache();
@@ -130,7 +134,10 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
     }
 
     const candidates = await ValidatedAddress.findAll({
-      where: { order_status: 'ordered' }
+      where: {
+        order_status: { [Op.in]: ['ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'] },
+        dispatch_status: { [Op.ne]: 'archived' }
+      }
     });
 
     const wholesaleClients = await WholesaleClient.findAll({
@@ -143,6 +150,7 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
 
     const synced = [];
     const skipped = [];
+    const alreadyDone = [];
     const wholesaleSynced = [];
 
     console.log(`[Email Sync] Cotejando ${gmailOrders.length} correos vs ${candidates.length} órdenes en sistema...`);
@@ -159,8 +167,9 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
 
       if (match) {
         processedGmailOrders.add(gmailOrder.messageId);
-        if (match.order_status === 'pickup_ready') {
-          skipped.push(match.customer_name + ' (ya estaba listo)');
+
+        if (ALREADY_PROCESSED_STATUSES.has(match.order_status)) {
+          alreadyDone.push(match.customer_name);
           continue;
         }
 
@@ -206,8 +215,7 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
           });
 
           if (activeOrder) {
-            console.log(`[Email Sync MAY] ${wClient.customer_name} ya tiene orden activa (${activeOrder.order_status}), omitiendo`);
-            skipped.push(`${wClient.customer_name} (MAY - ya activo)`);
+            alreadyDone.push(`${wClient.customer_name} (MAY)`);
             continue;
           }
 
@@ -265,13 +273,14 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
     }
 
     const totalSynced = synced.length + wholesaleSynced.length;
-    console.log(`[Email Sync] Sincronizados: ${totalSynced} (regulares: ${synced.length}, mayoristas: ${wholesaleSynced.length}), Omitidos: ${skipped.length}`);
+    console.log(`[Email Sync] Sincronizados: ${totalSynced} (regulares: ${synced.length}, mayoristas: ${wholesaleSynced.length}), Ya procesados: ${alreadyDone.length}, Sin coincidencia real: ${skipped.length}`);
 
     res.json({
       success: true,
       synced: totalSynced,
       syncedNames: synced,
       wholesaleSynced: wholesaleSynced,
+      alreadyProcessed: alreadyDone.length,
       skipped
     });
   } catch (error) {
