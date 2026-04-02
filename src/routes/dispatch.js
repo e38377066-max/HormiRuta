@@ -1803,7 +1803,17 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
       to_collect: acc.to_collect + Number(d.total_to_collect || 0)
     }), { stops: 0, collected: 0, commission: 0, to_collect: 0 });
 
-    totals.to_deliver = totals.collected - totals.commission;
+    const completedRoutes = await Route.findAll({
+      where: {
+        assigned_driver_id: req.userId,
+        status: 'completed',
+        admin_amount_received: { [Op.gt]: 0 }
+      },
+      attributes: ['admin_amount_received']
+    });
+    const totalAdminReceived = completedRoutes.reduce((sum, r) => sum + Number(r.admin_amount_received || 0), 0);
+
+    totals.to_deliver = Math.max(0, (totals.collected - totals.commission) - totalAdminReceived);
 
     res.json({
       months,
@@ -1863,8 +1873,9 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
       const routeStops = stopMap[r.id] || [];
       const totalCollected = Number(r.route_total_collected || 0) || routeStops.reduce((sum, s) => sum + Number(s.amount_collected || 0), 0);
       const commission = commissionPerStop * routeStops.length;
-      const toDeliver = totalCollected - commission;
+      const grossToDeliver = totalCollected - commission;
       const received = Number(r.admin_amount_received || 0);
+      const pendingToDeliver = Math.max(0, grossToDeliver - received);
       return {
         id: r.id,
         name: r.name,
@@ -1872,13 +1883,13 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
         stops_count: routeStops.length,
         total_collected: totalCollected,
         commission,
-        to_deliver: toDeliver,
+        to_deliver: pendingToDeliver,
         payment_delivered: r.payment_delivered || false,
         payment_delivery_method: r.payment_delivery_method || null,
         payment_delivered_at: r.payment_delivered_at || null,
         admin_confirmed: r.admin_confirmed || false,
         admin_amount_received: received,
-        admin_remaining: toDeliver - received
+        admin_remaining: pendingToDeliver
       };
     });
 
