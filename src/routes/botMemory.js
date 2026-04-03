@@ -170,15 +170,25 @@ router.post('/analyze-history', requireAuth, async (req, res) => {
       return res.json({ lessons_created: 0, contacts_analyzed: contactsWithHistory, message: 'No se encontraron conversaciones con suficiente historial' });
     }
 
-    // --- 3. Agrupar conversaciones en lotes y analizar con IA ---
-    const BATCH_SIZE = 5; // Procesar 5 conversaciones por llamada a OpenAI
+    // --- 3. Cargar lecciones existentes para evitar duplicados semánticos ---
+    const existingMemories = await BotMemory.findAll({
+      where: { user_id: userId, is_active: true },
+      attributes: ['lesson', 'context_type']
+    });
+    const existingLessons = existingMemories.map(m => m.lesson);
+
+    // --- 4. Agrupar conversaciones en lotes más grandes y analizar con IA ---
+    const BATCH_SIZE = 8; // Más conversaciones por lote = lecciones más diversas
     const batches = [];
     for (let i = 0; i < conversationSnippets.length; i += BATCH_SIZE) {
       batches.push(conversationSnippets.slice(i, i + BATCH_SIZE));
     }
 
+    const validContextTypes = ['general', 'greeting', 'product', 'zip', 'design', 'frustration', 'correction', 'pattern'];
     let totalLessonsCreated = 0;
+    // Acumular lecciones para deduplicación cruzada entre lotes
     const lessonsToSave = [];
+    const lessonTextsAccumulated = new Set(existingLessons.map(l => l.substring(0, 80).toLowerCase()));
 
     for (const batch of batches) {
       try {
@@ -186,38 +196,45 @@ router.post('/analyze-history', requireAuth, async (req, res) => {
           return `--- Conversación ${i + 1} (${c.contact}) ---\n${c.lines.join('\n')}`;
         }).join('\n\n');
 
-        const analysisPrompt = `Eres un experto en análisis de conversaciones de ventas para Area 862 Graphics LLC, una empresa de impresión y diseño gráfico en Dallas, Texas que atiende clientes hispanohablantes.
+        // Construir contexto de lecciones ya conocidas para evitar repetir
+        const knownTopicsText = lessonTextsAccumulated.size > 0
+          ? `\nLECCIONES YA REGISTRADAS (NO las repitas ni generes algo similar):\n${[...lessonTextsAccumulated].slice(0, 30).map((l, i) => `${i + 1}. ${l}`).join('\n')}\n`
+          : '';
 
-Analiza estas conversaciones reales entre clientes y agentes de ventas:
+        const analysisPrompt = `Eres un experto en análisis de conversaciones de ventas para Area 862 Graphics LLC, empresa de impresión y diseño gráfico en Dallas, Texas que atiende clientes hispanohablantes por WhatsApp.
+${knownTopicsText}
+Analiza estas conversaciones REALES entre clientes y agentes humanos de Area 862:
 
 ${transcriptText}
 
-Extrae EXACTAMENTE entre 3 y 6 lecciones concretas y accionables para mejorar el bot de atención automática. Enfócate en:
-1. Cómo preguntan los diferentes tipos de clientes (patrones de lenguaje, expresiones coloquiales)
-2. Qué respuestas de los agentes funcionaron mejor (¿qué decían para cerrar o avanzar?)
-3. Qué confusiones o errores surgieron y cómo se resolvieron
-4. Cuándo los clientes necesitan más información específica antes de continuar
-5. Patrones de clientes indecisos vs clientes con pedido directo
+INSTRUCCIONES CRÍTICAS:
+- Extrae entre 1 y 3 lecciones MUY ESPECÍFICAS y ÚNICAS. Si no hay nada nuevo relevante, devuelve 0 lecciones.
+- Cada lección debe ser DIFERENTE en tema y enfoque a las ya registradas arriba.
+- NO generes lecciones genéricas como "usar un saludo cálido" o "presentar paquetes claramente" si ya existen.
+- PRIORIDAD: Aprende de lo que hicieron los AGENTES — sus frases exactas, cómo manejaron objeciones, cómo condujeron el proceso de diseño/edición, cómo cerraron ventas, qué información pidieron y en qué orden.
+- En diseño y edición: el agente es quien trabaja directamente con el cliente. Extrae técnicas específicas que usó (ej. pedir aprobación con frases concretas, cómo envió muestras, cómo manejó cambios de último momento).
+- Enfócate en detalles concretos: frases reales, secuencias de pasos, situaciones específicas de este negocio.
+- Si el agente usó una frase que funcionó bien, inclúyela literalmente como ejemplo.
 
-Responde SOLO con un JSON válido (sin markdown, sin explicaciones).
-Para "context_type" elige UNO SOLO de estos valores exactos: general, greeting, product, zip, design, frustration, correction, pattern
+Para "context_type" elige UNO SOLO: general, greeting, product, zip, design, frustration, correction, pattern
 
+Responde SOLO con JSON válido (sin markdown):
 {
   "lessons": [
     {
-      "lesson": "texto de la lección clara y accionable para el bot (en español)",
+      "lesson": "lección específica y accionable con detalles concretos (en español)",
       "context_type": "general",
-      "trigger_example": "ejemplo del mensaje del cliente que generó esta lección (opcional)"
+      "trigger_example": "mensaje exacto del cliente o agente que generó esta lección"
     }
   ]
 }`;
 
         const messages = [
-          { role: 'system', content: 'Eres un experto en análisis de conversaciones de ventas. Respondes SOLO con JSON válido.' },
+          { role: 'system', content: 'Eres un experto en análisis de conversaciones de ventas. Extraes lecciones únicas y específicas. Respondes SOLO con JSON válido.' },
           { role: 'user', content: analysisPrompt }
         ];
 
-        const response = await ai.callOpenAI(messages, 1000);
+        const response = await ai.callOpenAI(messages, 1200);
         if (!response.success || !response.content) continue;
 
         // Parsear JSON de respuesta
@@ -232,27 +249,29 @@ Para "context_type" elige UNO SOLO de estos valores exactos: general, greeting, 
 
         if (!parsed?.lessons?.length) continue;
 
-        const validContextTypes = ['general', 'greeting', 'product', 'zip', 'design', 'frustration', 'correction', 'pattern'];
-
         for (const lesson of parsed.lessons) {
           if (!lesson.lesson?.trim()) continue;
 
-          // Sanitizar context_type: tomar solo el primer valor si viene con pipes, y validar que sea válido
+          // Sanitizar context_type
           let contextType = (lesson.context_type || 'general').split('|')[0].trim().toLowerCase();
           if (!validContextTypes.includes(contextType)) contextType = 'general';
 
-          // Evitar duplicados exactos
+          const lessonText = lesson.lesson.trim();
+          const lessonKey = lessonText.substring(0, 80).toLowerCase();
+
+          // Deduplicación cruzada: contra DB y contra lecciones ya acumuladas en este run
+          if (lessonTextsAccumulated.has(lessonKey)) continue;
+
+          // También verificar en DB por si acaso
           const exists = await BotMemory.findOne({
-            where: {
-              user_id: userId,
-              lesson: lesson.lesson.trim().substring(0, 100)
-            }
+            where: { user_id: userId, lesson: { [Op.like]: `${lessonText.substring(0, 60)}%` } }
           });
           if (exists) continue;
 
+          lessonTextsAccumulated.add(lessonKey);
           lessonsToSave.push({
             user_id: userId,
-            lesson: lesson.lesson.trim(),
+            lesson: lessonText,
             context_type: contextType,
             trigger_example: lesson.trigger_example?.trim() || null,
             source: 'auto_detected',
