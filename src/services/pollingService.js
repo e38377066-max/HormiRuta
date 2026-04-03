@@ -2008,31 +2008,31 @@ class PollingService {
   async cleanupDeliveredOrders() {
     try {
       const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
-      const ordersToDelete = await ValidatedAddress.findAll({
+      const ordersToArchive = await ValidatedAddress.findAll({
         where: {
           order_status: 'delivered',
+          dispatch_status: { [Op.ne]: 'archived' },
           updated_at: { [Op.lt]: cutoff }
         }
       });
 
-      if (ordersToDelete.length === 0) return;
+      if (ordersToArchive.length === 0) return;
 
-      const archived = await this.archiveDeliveredOrders(ordersToDelete);
-      if (!archived) {
-        console.error(`[Cleanup] Archivo ZIP falló, órdenes NO eliminadas para preservar datos`);
-        return;
-      }
+      await this.archiveDeliveredOrders(ordersToArchive);
 
-      const deleted = await ValidatedAddress.destroy({
-        where: {
-          id: { [Op.in]: ordersToDelete.map(o => o.id) }
+      const [updated] = await ValidatedAddress.update(
+        { dispatch_status: 'archived' },
+        {
+          where: {
+            id: { [Op.in]: ordersToArchive.map(o => o.id) }
+          }
         }
-      });
-      if (deleted > 0) {
-        console.log(`[Cleanup] ${deleted} orden(es) entregada(s) archivada(s) y eliminada(s) (>48h)`);
+      );
+      if (updated > 0) {
+        console.log(`[Cleanup] ${updated} orden(es) entregada(s) archivadas en base de datos (>48h) — NO eliminadas`);
       }
     } catch (error) {
-      console.error(`[Cleanup] Error limpiando órdenes entregadas:`, error.message);
+      console.error(`[Cleanup] Error archivando órdenes entregadas:`, error.message);
     }
   }
 
