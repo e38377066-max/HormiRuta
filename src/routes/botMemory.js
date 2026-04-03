@@ -199,12 +199,14 @@ Extrae EXACTAMENTE entre 3 y 6 lecciones concretas y accionables para mejorar el
 4. Cuándo los clientes necesitan más información específica antes de continuar
 5. Patrones de clientes indecisos vs clientes con pedido directo
 
-Responde SOLO con un JSON válido (sin markdown, sin explicaciones):
+Responde SOLO con un JSON válido (sin markdown, sin explicaciones).
+Para "context_type" elige UNO SOLO de estos valores exactos: general, greeting, product, zip, design, frustration, correction, pattern
+
 {
   "lessons": [
     {
       "lesson": "texto de la lección clara y accionable para el bot (en español)",
-      "context_type": "general|greeting|product|zip|design|frustration|correction|pattern",
+      "context_type": "general",
       "trigger_example": "ejemplo del mensaje del cliente que generó esta lección (opcional)"
     }
   ]
@@ -230,8 +232,14 @@ Responde SOLO con un JSON válido (sin markdown, sin explicaciones):
 
         if (!parsed?.lessons?.length) continue;
 
+        const validContextTypes = ['general', 'greeting', 'product', 'zip', 'design', 'frustration', 'correction', 'pattern'];
+
         for (const lesson of parsed.lessons) {
           if (!lesson.lesson?.trim()) continue;
+
+          // Sanitizar context_type: tomar solo el primer valor si viene con pipes, y validar que sea válido
+          let contextType = (lesson.context_type || 'general').split('|')[0].trim().toLowerCase();
+          if (!validContextTypes.includes(contextType)) contextType = 'general';
 
           // Evitar duplicados exactos
           const exists = await BotMemory.findOne({
@@ -245,7 +253,7 @@ Responde SOLO con un JSON válido (sin markdown, sin explicaciones):
           lessonsToSave.push({
             user_id: userId,
             lesson: lesson.lesson.trim(),
-            context_type: lesson.context_type || 'general',
+            context_type: contextType,
             trigger_example: lesson.trigger_example?.trim() || null,
             source: 'auto_detected',
             is_approved: false,
