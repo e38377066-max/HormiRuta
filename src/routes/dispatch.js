@@ -1803,17 +1803,29 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
       to_collect: acc.to_collect + Number(d.total_to_collect || 0)
     }), { stops: 0, collected: 0, commission: 0, to_collect: 0 });
 
-    const completedRoutes = await Route.findAll({
-      where: {
-        assigned_driver_id: req.userId,
-        status: 'completed',
-        admin_amount_received: { [Op.gt]: 0 }
-      },
-      attributes: ['admin_amount_received']
+    // Calcular to_deliver usando la misma lógica que las tarjetas individuales de rutas
+    // para que el total sea consistente con lo que se muestra por ruta
+    const allDriverRoutes = await Route.findAll({
+      where: { assigned_driver_id: req.userId, status: 'completed' },
+      attributes: ['id', 'route_total_collected', 'admin_amount_received']
     });
-    const totalAdminReceived = completedRoutes.reduce((sum, r) => sum + Number(r.admin_amount_received || 0), 0);
+    const allRouteIds = allDriverRoutes.map(r => r.id);
+    const allRouteStops = allRouteIds.length > 0
+      ? await Stop.findAll({ where: { route_id: { [Op.in]: allRouteIds } }, attributes: ['route_id'] })
+      : [];
+    const stopCountMap = {};
+    allRouteStops.forEach(s => { stopCountMap[s.route_id] = (stopCountMap[s.route_id] || 0) + 1; });
+    const driverUser = await User.findByPk(req.userId, { attributes: ['commission_per_stop'] });
+    const driverCommission = Number(driverUser?.commission_per_stop || 0);
 
-    totals.to_deliver = Math.max(0, (totals.collected - totals.commission) - totalAdminReceived);
+    totals.to_deliver = allDriverRoutes.reduce((sum, r) => {
+      const collected = Number(r.route_total_collected || 0);
+      const stopCount = stopCountMap[r.id] || 0;
+      const commission = driverCommission * stopCount;
+      const grossToDeliver = collected - commission;
+      const received = Number(r.admin_amount_received || 0);
+      return sum + Math.max(0, grossToDeliver - received);
+    }, 0);
 
     res.json({
       months,
