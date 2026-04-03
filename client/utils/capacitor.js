@@ -19,6 +19,18 @@ export const setupStatusBar = async () => {
   }
 }
 
+export const initStatusBar = async () => {
+  if (isNative) {
+    try {
+      await StatusBar.setStyle({ style: Style.Dark })
+      await StatusBar.setBackgroundColor({ color: '#0f172a' })
+      await StatusBar.setOverlaysWebView({ overlay: true })
+    } catch (e) {
+      console.log('StatusBar not available')
+    }
+  }
+}
+
 export const requestLocationPermission = async () => {
   if (!isNative) return true
   try {

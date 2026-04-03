@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { MessagingProvider } from './contexts/MessagingContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import { Capacitor } from '@capacitor/core'
+import { initStatusBar } from './utils/capacitor'
 import './index.css'
 
 // ─── Inicialización nativa (solo iOS/Android) ─────────────────────────────
@@ -16,15 +17,8 @@ if (Capacitor.isNativePlatform()) {
       SplashScreen.hide().catch(() => {})
     } catch {}
 
-    try {
-      const { StatusBar, Style } = await import('@capacitor/status-bar')
-      // Íconos blancos sobre fondo oscuro
-      await StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
-      // Fondo oscuro bajo la barra de estado (Android)
-      await StatusBar.setBackgroundColor({ color: '#0f172a' }).catch(() => {})
-      // La webview ocupa toda la pantalla incluido el área del status bar
-      await StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
-    } catch {}
+    // Usar initStatusBar desde capacitor.js (usa el import estático, sin conflicto)
+    await initStatusBar()
   }
 
   initNative()

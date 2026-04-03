@@ -18,6 +18,28 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-capacitor': [
+            '@capacitor/core',
+            '@capacitor/geolocation',
+            '@capacitor/camera',
+            '@capacitor/haptics',
+            '@capacitor/status-bar',
+            '@capacitor/preferences',
+            '@capacitor-community/keep-awake'
+          ],
+          'vendor-maps': ['@googlemaps/js-api-loader'],
+          'vendor-misc': ['axios', 'xlsx', 'uuid']
+        }
+      }
+    }
+  },
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
   }
 })
