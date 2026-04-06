@@ -126,6 +126,7 @@ router.get('/orders', requireAuth, async (req, res) => {
     }
 
     where.dispatch_status = { [Op.ne]: 'archived' };
+    where.customer_name = { [Op.notILike]: '%-REC%' };
 
     const orders = await ValidatedAddress.findAll({
       where,

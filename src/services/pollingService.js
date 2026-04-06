@@ -2215,6 +2215,8 @@ class PollingService {
         return null;
       }
 
+      const isRecByName = /-rec\b/i.test(customerName);
+
       if (!record) {
         record = await ValidatedAddress.create({
           user_id: userId,
@@ -2230,9 +2232,14 @@ class PollingService {
           state: geocoded.stateShort || geocoded.state || null,
           confidence: geocoded.confidence || null,
           source: sourceOverride || 'scanner',
-          order_status: orderStatus || 'approved'
+          order_status: orderStatus || 'approved',
+          dispatch_status: isRecByName ? 'archived' : 'available'
         });
+        if (isRecByName) console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (nombre contiene -REC)`);
         created = true;
+      } else if (isRecByName && record.dispatch_status !== 'archived') {
+        await record.update({ dispatch_status: 'archived' });
+        console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (nombre contiene -REC)`);
       }
 
       if (created) {
