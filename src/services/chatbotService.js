@@ -370,7 +370,7 @@ class ChatbotService {
     return combined >= (threshold || 0.55);
   }
 
-  async parseProductSelection(text) {
+  async parseProductSelection(text, keywordOnly = false) {
     // Construir lista de productos para la IA
     let productsList = [];
     try {
@@ -389,8 +389,8 @@ class ChatbotService {
       ];
     }
 
-    // Intentar con IA primero
-    if (this.ai.isAvailable) {
+    // Intentar con IA — solo si NO estamos en modo solo-palabras-clave
+    if (!keywordOnly && this.ai.isAvailable) {
       const aiNum = await this.ai.extractProductSelection(text, productsList);
       if (aiNum !== null) {
         console.log(`[Bot-IA] parseProduct: "${text}" → opción ${aiNum}`);
@@ -962,7 +962,10 @@ class ChatbotService {
     // ─── DETECCIÓN DE PEDIDO DIRECTO ─────────────────────────────────────────
     // Si el cliente ya menciona un producto específico desde el primer mensaje,
     // no hay que hacerle el flujo completo — ya sabe lo que quiere.
-    const directProduct = await this.parseProductSelection(messageText);
+    // IMPORTANTE: en el estado inicial usamos solo palabras clave (sin IA) para
+    // evitar falsos positivos donde el AI alucina un producto en mensajes que
+    // en realidad son datos de contacto, saludos o información general.
+    const directProduct = await this.parseProductSelection(messageText, true);
     if (directProduct && !directProduct.isOther) {
       return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName);
     }

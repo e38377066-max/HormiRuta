@@ -410,8 +410,12 @@ Responde SOLO con el ZIP, la ciudad, o la palabra null.`
 ${productsText}
 ${productsList.length + 1}. Otros
 
-El cliente puede referirse al producto por número, nombre, sinónimo o descripción.
-Responde SOLO con el número de la opción (1, 2, 3...) o "null" si no se puede determinar.`
+REGLAS ESTRICTAS:
+- Solo responde con un número si el mensaje menciona EXPLÍCITAMENTE uno de los productos por su nombre o un sinónimo claro.
+- Si el mensaje parece ser información de contacto (nombre, teléfono, dirección, referido), responde null.
+- Si el mensaje es un saludo, pregunta general, o no menciona claramente un producto, responde null.
+- Cuando tengas duda, responde null. Es mejor null que equivocarse.
+- Responde SOLO con el número de la opción (1, 2, 3...) o exactamente la palabra "null".`
         },
         {
           role: 'user',
