@@ -108,7 +108,7 @@ router.get('/orders', requireAuth, async (req, res) => {
       if (req.query.status) {
         where.order_status = req.query.status;
       } else {
-        where.order_status = { [Op.notIn]: ['delivered', 'pickup_ready'] };
+        where.order_status = { [Op.notIn]: ['delivered'] };
       }
       if (req.query.available === 'true') {
         where.route_id = { [Op.is]: null };

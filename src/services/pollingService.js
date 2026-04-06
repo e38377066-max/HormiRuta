@@ -1158,16 +1158,20 @@ class PollingService {
 
       if (tagExcludedIds.length > 0) {
         try {
-          const deletedCount = await ValidatedAddress.destroy({
-            where: {
-              respond_contact_id: { [Op.in]: tagExcludedIds }
+          const [archivedCount] = await ValidatedAddress.update(
+            { dispatch_status: 'archived' },
+            {
+              where: {
+                respond_contact_id: { [Op.in]: tagExcludedIds },
+                dispatch_status: { [Op.ne]: 'archived' }
+              }
             }
-          });
-          if (deletedCount > 0) {
-            console.log(`[AddressScan] ${deletedCount} orden(es) eliminada(s) por tag excluido (rec)`);
+          );
+          if (archivedCount > 0) {
+            console.log(`[AddressScan] ${archivedCount} orden(es) archivada(s) del dispatcher por tag excluido (rec)`);
           }
         } catch (err) {
-          console.error(`[AddressScan] Error limpiando tags excluidos:`, err.message);
+          console.error(`[AddressScan] Error archivando tags excluidos:`, err.message);
         }
       }
 
