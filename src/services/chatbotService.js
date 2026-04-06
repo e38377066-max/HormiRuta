@@ -132,12 +132,12 @@ class ChatbotService {
   }
 
   hasExcludedTag(contact) {
-    const excludedTags = this.settings.excluded_tags || ['Personal', 'IprintPOS', 'ClientesArea', 'Area862Designers'];
+    const excludedTags = this.settings.excluded_tags || ['Personal', 'Personales', 'IprintPOS', 'ClientesArea', 'Area862Designers'];
     const contactTags = contact.tags || [];
     
     for (const tag of contactTags) {
       const tagName = typeof tag === 'string' ? tag : tag.name;
-      if (excludedTags.includes(tagName)) {
+      if (excludedTags.some(ex => ex.toLowerCase() === (tagName || '').toLowerCase())) {
         return true;
       }
     }

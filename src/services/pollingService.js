@@ -1825,6 +1825,10 @@ class PollingService {
               await order.update(closedUpdateFields);
               console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
               syncedCount++;
+            } else if (!order.route_id && order.dispatch_status !== 'archived' && !['delivered', 'ups_shipped'].includes(order.order_status)) {
+              await order.update({ dispatch_status: 'archived' });
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, archivada del dispatch (estado ${order.order_status} sin avance)`);
+              syncedCount++;
             }
           } else if (!newStatus && contactLifecycle) {
             const archiveLifecycles = ['new lead'];
@@ -2199,6 +2203,12 @@ class PollingService {
           await record.update({ respond_contact_id: contactIdStr });
           console.log(`[ValidatedAddr] Vinculado registro manual de ${customerName} (por nombre) al contacto ${contactIdStr}`);
         }
+      }
+
+      const geocodedState = geocoded?.stateShort || geocoded?.state || null;
+      if (geocodedState && geocodedState.toUpperCase() !== 'TX') {
+        console.log(`[ValidatedAddr] Dirección de ${customerName} fuera de TX (${geocodedState}): "${finalAddress}" — ignorada`);
+        return null;
       }
 
       if (!record) {
