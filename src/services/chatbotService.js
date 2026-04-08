@@ -850,7 +850,13 @@ class ChatbotService {
     if (!this.isWithinBusinessHours()) {
       if (!convState.out_of_hours_notified) {
         const customerNameOOH = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
-        const outMsg = await this.getAIMsg('out_of_hours', { customerName: customerNameOOH }, msgs.outOfHours);
+        const isExistingOOH = convState.is_existing_customer || convState.is_reopened || false;
+        const outMsg = await this.getAIMsg('out_of_hours', {
+          customerName: customerNameOOH,
+          lastMessage: messageText,
+          isExisting: isExistingOOH,
+          businessHours: this.getBusinessHoursText()
+        }, msgs.outOfHours);
         await this.sendMessage(contact.id, outMsg);
         await this.updateConversationState(contact.id, { out_of_hours_notified: true });
         convState.out_of_hours_notified = true;

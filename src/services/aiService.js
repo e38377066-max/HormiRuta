@@ -595,7 +595,7 @@ Genera la respuesta más apropiada:`
   async generateFlowMessage(intent, params = {}) {
     if (!this.isAvailable) return null;
 
-    const { customerName, zipCode, city, product, zone, lastMessage, outOfHours, businessHours } = params;
+    const { customerName, zipCode, city, product, zone, lastMessage, outOfHours, businessHours, isExisting } = params;
     const name = customerName && customerName !== 'Sin nombre' ? customerName.split(' ')[0] : null;
     const handoffNote = outOfHours && businessHours
       ? `IMPORTANTE: El cliente escribió fuera de horario. En lugar de decir "un agente te atenderá en breve", di que en el horario de atención (${businessHours}) un agente o diseñador lo atenderá.`
@@ -651,11 +651,17 @@ ${handoffNote || 'Menciona que un agente les ayudará a crear algo profesional e
 ${name ? `Nombre: ${name}` : ''}
 Sé breve y positivo, 1-2 líneas máximo.`,
 
-      out_of_hours: `Informa al cliente que en este momento están fuera del horario de atención.
-Horario: Lunes-Viernes 9AM-6PM (hora de Dallas/Texas).
-${name ? `Nombre: ${name}` : ''}
-IMPORTANTE: Diles que aunque están fuera de horario, el bot los puede atender AHORA para recopilar la información de su pedido, y que durante el horario de atención un agente o diseñador les dará seguimiento y confirmará todo.
-Sé amigable, tranquilizador y entusiasta. Máximo 4 líneas.`,
+      out_of_hours: `Eres el asistente de Area 862 Graphics. El cliente acaba de escribir fuera del horario de atención.
+${name ? `Nombre del cliente: ${name}` : 'El cliente no tiene nombre registrado.'}
+Tipo de cliente: ${isExisting ? 'CLIENTE EXISTENTE que ya ha ordenado antes — salúdalo como a alguien conocido.' : 'CLIENTE NUEVO que escribe por primera vez.'}
+Mensaje del cliente: "${lastMessage || ''}"
+Horario de atención: ${businessHours || 'Lunes a Viernes de 9am a 6pm (hora de Dallas)'}.
+
+Tu tarea: Escribe un mensaje personalizado que:
+1. Reconozca lo que el cliente escribió (si mencionó algo concreto, refiérete a ello).
+2. Le avise amablemente que están fuera de horario y cuál es el horario.
+3. Le explique que el bot puede tomarle los datos de su pedido AHORA MISMO, y que durante el horario de atención un agente o diseñador le dará seguimiento completo.
+4. Sea cálido, natural y breve (máximo 4 líneas). No uses listas ni bullet points.`,
 
       frustrated: `El cliente está molesto o frustrado. 
 ${name ? `Nombre: ${name}` : ''}
