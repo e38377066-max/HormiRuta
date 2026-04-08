@@ -595,8 +595,11 @@ Genera la respuesta más apropiada:`
   async generateFlowMessage(intent, params = {}) {
     if (!this.isAvailable) return null;
 
-    const { customerName, zipCode, city, product, zone, lastMessage } = params;
+    const { customerName, zipCode, city, product, zone, lastMessage, outOfHours, businessHours } = params;
     const name = customerName && customerName !== 'Sin nombre' ? customerName.split(' ')[0] : null;
+    const handoffNote = outOfHours && businessHours
+      ? `IMPORTANTE: El cliente escribió fuera de horario. En lugar de decir "un agente te atenderá en breve", di que en el horario de atención (${businessHours}) un agente o diseñador lo atenderá.`
+      : '';
 
     const intentPrompts = {
       welcome_new: `El cliente acaba de escribir por primera vez. Saluda de forma cálida y amigable en nombre de Area 862 Graphics. 
@@ -636,20 +639,23 @@ Confirma su elección de forma entusiasta y pregúntale si ya tiene un diseño l
 
       has_design: `El cliente dice que ya tiene un diseño. 
 ${name ? `Nombre: ${name}` : ''}
-Responde de forma positiva. Diles que envíen su diseño o la información que necesitan incluir. Menciona que un agente les atenderá en breve para continuar con su pedido.`,
+Responde de forma positiva. Diles que envíen su diseño o la información que necesitan incluir.
+${handoffNote || 'Menciona que un agente les atenderá en breve para continuar con su pedido.'}`,
 
       needs_design: `El cliente necesita que le hagan un diseño desde cero.
 ${name ? `Nombre: ${name}` : ''}
-Responde con entusiasmo. Diles que cuenten qué información quieren en el diseño (nombre, teléfono, logo, etc.) y que un agente les ayudará a crear algo profesional.`,
+Responde con entusiasmo. Diles que cuenten qué información quieren en el diseño (nombre, teléfono, logo, etc.).
+${handoffNote || 'Menciona que un agente les ayudará a crear algo profesional en breve.'}`,
 
       passing_to_agent: `Informa al cliente de forma amigable que lo estás conectando con uno de los agentes especializados del equipo.
 ${name ? `Nombre: ${name}` : ''}
 Sé breve y positivo, 1-2 líneas máximo.`,
 
       out_of_hours: `Informa al cliente que en este momento están fuera del horario de atención.
-Horario: Lunes-Viernes 9AM-6PM, Sábados 9AM-4PM (hora de Dallas/Texas).
+Horario: Lunes-Viernes 9AM-6PM (hora de Dallas/Texas).
 ${name ? `Nombre: ${name}` : ''}
-Diles que dejen su mensaje y que en cuanto abran se lo responden. Sé amigable y tranquilizador.`,
+IMPORTANTE: Diles que aunque están fuera de horario, el bot los puede atender AHORA para recopilar la información de su pedido, y que durante el horario de atención un agente o diseñador les dará seguimiento y confirmará todo.
+Sé amigable, tranquilizador y entusiasta. Máximo 4 líneas.`,
 
       frustrated: `El cliente está molesto o frustrado. 
 ${name ? `Nombre: ${name}` : ''}
@@ -685,7 +691,9 @@ Ahora pregúntale brevemente si tiene alguna pregunta o si quiere continuar con 
 Producto solicitado: ${product || 'el servicio mencionado'}
 Mensaje del cliente: "${lastMessage || ''}"
 ${name ? `Nombre: ${name}` : ''}
-Responde de forma natural y entusiasta: confirma que lo puedes ayudar con eso, dile que vas a conectarlo con uno de los especialistas del equipo que le dará todos los detalles (precio, tiempo de entrega, diseño, etc.). No hagas preguntas de validación ni pidas ZIP. Sé cálido, directo y breve (2-3 líneas máximo).`
+Confirma que lo puedes ayudar con eso.
+${handoffNote || 'Dile que vas a conectarlo con uno de los especialistas del equipo que le dará todos los detalles (precio, tiempo de entrega, diseño, etc.).'}
+No hagas preguntas de validación ni pidas ZIP. Sé cálido, directo y breve (2-3 líneas máximo).`
     };
 
     const promptForIntent = intentPrompts[intent];

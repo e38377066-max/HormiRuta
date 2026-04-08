@@ -83,6 +83,48 @@ class ChatbotService {
     }
   }
 
+  // ==================== HORARIO ====================
+
+  getBusinessHoursText() {
+    const start = this.settings.business_hours_start || '09:00';
+    const end = this.settings.business_hours_end || '18:00';
+    let businessDays = this.settings.business_days || [1, 2, 3, 4, 5];
+    if (typeof businessDays === 'string') {
+      businessDays = businessDays.replace(/["\[\]]/g, '').split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+    }
+    if (!Array.isArray(businessDays)) businessDays = [1, 2, 3, 4, 5];
+
+    const dayNames = { 0: 'Domingo', 1: 'Lunes', 2: 'Martes', 3: 'Miércoles', 4: 'Jueves', 5: 'Viernes', 6: 'Sábado' };
+    const sorted = [...businessDays].sort((a, b) => a - b);
+    let daysText;
+    if (JSON.stringify(sorted) === JSON.stringify([1, 2, 3, 4, 5])) {
+      daysText = 'Lunes a Viernes';
+    } else if (JSON.stringify(sorted) === JSON.stringify([1, 2, 3, 4, 5, 6])) {
+      daysText = 'Lunes a Sábado';
+    } else if (JSON.stringify(sorted) === JSON.stringify([0, 1, 2, 3, 4, 5, 6])) {
+      daysText = 'todos los días';
+    } else {
+      daysText = sorted.map(d => dayNames[d]).join(', ');
+    }
+
+    const fmt = (t) => {
+      const [h, m] = t.split(':').map(Number);
+      const ampm = h >= 12 ? 'pm' : 'am';
+      const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+      return m === 0 ? `${h12}${ampm}` : `${h12}:${String(m).padStart(2, '0')}${ampm}`;
+    };
+
+    return `${daysText} de ${fmt(start)} a ${fmt(end)} (hora de Dallas)`;
+  }
+
+  getHandoffText() {
+    if (!this.isWithinBusinessHours()) {
+      const hoursText = this.getBusinessHoursText();
+      return `en nuestro horario de atención (${hoursText}), un agente o diseñador te atenderá 🕐`;
+    }
+    return 'un agente te atenderá en breve';
+  }
+
   // ==================== VERIFICACIONES ====================
 
   isWithinBusinessHours() {
@@ -595,18 +637,18 @@ class ChatbotService {
       productSelectedAskDesign: '¡Excelente elección! {{product}} 👍\n\n¿Ya tienes un diseño en mente o quieres que te lo hagamos de cero? 🎨',
       
       // Tiene diseño
-      hasDesignResponse: '¡Perfecto! 📸 Envíanos tu diseño o la información de lo que necesitas.\n\nUn agente te atenderá en breve para ayudarte con tu pedido.',
+      hasDesignResponse: `¡Perfecto! 📸 Envíanos tu diseño o la información de lo que necesitas.\n\n${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} para ayudarte con tu pedido 👨‍💼`,
       
       // Necesita diseño nuevo
-      needsDesignResponse: '¡Genial! 🎨 Cuéntanos qué información quieres incluir en tu diseño (nombre, teléfono, logo, etc.)\n\nUn agente te atenderá en breve para crear algo increíble para ti.',
+      needsDesignResponse: `¡Genial! 🎨 Cuéntanos qué información quieres incluir en tu diseño (nombre, teléfono, logo, etc.)\n\n${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} para crear algo increíble para ti 👨‍💼`,
       
       // Producto seleccionado (sin info previa - flujo de validación)
       productSelected: this.settings.product_selected_message || 
-        '¡Perfecto! Te interesan {{product}} 👍\n\nDame un momento, te paso con uno de nuestros especialistas que te dará toda la información sobre precios, diseños y tiempos de entrega 📋✨',
+        `¡Perfecto! Te interesan {{product}} 👍\n\nDame un momento, ${this.getHandoffText()} que te dará toda la información sobre precios, diseños y tiempos de entrega 📋✨`,
       
       // Fuera de horario
       outOfHours: this.settings.out_of_hours_message || 
-        '🌙 ¡Hola! Gracias por escribirnos 😊\n\nEn este momento estamos fuera de horario de atención.\nNuestro horario es de Lunes a Viernes de 9am a 6pm (hora de Dallas).\n\nPero no te preocupes, deja tu mensaje y en cuanto regresemos te respondemos lo antes posible 💬\n\nSi es urgente, también puedes dejarnos tu número y te llamamos mañana temprano 📞',
+        `🌙 ¡Hola! Gracias por escribirnos 😊\n\nEn este momento estamos fuera de horario de atención.\nNuestro horario es ${this.getBusinessHoursText()}.\n\n¡Pero no te preocupes! Puedo tomarte los datos de tu pedido ahora mismo 📋 y cuando estemos en horario, un agente o diseñador te contactará para confirmar todo y darte seguimiento 👨‍💼✨`,
       
       // No entendió ZIP
       remindZip: this.settings.remind_zip_message || 
@@ -732,17 +774,25 @@ class ChatbotService {
     if (convState.out_of_hours_notified && this.isWithinBusinessHours()) {
       const agentCheck = await this.hasAgentAlreadyResponded(contact.id, false);
       if (!agentCheck.hasResponded) {
-        const botInteracted = await this.hasBotAlreadyInteracted(contact.id);
-        const isExisting = botInteracted || convState.is_existing_customer;
-        console.log(`[Bot] Contacto ${contact.id} vuelve en horario de atencion, ningun agente respondio, iniciando flujo como ${isExisting ? 'CLIENTE EXISTENTE' : 'CLIENTE NUEVO'}`);
-        await this.updateConversationState(contact.id, { 
-          out_of_hours_notified: false,
-          agent_active: false,
-          state: 'initial',
-          is_existing_customer: isExisting,
-          has_prior_info: isExisting
-        });
-        convState = await this.getOrCreateConversationState(contact.id);
+        // Si el cliente ya completó el flujo OOH (estado 'assigned' u otro terminal),
+        // no reiniciamos — solo limpiamos el flag
+        if (convState.state === 'assigned' || convState.state === 'closed_no_coverage') {
+          await this.updateConversationState(contact.id, { out_of_hours_notified: false });
+          convState = await this.getOrCreateConversationState(contact.id);
+          console.log(`[Bot] Contacto ${contact.id} vuelve en horario con flujo completado OOH (estado: ${convState.state}), limpiando flag`);
+        } else {
+          const botInteracted = await this.hasBotAlreadyInteracted(contact.id);
+          const isExisting = botInteracted || convState.is_existing_customer;
+          console.log(`[Bot] Contacto ${contact.id} vuelve en horario de atencion, ningun agente respondio, reiniciando flujo como ${isExisting ? 'CLIENTE EXISTENTE' : 'CLIENTE NUEVO'}`);
+          await this.updateConversationState(contact.id, { 
+            out_of_hours_notified: false,
+            agent_active: false,
+            state: 'initial',
+            is_existing_customer: isExisting,
+            has_prior_info: isExisting
+          });
+          convState = await this.getOrCreateConversationState(contact.id);
+        }
       } else {
         console.log(`[Bot] Contacto ${contact.id} vuelve en horario pero agente ${agentCheck.agentName} ya respondio, bot no interferira`);
         return { handled: false, reason: 'agent_already_responded' };
@@ -799,20 +849,21 @@ class ChatbotService {
     // Verificar horario de atención
     if (!this.isWithinBusinessHours()) {
       if (!convState.out_of_hours_notified) {
-        const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
-        const outMsg = await this.getAIMsg('out_of_hours', { customerName }, msgs.outOfHours);
+        const customerNameOOH = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+        const outMsg = await this.getAIMsg('out_of_hours', { customerName: customerNameOOH }, msgs.outOfHours);
         await this.sendMessage(contact.id, outMsg);
         await this.updateConversationState(contact.id, { out_of_hours_notified: true });
-        await this.assignToDefaultAgent(contact.id);
+        convState.out_of_hours_notified = true;
         await this.addTrackingTag(contact.id, 'FueraDeHorario');
-        return { handled: true, action: 'out_of_hours' };
+        console.log(`[Bot] Fuera de horario — aviso enviado a ${contact.id}, continuando flujo normal`);
       }
-      return { handled: false, reason: 'out_of_hours_already_notified' };
-    }
-
-    // Reset out of hours flag si estamos en horario
-    if (convState.out_of_hours_notified) {
-      await this.updateConversationState(contact.id, { out_of_hours_notified: false });
+      // Continúa el flujo normal aunque sea fuera de horario
+    } else {
+      // Reset out of hours flag si volvimos a horario hábil
+      if (convState.out_of_hours_notified) {
+        await this.updateConversationState(contact.id, { out_of_hours_notified: false });
+        convState.out_of_hours_notified = false;
+      }
     }
 
     // Verificar si conversación fue abandonada
@@ -1026,10 +1077,12 @@ class ChatbotService {
 
   // Maneja el caso donde el cliente llega ya sabiendo lo que quiere
   async handleDirectOrderRequest(contact, messageText, product, customerName) {
+    const ooh = !this.isWithinBusinessHours();
+    const oohParams = ooh ? { outOfHours: true, businessHours: this.getBusinessHoursText() } : {};
     const directMsg = await this.getAIMsg(
       'direct_order',
-      { customerName, product: product.name, lastMessage: messageText },
-      `¡Hola! Claro que te ayudamos con ${product.name} 😊\n\nTe conecto de inmediato con uno de nuestros especialistas que te dará todos los detalles sobre precio, tiempo de entrega y diseño.`
+      { customerName, product: product.name, lastMessage: messageText, ...oohParams },
+      `¡Hola! Claro que te ayudamos con ${product.name} 😊\n\n${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} que te dará todos los detalles sobre precio, tiempo de entrega y diseño 📋✨`
     );
     await this.sendMessage(contact.id, directMsg);
     
@@ -1112,7 +1165,7 @@ class ChatbotService {
     if (product) {
       // Si seleccionó "Otros", asignar a agente directamente
       if (product.isOther) {
-        const otherMsg = '¡Perfecto! Te paso con uno de nuestros agentes para ayudarte con tu consulta 😊';
+        const otherMsg = `¡Perfecto! ${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} para ayudarte con tu consulta 😊`;
         await this.sendMessage(contact.id, otherMsg);
         
         await this.updateConversationState(contact.id, {
@@ -1161,12 +1214,15 @@ class ChatbotService {
     const hasDesign = this.parseDesignResponse(messageText);
     const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
 
+    const ooh = !this.isWithinBusinessHours();
+    const oohParams = ooh ? { outOfHours: true, businessHours: this.getBusinessHoursText() } : {};
+
     if (hasDesign === 'no') {
-      const needsMsg = await this.getAIMsg('needs_design', { customerName }, msgs.needsDesignResponse);
+      const needsMsg = await this.getAIMsg('needs_design', { customerName, ...oohParams }, msgs.needsDesignResponse);
       await this.sendMessage(contact.id, needsMsg);
     } else {
       // Tiene diseño o respuesta ambigua (asumir que sí tiene)
-      const hasMsg = await this.getAIMsg('has_design', { customerName }, msgs.hasDesignResponse);
+      const hasMsg = await this.getAIMsg('has_design', { customerName, ...oohParams }, msgs.hasDesignResponse);
       await this.sendMessage(contact.id, hasMsg);
     }
     
@@ -1306,7 +1362,7 @@ class ChatbotService {
     if (product) {
       // Si seleccionó "Otros", asignar a agente directamente
       if (product.isOther) {
-        const otherMsg = '¡Perfecto! Te paso con uno de nuestros agentes para ayudarte con tu consulta 😊';
+        const otherMsg = `¡Perfecto! ${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} para ayudarte con tu consulta 😊`;
         await this.sendMessage(contact.id, otherMsg);
         
         await this.updateConversationState(contact.id, {
