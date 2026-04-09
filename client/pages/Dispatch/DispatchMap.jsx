@@ -668,6 +668,17 @@ export default function DispatchMap() {
     }
   }
 
+  const handleDeleteOrder = async (order) => {
+    if (!window.confirm(`¿Eliminar permanentemente la orden de "${order.customer_name}"? Esta acción no se puede deshacer.`)) return
+    try {
+      await api.delete(`/api/dispatch/orders/${order.id}`)
+      setOrders(prev => prev.filter(o => o.id !== order.id))
+      setSelectedOrders(prev => { const s = new Set(prev); s.delete(order.id); return s })
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al eliminar orden')
+    }
+  }
+
   const loadRouteStops = async (routeId) => {
     try {
       setLoadingRouteStops(routeId)
@@ -1544,6 +1555,16 @@ export default function DispatchMap() {
                           >
                             <span className="material-icons">edit</span>
                           </button>
+                          {!order.route_id && (
+                            <button
+                              className="do-edit-notes"
+                              onClick={() => handleDeleteOrder(order)}
+                              title="Eliminar orden"
+                              style={{ color: '#f44336' }}
+                            >
+                              <span className="material-icons">delete</span>
+                            </button>
+                          )}
 
                           {order.notes && editingNotes !== order.id && (
                             <div className="do-notes-preview">{order.notes}</div>

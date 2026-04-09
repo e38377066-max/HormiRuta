@@ -83,6 +83,41 @@ class GeocodingService {
       }
 
       if (data.status === 'ZERO_RESULTS') {
+        // Retry without country restriction — some addresses fail with country:US
+        try {
+          const retryResp = await axios.get(this.baseUrl, {
+            params: { address: rawAddress, key: this.apiKey, language: 'en' },
+            timeout: 5000
+          });
+          const retryData = retryResp.data;
+          if (retryData.status === 'OK' && retryData.results?.length > 0) {
+            const best = retryData.results[0];
+            const comps = this.parseAddressComponents(best.address_components);
+            const fmt = best.formatted_address.replace(/,\s*USA?\s*$/i, '').trim();
+            const locType = best.geometry?.location_type;
+            const builtAddr = this.buildCleanAddress(comps);
+            const finalAddr = builtAddr && builtAddr.length > 5 ? builtAddr : fmt;
+            const retryResult = {
+              success: true,
+              original: rawAddress,
+              corrected: fmt,
+              streetNumber: comps.streetNumber,
+              street: comps.street,
+              city: comps.city,
+              state: comps.state,
+              zip: comps.zip,
+              county: comps.county,
+              fullAddress: finalAddr,
+              latitude: best.geometry?.location?.lat,
+              longitude: best.geometry?.location?.lng,
+              confidence: (locType === 'ROOFTOP' || locType === 'RANGE_INTERPOLATED') ? 'high' : 'low',
+              locationType: locType,
+              wasChanged: true
+            };
+            this.addToCache(cacheKey, retryResult, false);
+            return retryResult;
+          }
+        } catch (_) {}
         const result = { success: false, error: 'Address not found', original: rawAddress };
         this.addToCache(cacheKey, result, true);
         return result;

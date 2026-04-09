@@ -135,7 +135,7 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
 
     const candidates = await ValidatedAddress.findAll({
       where: {
-        order_status: { [Op.in]: ['ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'] },
+        order_status: { [Op.in]: ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'] },
         dispatch_status: { [Op.ne]: 'archived' }
       }
     });

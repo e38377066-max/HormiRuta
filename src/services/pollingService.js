@@ -1145,7 +1145,7 @@ class PollingService {
 
       if (allContacts.length === 0) return;
 
-      const excludedTags = ['rec'];
+      const excludedTags = ['rec', 'iprintpos', 'area862designers', 'clientesarea'];
       const tagFilteredContacts = allContacts.filter(contact => {
         const contactTags = contact.tags || [];
         const tagNames = contactTags.map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
@@ -1386,9 +1386,14 @@ class PollingService {
             const contactDetail = await respondio.getContact(contact.id);
             if (contactDetail.success && contactDetail.data) {
               const cData = contactDetail.data;
-              const cfAddress = cData.custom_fields?.find(f => 
-                f.name?.toLowerCase() === 'address' || f.name?.toLowerCase() === 'direccion'
-              );
+              const normalizeFieldName = (n) => (n || '').toLowerCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+              const cfAddress = cData.custom_fields?.find(f => {
+                const fn = normalizeFieldName(f.name);
+                return fn === 'address' || fn === 'direccion' ||
+                  fn === 'delivery address' || fn === 'delivery' ||
+                  fn === 'address line 1' || fn === 'direccion de entrega';
+              });
               if (cfAddress?.value && cfAddress.value.trim().length >= 5) {
                 contactFieldAddress = cfAddress.value.trim();
               }

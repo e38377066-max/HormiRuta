@@ -470,6 +470,23 @@ router.put('/orders/:id/edit', requireAdmin, async (req, res) => {
   }
 });
 
+router.delete('/orders/:id', requireAdmin, async (req, res) => {
+  try {
+    const order = await ValidatedAddress.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (order.route_id) {
+      return res.status(400).json({ error: 'No se puede borrar una orden que está en una ruta activa. Primero remuévela de la ruta.' });
+    }
+    const name = order.customer_name;
+    await order.destroy();
+    console.log(`[Dispatch] Orden #${req.params.id} eliminada: ${name}`);
+    res.json({ success: true, message: `Orden de ${name} eliminada` });
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    res.status(500).json({ error: 'Error al eliminar orden' });
+  }
+});
+
 router.get('/accounting', requireAdmin, async (req, res) => {
   try {
     const { driver_id, date_from, date_to } = req.query;
