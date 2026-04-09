@@ -1145,7 +1145,7 @@ class PollingService {
 
       if (allContacts.length === 0) return;
 
-      const excludedTags = ['rec', 'iprintpos', 'area862designers', 'clientesarea'];
+      const excludedTags = ['rec'];
       const tagFilteredContacts = allContacts.filter(contact => {
         const contactTags = contact.tags || [];
         const tagNames = contactTags.map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
@@ -1181,7 +1181,7 @@ class PollingService {
       await this.cleanupDuplicateAddresses(userId);
       await this.cleanupDeliveredOrders();
 
-      const excludedLifecycles = ['new lead', 'impropos'];
+      const excludedLifecycles = ['new lead', 'impropos', 'iprintpos'];
       const scanContacts = tagFilteredContacts.filter(contact => {
         const lc = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
         if (lc && excludedLifecycles.includes(lc)) {
@@ -1228,7 +1228,7 @@ class PollingService {
 
         const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
         const orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
-        const excludedLifecycles = ['New Lead', 'Impropos'];
+        const excludedLifecycles = ['New Lead', 'Impropos', 'IprintPOS'];
         const isExcluded = excludedLifecycles.some(ex => ex.toLowerCase() === contactLifecycle.toLowerCase());
         if (!orderStatus && contactLifecycle && isExcluded) {
           if (!existing.route_id) {
@@ -1481,21 +1481,19 @@ class PollingService {
               const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
               if (cfNorm !== existOrigNorm && cfNorm !== existValidNorm) {
                 const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
-                if (cfGeocoded.success) {
-                  console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}" -> "${cfGeocoded.fullAddress}" [contact_corrected]`);
-                  await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
-                  continue;
-                }
+                const addressToSave = cfGeocoded.success ? cfGeocoded.fullAddress : contactFieldAddress;
+                console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}"${cfGeocoded.success ? ` -> "${cfGeocoded.fullAddress}"` : ' (geocodificacion fallida, guardando igualmente)'} [contact_corrected]`);
+                await this.saveValidatedAddress(userId, contact, addressToSave, contactFieldAddress, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
+                continue;
               } else {
                 continue;
               }
             } else {
               const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
-              if (cfGeocoded.success) {
-                console.log(`[AddressScan] Direccion desde contacto (sin registro previo) ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}" [contact_corrected]`);
-                await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
-                continue;
-              }
+              const addressToSave = cfGeocoded.success ? cfGeocoded.fullAddress : contactFieldAddress;
+              console.log(`[AddressScan] Direccion desde contacto (sin registro previo) ${contactName} (${contact.id}): "${addressToSave}"${cfGeocoded.success ? '' : ' (geocodificacion fallida, guardando igualmente)'} [contact_corrected]`);
+              await this.saveValidatedAddress(userId, contact, addressToSave, contactFieldAddress, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
+              continue;
             }
           }
 
@@ -2173,8 +2171,14 @@ class PollingService {
       const lng = geocoded?.success ? geocoded.longitude : null;
       const orderStatus = this.lifecycleToOrderStatus(contact.lifecycle);
 
+      // Only skip if no coordinates AND no manually-entered address (contact_corrected)
+      // If an agent wrote the address in Respond.io, save it even if geocoding failed
       if (!lat || !lng) {
-        return;
+        if (sourceOverride !== 'contact_corrected') {
+          return;
+        }
+        // For contact_corrected without coords: save the record so it shows in dispatch
+        // The dispatcher can edit/re-geocode the address manually
       }
 
       let record = await ValidatedAddress.findOne({
