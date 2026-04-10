@@ -1284,9 +1284,8 @@ class PollingService {
     try {
       const extractor = new AddressExtractorService();
       let updatedCount = 0;
-      const MAX_CONTACTS_PER_SCAN = 15;
-      const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
-      const DELAY_BETWEEN_CONTACTS_MS = 500;
+      const RESCAN_INTERVAL_MS = 5 * 60 * 1000;
+      const DELAY_BETWEEN_CONTACTS_MS = 300;
 
       let contactsToScan = allContacts.filter((contact, index, self) =>
         index === self.findIndex(c => c.id === contact.id)
@@ -1311,34 +1310,6 @@ class PollingService {
         return !this.addressScannedContacts.has(c.id.toString());
       });
 
-      const terminalStates = ['initial', 'assigned', 'completed', 'closed_no_coverage', 'closed'];
-
-      const contactIds = contactsToScan.map(c => c.id.toString());
-
-      if (contactIds.length > 0) {
-        const busyConversations = await ConversationState.findAll({
-          where: {
-            contact_id: { [Op.in]: contactIds },
-            state: { [Op.notIn]: terminalStates }
-          }
-        });
-
-        const busyContactIds = new Set(busyConversations.map(c => c.contact_id));
-
-        const busyWithoutAddress = [...busyContactIds].filter(id => needsAddressSet.has(id));
-        const busyWithAddress = [...busyContactIds].filter(id => !needsAddressSet.has(id));
-
-        if (busyWithAddress.length > 0) {
-          console.log(`[AddressScan] Saltando ${busyWithAddress.length} contactos con flujo de chatbot activo (ya tienen direccion)`);
-        }
-
-        contactsToScan = contactsToScan.filter(c => {
-          const cid = c.id.toString();
-          if (busyContactIds.has(cid) && !needsAddressSet.has(cid)) return false;
-          return true;
-        });
-      }
-
       if (contactsToScan.length === 0) {
         if (this.lastFullAddressScan && (Date.now() - this.lastFullAddressScan) > RESCAN_INTERVAL_MS) {
           this.addressScannedContacts.clear();
@@ -1358,7 +1329,9 @@ class PollingService {
         return aNeeds - bNeeds;
       });
 
-      const batch = contactsToScan.slice(0, MAX_CONTACTS_PER_SCAN);
+      console.log(`[AddressScan] Escaneando ${contactsToScan.length} contactos (${needsAddressSet.size} sin direccion)`);
+
+      const batch = contactsToScan;
 
       const batchContactIds = batch.map(c => c.id.toString());
       const existingAddresses = await ValidatedAddress.findAll({
