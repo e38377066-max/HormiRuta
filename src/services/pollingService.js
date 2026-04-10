@@ -1418,6 +1418,30 @@ class PollingService {
                   balance: (cost !== null ? cost : 0) - (deposit !== null ? deposit : 0)
                 };
               }
+
+              const cfReactivarBot = cData.custom_fields?.find(f => {
+                const fn = normalizeFieldName(f.name);
+                return fn === 'reactivar_bot' || fn === 'reactivar bot' || fn === 'reactivarbot' || fn === 'bot_status' || fn === 'bot status';
+              });
+              if (cfReactivarBot?.value && cfReactivarBot.value.trim().length > 0) {
+                const val = cfReactivarBot.value.trim().toLowerCase();
+                if (val === 'si' || val === 'sí' || val === 'yes' || val === 'activo' || val === 'active' || val === '1' || val === 'on' || val === 'reactivar') {
+                  const convState = await ConversationState.findOne({ where: { contact_id: contactIdStr } });
+                  if (convState && (convState.agent_active || convState.state === 'assigned')) {
+                    await convState.update({
+                      agent_active: false,
+                      state: 'initial',
+                      last_agent_message_at: null
+                    });
+                    console.log(`[AddressScan] Bot reactivado via custom field para ${contactName} (contacto ${contact.id})`);
+                  }
+                  try {
+                    await respondio.updateContactCustomFields(contact.id, { [cfReactivarBot.name]: '' });
+                  } catch (clearErr) {
+                    console.log(`[AddressScan] No se pudo limpiar campo reactivar_bot de ${contactName}`);
+                  }
+                }
+              }
             }
           } catch (cfErr) {
             // skip

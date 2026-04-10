@@ -669,6 +669,20 @@ export default function DispatchMap() {
   }
 
   const [refreshingOrderId, setRefreshingOrderId] = useState(null)
+  const [reactivatingBotId, setReactivatingBotId] = useState(null)
+
+  const handleReactivateBot = async (order) => {
+    if (!window.confirm(`¿Reactivar el bot para "${order.customer_name}"? El bot responderá al próximo mensaje del cliente.`)) return
+    try {
+      setReactivatingBotId(order.id)
+      const response = await api.post(`/api/dispatch/orders/${order.id}/reactivate-bot`)
+      alert(response.data.message)
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al reactivar bot')
+    } finally {
+      setReactivatingBotId(null)
+    }
+  }
 
   const handleRefreshOrder = async (order) => {
     if (!window.confirm(`¿Actualizar dirección de "${order.customer_name}"? Se leerá del chat en este momento.`)) return
@@ -1575,6 +1589,19 @@ export default function DispatchMap() {
                             >
                               <span className="material-icons" style={refreshingOrderId === order.id ? { animation: 'spin 1s linear infinite' } : {}}>
                                 {refreshingOrderId === order.id ? 'sync' : 'refresh'}
+                              </span>
+                            </button>
+                          )}
+                          {order.respond_contact_id && (
+                            <button
+                              className="do-edit-notes"
+                              onClick={() => handleReactivateBot(order)}
+                              title="Reactivar bot para este contacto"
+                              style={{ color: '#4caf50' }}
+                              disabled={reactivatingBotId === order.id}
+                            >
+                              <span className="material-icons" style={reactivatingBotId === order.id ? { animation: 'spin 1s linear infinite' } : {}}>
+                                {reactivatingBotId === order.id ? 'sync' : 'smart_toy'}
                               </span>
                             </button>
                           )}
