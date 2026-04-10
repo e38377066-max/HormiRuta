@@ -668,13 +668,24 @@ export default function DispatchMap() {
     }
   }
 
+  const [refreshingOrderId, setRefreshingOrderId] = useState(null)
+
   const handleRefreshOrder = async (order) => {
-    if (!window.confirm(`¿Refrescar la orden de "${order.customer_name}"? Se volverá a leer la dirección del chat.`)) return
+    if (!window.confirm(`¿Actualizar dirección de "${order.customer_name}"? Se leerá del chat en este momento.`)) return
     try {
-      await api.post(`/api/dispatch/orders/${order.id}/refresh`)
+      setRefreshingOrderId(order.id)
+      const response = await api.post(`/api/dispatch/orders/${order.id}/refresh`)
+      const data = response.data
+      if (data.addressFound) {
+        alert(`✅ Dirección encontrada: ${data.address}`)
+      } else {
+        alert(`⚠️ ${data.message}`)
+      }
       fetchData()
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al refrescar orden')
+      alert(error.response?.data?.error || 'Error al actualizar dirección')
+    } finally {
+      setRefreshingOrderId(null)
     }
   }
 
@@ -1558,10 +1569,13 @@ export default function DispatchMap() {
                             <button
                               className="do-edit-notes"
                               onClick={() => handleRefreshOrder(order)}
-                              title="Refrescar orden (re-leer dirección)"
+                              title="Actualizar dirección (leer del chat)"
                               style={{ color: '#ff9800' }}
+                              disabled={refreshingOrderId === order.id}
                             >
-                              <span className="material-icons">refresh</span>
+                              <span className="material-icons" style={refreshingOrderId === order.id ? { animation: 'spin 1s linear infinite' } : {}}>
+                                {refreshingOrderId === order.id ? 'sync' : 'refresh'}
+                              </span>
                             </button>
                           )}
 

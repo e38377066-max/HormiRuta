@@ -10,6 +10,7 @@ import RespondioService from '../services/respondio.js';
 import respondApiService from '../services/respondApiService.js';
 import { optimizeRouteOrder } from '../services/optimization.js';
 import geocodingService from '../services/geocodingService.js';
+import AddressExtractorService from '../services/addressExtractorService.js';
 
 const ORDER_STATUS_TO_LIFECYCLE = {
   approved: 'Approved',
@@ -487,23 +488,169 @@ router.post('/orders/:id/refresh', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Esta orden fue creada manualmente. Usa el botón de editar para cambiar la dirección.' });
     }
 
-    const pollingService = (await import('../services/pollingService.js')).default;
-    pollingService.addressScannedContacts.delete(contactId);
+    let settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
+    if (!settings?.respond_api_token) {
+      settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
+    }
+    if (!settings?.respond_api_token) {
+      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+    }
+
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No se encontró token de Respond.io para leer mensajes.' });
+    }
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const extractor = new AddressExtractorService();
+    const messageLimit = settings.message_history_limit || 50;
+
+    console.log(`[Refresh] Escaneando mensajes de ${name} (contacto ${contactId})...`);
+
+    const messagesResult = await respondio.listMessages(contactId, { limit: messageLimit });
+    if (!messagesResult.success || !messagesResult.items || messagesResult.items.length === 0) {
+      return res.status(400).json({ error: `No se encontraron mensajes para ${name}. Verifica que el contacto tenga conversación en Respond.io.` });
+    }
+
+    const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
+    const outgoingMessages = messagesResult.items.filter(m => m.traffic === 'outgoing');
+    let latestExtracted = null;
+    let scanMapsLink = null;
+    let scanLocationCoords = null;
+
+    for (const msg of incomingMessages) {
+      if (msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
+        scanLocationCoords = { lat: msg.message.latitude, lng: msg.message.longitude };
+        break;
+      }
+      const text = msg.message?.text || '';
+      if (!text || text.length < 5) continue;
+      const gLink = extractor.extractGoogleMapsLink(text);
+      if (gLink) { scanMapsLink = gLink; break; }
+      const addr = extractor.extractAddressFromMessage(text);
+      if (addr) { latestExtracted = addr; break; }
+    }
+
+    if (!scanLocationCoords && !scanMapsLink && !latestExtracted) {
+      const confirmPatterns = [
+        /(?:esta|esta es|tu|su|la)\s+(?:direccion|dir|address)/i,
+        /(?:confirm|verific|correct|bien)\s+.*(?:direccion|dir|address)/i,
+        /(?:direccion|address)\s+(?:es|seria|correcta|confirmada|de\s+entrega)/i,
+        /(?:te|le)\s+(?:mando|envio|confirmo)\s+(?:la|tu|su)?\s*(?:direccion|dir|address)/i,
+        /(?:entrega|delivery|envio)\s+(?:a|en|para)\s*:?\s*/i,
+        /direccion\s+de\s+entrega/i,
+        /dir(?:eccion)?[\s:]+\d+/i
+      ];
+      for (const msg of outgoingMessages) {
+        const text = msg.message?.text || '';
+        if (!text || text.length < 5) continue;
+        const gLink = extractor.extractGoogleMapsLink(text);
+        if (gLink) { scanMapsLink = gLink; break; }
+        const isConfirmation = confirmPatterns.some(p => p.test(text));
+        if (isConfirmation) {
+          const addr = extractor.extractAddressFromMessage(text);
+          if (addr) { latestExtracted = addr; break; }
+        }
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length >= 8);
+        for (const line of lines) {
+          if (/^\d+\s+\w/.test(line) && /\b(st|ave|rd|dr|blvd|ln|ct|way|pl|pkwy|hwy|cir|trail|loop)\b/i.test(line)) {
+            const addr = extractor.extractAddressFromMessage(line);
+            if (addr) { latestExtracted = addr; break; }
+          }
+        }
+        if (latestExtracted) break;
+      }
+    }
+
+    let result;
+    if (scanLocationCoords) {
+      result = { address: null, googleMapsCoords: scanLocationCoords };
+    } else if (scanMapsLink) {
+      result = { address: null, googleMapsLink: scanMapsLink };
+    } else if (latestExtracted) {
+      result = { address: latestExtracted };
+    } else {
+      result = extractor.extractAddressFromConversation(messagesResult.items);
+    }
+
+    if (!result || (!result.address && !result.googleMapsLink && !result.googleMapsCoords)) {
+      await order.update({
+        validated_address: null, original_address: null,
+        address_lat: null, address_lng: null,
+        zip_code: null, city: null, state: null,
+        source: 'placeholder', confidence: null
+      });
+      const pollingService = (await import('../services/pollingService.js')).default;
+      pollingService.addressScannedContacts.delete(contactId);
+      console.log(`[Refresh] No se encontró dirección en el chat de ${name}`);
+      return res.json({ success: true, message: `No se encontró dirección en el chat de ${name}. Se reintentará automáticamente.`, addressFound: false });
+    }
+
+    let finalAddress = result.address;
+    let finalZip = null;
+    let geocoded = { success: false };
+
+    if (result.googleMapsCoords) {
+      geocoded = await geocodingService.reverseGeocode(result.googleMapsCoords.lat, result.googleMapsCoords.lng);
+      if (geocoded.success) {
+        finalAddress = geocoded.fullAddress;
+        finalZip = geocoded.zip;
+      }
+    } else if (result.googleMapsLink) {
+      const resolved = await geocodingService.resolveGoogleMapsLink(result.googleMapsLink);
+      if (resolved.success) {
+        if (resolved.lat && resolved.lng) {
+          geocoded = await geocodingService.reverseGeocode(resolved.lat, resolved.lng);
+        } else if (resolved.address) {
+          geocoded = await geocodingService.geocodeAddress(resolved.address);
+        }
+        if (geocoded.success) {
+          finalAddress = geocoded.fullAddress;
+          finalZip = geocoded.zip;
+        }
+      }
+    } else if (result.address) {
+      geocoded = await geocodingService.geocodeAddress(result.address);
+      if (geocoded.success) {
+        finalAddress = geocoded.fullAddress;
+        finalZip = geocoded.zip;
+      } else {
+        const components = extractor.extractFullAddressComponents(result.address);
+        finalZip = components.zip;
+      }
+    }
+
+    if (!finalAddress) {
+      return res.json({ success: true, message: `Se encontró información pero no se pudo resolver la dirección de ${name}.`, addressFound: false });
+    }
+
+    const lat = geocoded?.success ? geocoded.latitude : null;
+    const lng = geocoded?.success ? geocoded.longitude : null;
 
     await order.update({
-      validated_address: null,
-      original_address: null,
-      address_lat: null,
-      address_lng: null,
-      zip_code: null,
-      city: null,
-      state: null,
-      source: 'placeholder',
-      confidence: null
+      validated_address: finalAddress,
+      original_address: result.address || finalAddress,
+      address_lat: lat,
+      address_lng: lng,
+      zip_code: finalZip,
+      city: geocoded?.city || null,
+      state: geocoded?.state || null,
+      source: 'chat_scan',
+      confidence: geocoded?.confidence || null
     });
 
-    console.log(`[Dispatch] Orden #${req.params.id} refrescada: ${name} (contacto ${contactId} liberado para re-escaneo)`);
-    res.json({ success: true, message: `Orden de ${name} puesta en cola para re-lectura` });
+    const pollingService = (await import('../services/pollingService.js')).default;
+    pollingService.addressScannedContacts.add(contactId);
+
+    try {
+      const customFieldsUpdate = { address: finalAddress };
+      if (finalZip) customFieldsUpdate.zip_code = finalZip;
+      await respondio.updateContactCustomFields(contactId, customFieldsUpdate);
+    } catch (cfErr) {
+      console.log(`[Refresh] No se pudo actualizar custom fields de ${name}, pero la dirección local sí se guardó`);
+    }
+
+    console.log(`[Refresh] Dirección actualizada para ${name}: "${finalAddress}"`);
+    res.json({ success: true, message: `Dirección actualizada: ${finalAddress}`, addressFound: true, address: finalAddress });
   } catch (error) {
     console.error('Error refreshing order:', error);
     res.status(500).json({ error: 'Error al refrescar orden' });
