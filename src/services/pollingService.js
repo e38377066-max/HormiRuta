@@ -1428,12 +1428,12 @@ class PollingService {
                 if (val === 'si' || val === 'sí' || val === 'yes' || val === 'activo' || val === 'active' || val === '1' || val === 'on' || val === 'reactivar') {
                   const convState = await ConversationState.findOne({ where: { contact_id: contactIdStr } });
                   if (convState && (convState.agent_active || convState.state === 'assigned')) {
-                    await convState.update({
-                      agent_active: false,
-                      state: 'initial',
-                      last_agent_message_at: null
-                    });
-                    console.log(`[AddressScan] Bot reactivado via custom field para ${contactName} (contacto ${contact.id})`);
+                    const updateFields = { agent_active: false };
+                    if (convState.state === 'assigned') {
+                      updateFields.state = 'initial';
+                    }
+                    await convState.update(updateFields);
+                    console.log(`[AddressScan] Bot reactivado via custom field para ${contactName} (contacto ${contact.id}), estado: ${convState.state}`);
                   }
                   try {
                     await respondio.updateContactCustomFields(contact.id, { [cfReactivarBot.name]: '' });

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress, ConversationState } from '../models/index.js';
+import { ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress } from '../models/index.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op, literal } from 'sequelize';
 import bcrypt from 'bcryptjs';
@@ -654,39 +654,6 @@ router.post('/orders/:id/refresh', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error refreshing order:', error);
     res.status(500).json({ error: 'Error al refrescar orden' });
-  }
-});
-
-router.post('/orders/:id/reactivate-bot', requireAdmin, async (req, res) => {
-  try {
-    const order = await ValidatedAddress.findByPk(req.params.id);
-    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
-
-    const contactId = order.respond_contact_id;
-    if (!contactId) {
-      return res.status(400).json({ error: 'Esta orden fue creada manualmente, no tiene conversación de bot.' });
-    }
-
-    const convState = await ConversationState.findOne({ where: { contact_id: contactId } });
-    if (!convState) {
-      return res.status(404).json({ error: `No se encontró estado de conversación para ${order.customer_name}.` });
-    }
-
-    if (!convState.agent_active && convState.state !== 'assigned') {
-      return res.json({ success: true, message: `El bot ya está activo para ${order.customer_name}.`, alreadyActive: true });
-    }
-
-    await convState.update({
-      agent_active: false,
-      state: 'initial',
-      last_agent_message_at: null
-    });
-
-    console.log(`[Dispatch] Bot reactivado para ${order.customer_name} (contacto ${contactId})`);
-    res.json({ success: true, message: `Bot reactivado para ${order.customer_name}. Responderá al próximo mensaje del cliente.` });
-  } catch (error) {
-    console.error('Error reactivating bot:', error);
-    res.status(500).json({ error: 'Error al reactivar bot' });
   }
 });
 
