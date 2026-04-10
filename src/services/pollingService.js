@@ -1292,7 +1292,24 @@ class PollingService {
         index === self.findIndex(c => c.id === contact.id)
       );
 
-      contactsToScan = contactsToScan.filter(c => !this.addressScannedContacts.has(c.id.toString()));
+      const allContactIds = contactsToScan.map(c => c.id.toString());
+      const existingRecords = allContactIds.length > 0
+        ? await ValidatedAddress.findAll({
+            where: { respond_contact_id: { [Op.in]: allContactIds } },
+            attributes: ['respond_contact_id', 'validated_address', 'source']
+          })
+        : [];
+      const needsAddressSet = new Set();
+      for (const rec of existingRecords) {
+        if (!rec.validated_address || rec.source === 'placeholder') {
+          needsAddressSet.add(rec.respond_contact_id);
+        }
+      }
+
+      contactsToScan = contactsToScan.filter(c => {
+        if (needsAddressSet.has(c.id.toString())) return true;
+        return !this.addressScannedContacts.has(c.id.toString());
+      });
 
       const terminalStates = ['initial', 'assigned', 'completed', 'closed_no_coverage', 'closed'];
 
@@ -1308,11 +1325,18 @@ class PollingService {
 
         const busyContactIds = new Set(busyConversations.map(c => c.contact_id));
 
-        if (busyContactIds.size > 0) {
-          console.log(`[AddressScan] Saltando ${busyContactIds.size} contactos con flujo de chatbot activo: ${[...busyContactIds].join(', ')}`);
+        const busyWithoutAddress = [...busyContactIds].filter(id => needsAddressSet.has(id));
+        const busyWithAddress = [...busyContactIds].filter(id => !needsAddressSet.has(id));
+
+        if (busyWithAddress.length > 0) {
+          console.log(`[AddressScan] Saltando ${busyWithAddress.length} contactos con flujo de chatbot activo (ya tienen direccion)`);
         }
 
-        contactsToScan = contactsToScan.filter(c => !busyContactIds.has(c.id.toString()));
+        contactsToScan = contactsToScan.filter(c => {
+          const cid = c.id.toString();
+          if (busyContactIds.has(cid) && !needsAddressSet.has(cid)) return false;
+          return true;
+        });
       }
 
       if (contactsToScan.length === 0) {
@@ -1327,6 +1351,12 @@ class PollingService {
       if (!this.lastFullAddressScan) {
         this.lastFullAddressScan = Date.now();
       }
+
+      contactsToScan.sort((a, b) => {
+        const aNeeds = needsAddressSet.has(a.id.toString()) ? 0 : 1;
+        const bNeeds = needsAddressSet.has(b.id.toString()) ? 0 : 1;
+        return aNeeds - bNeeds;
+      });
 
       const batch = contactsToScan.slice(0, MAX_CONTACTS_PER_SCAN);
 
@@ -1370,7 +1400,6 @@ class PollingService {
       for (let i = 0; i < batch.length; i++) {
         const contact = batch[i];
         const contactIdStr = contact.id.toString();
-        this.addressScannedContacts.add(contactIdStr);
 
         if (i > 0) {
           await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CONTACTS_MS));
@@ -1471,6 +1500,7 @@ class PollingService {
                 }
               }
             }
+            this.addressScannedContacts.add(contactIdStr);
             continue;
           }
 
@@ -1484,8 +1514,10 @@ class PollingService {
                 const addressToSave = cfGeocoded.success ? cfGeocoded.fullAddress : contactFieldAddress;
                 console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}"${cfGeocoded.success ? ` -> "${cfGeocoded.fullAddress}"` : ' (geocodificacion fallida, guardando igualmente)'} [contact_corrected]`);
                 await this.saveValidatedAddress(userId, contact, addressToSave, contactFieldAddress, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
+                this.addressScannedContacts.add(contactIdStr);
                 continue;
               } else {
+                this.addressScannedContacts.add(contactIdStr);
                 continue;
               }
             } else {
@@ -1493,11 +1525,13 @@ class PollingService {
               const addressToSave = cfGeocoded.success ? cfGeocoded.fullAddress : contactFieldAddress;
               console.log(`[AddressScan] Direccion desde contacto (sin registro previo) ${contactName} (${contact.id}): "${addressToSave}"${cfGeocoded.success ? '' : ' (geocodificacion fallida, guardando igualmente)'} [contact_corrected]`);
               await this.saveValidatedAddress(userId, contact, addressToSave, contactFieldAddress, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
+              this.addressScannedContacts.add(contactIdStr);
               continue;
             }
           }
 
           if (existing && existing.validated) {
+            this.addressScannedContacts.add(contactIdStr);
             continue;
           }
 
@@ -1718,6 +1752,7 @@ class PollingService {
           }
 
           await this.saveValidatedAddress(userId, contact, finalAddress, result.address || finalAddress, finalZip, geocoded);
+          this.addressScannedContacts.add(contactIdStr);
         } catch (contactError) {
           console.error(`[AddressScan] Error procesando contacto ${contact.id}:`, contactError.message);
         }
