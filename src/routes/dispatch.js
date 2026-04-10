@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress } from '../models/index.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
-import { Op } from 'sequelize';
+import { Op, literal } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import RespondioService from '../services/respondio.js';
 import respondApiService from '../services/respondApiService.js';
@@ -126,7 +126,10 @@ router.get('/orders', requireAuth, async (req, res) => {
     }
 
     where.dispatch_status = { [Op.ne]: 'archived' };
-    where.customer_name = { [Op.notILike]: '%-REC%' };
+    where[Op.and] = [
+      ...(where[Op.and] || []),
+      literal("\"customer_name\" !~* '(^|[\\s\\-])REC([\\s\\-]|$)'")
+    ];
 
     const orders = await ValidatedAddress.findAll({
       where,
@@ -467,6 +470,43 @@ router.put('/orders/:id/edit', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error editing order:', error);
     res.status(500).json({ error: 'Error al editar orden' });
+  }
+});
+
+router.post('/orders/:id/refresh', requireAdmin, async (req, res) => {
+  try {
+    const order = await ValidatedAddress.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (order.route_id) {
+      return res.status(400).json({ error: 'No se puede refrescar una orden que está en una ruta activa.' });
+    }
+    const name = order.customer_name;
+    const contactId = order.respond_contact_id;
+
+    if (!contactId) {
+      return res.status(400).json({ error: 'Esta orden fue creada manualmente. Usa el botón de editar para cambiar la dirección.' });
+    }
+
+    const pollingService = (await import('../services/pollingService.js')).default;
+    pollingService.addressScannedContacts.delete(contactId);
+
+    await order.update({
+      validated_address: null,
+      original_address: null,
+      address_lat: null,
+      address_lng: null,
+      zip_code: null,
+      city: null,
+      state: null,
+      source: 'placeholder',
+      confidence: null
+    });
+
+    console.log(`[Dispatch] Orden #${req.params.id} refrescada: ${name} (contacto ${contactId} liberado para re-escaneo)`);
+    res.json({ success: true, message: `Orden de ${name} puesta en cola para re-lectura` });
+  } catch (error) {
+    console.error('Error refreshing order:', error);
+    res.status(500).json({ error: 'Error al refrescar orden' });
   }
 });
 

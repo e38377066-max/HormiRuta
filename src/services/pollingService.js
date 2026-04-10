@@ -1727,7 +1727,7 @@ class PollingService {
         console.log(`[AddressScan] === ${updatedCount} contactos actualizados con direccion ===`);
       }
 
-      const validLifecycles = ['approved', 'ordered', 'on delivery'];
+      const validLifecycles = ['approved', 'ordered', 'on delivery', 'pickup ready'];
       let placeholderCount = 0;
       for (const contact of batch) {
         const contactIdStr = contact.id.toString();
@@ -1738,6 +1738,10 @@ class PollingService {
         if (!validLifecycles.includes(contactLifecycle)) continue;
 
         const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
+
+        const isRecName = /\bREC\b/i.test(customerName) || /-REC/i.test(customerName);
+        if (isRecName) continue;
+
         const orderStatus = this.lifecycleToOrderStatus(contact.lifecycle || contact.lifecycleStage || '');
         if (!orderStatus) continue;
 
@@ -1746,21 +1750,76 @@ class PollingService {
             where: { respond_contact_id: contactIdStr }
           });
           if (existingAny) continue;
+
+          let placeholderAddress = null;
+          let placeholderLat = null;
+          let placeholderLng = null;
+          let placeholderZip = null;
+          let placeholderCity = null;
+          let placeholderState = null;
+          let placeholderSource = 'placeholder';
+
+          try {
+            const contactDetail = await respondio.getContact(contact.id);
+            if (contactDetail.success && contactDetail.data) {
+              const cData = contactDetail.data;
+              const normalizeFieldName = (n) => (n || '').toLowerCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+              const cfAddress = cData.custom_fields?.find(f => {
+                const fn = normalizeFieldName(f.name);
+                return fn === 'address' || fn === 'direccion' ||
+                  fn === 'delivery address' || fn === 'delivery' ||
+                  fn === 'address line 1' || fn === 'direccion de entrega';
+              });
+              if (cfAddress?.value && cfAddress.value.trim().length >= 5) {
+                const addressText = cfAddress.value.trim();
+                const geocoded = await geocodingService.geocodeAddress(addressText);
+                if (geocoded.success) {
+                  placeholderAddress = geocoded.fullAddress;
+                  placeholderLat = geocoded.latitude;
+                  placeholderLng = geocoded.longitude;
+                  placeholderZip = geocoded.zip;
+                  placeholderCity = geocoded.city;
+                  placeholderState = geocoded.stateShort || geocoded.state;
+                  placeholderSource = 'contact_corrected';
+                  console.log(`[AddressScan] Placeholder con dirección de contacto para ${customerName}: "${placeholderAddress}"`);
+
+                  try {
+                    await respondio.updateContactCustomFields(contact.id, {
+                      address: placeholderAddress,
+                      ...(placeholderZip ? { zip_code: placeholderZip } : {})
+                    });
+                  } catch (updateErr) {}
+                } else {
+                  placeholderAddress = addressText;
+                  placeholderSource = 'contact_corrected';
+                  console.log(`[AddressScan] Placeholder con dirección sin geocodificar para ${customerName}: "${addressText}"`);
+                }
+              }
+            }
+          } catch (cfErr) {}
+
           await ValidatedAddress.create({
             user_id: userId,
             respond_contact_id: contactIdStr,
             customer_name: customerName,
             customer_phone: contact.phone || null,
-            original_address: null,
-            validated_address: null,
-            address_lat: null,
-            address_lng: null,
-            zip_code: null,
-            source: 'placeholder',
+            original_address: placeholderAddress,
+            validated_address: placeholderAddress,
+            address_lat: placeholderLat,
+            address_lng: placeholderLng,
+            zip_code: placeholderZip,
+            city: placeholderCity,
+            state: placeholderState,
+            source: placeholderSource,
             order_status: orderStatus
           });
           placeholderCount++;
-          console.log(`[AddressScan] Placeholder creado para ${customerName} (${contactIdStr}) [${orderStatus}] - sin direccion detectada`);
+          if (placeholderAddress) {
+            console.log(`[AddressScan] Placeholder con dirección creado para ${customerName} (${contactIdStr}) [${orderStatus}]: "${placeholderAddress}"`);
+          } else {
+            console.log(`[AddressScan] Placeholder creado para ${customerName} (${contactIdStr}) [${orderStatus}] - sin direccion detectada`);
+          }
         } catch (phErr) {
           console.error(`[AddressScan] Error creando placeholder ${contactIdStr}:`, phErr.message);
         }
@@ -2224,7 +2283,7 @@ class PollingService {
         return null;
       }
 
-      const isRecByName = /-rec\b/i.test(customerName);
+      const isRecByName = /\bREC\b/i.test(customerName) || /-REC/i.test(customerName);
 
       if (!record) {
         record = await ValidatedAddress.create({

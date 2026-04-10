@@ -668,14 +668,13 @@ export default function DispatchMap() {
     }
   }
 
-  const handleDeleteOrder = async (order) => {
-    if (!window.confirm(`¿Eliminar permanentemente la orden de "${order.customer_name}"? Esta acción no se puede deshacer.`)) return
+  const handleRefreshOrder = async (order) => {
+    if (!window.confirm(`¿Refrescar la orden de "${order.customer_name}"? Se volverá a leer la dirección del chat.`)) return
     try {
-      await api.delete(`/api/dispatch/orders/${order.id}`)
-      setOrders(prev => prev.filter(o => o.id !== order.id))
-      setSelectedOrders(prev => { const s = new Set(prev); s.delete(order.id); return s })
+      await api.post(`/api/dispatch/orders/${order.id}/refresh`)
+      fetchData()
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al eliminar orden')
+      alert(error.response?.data?.error || 'Error al refrescar orden')
     }
   }
 
@@ -1558,11 +1557,11 @@ export default function DispatchMap() {
                           {!order.route_id && (
                             <button
                               className="do-edit-notes"
-                              onClick={() => handleDeleteOrder(order)}
-                              title="Eliminar orden"
-                              style={{ color: '#f44336' }}
+                              onClick={() => handleRefreshOrder(order)}
+                              title="Refrescar orden (re-leer dirección)"
+                              style={{ color: '#ff9800' }}
                             >
-                              <span className="material-icons">delete</span>
+                              <span className="material-icons">refresh</span>
                             </button>
                           )}
 
