@@ -513,13 +513,50 @@ class PollingService {
             followup_last_sent_at: null
           });
         } else {
-          console.log(`[Polling] Contacto ${contact.id} tiene agent_active=true, extrayendo direcciones sin procesar con bot`);
-          for (const msg of incomingMessages) {
-            poller.processedMessageIds.add(msg.messageId);
+          // Antes de retornar, verificar si hay campo reactivar_bot activo
+          let botReactivated = false;
+          try {
+            const contactDetail = await respondio.getContact(contact.id);
+            if (contactDetail.success && contactDetail.data) {
+              const cData = contactDetail.data;
+              const normalizeFieldName = (n) => (n || '').toLowerCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+              const cfReactivarBot = cData.custom_fields?.find(f => {
+                const fn = normalizeFieldName(f.name);
+                return fn === 'reactivar_bot' || fn === 'reactivar bot' || fn === 'reactivarbot' || fn === 'bot_status' || fn === 'bot status';
+              });
+              if (cfReactivarBot?.value && cfReactivarBot.value.trim().length > 0) {
+                const val = cfReactivarBot.value.trim().toLowerCase();
+                if (val === 'si' || val === 'sí' || val === 'yes' || val === 'activo' || val === 'active' || val === '1' || val === 'on' || val === 'reactivar') {
+                  const updateFields = { agent_active: false };
+                  if (convState.state === 'assigned') {
+                    updateFields.state = 'initial';
+                  }
+                  await convState.update(updateFields);
+                  console.log(`[Polling] Bot reactivado via custom field para ${contact.id} (estado anterior: ${convState.state})`);
+                  try {
+                    await respondio.updateContactCustomFields(contact.id, { [cfReactivarBot.name]: '' });
+                  } catch (clearErr) {
+                    console.log(`[Polling] No se pudo limpiar campo reactivar_bot de ${contact.id}`);
+                  }
+                  botReactivated = true;
+                }
+              }
+            }
+          } catch (reactivateErr) {
+            console.log(`[Polling] Error verificando reactivar_bot para ${contact.id}:`, reactivateErr.message);
           }
-          await this.extractAndSaveAddressFromMessages(userId, contact, incomingMessages, respondio);
-          this.addressScannedContacts.delete(contact.id.toString());
-          return;
+
+          if (!botReactivated) {
+            console.log(`[Polling] Contacto ${contact.id} tiene agent_active=true, extrayendo direcciones sin procesar con bot`);
+            for (const msg of incomingMessages) {
+              poller.processedMessageIds.add(msg.messageId);
+            }
+            await this.extractAndSaveAddressFromMessages(userId, contact, incomingMessages, respondio);
+            this.addressScannedContacts.delete(contact.id.toString());
+            return;
+          }
+          // Si botReactivated=true, continúa el flujo normal del bot
         }
       }
     }
