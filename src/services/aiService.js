@@ -741,6 +741,75 @@ No hagas preguntas de validación ni pidas ZIP. Sé cálido, directo y breve (2-
     }
   }
 
+  // Analyzes recent conversation to decide if this is a closing flow situation
+  async analyzeClosingContext(recentMessages) {
+    if (!this.isAvailable) return { isClosingFlow: false, hasPendingQuestion: true, reason: 'no_api_key' };
+
+    try {
+      const context = (recentMessages || [])
+        .slice(-15)
+        .map(m => {
+          const role = m.isFromAgent ? '[AGENTE]' : m.isFromBot ? '[BOT]' : '[CLIENTE]';
+          return `${role}: ${m.text}`;
+        })
+        .join('\n');
+
+      const messages = [
+        {
+          role: 'system',
+          content: `Eres un analizador de conversaciones para Area 862 Graphics, negocio de impresión en Dallas que vende tarjetas de presentación, magnéticos, post cards y playeras.
+
+Analiza el historial y determina si el cliente ya está listo para cerrar una venta de TARJETAS y el agente terminó de atenderlo, o si el cliente tiene una pregunta nueva.
+
+Señales de CIERRE DE VENTA:
+- El agente presentó precios y el cliente mostró interés positivo
+- El cliente dijo palabras como: "listo", "me interesa", "cuándo me llegan", "cómo pago", "adelante", "va", "ok", "sí quiero"
+- El agente indicó algo como "ya", "perfecto", "con eso cerramos", "te mando al bot"
+- La conversación llegó a un punto de acuerdo sobre tarjetas
+
+Señales de PREGUNTA PENDIENTE:
+- El cliente hizo una pregunta sin respuesta clara
+- El cliente expresa duda, indecisión o pide más información
+- El último mensaje del cliente es una pregunta
+
+Responde con JSON exacto:
+{
+  "is_closing_flow": true/false,
+  "product": "tarjetas" o null,
+  "has_pending_question": true/false,
+  "pending_question_summary": "resumen breve si hay pregunta",
+  "confidence": "alta/media/baja",
+  "reason": "razón de 1 línea"
+}`
+        },
+        {
+          role: 'user',
+          content: `Historial de la conversación:\n${context || 'Sin historial previo'}\n\n¿Es momento de iniciar el proceso de cierre de venta de tarjetas, o el cliente tiene una pregunta pendiente?`
+        }
+      ];
+
+      const response = await this.callOpenAI(messages, 300);
+      if (response.success) {
+        const parsed = this.parseJsonFromResponse(response.content);
+        if (parsed) {
+          console.log(`[AI] analyzeClosingContext → closing=${parsed.is_closing_flow}, confidence=${parsed.confidence}, reason=${parsed.reason}`);
+          return {
+            isClosingFlow: !!parsed.is_closing_flow,
+            product: parsed.product || 'tarjetas',
+            hasPendingQuestion: !!parsed.has_pending_question,
+            pendingQuestion: parsed.pending_question_summary || null,
+            confidence: parsed.confidence || 'baja',
+            reason: parsed.reason || ''
+          };
+        }
+      }
+      return { isClosingFlow: false, product: null, hasPendingQuestion: true, reason: 'parse_error' };
+    } catch (e) {
+      console.error('[AI] analyzeClosingContext error:', e.message);
+      return { isClosingFlow: false, product: null, hasPendingQuestion: true, reason: e.message };
+    }
+  }
+
   // Test if API key is valid
   async testConnection() {
     if (!this.isAvailable) {

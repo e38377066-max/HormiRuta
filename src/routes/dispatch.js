@@ -2270,4 +2270,35 @@ router.post('/cleanup-duplicates', requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/dispatch/bot/initiate-closing/:contactId
+// Inicia el flujo de cierre de venta manualmente desde el panel de despacho
+router.post('/bot/initiate-closing/:contactId', requireAuth, async (req, res) => {
+  try {
+    const { contactId } = req.params;
+    const product = req.body.product || 'tarjetas';
+
+    const settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
+    if (!settings) return res.status(400).json({ success: false, error: 'No hay configuración de mensajería' });
+    if (!settings.respond_api_token) return res.status(400).json({ success: false, error: 'Token de API no configurado' });
+
+    const ChatbotService = (await import('../services/chatbotService.js')).default;
+    const bot = new ChatbotService(settings.user_id, settings);
+
+    respondApiService.setContext(settings.user_id, settings.respond_api_token);
+    const contactResult = await respondApiService.getContact(`id:${contactId}`);
+    const contact = (contactResult.success && contactResult.data)
+      ? contactResult.data
+      : { id: contactId, firstName: '', lastName: '' };
+
+    await bot.getOrCreateConversationState(contactId);
+    const result = await bot.startClosingFlow(contact, product);
+
+    console.log(`[Dispatch] Flujo de cierre iniciado manualmente para contacto ${contactId}`);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Dispatch] Error iniciando flujo de cierre:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

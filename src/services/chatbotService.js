@@ -48,6 +48,16 @@ class ChatbotService {
     }
   }
 
+  async sendAttachmentMsg(contactId, url, type = 'image') {
+    try {
+      await this.api.sendAttachment(`id:${contactId}`, type, url);
+      await this.updateConversationState(contactId, { last_bot_message_at: new Date() });
+      console.log(`[Bot] Attachment (${type}) enviado a ${contactId}`);
+    } catch (error) {
+      console.error(`[Bot] Error enviando attachment a ${contactId}:`, error.message);
+    }
+  }
+
   async assignToAgent(contactId, agentIdOrEmail, agentName = null) {
     try {
       const result = await this.api.assignConversation(`id:${contactId}`, agentIdOrEmail);
@@ -734,15 +744,44 @@ class ChatbotService {
       console.log(`[Bot] MODO PRUEBA - Saltando verificación de agente para ${contact.id}`);
     }
 
-    // PASO 3: Manejar pausa por seguimiento
+    // PASO 3: Manejar pausa por seguimiento o reactivación por agente
     if (convState.bot_paused) {
-      console.log(`[Bot] Contacto ${contact.id} respondio despues de pausa por seguimiento, reactivando bot`);
+      console.log(`[Bot] Contacto ${contact.id} respondio tras pausa, reactivando bot y analizando contexto`);
       await this.updateConversationState(contact.id, {
         bot_paused: false,
         followup_count: 0,
         followup_last_sent_at: null,
         last_customer_message_at: new Date()
       });
+
+      // Leer el historial reciente para decidir si es flujo de cierre o pregunta nueva
+      if (this.ai.isAvailable) {
+        try {
+          let recentMessages = [];
+          const histResult = await this.api.listMessages(`id:${contact.id}`, 15);
+          if (histResult.success && histResult.items) {
+            recentMessages = histResult.items.map(m => ({
+              text: m.body?.text || m.text || '',
+              isFromBot: m.sender?.source === 'bot' || m.sender?.source === 'automation',
+              isFromAgent: m.sender?.source === 'user' && m.traffic === 'outgoing',
+              isFromCustomer: m.traffic === 'incoming'
+            })).filter(m => m.text);
+          }
+
+          if (recentMessages.length > 0) {
+            const closingAnalysis = await this.ai.analyzeClosingContext(recentMessages);
+            console.log(`[Bot] Post-reactivación análisis cierre: closing=${closingAnalysis.isClosingFlow}, confidence=${closingAnalysis.confidence}, reason=${closingAnalysis.reason}`);
+
+            if (closingAnalysis.isClosingFlow && closingAnalysis.confidence !== 'baja') {
+              console.log(`[Bot] Iniciando flujo de cierre automático para ${contact.id} (producto: ${closingAnalysis.product})`);
+              return await this.startClosingFlow(contact, closingAnalysis.product || 'tarjetas');
+            }
+          }
+        } catch (e) {
+          console.error('[Bot] Error analizando contexto post-reactivación:', e.message);
+        }
+      }
+
       convState = await this.getOrCreateConversationState(contact.id);
     } else {
       await this.updateConversationState(contact.id, { 
@@ -930,6 +969,18 @@ class ChatbotService {
       case 'awaiting_continuation':
         return await this.handleAwaitingContinuation(contact, messageText, convState);
       
+      case 'closing_approval':
+        return await this.handleClosingApproval(contact, messageText, convState);
+      
+      case 'closing_quantity':
+        return await this.handleClosingQuantity(contact, messageText, convState);
+      
+      case 'closing_address':
+        return await this.handleClosingAddress(contact, messageText, convState);
+      
+      case 'closing_complete':
+        return { handled: false, reason: 'order_already_completed' };
+
       case 'assigned': {
         const wasReopened = await this.isConversationReopened(contact.id);
         if (wasReopened) {
@@ -1589,6 +1640,146 @@ class ChatbotService {
       console.error('[Bot] Error buscando agente para producto:', error.message);
       return null;
     }
+  }
+
+  // ==================== FLUJO DE CIERRE (TARJETAS) ====================
+
+  // Paso 0: Envía el mensaje de aprobación con imagen aviso
+  async startClosingFlow(contact, product = 'tarjetas') {
+    const msg0 = 'Hola, veo que ya está aprobando su orden 🎉\n\nTome unos minutos y lea este mensaje para asegurar que todo esté bien.\n\n✅ POR FAVOR escriba:\n- *APROBADO* si todo está correcto\n- *Necesita cambios* si desea modificar algo';
+
+    // Enviar imagen aviso si está configurada
+    const avisoUrl = this.settings.closing_aviso_image_url || null;
+    if (avisoUrl) {
+      await this.sendAttachmentMsg(contact.id, avisoUrl, 'image');
+    }
+
+    await this.sendMessage(contact.id, msg0);
+
+    await this.updateConversationState(contact.id, {
+      state: 'closing_approval',
+      selected_product: product,
+      context_data: {
+        closing_product: product,
+        closing_started_at: new Date().toISOString()
+      }
+    });
+
+    await this.addComment(contact.id, `[Bot] Flujo de cierre iniciado para: ${product}`);
+    await this.addTrackingTag(contact.id, 'FlujoCierre');
+
+    console.log(`[Bot] Flujo de cierre iniciado para ${contact.id}, producto: ${product}`);
+    return { handled: true, action: 'closing_flow_started', product };
+  }
+
+  // Paso 1: Procesa APROBADO o Necesita cambios
+  async handleClosingApproval(contact, messageText, convState) {
+    const lower = messageText.toLowerCase().trim();
+
+    const needsChanges = lower.includes('cambio') || lower.includes('modific') || lower.includes('cambiar') || lower.includes('diferente') || (lower.match(/^no[\s!.,]*$/) && !lower.includes('aprobado'));
+
+    const approved = !needsChanges && (
+      lower.includes('aprobado') || lower.includes('aprobada') || lower.includes('aprob') ||
+      lower.match(/^s[ií][\s!.,]*$/) || lower.includes('ok') || lower.includes('dale') ||
+      lower.includes('correcto') || lower.includes('listo') || lower.includes('adelante') ||
+      lower.includes('va ') || lower === 'va' || lower.includes('perfecto') || lower.includes('bien')
+    );
+
+    if (approved) {
+      const msg1 = 'Me indica cuántas desea ordenar 🃏\n\nPaquetes disponibles de Tarjetas:\n\n🔹 500 tarjetas — $60\n🔹 1000 tarjetas — $70';
+      await this.sendMessage(contact.id, msg1);
+      await this.updateConversationState(contact.id, { state: 'closing_quantity' });
+      await this.addComment(contact.id, `[Bot] Cliente aprobó pedido. Preguntando cantidad.`);
+      return { handled: true, action: 'closing_approved_ask_quantity' };
+
+    } else if (needsChanges) {
+      const changesMsg = 'Entendido 😊 ¿Qué cambios necesita? Cuéntenos y con gusto lo ajustamos para usted.';
+      await this.sendMessage(contact.id, changesMsg);
+      await this.updateConversationState(contact.id, { state: 'assigned' });
+      await this.assignToDefaultAgent(contact.id);
+      await this.addComment(contact.id, `[Bot] Cliente solicitó cambios. Mensaje: "${messageText}". Pasando a agente.`);
+      return { handled: true, action: 'closing_needs_changes' };
+
+    } else {
+      // No entendió — recordar opciones
+      const remindMsg = 'Por favor responda:\n\n✅ *APROBADO* — si todo está correcto\n❌ *Necesita cambios* — si desea modificar algo 😊';
+      await this.sendMessage(contact.id, remindMsg);
+      return { handled: true, action: 'closing_approval_remind' };
+    }
+  }
+
+  // Paso 2: Procesa la cantidad elegida
+  async handleClosingQuantity(contact, messageText, convState) {
+    const lower = messageText.toLowerCase().replace(/,/g, '');
+
+    let quantity = null;
+    if (lower.includes('500') || lower.includes('quinientas') || lower.includes('quinientos')) {
+      quantity = 500;
+    } else if (lower.includes('1000') || lower.includes('1 000') || lower.includes('mil tarjetas') || lower === 'mil' || lower.includes('1,000')) {
+      quantity = 1000;
+    } else {
+      // Intentar parsear número directo
+      const numMatch = lower.match(/\b(500|1000|1 000)\b/);
+      if (numMatch) quantity = parseInt(numMatch[1].replace(/\s/g, ''));
+    }
+
+    if (quantity === 500 || quantity === 1000) {
+      const price = quantity === 500 ? '$60' : '$70';
+      const msg2 = `¡Excelente! ${quantity} tarjetas por ${price} 😊\n\nYa que el pago se realiza al momento de la entrega, ¿podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
+      await this.sendMessage(contact.id, msg2);
+
+      const existingCtx = convState.context_data || {};
+      await this.updateConversationState(contact.id, {
+        state: 'closing_address',
+        context_data: {
+          ...existingCtx,
+          closing_quantity: quantity,
+          closing_price: price
+        }
+      });
+
+      await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${price}). Solicitando dirección.`);
+      return { handled: true, action: 'closing_quantity_selected', quantity, price };
+
+    } else {
+      const remindMsg = 'Por favor indíquenos cuántas tarjetas desea ordenar:\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70';
+      await this.sendMessage(contact.id, remindMsg);
+      return { handled: true, action: 'closing_quantity_remind' };
+    }
+  }
+
+  // Paso 3: Procesa la dirección y cierra el pedido
+  async handleClosingAddress(contact, messageText, convState) {
+    const wordCount = messageText.trim().split(/\s+/).length;
+
+    if (wordCount < 3) {
+      const remindMsg = 'Por favor comparta la dirección completa de entrega 📍\n\n(Calle, número, ciudad y ZIP)';
+      await this.sendMessage(contact.id, remindMsg);
+      return { handled: true, action: 'closing_address_remind' };
+    }
+
+    const msg3 = 'Procesamos su orden, ¡muchas gracias por preferirnos! 🎉\n\nEl proceso de entrega es de 3 a 4 días hábiles.\n\nPor ahora muchas gracias y uno de nuestro personal de entregas se comunicará con usted cuando su orden esté lista 🚚';
+    await this.sendMessage(contact.id, msg3);
+
+    const existingCtx = convState.context_data || {};
+    await this.updateConversationState(contact.id, {
+      state: 'closing_complete',
+      context_data: {
+        ...existingCtx,
+        closing_address: messageText,
+        closing_completed_at: new Date().toISOString()
+      }
+    });
+
+    const product = convState.selected_product || 'tarjetas';
+    const quantity = existingCtx.closing_quantity || '?';
+    const price = existingCtx.closing_price || '';
+
+    await this.addComment(contact.id, `[Bot] ✅ PEDIDO CERRADO — ${product} x${quantity} (${price}) — Dirección: ${messageText}`);
+    await this.addTrackingTag(contact.id, 'PedidoConfirmado');
+
+    console.log(`[Bot] Cierre completado para ${contact.id}: ${quantity} tarjetas → ${messageText}`);
+    return { handled: true, action: 'closing_complete', address: messageText };
   }
 
   async createOrUpdateOrder(contact, zipCode, customerName, validationStatus, zone) {
