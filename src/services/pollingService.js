@@ -527,7 +527,23 @@ class PollingService {
               });
               if (cfReactivarBot?.value && cfReactivarBot.value.trim().length > 0) {
                 const val = cfReactivarBot.value.trim().toLowerCase();
-                if (val === 'si' || val === 'sí' || val === 'yes' || val === 'activo' || val === 'active' || val === '1' || val === 'on' || val === 'reactivar') {
+                const isCierreKeyword = val.includes('cierre') || val.includes('cerrar') || val === 'closing';
+                const isReactivarKeyword = val === 'si' || val === 'sí' || val === 'yes' || val === 'activo' || val === 'active' || val === '1' || val === 'on' || val === 'reactivar';
+                if (isCierreKeyword) {
+                  // Limpiar el campo primero
+                  try {
+                    await respondio.updateContactCustomFields(contact.id, { [cfReactivarBot.name]: '' });
+                  } catch (clearErr) {
+                    console.log(`[Polling] No se pudo limpiar campo reactivar_bot de ${contact.id}`);
+                  }
+                  // Asegurarse de que agent_active = false para que el bot pueda actuar
+                  await convState.update({ agent_active: false });
+                  // Iniciar flujo de cierre
+                  const chatbotForClose = new ChatbotService(userId, settings);
+                  await chatbotForClose.startClosingFlow(contact, 'tarjetas');
+                  console.log(`[Polling] Flujo de cierre iniciado via custom field para ${contact.id}`);
+                  botReactivated = true;
+                } else if (isReactivarKeyword) {
                   const updateFields = { agent_active: false };
                   if (convState.state === 'assigned') {
                     updateFields.state = 'initial';
@@ -1462,7 +1478,24 @@ class PollingService {
               });
               if (cfReactivarBot?.value && cfReactivarBot.value.trim().length > 0) {
                 const val = cfReactivarBot.value.trim().toLowerCase();
-                if (val === 'si' || val === 'sí' || val === 'yes' || val === 'activo' || val === 'active' || val === '1' || val === 'on' || val === 'reactivar') {
+                const isCierreKw = val.includes('cierre') || val.includes('cerrar') || val === 'closing';
+                const isReactivarKw = val === 'si' || val === 'sí' || val === 'yes' || val === 'activo' || val === 'active' || val === '1' || val === 'on' || val === 'reactivar';
+                // Limpiar campo siempre antes de actuar
+                try {
+                  await respondio.updateContactCustomFields(contact.id, { [cfReactivarBot.name]: '' });
+                } catch (clearErr) {
+                  console.log(`[AddressScan] No se pudo limpiar campo reactivar_bot de ${contactName}`);
+                }
+                if (isCierreKw) {
+                  // Asegurar que el bot pueda enviar
+                  const convState = await ConversationState.findOne({ where: { contact_id: contactIdStr } });
+                  if (convState) {
+                    await convState.update({ agent_active: false });
+                  }
+                  const chatbotForClose = new ChatbotService(userId, settings);
+                  await chatbotForClose.startClosingFlow(contact, 'tarjetas');
+                  console.log(`[AddressScan] Flujo de cierre iniciado via custom field para ${contactName} (contacto ${contact.id})`);
+                } else if (isReactivarKw) {
                   const convState = await ConversationState.findOne({ where: { contact_id: contactIdStr } });
                   if (convState && (convState.agent_active || convState.state === 'assigned')) {
                     const updateFields = { agent_active: false };
@@ -1471,11 +1504,6 @@ class PollingService {
                     }
                     await convState.update(updateFields);
                     console.log(`[AddressScan] Bot reactivado via custom field para ${contactName} (contacto ${contact.id}), estado: ${convState.state}`);
-                  }
-                  try {
-                    await respondio.updateContactCustomFields(contact.id, { [cfReactivarBot.name]: '' });
-                  } catch (clearErr) {
-                    console.log(`[AddressScan] No se pudo limpiar campo reactivar_bot de ${contactName}`);
                   }
                 }
               }

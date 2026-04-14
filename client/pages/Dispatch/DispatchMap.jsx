@@ -91,9 +91,6 @@ export default function DispatchMap() {
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [messageSuccess, setMessageSuccess] = useState('')
-  const [botKeyword, setBotKeyword] = useState('')
-  const [botReactivating, setBotReactivating] = useState(false)
-  const [botReactivateResult, setBotReactivateResult] = useState(null)
   const [showManualOrder, setShowManualOrder] = useState(false)
   const [manualOrderForm, setManualOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
   const [manualOrderGeo, setManualOrderGeo] = useState(null)
@@ -783,42 +780,9 @@ export default function DispatchMap() {
     }
   }
 
-  const reactivateBot = async () => {
-    if (!messageModal || botReactivating) return
-    const contactId = messageModal.respond_contact_id
-    if (!contactId) {
-      setBotReactivateResult({ ok: false, msg: 'Este cliente no tiene contacto en Respond.io' })
-      return
-    }
-    const keyword = botKeyword.trim().toLowerCase()
-    if (!keyword) {
-      setBotReactivateResult({ ok: false, msg: 'Escribe "cierre" o "sí" antes de enviar' })
-      return
-    }
-    setBotReactivating(true)
-    setBotReactivateResult(null)
-    try {
-      const isCierre = keyword.includes('cierre') || keyword.includes('cerrar')
-      if (isCierre) {
-        await api.post(`/api/dispatch/bot/initiate-closing/${contactId}`, { product: 'tarjetas' })
-        setBotReactivateResult({ ok: true, msg: '✅ Flujo de cierre iniciado — el bot envió el mensaje de aprobación al cliente' })
-      } else {
-        await api.post(`/api/messaging/chatbot/resume/${contactId}`)
-        setBotReactivateResult({ ok: true, msg: '✅ Bot reactivado — responderá la próxima pregunta del cliente' })
-      }
-      setBotKeyword('')
-    } catch (err) {
-      setBotReactivateResult({ ok: false, msg: err.response?.data?.error || 'Error al reactivar el bot' })
-    } finally {
-      setBotReactivating(false)
-    }
-  }
-
   const openMessageModal = async (order) => {
     setMessageModal(order)
     setMessageSuccess('')
-    setBotKeyword('')
-    setBotReactivateResult(null)
     if (templates.length === 0) {
       setLoadingTemplates(true)
       try {
@@ -2463,43 +2427,6 @@ export default function DispatchMap() {
               </div>
             )}
 
-            {messageModal?.respond_contact_id && (
-              <div className="bot-reactivate-section">
-                <div className="bot-reactivate-label">
-                  <span className="material-icons" style={{ fontSize: 16, color: '#6366f1' }}>smart_toy</span>
-                  Reactivar Bot
-                </div>
-                <div className="bot-reactivate-hint">
-                  Escribe <strong>cierre</strong> para iniciar el flujo de venta, o <strong>sí</strong> para que responda preguntas del cliente.
-                </div>
-                <div className="bot-reactivate-row">
-                  <input
-                    type="text"
-                    className="bot-reactivate-input"
-                    placeholder="cierre  /  sí"
-                    value={botKeyword}
-                    onChange={e => { setBotKeyword(e.target.value); setBotReactivateResult(null) }}
-                    onKeyDown={e => e.key === 'Enter' && reactivateBot()}
-                    disabled={botReactivating}
-                  />
-                  <button
-                    className="bot-reactivate-btn"
-                    onClick={reactivateBot}
-                    disabled={botReactivating || !botKeyword.trim()}
-                  >
-                    {botReactivating
-                      ? <span className="material-icons rotating" style={{ fontSize: 18 }}>hourglass_empty</span>
-                      : <span className="material-icons" style={{ fontSize: 18 }}>send</span>
-                    }
-                  </button>
-                </div>
-                {botReactivateResult && (
-                  <div className={`bot-reactivate-result ${botReactivateResult.ok ? 'ok' : 'err'}`}>
-                    {botReactivateResult.msg}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}
