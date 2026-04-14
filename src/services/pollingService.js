@@ -510,6 +510,9 @@ class PollingService {
 
     if (incomingMessages.length === 0) return;
 
+    const settings = await getGlobalSettings();
+    const isAutomatic = settings?.attention_mode === 'automatic';
+
     if (!isTestMode) {
       const convState = await ConversationState.findOne({
         where: { contact_id: contact.id.toString() }
@@ -599,9 +602,6 @@ class PollingService {
     }
 
     this.addressScannedContacts.delete(contact.id.toString());
-
-    const settings = await getGlobalSettings();
-    const isAutomatic = settings?.attention_mode === 'automatic';
 
     const latestMessage = incomingMessages[incomingMessages.length - 1];
     
