@@ -82,9 +82,11 @@ class PollingService {
       isRunning: true,
       pollInProgress: false,
       scanInProgress: false,
+      botReactiveScanInProgress: false,
       processedMessageIds: new Set(),
       intervalId: null,
-      scanIntervalId: null
+      scanIntervalId: null,
+      botReactiveScanIntervalId: null
     };
 
     const pollFn = async () => {
@@ -139,6 +141,22 @@ class PollingService {
       setTimeout(() => scanFn(), 5000);
       poller.scanIntervalId = setInterval(scanFn, 20000);
       console.log(`[AddressScan] Scanner ACTIVO para usuario ${userId} cada 20s (independiente del bot)`);
+
+      const botReactiveScanFn = async () => {
+        if (!poller.isRunning) return;
+        if (poller.botReactiveScanInProgress) return;
+        poller.botReactiveScanInProgress = true;
+        try {
+          await this.checkBotReactivationFields(userId, settings.respond_api_token, settings);
+        } catch (err) {
+          console.error('[BotReactiveScan] Error:', err.message);
+        } finally {
+          poller.botReactiveScanInProgress = false;
+        }
+      };
+      setTimeout(() => botReactiveScanFn(), 10000);
+      poller.botReactiveScanIntervalId = setInterval(botReactiveScanFn, 60000);
+      console.log(`[BotReactiveScan] Escáner de reactivación ACTIVO cada 60s`);
     })();
 
     return { success: true, message: `Polling iniciado cada ${intervalSeconds} segundos` };
@@ -153,6 +171,9 @@ class PollingService {
       }
       if (poller.scanIntervalId) {
         clearInterval(poller.scanIntervalId);
+      }
+      if (poller.botReactiveScanIntervalId) {
+        clearInterval(poller.botReactiveScanIntervalId);
       }
       this.activePollers.delete(userId);
       console.log(`Stopped polling and address scanner for user ${userId}`);
@@ -2538,6 +2559,68 @@ class PollingService {
       console.log(`[Wholesale] Dirección actualizada para mayorista ${customerName}: "${finalAddress}"`);
     } catch (error) {
       console.error(`[Wholesale] Error actualizando dirección de mayorista:`, error.message);
+    }
+  }
+
+  async checkBotReactivationFields(userId, apiToken, settings) {
+    try {
+      const respondio = this.getRespondioInstance(apiToken);
+      const pausedStates = await ConversationState.findAll({
+        where: { agent_active: true },
+        attributes: ['contact_id']
+      });
+      if (!pausedStates || pausedStates.length === 0) return;
+
+      const normalizeFieldName = (n) => (n || '').toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+      for (const cs of pausedStates) {
+        try {
+          const contactDetail = await respondio.getContact(cs.contact_id);
+          if (!contactDetail.success || !contactDetail.data) continue;
+          const cData = contactDetail.data;
+          const cfReactivarBot = cData.custom_fields?.find(f => {
+            const fn = normalizeFieldName(f.name);
+            return fn === 'reactivar_bot' || fn === 'reactivar bot' || fn === 'reactivarbot' || fn === 'bot_status' || fn === 'bot status' || fn === 'reactivar';
+          });
+          if (!cfReactivarBot?.value || cfReactivarBot.value.trim().length === 0) continue;
+
+          const val = cfReactivarBot.value.trim().toLowerCase();
+          const isCierreKw = val.includes('cierre') || val.includes('cerrar') || val === 'closing';
+          const isReactivarKw = val === 'si' || val === 'sí' || val === 'yes' || val === 'activo' || val === 'active' || val === '1' || val === 'on' || val === 'reactivar';
+
+          if (!isCierreKw && !isReactivarKw) continue;
+
+          // Limpiar campo primero
+          try {
+            await respondio.updateContactCustomFields(cs.contact_id, { [cfReactivarBot.name]: '' });
+          } catch (clearErr) {
+            console.log(`[BotReactiveScan] No se pudo limpiar campo para ${cs.contact_id}`);
+          }
+
+          const convState = await ConversationState.findOne({ where: { contact_id: cs.contact_id } });
+          const contact = cData;
+          contact.id = cs.contact_id;
+
+          if (isCierreKw) {
+            if (convState) await convState.update({ agent_active: false });
+            const chatbot = new ChatbotService(userId, settings);
+            await chatbot.startClosingFlow(contact, 'tarjetas');
+            console.log(`[BotReactiveScan] Flujo de cierre iniciado para contacto ${cs.contact_id}`);
+          } else if (isReactivarKw) {
+            if (convState) {
+              const updateFields = { agent_active: false };
+              if (convState.state === 'assigned') updateFields.state = 'initial';
+              await convState.update(updateFields);
+            }
+            console.log(`[BotReactiveScan] Bot reactivado para contacto ${cs.contact_id}`);
+          }
+        } catch (contactErr) {
+          // silenciar error individual para no detener el loop
+        }
+      }
+    } catch (err) {
+      console.error('[BotReactiveScan] Error en escáner de reactivación:', err.message);
     }
   }
 }
