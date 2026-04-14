@@ -324,10 +324,16 @@ class RespondioService {
         data: response.data
       };
     } catch (error) {
-      console.error('Respond.io get contact error:', error.response?.data || error.message);
+      const errMsg = error.response?.data?.message || error.message || '';
+      const isInvalidId = error.response?.status === 400 &&
+        (errMsg.includes('is invalid') || errMsg.includes('Invalid identifier'));
+      if (!isInvalidId) {
+        console.error('Respond.io get contact error:', error.response?.data || error.message);
+      }
       return {
         success: false,
-        error: error.response?.data?.message || error.message
+        notFound: isInvalidId,
+        error: errMsg
       };
     }
   }

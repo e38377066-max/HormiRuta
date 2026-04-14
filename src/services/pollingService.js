@@ -1474,6 +1474,17 @@ class PollingService {
           let cfApartment = null;
           try {
             const contactDetail = await respondio.getContact(contact.id);
+            if (!contactDetail.success && contactDetail.notFound && existing) {
+              // Contacto eliminado en Respond.io — archivar registro para no volver a escanearlo
+              if (existing.dispatch_status !== 'archived') {
+                await ValidatedAddress.update(
+                  { dispatch_status: 'archived' },
+                  { where: { id: existing.id } }
+                );
+                console.log(`[AddressScan] Contacto ${contact.id} eliminado en Respond.io, archivando registro de "${existing.customer_name}"`);
+              }
+              continue;
+            }
             if (contactDetail.success && contactDetail.data) {
               const cData = contactDetail.data;
               const normalizeFieldName = (n) => (n || '').toLowerCase()
@@ -2619,7 +2630,14 @@ class PollingService {
       for (const cs of pausedStates) {
         try {
           const contactDetail = await respondio.getContact(cs.contact_id);
-          if (!contactDetail.success || !contactDetail.data) continue;
+          if (!contactDetail.success || !contactDetail.data) {
+            if (contactDetail.notFound) {
+              // Contacto eliminado en Respond.io — desactivar para no volver a buscar
+              await ConversationState.update({ agent_active: false }, { where: { contact_id: cs.contact_id } });
+              console.log(`[BotReactiveScan] Contacto ${cs.contact_id} ya no existe en Respond.io, desactivando agent_active`);
+            }
+            continue;
+          }
           const cData = contactDetail.data;
           const cfReactivarBot = cData.custom_fields?.find(f => {
             const fn = normalizeFieldName(f.name);
