@@ -1671,6 +1671,28 @@ class ChatbotService {
     return { handled: true, action: 'closing_flow_started', product };
   }
 
+  // Detecta si el cliente está corrigiendo algo en el flujo de cierre
+  isClosingCorrection(text) {
+    const lower = text.toLowerCase();
+    return (
+      lower.includes('me equivoc') ||
+      lower.includes('equivoque') ||
+      lower.includes('equivoqué') ||
+      lower.includes('perdon') ||
+      lower.includes('perdón') ||
+      lower.includes('disculpa') ||
+      lower.includes('lo siento') ||
+      lower.includes('error') ||
+      lower.includes('no era') ||
+      lower.includes('no eran') ||
+      lower.includes('en realidad') ||
+      lower.includes('quise decir') ||
+      lower.includes('quería decir') ||
+      (lower.includes('espera') && lower.length < 40) ||
+      (lower.startsWith('no ') && lower.length < 50)
+    );
+  }
+
   // Paso 1: Procesa APROBADO o Necesita cambios
   async handleClosingApproval(contact, messageText, convState) {
     const lower = messageText.toLowerCase().trim();
@@ -1710,6 +1732,13 @@ class ChatbotService {
   // Paso 2: Procesa la cantidad elegida
   async handleClosingQuantity(contact, messageText, convState) {
     const lower = messageText.toLowerCase().replace(/,/g, '').trim();
+
+    // Si el cliente se está corrigiendo pero no menciona cantidad, volver a preguntar
+    if (this.isClosingCorrection(lower) && !/\d/.test(lower)) {
+      const remindMsg = 'Sin problema 😊 ¿Cuántas tarjetas desea ordenar?\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70';
+      await this.sendMessage(contact.id, remindMsg);
+      return { handled: true, action: 'closing_quantity_correction_prompt' };
+    }
 
     // Detectar cantidad exacta con límites de palabra para evitar que "5000" se confunda con "500"
     let quantity = null;
@@ -1786,6 +1815,61 @@ No repitas los precios en formato de lista — responde conversacionalmente.`
 
   // Paso 3: Procesa la dirección y cierra el pedido
   async handleClosingAddress(contact, messageText, convState) {
+    const lower = messageText.toLowerCase().replace(/,/g, '').trim();
+
+    // Detectar corrección — el cliente se equivocó en algo anterior
+    if (this.isClosingCorrection(lower)) {
+      const existingCtx = convState.context_data || {};
+
+      // ¿Está corrigiendo la cantidad?
+      const mentionsQuantity = /\b(\d+)\b/.test(lower) && (
+        lower.includes('tarjet') || lower.includes('card') || lower.includes('paquete') ||
+        lower.includes('unidad') || lower.includes('pieza') || /\b(500|1000|mil)\b/.test(lower)
+      );
+
+      if (mentionsQuantity) {
+        // Volver al paso de cantidad con el nuevo valor
+        await this.updateConversationState(contact.id, {
+          state: 'closing_quantity',
+          context_data: { ...existingCtx, closing_quantity: null, closing_price: null }
+        });
+        await this.addComment(contact.id, `[Bot] Cliente corrigió cantidad durante paso de dirección`);
+        return await this.handleClosingQuantity(contact, messageText, convState);
+      }
+
+      // Corrección genérica — preguntar qué desea cambiar usando IA
+      try {
+        const aiMessages = [
+          {
+            role: 'system',
+            content: `Eres un asistente amable de una imprenta. El cliente está confirmando su pedido y acaba de decir que cometió un error.
+Contexto del pedido: ${existingCtx.closing_quantity ? `${existingCtx.closing_quantity} tarjetas a ${existingCtx.closing_price}` : 'cantidad pendiente'}.
+Responde de forma empática y amigable preguntando qué desea corregir (la cantidad o algo más). Máximo 2 oraciones, en español.`
+          },
+          { role: 'user', content: messageText }
+        ];
+        const aiResult = await this.ai.callOpenAI(aiMessages, 150);
+        if (aiResult.success && aiResult.content) {
+          await this.sendMessage(contact.id, aiResult.content.trim());
+          // Regresar al estado de cantidad para que el próximo mensaje sea la corrección
+          await this.updateConversationState(contact.id, {
+            state: 'closing_quantity',
+            context_data: { ...existingCtx, closing_quantity: null, closing_price: null }
+          });
+          return { handled: true, action: 'closing_correction_prompt' };
+        }
+      } catch (aiErr) {}
+
+      // Fallback
+      const fallbackMsg = 'Sin problema 😊 ¿Qué desea corregir? ¿La cantidad de tarjetas o algo más?';
+      await this.sendMessage(contact.id, fallbackMsg);
+      await this.updateConversationState(contact.id, {
+        state: 'closing_quantity',
+        context_data: { ...existingCtx, closing_quantity: null, closing_price: null }
+      });
+      return { handled: true, action: 'closing_correction_fallback' };
+    }
+
     const wordCount = messageText.trim().split(/\s+/).length;
 
     if (wordCount < 3) {
