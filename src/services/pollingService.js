@@ -1331,9 +1331,12 @@ class PollingService {
           }
           continue;
         }
+        // Respond.io es fuente de verdad para el estado.
+        // Solo protegemos: órdenes con ruta asignada y estados terminales.
+        const terminalStatuses = ['delivered', 'ups_shipped'];
         const canSync = orderStatus && existing.order_status !== orderStatus &&
-          (this.statusCanAdvance(existing.order_status, orderStatus) ||
-           (existing.order_status === 'approved' && orderStatus === 'pending'));
+          !existing.route_id &&
+          !terminalStatuses.includes(existing.order_status);
         if (canSync) {
           updateFields.order_status = orderStatus;
           if (existing.dispatch_status === 'archived') {
@@ -2031,7 +2034,8 @@ class PollingService {
             syncedCount++;
           } else if (newStatus) {
             const closedUpdateFields = {};
-            if (newStatus !== order.order_status && this.statusCanAdvance(order.order_status, newStatus)) {
+            const closedTerminal = ['delivered', 'ups_shipped'];
+            if (newStatus !== order.order_status && !order.route_id && !closedTerminal.includes(order.order_status)) {
               closedUpdateFields.order_status = newStatus;
             }
             if (order.dispatch_status === 'archived') {
@@ -2478,7 +2482,9 @@ class PollingService {
         if (sourceOverride) {
           updateData.source = sourceOverride;
         }
-        if (orderStatus && record.order_status !== orderStatus && this.statusCanAdvance(record.order_status, orderStatus)) {
+        const saveTerminal = ['delivered', 'ups_shipped'];
+        if (orderStatus && record.order_status !== orderStatus &&
+            !record.route_id && !saveTerminal.includes(record.order_status)) {
           updateData.order_status = orderStatus;
           console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${record.order_status} -> ${orderStatus}`);
         }
