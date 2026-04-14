@@ -1709,17 +1709,21 @@ class ChatbotService {
 
   // Paso 2: Procesa la cantidad elegida
   async handleClosingQuantity(contact, messageText, convState) {
-    const lower = messageText.toLowerCase().replace(/,/g, '');
+    const lower = messageText.toLowerCase().replace(/,/g, '').trim();
 
+    // Detectar cantidad exacta con límites de palabra para evitar que "5000" se confunda con "500"
     let quantity = null;
-    if (lower.includes('500') || lower.includes('quinientas') || lower.includes('quinientos')) {
+    if (/\b500\b/.test(lower) || lower.includes('quinientas') || lower.includes('quinientos')) {
       quantity = 500;
-    } else if (lower.includes('1000') || lower.includes('1 000') || lower.includes('mil tarjetas') || lower === 'mil' || lower.includes('1,000')) {
+    } else if (/\b1000\b|\b1 000\b/.test(lower) || lower.includes('mil tarjetas') || lower === 'mil') {
       quantity = 1000;
     } else {
-      // Intentar parsear número directo
-      const numMatch = lower.match(/\b(500|1000|1 000)\b/);
-      if (numMatch) quantity = parseInt(numMatch[1].replace(/\s/g, ''));
+      // Intentar extraer cualquier número mencionado
+      const numMatch = lower.match(/\b(\d[\d\s]*)\b/);
+      if (numMatch) {
+        const parsed = parseInt(numMatch[1].replace(/\s/g, ''), 10);
+        if (!isNaN(parsed) && parsed > 0) quantity = parsed;
+      }
     }
 
     if (quantity === 500 || quantity === 1000) {
@@ -1741,7 +1745,40 @@ class ChatbotService {
       return { handled: true, action: 'closing_quantity_selected', quantity, price };
 
     } else {
-      const remindMsg = 'Por favor indíquenos cuántas tarjetas desea ordenar:\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70';
+      // Cantidad no estándar o pregunta de precio — usar IA para responder naturalmente
+      try {
+        const packageInfo = '500 tarjetas = $60, 1000 tarjetas = $70';
+        const aiMessages = [
+          {
+            role: 'system',
+            content: `Eres un asistente de ventas amable de una imprenta. El cliente está en el proceso de confirmar su pedido de tarjetas de presentación.
+Los paquetes disponibles son: ${packageInfo}.
+Si el cliente pregunta por una cantidad diferente (ej. 5000, 2000, etc.), responde de forma natural y útil:
+- Menciona los paquetes estándar disponibles
+- Si es una cantidad grande, sugiere que puedes verificar el precio con el equipo o que los paquetes son 500 y 1000 por ahora
+- Mantén el tono amigable y sin presión
+- Responde en español, máximo 3 oraciones
+- Al final, redirige amablemente a confirmar una cantidad (500 o 1000) o indica que el equipo se pondrá en contacto para cantidades especiales
+No repitas los precios en formato de lista — responde conversacionalmente.`
+          },
+          {
+            role: 'user',
+            content: messageText
+          }
+        ];
+
+        const aiResult = await this.ai.callOpenAI(aiMessages, 200);
+        if (aiResult.success && aiResult.content) {
+          await this.sendMessage(contact.id, aiResult.content.trim());
+          await this.addComment(contact.id, `[Bot] Respuesta IA a cantidad no estándar: "${messageText}"`);
+          return { handled: true, action: 'closing_quantity_ai_response' };
+        }
+      } catch (aiErr) {
+        console.log(`[Bot] Error IA en handleClosingQuantity:`, aiErr.message);
+      }
+
+      // Fallback si la IA falla
+      const remindMsg = 'Claro 😊 Por el momento contamos con estos paquetes:\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70\n\n¿Cuál le gustaría ordenar?';
       await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'closing_quantity_remind' };
     }
