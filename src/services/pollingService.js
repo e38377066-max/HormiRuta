@@ -1035,6 +1035,14 @@ class PollingService {
       const extractor = new AddressExtractorService();
       const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
 
+      // No guardar direcciones de New Leads — aún no son clientes confirmados
+      const contactLifecycleLow = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
+      const excludedForExtraction = ['new lead', 'impropos', 'iprintpos'];
+      if (excludedForExtraction.includes(contactLifecycleLow)) {
+        console.log(`[AddressScan-Agent] Omitiendo extracción para ${contactName} (lifecycle=${contact.lifecycle || 'New Lead'})`);
+        return;
+      }
+
       let latestAddress = null;
       let mapsLink = null;
       let locationCoords = null;
@@ -1323,7 +1331,10 @@ class PollingService {
           }
           continue;
         }
-        if (orderStatus && existing.order_status !== orderStatus && this.statusCanAdvance(existing.order_status, orderStatus)) {
+        const canSync = orderStatus && existing.order_status !== orderStatus &&
+          (this.statusCanAdvance(existing.order_status, orderStatus) ||
+           (existing.order_status === 'approved' && orderStatus === 'pending'));
+        if (canSync) {
           updateFields.order_status = orderStatus;
           if (existing.dispatch_status === 'archived') {
             updateFields.dispatch_status = 'available';
@@ -1876,6 +1887,8 @@ class PollingService {
           let placeholderCity = null;
           let placeholderState = null;
           let placeholderSource = 'placeholder';
+          let placeholderCost = null;
+          let placeholderDeposit = null;
 
           try {
             const contactDetail = await respondio.getContact(contact.id);
@@ -1889,6 +1902,20 @@ class PollingService {
                   fn === 'delivery address' || fn === 'delivery' ||
                   fn === 'address line 1' || fn === 'direccion de entrega';
               });
+
+              // Leer billing desde custom fields
+              const parseBillingVal = (val) => {
+                if (val === null || val === undefined || val === '') return null;
+                const num = parseFloat(val);
+                return isNaN(num) ? null : num;
+              };
+              const cfCostPh = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'cost');
+              const cfDepositPh = cData.custom_fields?.find(f => f.name?.toLowerCase() === 'deposit');
+              placeholderCost = parseBillingVal(cfCostPh?.value);
+              placeholderDeposit = parseBillingVal(cfDepositPh?.value);
+              if (placeholderCost !== null || placeholderDeposit !== null) {
+                console.log(`[AddressScan] Billing en placeholder ${customerName}: cost=${placeholderCost ?? '-'} deposit=${placeholderDeposit ?? '-'}`);
+              }
               if (cfAddress?.value && cfAddress.value.trim().length >= 5) {
                 const addressText = cfAddress.value.trim();
                 const geocoded = await geocodingService.geocodeAddress(addressText);
@@ -1917,6 +1944,8 @@ class PollingService {
             }
           } catch (cfErr) {}
 
+          const phCost = placeholderCost ?? null;
+          const phDeposit = placeholderDeposit ?? null;
           await ValidatedAddress.create({
             user_id: userId,
             respond_contact_id: contactIdStr,
@@ -1930,7 +1959,10 @@ class PollingService {
             city: placeholderCity,
             state: placeholderState,
             source: placeholderSource,
-            order_status: orderStatus
+            order_status: orderStatus,
+            order_cost: phCost,
+            deposit_amount: phDeposit,
+            total_to_collect: phCost !== null ? (phCost - (phDeposit ?? 0)) : null
           });
           placeholderCount++;
           if (placeholderAddress) {
@@ -2418,7 +2450,7 @@ class PollingService {
           state: geocoded.stateShort || geocoded.state || null,
           confidence: geocoded.confidence || null,
           source: sourceOverride || 'scanner',
-          order_status: orderStatus || 'approved',
+          order_status: orderStatus || 'pending',
           dispatch_status: isRecByName ? 'archived' : 'available'
         });
         if (isRecByName) console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (nombre contiene -REC)`);
