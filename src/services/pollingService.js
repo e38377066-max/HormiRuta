@@ -2614,13 +2614,14 @@ class PollingService {
   async checkBotReactivationFields(userId, apiToken, settings) {
     try {
       const respondio = this.getRespondioInstance(apiToken);
-      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      // Escanear todos los contactos con actividad en los últimos 7 días,
+      // sin importar si el bot o el agente está activo.
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const pausedStates = await ConversationState.findAll({
         where: {
-          agent_active: true,
           updated_at: { [Op.gte]: cutoff }
         },
-        attributes: ['contact_id']
+        attributes: ['contact_id', 'agent_active']
       });
       if (!pausedStates || pausedStates.length === 0) return;
 
@@ -2663,17 +2664,19 @@ class PollingService {
           contact.id = cs.contact_id;
 
           if (isCierreKw) {
+            // Funciona sin importar si el bot o el agente estaba activo
             if (convState) await convState.update({ agent_active: false });
             const chatbot = new ChatbotService(userId, settings);
             await chatbot.startClosingFlow(contact, 'tarjetas');
-            console.log(`[BotReactiveScan] Flujo de cierre iniciado para contacto ${cs.contact_id}`);
+            console.log(`[BotReactiveScan] Flujo de cierre iniciado para contacto ${cs.contact_id} (agent_active era ${cs.agent_active})`);
           } else if (isReactivarKw) {
-            if (convState) {
+            // Solo aplica si el agente había tomado control
+            if (cs.agent_active && convState) {
               const updateFields = { agent_active: false };
               if (convState.state === 'assigned') updateFields.state = 'initial';
               await convState.update(updateFields);
+              console.log(`[BotReactiveScan] Bot reactivado para contacto ${cs.contact_id}`);
             }
-            console.log(`[BotReactiveScan] Bot reactivado para contacto ${cs.contact_id}`);
           }
         } catch (contactErr) {
           // silenciar error individual para no detener el loop
