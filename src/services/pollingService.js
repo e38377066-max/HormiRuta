@@ -1393,23 +1393,22 @@ class PollingService {
         }
       }
 
+      // Limpiar cache periódicamente sin importar si hay contactos pendientes.
+      // Garantiza que "cierre" y otros campos sean detectados aunque no lleguen mensajes nuevos.
+      if (!this.lastFullAddressScan) {
+        this.lastFullAddressScan = Date.now();
+      } else if ((Date.now() - this.lastFullAddressScan) > RESCAN_INTERVAL_MS) {
+        this.addressScannedContacts.clear();
+        console.log(`[AddressScan] Cache limpiado, re-escaneando todos los contactos`);
+        this.lastFullAddressScan = Date.now();
+      }
+
       contactsToScan = contactsToScan.filter(c => {
         if (needsAddressSet.has(c.id.toString())) return true;
         return !this.addressScannedContacts.has(c.id.toString());
       });
 
-      if (contactsToScan.length === 0) {
-        if (this.lastFullAddressScan && (Date.now() - this.lastFullAddressScan) > RESCAN_INTERVAL_MS) {
-          this.addressScannedContacts.clear();
-          console.log(`[AddressScan] Cache limpiado, proximo ciclo re-escaneara todos los contactos`);
-          this.lastFullAddressScan = Date.now();
-        }
-        return;
-      }
-
-      if (!this.lastFullAddressScan) {
-        this.lastFullAddressScan = Date.now();
-      }
+      if (contactsToScan.length === 0) return;
 
       contactsToScan.sort((a, b) => {
         const aNeeds = needsAddressSet.has(a.id.toString()) ? 0 : 1;
@@ -2614,11 +2613,12 @@ class PollingService {
   async checkBotReactivationFields(userId, apiToken, settings) {
     try {
       const respondio = this.getRespondioInstance(apiToken);
-      // Escanear todos los contactos con actividad en los últimos 7 días,
-      // sin importar si el bot o el agente está activo.
-      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      // Solo contactos donde el agente tomó control (agent_active = true).
+      // Para contactos con bot activo, el check se hace en el flujo de mensajes.
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const pausedStates = await ConversationState.findAll({
         where: {
+          agent_active: true,
           updated_at: { [Op.gte]: cutoff }
         },
         attributes: ['contact_id', 'agent_active']
@@ -2630,7 +2630,8 @@ class PollingService {
 
       for (const cs of pausedStates) {
         try {
-          const contactDetail = await respondio.getContact(cs.contact_id);
+          // contact_id en ConversationState es un string — parseInt necesario para la API
+          const contactDetail = await respondio.getContact(parseInt(cs.contact_id, 10));
           if (!contactDetail.success || !contactDetail.data) {
             if (contactDetail.notFound) {
               // Contacto eliminado en Respond.io — desactivar para no volver a buscar
