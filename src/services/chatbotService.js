@@ -1648,11 +1648,10 @@ class ChatbotService {
   async startClosingFlow(contact, product = 'tarjetas') {
     const msg0 = 'Hola, veo que ya está aprobando su orden 🎉\n\nTome unos minutos y lea este mensaje para asegurar que todo esté bien.\n\n✅ POR FAVOR escriba:\n- *APROBADO* si todo está correcto\n- *Necesita cambios* si desea modificar algo';
 
-    // Enviar imagen aviso si está configurada
-    const avisoUrl = this.settings.closing_aviso_image_url || null;
-    if (avisoUrl) {
-      await this.sendAttachmentMsg(contact.id, avisoUrl, 'image');
-    }
+    // Enviar imagen aviso (URL configurada en settings o la predeterminada de producción)
+    const avisoUrl = this.settings.closing_aviso_image_url ||
+      'https://production--bucket.s3-accelerate.amazonaws.com/files/313144/879645/1760541638162/aviso.jpg';
+    await this.sendAttachmentMsg(contact.id, avisoUrl, 'image');
 
     await this.sendMessage(contact.id, msg0);
 
