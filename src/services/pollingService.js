@@ -2565,8 +2565,12 @@ class PollingService {
   async checkBotReactivationFields(userId, apiToken, settings) {
     try {
       const respondio = this.getRespondioInstance(apiToken);
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const pausedStates = await ConversationState.findAll({
-        where: { agent_active: true },
+        where: {
+          agent_active: true,
+          updatedAt: { [Op.gte]: cutoff }
+        },
         attributes: ['contact_id']
       });
       if (!pausedStates || pausedStates.length === 0) return;
