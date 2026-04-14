@@ -788,6 +788,93 @@
   animation: spin 1s linear infinite;
 }
 
+.bot-reactivate-section {
+  margin: 12px 16px 16px;
+  padding: 14px;
+  background: #f3f4ff;
+  border: 1px solid #c7d0ff;
+  border-radius: 10px;
+}
+
+.bot-reactivate-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4338ca;
+  margin-bottom: 6px;
+}
+
+.bot-reactivate-hint {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.bot-reactivate-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bot-reactivate-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #c7d0ff;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+}
+
+.bot-reactivate-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+}
+
+.bot-reactivate-btn {
+  padding: 8px 12px;
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s;
+}
+
+.bot-reactivate-btn:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.bot-reactivate-btn:disabled {
+  background: #a5b4fc;
+  cursor: not-allowed;
+}
+
+.bot-reactivate-result {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.bot-reactivate-result.ok {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.bot-reactivate-result.err {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
 .do-billing-edit {
   padding: 8px;
   background: #f0faf0;
