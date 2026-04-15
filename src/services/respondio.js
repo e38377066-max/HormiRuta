@@ -325,7 +325,10 @@ class RespondioService {
       };
     } catch (error) {
       const errMsg = error.response?.data?.message || error.message || '';
-      const isInvalidId = error.response?.status === 400 &&
+      // Respond.io puede devolver HTTP 400 o HTTP 200/4xx con code:400 en el body
+      const httpStatus = error.response?.status;
+      const bodyCode = error.response?.data?.code;
+      const isInvalidId = (httpStatus === 400 || bodyCode === 400) &&
         (errMsg.includes('is invalid') || errMsg.includes('Invalid identifier'));
       if (!isInvalidId) {
         console.error('Respond.io get contact error:', error.response?.data || error.message);

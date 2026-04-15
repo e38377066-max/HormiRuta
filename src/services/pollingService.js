@@ -2619,7 +2619,7 @@ class PollingService {
       const pausedStates = await ConversationState.findAll({
         where: {
           agent_active: true,
-          updated_at: { [Op.gte]: cutoff }
+          updatedAt: { [Op.gte]: cutoff }
         },
         attributes: ['contact_id', 'agent_active']
       });
