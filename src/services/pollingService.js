@@ -2615,11 +2615,9 @@ class PollingService {
       const respondio = this.getRespondioInstance(apiToken);
       // Solo contactos donde el agente tomó control (agent_active = true).
       // Para contactos con bot activo, el check se hace en el flujo de mensajes.
-      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const pausedStates = await ConversationState.findAll({
         where: {
-          agent_active: true,
-          updatedAt: { [Op.gte]: cutoff }
+          agent_active: true
         },
         attributes: ['contact_id', 'agent_active']
       });
