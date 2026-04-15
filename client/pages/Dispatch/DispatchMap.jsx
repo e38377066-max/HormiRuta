@@ -290,16 +290,17 @@ export default function DispatchMap() {
         position: { lat: order.address_lat, lng: order.address_lng },
         map: mapInstance.current,
         icon,
-        title: `${order.customer_name || 'Sin nombre'} - ${order.address}`,
+        title: `${order.customer_name || 'Sin nombre'} - ${order.address} | ${config.label}`,
         zIndex: isEditSelected ? 150 : isSelected ? 100 : 1
       })
 
+      const badgeBg = config.color === '#ffffff' ? '#555' : config.color
       const infoContent = `
         <div style="font-family:sans-serif;min-width:200px">
           <strong>${order.customer_name || 'Sin nombre'}</strong><br/>
           <span style="color:#666">${order.address || ''}</span><br/>
           <span style="color:#666">${order.customer_phone || ''}</span><br/>
-          <span style="background:${config.color};color:white;padding:2px 8px;border-radius:4px;font-size:12px">${config.label}</span>
+          <span style="background:${badgeBg};color:white;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:bold">● ${config.label}</span>
           ${order.amount ? `<br/><strong>$${order.amount.toFixed(2)}</strong>` : ''}
         </div>
       `
