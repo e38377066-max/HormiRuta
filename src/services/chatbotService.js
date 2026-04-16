@@ -1707,7 +1707,7 @@ class ChatbotService {
     );
 
     if (approved) {
-      const msg1 = 'Me indica cuántas desea ordenar 🃏\n\nPaquetes disponibles de Tarjetas:\n\n🔹 500 tarjetas — $60\n🔹 1000 tarjetas — $70';
+      const msg1 = 'Me indica cuántas desea ordenar 🃏\n\n💳 Paquetes disponibles de Tarjetas:\n\n🔹 500 tarjetas — $60\n🔹 1000 tarjetas — $70\n✨ 2500 tarjetas — $120 (depósito $40)\n✨ 5000 tarjetas — $140 (depósito $50)';
       await this.sendMessage(contact.id, msg1);
       await this.updateConversationState(contact.id, { state: 'closing_quantity' });
       await this.addComment(contact.id, `[Bot] Cliente aprobó pedido. Preguntando cantidad.`);
@@ -1735,17 +1735,21 @@ class ChatbotService {
 
     // Si el cliente se está corrigiendo pero no menciona cantidad, volver a preguntar
     if (this.isClosingCorrection(lower) && !/\d/.test(lower)) {
-      const remindMsg = 'Sin problema 😊 ¿Cuántas tarjetas desea ordenar?\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70';
+      const remindMsg = 'Sin problema 😊 ¿Cuántas tarjetas desea ordenar?\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70\n✨ *2500 tarjetas* — $120 (depósito $40)\n✨ *5000 tarjetas* — $140 (depósito $50)';
       await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'closing_quantity_correction_prompt' };
     }
 
-    // Detectar cantidad exacta con límites de palabra para evitar que "5000" se confunda con "500"
+    // Detectar cantidad exacta con límites de palabra
     let quantity = null;
     if (/\b500\b/.test(lower) || lower.includes('quinientas') || lower.includes('quinientos')) {
       quantity = 500;
     } else if (/\b1000\b|\b1 000\b/.test(lower) || lower.includes('mil tarjetas') || lower === 'mil') {
       quantity = 1000;
+    } else if (/\b2500\b|\b2 500\b/.test(lower) || lower.includes('dos mil quinientas') || lower.includes('dos mil quinientos')) {
+      quantity = 2500;
+    } else if (/\b5000\b|\b5 000\b/.test(lower) || lower.includes('cinco mil')) {
+      quantity = 5000;
     } else {
       // Intentar extraer cualquier número mencionado
       const numMatch = lower.match(/\b(\d[\d\s]*)\b/);
@@ -1755,9 +1759,21 @@ class ChatbotService {
       }
     }
 
-    if (quantity === 500 || quantity === 1000) {
-      const price = quantity === 500 ? '$60' : '$70';
-      const msg2 = `¡Excelente! ${quantity} tarjetas por ${price} 😊\n\nYa que el pago se realiza al momento de la entrega, ¿podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
+    const PACKAGES = {
+      500:  { price: '$60',  deposit: null },
+      1000: { price: '$70',  deposit: null },
+      2500: { price: '$120', deposit: '$40' },
+      5000: { price: '$140', deposit: '$50' },
+    };
+
+    if (PACKAGES[quantity]) {
+      const pkg = PACKAGES[quantity];
+      let msg2;
+      if (pkg.deposit) {
+        msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nEste paquete requiere un depósito de ${pkg.deposit} para apartar el pedido, y el resto se paga al momento de la entrega 💳\n\n¿Podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
+      } else {
+        msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nYa que el pago se realiza al momento de la entrega, ¿podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
+      }
       await this.sendMessage(contact.id, msg2);
 
       const existingCtx = convState.context_data || {};
@@ -1766,28 +1782,29 @@ class ChatbotService {
         context_data: {
           ...existingCtx,
           closing_quantity: quantity,
-          closing_price: price
+          closing_price: pkg.price,
+          closing_deposit: pkg.deposit || null
         }
       });
 
-      await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${price}). Solicitando dirección.`);
-      return { handled: true, action: 'closing_quantity_selected', quantity, price };
+      await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${pkg.price}${pkg.deposit ? `, depósito ${pkg.deposit}` : ''}). Solicitando dirección.`);
+      return { handled: true, action: 'closing_quantity_selected', quantity, price: pkg.price };
 
     } else {
       // Cantidad no estándar o pregunta de precio — usar IA para responder naturalmente
       try {
-        const packageInfo = '500 tarjetas = $60, 1000 tarjetas = $70';
+        const packageInfo = '500 tarjetas = $60 (pago en entrega), 1000 tarjetas = $70 (pago en entrega), 2500 tarjetas = $120 con depósito de $40, 5000 tarjetas = $140 con depósito de $50';
         const aiMessages = [
           {
             role: 'system',
             content: `Eres un asistente de ventas amable de una imprenta. El cliente está en el proceso de confirmar su pedido de tarjetas de presentación.
 Los paquetes disponibles son: ${packageInfo}.
-Si el cliente pregunta por una cantidad diferente (ej. 5000, 2000, etc.), responde de forma natural y útil:
-- Menciona los paquetes estándar disponibles
-- Si es una cantidad grande, sugiere que puedes verificar el precio con el equipo o que los paquetes son 500 y 1000 por ahora
+Si el cliente pregunta por una cantidad diferente, responde de forma natural y útil:
+- Menciona los 4 paquetes disponibles de forma conversacional
+- Para paquetes grandes (2500 y 5000) menciona que requieren un depósito para apartar el pedido
 - Mantén el tono amigable y sin presión
 - Responde en español, máximo 3 oraciones
-- Al final, redirige amablemente a confirmar una cantidad (500 o 1000) o indica que el equipo se pondrá en contacto para cantidades especiales
+- Al final, redirige amablemente a elegir uno de los 4 paquetes disponibles
 No repitas los precios en formato de lista — responde conversacionalmente.`
           },
           {
@@ -1807,7 +1824,7 @@ No repitas los precios en formato de lista — responde conversacionalmente.`
       }
 
       // Fallback si la IA falla
-      const remindMsg = 'Claro 😊 Por el momento contamos con estos paquetes:\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70\n\n¿Cuál le gustaría ordenar?';
+      const remindMsg = 'Claro 😊 Contamos con estos paquetes:\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70\n✨ *2500 tarjetas* — $120 (depósito $40)\n✨ *5000 tarjetas* — $140 (depósito $50)\n\n¿Cuál le gustaría ordenar?';
       await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'closing_quantity_remind' };
     }
@@ -1824,14 +1841,14 @@ No repitas los precios en formato de lista — responde conversacionalmente.`
       // ¿Está corrigiendo la cantidad?
       const mentionsQuantity = /\b(\d+)\b/.test(lower) && (
         lower.includes('tarjet') || lower.includes('card') || lower.includes('paquete') ||
-        lower.includes('unidad') || lower.includes('pieza') || /\b(500|1000|mil)\b/.test(lower)
+        lower.includes('unidad') || lower.includes('pieza') || /\b(500|1000|2500|5000|mil)\b/.test(lower)
       );
 
       if (mentionsQuantity) {
         // Volver al paso de cantidad con el nuevo valor
         await this.updateConversationState(contact.id, {
           state: 'closing_quantity',
-          context_data: { ...existingCtx, closing_quantity: null, closing_price: null }
+          context_data: { ...existingCtx, closing_quantity: null, closing_price: null, closing_deposit: null }
         });
         await this.addComment(contact.id, `[Bot] Cliente corrigió cantidad durante paso de dirección`);
         return await this.handleClosingQuantity(contact, messageText, convState);
