@@ -1902,20 +1902,55 @@ Responde de forma empática y amigable preguntando qué desea corregir (la canti
     const depositRequired = existingCtx.closing_deposit;
 
     if (depositRequired) {
-      // Paquete con depósito — pedir captura de Zelle antes de cerrar
-      const depositMsg = `¡Perfecto! Anotamos su dirección 📍\n\nPara apartar su pedido necesitamos el depósito de *${depositRequired}* vía Zelle 💳\n\nPor favor envíe la captura de pantalla de su transferencia Zelle para confirmar su orden 📸`;
-      await this.sendMessage(contact.id, depositMsg);
+      // Buscar primero en el historial de la conversación si ya enviaron captura de Zelle
+      await this.addComment(contact.id, `[Bot] Dirección recibida: ${messageText}. Buscando captura de Zelle en historial...`);
+      const zelleCheck = await this.findZelleInHistory(contact.id, depositRequired);
 
-      await this.updateConversationState(contact.id, {
-        state: 'closing_deposit_verification',
-        context_data: {
-          ...existingCtx,
-          closing_address: messageText
-        }
-      });
+      if (zelleCheck.found && zelleCheck.verified) {
+        // ✅ Ya pagaron — cerrar directamente
+        const confirmMsg = `¡Perfecto! Anotamos su dirección y ya tenemos confirmado su depósito de ${depositRequired} vía Zelle ✅\n\n¡Muchas gracias por preferirnos! 🎉\n\nEl proceso de entrega es de 3 a 4 días hábiles. Uno de nuestro personal de entregas se comunicará con usted cuando su orden esté lista 🚚`;
+        await this.sendMessage(contact.id, confirmMsg);
 
-      await this.addComment(contact.id, `[Bot] Dirección recibida: ${messageText}. Solicitando captura de depósito Zelle (${depositRequired}).`);
-      return { handled: true, action: 'closing_deposit_requested', address: messageText };
+        await this.updateConversationState(contact.id, {
+          state: 'closing_complete',
+          context_data: {
+            ...existingCtx,
+            closing_address: messageText,
+            closing_deposit_verified: true,
+            closing_deposit_found_in_history: true,
+            closing_completed_at: new Date().toISOString()
+          }
+        });
+
+        const product2 = convState.selected_product || 'tarjetas';
+        const qty2 = existingCtx.closing_quantity || '?';
+        const price2 = existingCtx.closing_price || '';
+        await this.addComment(contact.id, `[Bot] ✅ PEDIDO CERRADO — ${product2} x${qty2} (${price2}) — Depósito Zelle ${depositRequired} encontrado en historial — Dirección: ${messageText}`);
+        await this.addTrackingTag(contact.id, 'PedidoConfirmado');
+        return { handled: true, action: 'closing_complete_deposit_in_history', address: messageText };
+
+      } else if (zelleCheck.found && !zelleCheck.verified) {
+        // Encontraron imagen pero el monto no coincide — pedir aclaración
+        const clarifyMsg = `¡Gracias! Revisamos el historial pero el depósito detectado (${zelleCheck.detectedAmount || 'monto desconocido'}) no coincide con el requerido de *${depositRequired}* 🙏\n\nSi ya realizó el depósito correcto, por favor envíe la captura de su transferencia Zelle por ${depositRequired} 📸`;
+        await this.sendMessage(contact.id, clarifyMsg);
+        await this.updateConversationState(contact.id, {
+          state: 'closing_deposit_verification',
+          context_data: { ...existingCtx, closing_address: messageText }
+        });
+        await this.addComment(contact.id, `[Bot] Imagen Zelle en historial pero monto (${zelleCheck.detectedAmount}) no coincide con ${depositRequired}. Esperando nueva captura.`);
+        return { handled: true, action: 'closing_deposit_wrong_amount_in_history' };
+
+      } else {
+        // No encontraron nada — pedir la captura
+        const depositMsg = `¡Perfecto! Anotamos su dirección 📍\n\nPara apartar su pedido necesitamos el depósito de *${depositRequired}* vía Zelle 💳\n\nPor favor envíe la captura de pantalla de su transferencia Zelle para confirmar su orden 📸`;
+        await this.sendMessage(contact.id, depositMsg);
+        await this.updateConversationState(contact.id, {
+          state: 'closing_deposit_verification',
+          context_data: { ...existingCtx, closing_address: messageText }
+        });
+        await this.addComment(contact.id, `[Bot] No se encontró captura Zelle en historial. Solicitando depósito (${depositRequired}).`);
+        return { handled: true, action: 'closing_deposit_requested', address: messageText };
+      }
     }
 
     // Paquete sin depósito — cierre directo
@@ -1940,6 +1975,79 @@ Responde de forma empática y amigable preguntando qué desea corregir (la canti
 
     console.log(`[Bot] Cierre completado para ${contact.id}: ${quantity} tarjetas → ${messageText}`);
     return { handled: true, action: 'closing_complete', address: messageText };
+  }
+
+  // Busca en el historial de mensajes si ya se envió una captura de Zelle
+  async findZelleInHistory(contactId, expectedDeposit) {
+    try {
+      const result = await this.api.listMessages(`id:${contactId}`, { limit: 50 });
+      if (!result.success || !result.items?.length) return { found: false };
+
+      const aiKey = this.settings?.openai_api_key || process.env.OPENAI_API_KEY;
+      if (!aiKey) return { found: false };
+
+      // Filtrar solo mensajes entrantes tipo imagen
+      const imageMessages = result.items.filter(msg =>
+        msg.traffic === 'incoming' &&
+        (msg.message?.type === 'image' || msg.message?.type === 'sticker')
+      );
+
+      if (!imageMessages.length) {
+        console.log(`[Bot] No se encontraron imágenes en historial de ${contactId}`);
+        return { found: false };
+      }
+
+      console.log(`[Bot] Encontradas ${imageMessages.length} imágenes en historial de ${contactId}, analizando para Zelle...`);
+
+      const AIService = (await import('./aiService.js')).default;
+      const ai = new AIService(aiKey, this.settings, this.userId);
+
+      // Analizar las últimas 5 imágenes (más recientes primero)
+      const toCheck = imageMessages.slice(0, 5);
+
+      for (const msg of toCheck) {
+        const imageUrl = msg.message?.url || msg.message?.attachment?.url || msg.message?.imageUrl;
+        if (!imageUrl) continue;
+
+        try {
+          const aiMessages = [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Analiza esta imagen. ¿Es una captura de pantalla de un pago Zelle?
+Si es Zelle, extrae el monto enviado y si coincide con ${expectedDeposit}.
+Responde SOLO en JSON: { "esZelle": true/false, "monto": "valor o null", "coincide": true/false }`
+                },
+                { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
+              ]
+            }
+          ];
+
+          const visionResult = await ai.callOpenAI(aiMessages, 200, 'gpt-4o');
+          if (!visionResult.success) continue;
+
+          let parsed = null;
+          try {
+            const jsonMatch = visionResult.content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+          } catch (e) {}
+
+          if (parsed?.esZelle) {
+            console.log(`[Bot] Imagen Zelle encontrada en historial de ${contactId}: monto=${parsed.monto}, coincide=${parsed.coincide}`);
+            return { found: true, verified: !!parsed.coincide, detectedAmount: parsed.monto };
+          }
+        } catch (imgErr) {
+          console.log(`[Bot] Error analizando imagen del historial:`, imgErr.message);
+        }
+      }
+
+      return { found: false };
+    } catch (err) {
+      console.error(`[Bot] Error buscando Zelle en historial:`, err.message);
+      return { found: false };
+    }
   }
 
   // Paso 4 (solo paquetes con depósito): Verifica captura de Zelle

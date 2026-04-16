@@ -230,14 +230,14 @@ Eres el cerebro del bot de WhatsApp/Facebook Messenger. Tu trabajo es:
 - El negocio atiende a la comunidad hispana de DFW${knowledgeSection}${memoriesSection}`;
   }
 
-  async callOpenAI(messages, maxTokens = 300) {
+  async callOpenAI(messages, maxTokens = 300, model = null) {
     if (!this.isAvailable) {
       return { success: false, error: 'No API key configured' };
     }
 
     return new Promise((resolve) => {
       const body = JSON.stringify({
-        model: this.model,
+        model: model || this.model,
         messages,
         max_tokens: maxTokens,
         temperature: 0.2,
