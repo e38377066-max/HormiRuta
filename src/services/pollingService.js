@@ -912,9 +912,11 @@ class PollingService {
       }
 
       // --- Procesar imágenes (describir con GPT-4o vision) ---
+      let incomingImageUrl = null;
       if ((msgType === 'image' || msgType === 'sticker') && !messageText) {
         const mediaUrl = message.message?.url || message.message?.attachment?.url || message.message?.imageUrl;
         if (mediaUrl) {
+          incomingImageUrl = mediaUrl; // Guardamos la URL cruda para verificación de depósito
           const aiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
           if (aiKey) {
             const ai = new AIService(aiKey, settings, userId);
@@ -947,7 +949,7 @@ class PollingService {
 
       if (useAutomaticMode) {
         const chatbot = new ChatbotService(userId, settings, isTestMode);
-        const result = await chatbot.processMessage(contact, messageText);
+        const result = await chatbot.processMessage(contact, messageText, incomingImageUrl);
         
         console.log(`[Chatbot] ${contact.firstName}: "${messageText.substring(0, 30)}..." -> ${result.action || result.reason || 'no_action'}`);
         
