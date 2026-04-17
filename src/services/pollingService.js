@@ -1334,11 +1334,12 @@ class PollingService {
           continue;
         }
         // Respond.io es fuente de verdad para el estado.
-        // Solo protegemos: órdenes con ruta asignada y estados terminales.
+        // Solo protegemos: órdenes con ruta asignada, estados terminales, y regresiones de estado.
         const terminalStatuses = ['delivered', 'ups_shipped'];
         const canSync = orderStatus && existing.order_status !== orderStatus &&
           !existing.route_id &&
-          !terminalStatuses.includes(existing.order_status);
+          !terminalStatuses.includes(existing.order_status) &&
+          this.statusCanAdvance(existing.order_status, orderStatus);
         if (canSync) {
           updateFields.order_status = orderStatus;
           if (existing.dispatch_status === 'archived') {
@@ -2496,7 +2497,8 @@ class PollingService {
         }
         const saveTerminal = ['delivered', 'ups_shipped'];
         if (orderStatus && record.order_status !== orderStatus &&
-            !record.route_id && !saveTerminal.includes(record.order_status)) {
+            !record.route_id && !saveTerminal.includes(record.order_status) &&
+            this.statusCanAdvance(record.order_status, orderStatus)) {
           updateData.order_status = orderStatus;
           console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${record.order_status} -> ${orderStatus}`);
         }
