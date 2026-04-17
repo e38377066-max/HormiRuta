@@ -27,7 +27,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run build && npm start"
+args = "npm install && npm run build && npm start"
 waitForPort = 5000
 
 [[ports]]
@@ -45,16 +45,6 @@ run = ["node", "src/index.js"]
 [userenv.shared]
 VITE_GOOGLE_MAPS_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
 GOOGLE_MAPS_API_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
-NODE_ENV = "development"
 VITE_GOOGLE_MAPS_API_KEY = "AIzaSyBLqGtCFZG3-cl9oILRHE-1QOJATX-gm-4"
-GITLAB_SSH_KEY = """
------BEGIN OPENSSH PRIVATE KEY-----
-b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-QyNTUxOQAAACBy8gt5mrWLVxas6jT0vJ4EIEL9PYkRaeyc9XW0bBl//QAAAJgO3L/9Dty/
-/QAAAAtzc2gtZWQyNTUxOQAAACBy8gt5mrWLVxas6jT0vJ4EIEL9PYkRaeyc9XW0bBl//Q
-AAAEC+HIQNe8IWuXgzF8MHXuve9CplHRPtqJvb4FOalvfYi3LyC3matYtXFqzqNPS8ngQg
-Qv09iRFp7Jz1dbRsGX/9AAAADmFyZWE4NjItcmVwbGl0AQIDBAUGBw==
------END OPENSSH PRIVATE KEY-----
-"""
 
 [userenv.development]
