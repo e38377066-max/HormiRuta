@@ -592,7 +592,13 @@ class PollingService {
             for (const msg of incomingMessages) {
               poller.processedMessageIds.add(msg.messageId);
             }
+            // Primero extraer de mensajes entrantes (del cliente)
             await this.extractAndSaveAddressFromMessages(userId, contact, incomingMessages, respondio);
+            // También revisar mensajes salientes del agente por si Felipe corrigió la dirección en el chat
+            const agentOutgoing = messages.filter(m => m.traffic === 'outgoing' && m.sender?.source === 'user');
+            if (agentOutgoing.length > 0) {
+              await this.extractAndSaveAddressFromMessages(userId, contact, agentOutgoing, respondio);
+            }
             this.addressScannedContacts.delete(contact.id.toString());
             return;
           }
@@ -1640,16 +1646,44 @@ class PollingService {
             }
           }
 
-          if (existing && existing.validated) {
-            this.addressScannedContacts.add(contactIdStr);
+          const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
+          if (!messagesResult.success || !messagesResult.items) {
+            if (existing && existing.validated) {
+              this.addressScannedContacts.add(contactIdStr);
+            }
             continue;
           }
 
-          const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
-          if (!messagesResult.success || !messagesResult.items) continue;
-
           const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
           const outgoingMessages = messagesResult.items.filter(m => m.traffic === 'outgoing');
+
+          // Si ya tiene dirección validada, revisar si el agente envió una dirección
+          // más reciente en el chat para actualizar (corrección enviada en conversación).
+          if (existing && existing.validated) {
+            const agentMessages = outgoingMessages.filter(m => m.sender?.source === 'user');
+            let agentAddress = null;
+            for (const msg of agentMessages) {
+              const text = msg.message?.text || '';
+              if (!text || text.length < 5) continue;
+              const extracted = extractor.extractAddressFromMessage(text);
+              if (extracted) { agentAddress = extracted; break; }
+            }
+            if (agentAddress) {
+              const agentNorm = agentAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (agentNorm !== existValidNorm && agentNorm !== existOrigNorm) {
+                const agentGeocoded = await geocodingService.geocodeAddress(agentAddress);
+                const agentFinal = agentGeocoded.success ? agentGeocoded.fullAddress : agentAddress;
+                console.log(`[AddressScan] Dirección corregida por agente en chat para ${contactName} (${contact.id}): "${agentFinal}" (anterior: "${existing.validated}") [agent_chat_corrected]`);
+                await this.saveValidatedAddress(userId, contact, agentFinal, agentAddress, agentGeocoded.zip || null, agentGeocoded, 'contact_corrected');
+                this.addressScannedContacts.delete(contactIdStr);
+                continue;
+              }
+            }
+            this.addressScannedContacts.add(contactIdStr);
+            continue;
+          }
           let latestExtracted = null;
           let scanMapsLink = null;
           let scanLocationCoords = null;
