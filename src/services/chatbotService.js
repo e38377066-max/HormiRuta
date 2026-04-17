@@ -1783,20 +1783,26 @@ class ChatbotService {
         // Revisar historial del chat para ver si ya envió comprobante Zelle
         const zelleCheck = await this.findZelleInHistory(contact.id, pkg.deposit);
 
-        if (zelleCheck.found && zelleCheck.amountMatches) {
-          // Depósito ya confirmado en historial — pedir dirección directamente
-          const msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nYa tenemos confirmado su depósito de ${pkg.deposit} vía Zelle ✅\n\n¿Podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
+        if (zelleCheck.found && zelleCheck.verified) {
+          // Depósito ya confirmado en historial (monto y destinatario correctos) — pedir dirección
+          const msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nYa tenemos confirmado su depósito de ${pkg.deposit} vía Zelle a Felipe Delgado ✅\n\n¿Podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
           await this.sendMessage(contact.id, msg2);
           await this.updateConversationState(contact.id, {
             state: 'closing_address',
             context_data: { ...baseCtxUpdate, closing_deposit_verified: true, closing_deposit_found_in_history: true }
           });
-          await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${pkg.price}, depósito ${pkg.deposit}). Depósito Zelle ya encontrado en historial. Solicitando dirección.`);
+          await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${pkg.price}, depósito ${pkg.deposit}). Depósito Zelle ya encontrado en historial (destinatario="${zelleCheck.detectedRecipient}"). Solicitando dirección.`);
           return { handled: true, action: 'closing_quantity_selected_deposit_found', quantity, price: pkg.price };
 
-        } else if (zelleCheck.found && !zelleCheck.amountMatches) {
-          // Hay una imagen Zelle pero el monto no coincide
-          const msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nRevisamos el historial y encontramos un comprobante Zelle, pero el monto detectado (${zelleCheck.detectedAmount || 'desconocido'}) no coincide con el depósito requerido de *${pkg.deposit}* 🙏\n\nPor favor envíe la captura de su transferencia Zelle por *${pkg.deposit}* para apartar su pedido 📸`;
+        } else if (zelleCheck.found && !zelleCheck.verified) {
+          // Hay una imagen Zelle pero monto o destinatario no coincide
+          let problemDetail = '';
+          if (!zelleCheck.amountMatches) {
+            problemDetail = `el monto detectado (${zelleCheck.detectedAmount || 'desconocido'}) no coincide con el depósito requerido de *${pkg.deposit}*`;
+          } else {
+            problemDetail = `el destinatario detectado ("${zelleCheck.detectedRecipient || 'desconocido'}") no corresponde a Felipe Delgado / Area 862 Graphics LLC`;
+          }
+          const msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nRevisamos el historial y encontramos un comprobante Zelle, pero ${problemDetail} 🙏\n\nPor favor envíe la captura de su transferencia Zelle a Felipe Delgado por *${pkg.deposit}* para apartar su pedido 📸`;
           await this.sendMessage(contact.id, msg2);
           await this.updateConversationState(contact.id, {
             state: 'closing_deposit_verification',
@@ -2068,15 +2074,23 @@ Responde de forma empática y amigable preguntando qué desea corregir (la canti
                 {
                   type: 'text',
                   text: `Analiza esta imagen. ¿Es una captura de pantalla de un pago Zelle?
-Si es Zelle, extrae el monto enviado y si coincide con ${expectedDeposit}.
-Responde SOLO en JSON: { "esZelle": true/false, "monto": "valor o null", "coincide": true/false }`
+Si es Zelle, extrae:
+1. El monto enviado (debe coincidir con ${expectedDeposit})
+2. El nombre del destinatario (debe ser "Felipe Delgado" o "Area 862 Graphics" o variación similar)
+3. El número de teléfono del destinatario si aparece (el correcto es (469) 684-3174)
+
+Verifica que:
+- El monto coincida con ${expectedDeposit}
+- El destinatario sea Felipe Delgado / Area 862 Graphics LLC (o número 469-684-3174)
+
+Responde SOLO en JSON: { "esZelle": true/false, "monto": "valor o null", "coincide": true/false, "destinatario": "nombre detectado o null", "destinatarioCorrecto": true/false }`
                 },
                 { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
               ]
             }
           ];
 
-          const visionResult = await ai.callOpenAI(aiMessages, 200, 'gpt-4o');
+          const visionResult = await ai.callOpenAI(aiMessages, 300, 'gpt-4o');
           if (!visionResult.success) continue;
 
           let parsed = null;
@@ -2086,8 +2100,18 @@ Responde SOLO en JSON: { "esZelle": true/false, "monto": "valor o null", "coinci
           } catch (e) {}
 
           if (parsed?.esZelle) {
-            console.log(`[Bot] Imagen Zelle encontrada en historial de ${contactId}: monto=${parsed.monto}, coincide=${parsed.coincide}`);
-            return { found: true, verified: !!parsed.coincide, detectedAmount: parsed.monto };
+            const amountMatches = !!parsed.coincide;
+            const recipientOk = parsed.destinatarioCorrecto !== false;
+            const allGood = amountMatches && recipientOk;
+            console.log(`[Bot] Imagen Zelle encontrada en historial de ${contactId}: monto=${parsed.monto}, coincide=${amountMatches}, destinatario="${parsed.destinatario}", destinatarioCorrecto=${recipientOk}`);
+            return {
+              found: true,
+              verified: allGood,
+              amountMatches,
+              recipientOk,
+              detectedAmount: parsed.monto,
+              detectedRecipient: parsed.destinatario
+            };
           }
         } catch (imgErr) {
           console.log(`[Bot] Error analizando imagen del historial:`, imgErr.message);
@@ -2122,11 +2146,17 @@ Responde SOLO en JSON: { "esZelle": true/false, "monto": "valor o null", "coinci
               content: [
                 {
                   type: 'text',
-                  text: `Analiza esta imagen y determina si es una captura de pantalla de un pago Zelle. 
-Si es un pago Zelle, extrae: monto enviado, nombre del destinatario o número de teléfono si aparece, y fecha/hora.
-El depósito esperado es de ${depositAmount}.
-¿El monto enviado coincide con ${depositAmount}? 
-Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": true/false, "detalles": "..." }`
+                  text: `Analiza esta imagen y determina si es una captura de pantalla de un pago Zelle.
+Si es un pago Zelle, extrae:
+1. El monto enviado (debe coincidir con ${depositAmount})
+2. El nombre del destinatario (debe ser "Felipe Delgado" o "Area 862 Graphics" o variación similar)
+3. El número de teléfono del destinatario si aparece (el correcto es (469) 684-3174)
+
+Verifica que:
+- El monto coincida con ${depositAmount}
+- El destinatario sea Felipe Delgado / Area 862 Graphics LLC (o número 469-684-3174)
+
+Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": true/false, "destinatario": "nombre detectado o null", "destinatarioCorrecto": true/false, "detalles": "..." }`
                 },
                 {
                   type: 'image_url',
@@ -2136,7 +2166,7 @@ Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": tru
             }
           ];
 
-          const result = await ai.callOpenAI(aiMessages, 300, 'gpt-4o');
+          const result = await ai.callOpenAI(aiMessages, 350, 'gpt-4o');
           if (result.success && result.content) {
             let parsed = null;
             try {
@@ -2145,8 +2175,11 @@ Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": tru
             } catch (e) {}
 
             if (parsed?.esZelle) {
-              if (parsed.coincide) {
-                // ✅ Depósito verificado
+              const amountOk = !!parsed.coincide;
+              const recipientOk = parsed.destinatarioCorrecto !== false;
+
+              if (amountOk && recipientOk) {
+                // ✅ Depósito verificado — monto correcto y destinatario correcto
                 const confirmMsg = `¡Perfecto! Recibimos la confirmación de su depósito de ${depositAmount} vía Zelle ✅\n\n¡Muchas gracias por preferirnos! 🎉\n\nEl proceso de entrega es de 3 a 4 días hábiles. Uno de nuestro personal de entregas se comunicará con usted cuando su orden esté lista 🚚`;
                 await this.sendMessage(contact.id, confirmMsg);
 
@@ -2156,19 +2189,27 @@ Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": tru
                     ...existingCtx,
                     closing_deposit_verified: true,
                     closing_deposit_amount_detected: parsed.monto,
+                    closing_deposit_recipient: parsed.destinatario,
                     closing_completed_at: new Date().toISOString()
                   }
                 });
 
-                await this.addComment(contact.id, `[Bot] ✅ PEDIDO CERRADO CON DEPÓSITO — ${product} x${quantity} (${price}) — Depósito Zelle ${depositAmount} verificado — Dirección: ${address}`);
+                await this.addComment(contact.id, `[Bot] ✅ PEDIDO CERRADO CON DEPÓSITO — ${product} x${quantity} (${price}) — Depósito Zelle ${depositAmount} a "${parsed.destinatario}" verificado — Dirección: ${address}`);
                 await this.addTrackingTag(contact.id, 'PedidoConfirmado');
                 return { handled: true, action: 'closing_deposit_verified' };
 
+              } else if (amountOk && !recipientOk) {
+                // ⚠️ Monto correcto pero destinatario incorrecto
+                const wrongRecipientMsg = `Recibimos su captura, pero el pago aparece enviado a *${parsed.destinatario || 'destinatario desconocido'}* en lugar de a *Felipe Delgado / Area 862 Graphics LLC* 🙏\n\nPor favor envíe la captura de su transferencia Zelle dirigida a Felipe Delgado ((469) 684-3174) por *${depositAmount}* 📸`;
+                await this.sendMessage(contact.id, wrongRecipientMsg);
+                await this.addComment(contact.id, `[Bot] Captura Zelle recibida — monto correcto (${parsed.monto}) pero destinatario incorrecto: "${parsed.destinatario}". Solicitando captura correcta.`);
+                return { handled: true, action: 'closing_deposit_wrong_recipient' };
+
               } else {
-                // ⚠️ Es Zelle pero monto no coincide
+                // ⚠️ Es Zelle pero monto no coincide (o ambos incorrectos)
                 const wrongAmountMsg = `Recibimos su captura, pero el monto detectado es *${parsed.monto || 'desconocido'}* y el depósito requerido es *${depositAmount}* 🙏\n\nSi es correcto, por favor comuníquese con nosotros para aclarar. Si fue un error, puede enviarnos la captura correcta 😊`;
                 await this.sendMessage(contact.id, wrongAmountMsg);
-                await this.addComment(contact.id, `[Bot] Captura Zelle recibida pero monto (${parsed.monto}) no coincide con depósito esperado (${depositAmount}). Detalles: ${parsed.detalles}`);
+                await this.addComment(contact.id, `[Bot] Captura Zelle recibida pero monto (${parsed.monto}) no coincide con depósito esperado (${depositAmount}). Destinatario: "${parsed.destinatario}". Detalles: ${parsed.detalles}`);
                 return { handled: true, action: 'closing_deposit_wrong_amount' };
               }
             } else {
