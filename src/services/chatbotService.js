@@ -1771,27 +1771,62 @@ class ChatbotService {
 
     if (PACKAGES[quantity]) {
       const pkg = PACKAGES[quantity];
-      let msg2;
-      if (pkg.deposit) {
-        msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nEste paquete requiere un depósito de ${pkg.deposit} para apartar el pedido, y el resto se paga al momento de la entrega 💳\n\n¿Podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
-      } else {
-        msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nYa que el pago se realiza al momento de la entrega, ¿podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
-      }
-      await this.sendMessage(contact.id, msg2);
-
       const existingCtx = convState.context_data || {};
-      await this.updateConversationState(contact.id, {
-        state: 'closing_address',
-        context_data: {
-          ...existingCtx,
-          closing_quantity: quantity,
-          closing_price: pkg.price,
-          closing_deposit: pkg.deposit || null
-        }
-      });
+      const baseCtxUpdate = {
+        ...existingCtx,
+        closing_quantity: quantity,
+        closing_price: pkg.price,
+        closing_deposit: pkg.deposit || null
+      };
 
-      await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${pkg.price}${pkg.deposit ? `, depósito ${pkg.deposit}` : ''}). Solicitando dirección.`);
-      return { handled: true, action: 'closing_quantity_selected', quantity, price: pkg.price };
+      if (pkg.deposit) {
+        // Revisar historial del chat para ver si ya envió comprobante Zelle
+        const zelleCheck = await this.findZelleInHistory(contact.id, pkg.deposit);
+
+        if (zelleCheck.found && zelleCheck.amountMatches) {
+          // Depósito ya confirmado en historial — pedir dirección directamente
+          const msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nYa tenemos confirmado su depósito de ${pkg.deposit} vía Zelle ✅\n\n¿Podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
+          await this.sendMessage(contact.id, msg2);
+          await this.updateConversationState(contact.id, {
+            state: 'closing_address',
+            context_data: { ...baseCtxUpdate, closing_deposit_verified: true, closing_deposit_found_in_history: true }
+          });
+          await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${pkg.price}, depósito ${pkg.deposit}). Depósito Zelle ya encontrado en historial. Solicitando dirección.`);
+          return { handled: true, action: 'closing_quantity_selected_deposit_found', quantity, price: pkg.price };
+
+        } else if (zelleCheck.found && !zelleCheck.amountMatches) {
+          // Hay una imagen Zelle pero el monto no coincide
+          const msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nRevisamos el historial y encontramos un comprobante Zelle, pero el monto detectado (${zelleCheck.detectedAmount || 'desconocido'}) no coincide con el depósito requerido de *${pkg.deposit}* 🙏\n\nPor favor envíe la captura de su transferencia Zelle por *${pkg.deposit}* para apartar su pedido 📸`;
+          await this.sendMessage(contact.id, msg2);
+          await this.updateConversationState(contact.id, {
+            state: 'closing_deposit_verification',
+            context_data: baseCtxUpdate
+          });
+          await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${pkg.price}). Imagen Zelle en historial pero monto (${zelleCheck.detectedAmount}) no coincide con ${pkg.deposit}. Esperando captura correcta.`);
+          return { handled: true, action: 'closing_quantity_selected_deposit_wrong_amount', quantity, price: pkg.price };
+
+        } else {
+          // No se encontró comprobante — pedir depósito primero antes de la dirección
+          const msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nEste paquete requiere un depósito de *${pkg.deposit}* para apartar el pedido, y el resto se paga al momento de la entrega 💳\n\nPor favor envíe la captura de pantalla de su transferencia Zelle por *${pkg.deposit}* para confirmar su orden 📸`;
+          await this.sendMessage(contact.id, msg2);
+          await this.updateConversationState(contact.id, {
+            state: 'closing_deposit_verification',
+            context_data: baseCtxUpdate
+          });
+          await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${pkg.price}, depósito ${pkg.deposit}). No se encontró comprobante Zelle en historial. Solicitando depósito antes de dirección.`);
+          return { handled: true, action: 'closing_quantity_selected_deposit_requested', quantity, price: pkg.price };
+        }
+
+      } else {
+        const msg2 = `¡Excelente! ${quantity} tarjetas por ${pkg.price} 😊\n\nYa que el pago se realiza al momento de la entrega, ¿podría compartirnos la dirección exacta de entrega? 📍\n\nSi es apartamento, favor de indicarnos también el número de unidad 🏠\n\n¡Gracias!`;
+        await this.sendMessage(contact.id, msg2);
+        await this.updateConversationState(contact.id, {
+          state: 'closing_address',
+          context_data: baseCtxUpdate
+        });
+        await this.addComment(contact.id, `[Bot] Cantidad seleccionada: ${quantity} tarjetas (${pkg.price}). Solicitando dirección.`);
+        return { handled: true, action: 'closing_quantity_selected', quantity, price: pkg.price };
+      }
 
     } else {
       // Cantidad no estándar o pregunta de precio — usar IA para responder naturalmente
@@ -1902,7 +1937,23 @@ Responde de forma empática y amigable preguntando qué desea corregir (la canti
     const depositRequired = existingCtx.closing_deposit;
 
     if (depositRequired) {
-      // Buscar primero en el historial de la conversación si ya enviaron captura de Zelle
+      // Si el depósito ya fue verificado en el paso de selección de cantidad, cerrar directo
+      if (existingCtx.closing_deposit_verified === true) {
+        const confirmMsg = `¡Perfecto! Anotamos su dirección y ya tenemos confirmado su depósito de ${depositRequired} vía Zelle ✅\n\n¡Muchas gracias por preferirnos! 🎉\n\nEl proceso de entrega es de 3 a 4 días hábiles. Uno de nuestro personal de entregas se comunicará con usted cuando su orden esté lista 🚚`;
+        await this.sendMessage(contact.id, confirmMsg);
+        await this.updateConversationState(contact.id, {
+          state: 'closing_complete',
+          context_data: { ...existingCtx, closing_address: messageText, closing_completed_at: new Date().toISOString() }
+        });
+        const product3 = convState.selected_product || 'tarjetas';
+        const qty3 = existingCtx.closing_quantity || '?';
+        const price3 = existingCtx.closing_price || '';
+        await this.addComment(contact.id, `[Bot] ✅ PEDIDO CERRADO — ${product3} x${qty3} (${price3}) — Depósito Zelle ${depositRequired} ya verificado — Dirección: ${messageText}`);
+        await this.addTrackingTag(contact.id, 'PedidoConfirmado');
+        return { handled: true, action: 'closing_complete_deposit_pre_verified', address: messageText };
+      }
+
+      // Buscar en el historial de la conversación si ya enviaron captura de Zelle
       await this.addComment(contact.id, `[Bot] Dirección recibida: ${messageText}. Buscando captura de Zelle en historial...`);
       const zelleCheck = await this.findZelleInHistory(contact.id, depositRequired);
 
