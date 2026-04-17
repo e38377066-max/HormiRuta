@@ -154,9 +154,9 @@ class PollingService {
           poller.botReactiveScanInProgress = false;
         }
       };
-      setTimeout(() => botReactiveScanFn(), 10000);
-      poller.botReactiveScanIntervalId = setInterval(botReactiveScanFn, 60000);
-      console.log(`[BotReactiveScan] Escáner de reactivación ACTIVO cada 60s`);
+      setTimeout(() => botReactiveScanFn(), 5000);
+      poller.botReactiveScanIntervalId = setInterval(botReactiveScanFn, 3000);
+      console.log(`[BotReactiveScan] Escáner de reactivación ACTIVO cada 3s`);
     })();
 
     return { success: true, message: `Polling iniciado cada ${intervalSeconds} segundos` };
@@ -2617,11 +2617,18 @@ class PollingService {
   async checkBotReactivationFields(userId, apiToken, settings) {
     try {
       const respondio = this.getRespondioInstance(apiToken);
-      // Solo contactos donde el agente tomó control (agent_active = true).
-      // Para contactos con bot activo, el check se hace en el flujo de mensajes.
+      // Checar contactos con agente activo (agent_active=true) O con actividad
+      // reciente (últimas 2h) donde el bot podría estar activo y alguien escribió "cierre".
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
       const pausedStates = await ConversationState.findAll({
         where: {
-          agent_active: true
+          [Op.or]: [
+            { agent_active: true },
+            {
+              state: { [Op.notIn]: ['closed', 'initial'] },
+              last_interaction: { [Op.gte]: twoHoursAgo }
+            }
+          ]
         },
         attributes: ['contact_id', 'agent_active']
       });
