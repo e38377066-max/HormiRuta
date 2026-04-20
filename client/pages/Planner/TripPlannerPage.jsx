@@ -19,7 +19,9 @@ export default function TripPlannerPage() {
   const navLineRef = useRef(null)
   const navRendererRef = useRef(null)
   const pendingNavRestoreRef = useRef(false)
+  const userToStopLineRef = useRef(null)
   const [userLocation, setUserLocation] = useState(null)
+  const [gpsError, setGpsError] = useState(false)
   const [selectedPoint, setSelectedPoint] = useState(null)
   
   const [stops, setStops] = useState([])
@@ -105,6 +107,12 @@ export default function TripPlannerPage() {
     }
   }, [isOptimized])
 
+  useEffect(() => {
+    if (currentRouteId) {
+      localStorage.setItem(`isOptimized_${currentRouteId}`, String(isOptimized))
+    }
+  }, [isOptimized, currentRouteId])
+
   const deliverRoutePayment = async () => {
     if (!payDeliveryModal || !payDeliveryMethod) return
     setDeliveringPay(true)
@@ -178,7 +186,8 @@ export default function TripPlannerPage() {
 
     setStops(routeStops)
     setRouteName(route.name || 'Ruta Asignada')
-    setIsOptimized(false)
+    const wasOptimized = route.is_optimized || localStorage.getItem(`isOptimized_${route.id}`) === 'true'
+    setIsOptimized(!!wasOptimized)
     setTotalDistance(route.total_distance || 0)
     setTotalDuration(route.total_duration || 0)
     setCurrentRouteId(route.id)
@@ -303,23 +312,29 @@ export default function TripPlannerPage() {
       const pos = await getCurrentPosition()
       const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       setUserLocation(loc)
+      setGpsError(false)
       mapInstanceRef.current?.setCenter(loc)
       reverseGeocode(loc)
       updateUserLocationMarker(loc)
     } catch (err) {
       console.error('Geolocation error:', err)
+      setGpsError(true)
     }
 
     const clearWatch = watchPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setUserLocation(loc)
+        setGpsError(false)
         updateUserLocationMarker(loc, pos.coords.accuracy)
         if (pos.coords.speed != null && pos.coords.speed >= 0) {
           setCurrentSpeed(Math.round(pos.coords.speed * 3.6))
         }
       },
-      (err) => console.error('Watch position error:', err),
+      (err) => {
+        console.error('Watch position error:', err)
+        setGpsError(true)
+      },
       { maximumAge: 3000 }
     )
     
@@ -373,6 +388,31 @@ export default function TripPlannerPage() {
       }
       setNavEta('')
       setNavDistance('')
+    }
+  }, [userLocation, navigationMode, stops])
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.google) return
+    if (userToStopLineRef.current) {
+      userToStopLineRef.current.setMap(null)
+      userToStopLineRef.current = null
+    }
+    if (!navigationMode && userLocation && stops.length > 0) {
+      const pending = stops.find(s => !s.completed && !s.skipped)
+      if (pending && pending.latitude && pending.longitude) {
+        userToStopLineRef.current = new window.google.maps.Polyline({
+          path: [userLocation, { lat: pending.latitude, lng: pending.longitude }],
+          map: mapInstanceRef.current,
+          strokeColor: '#4285F4',
+          strokeOpacity: 0,
+          strokeWeight: 3,
+          icons: [{
+            icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.7, scale: 3 },
+            offset: '0',
+            repeat: '12px'
+          }]
+        })
+      }
     }
   }, [userLocation, navigationMode, stops])
 
@@ -1123,20 +1163,18 @@ export default function TripPlannerPage() {
 
     const visibleStops = stopsList.filter(s => !s.completed && !s.skipped)
     const hasActivePending = stopsList.some(s => !s.completed && !s.skipped && !s.skippedOnce)
-    let pendingIndex = 0
 
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
         if (stop.completed || stop.skipped) return
         if (navigationMode && stop.skippedOnce && hasActivePending) return
-        pendingIndex++
         const color = '#EA4335'
         
         const marker = new window.google.maps.Marker({
           position: { lat: stop.latitude, lng: stop.longitude },
           map: mapInstanceRef.current,
           label: {
-            text: navigationMode ? String(pendingIndex) : String(index + 1),
+            text: String(index + 1),
             color: 'white',
             fontSize: '12px',
             fontWeight: 'bold'
@@ -1425,6 +1463,13 @@ export default function TripPlannerPage() {
       <div className="map-section">
         <div id="trip-map" className="map-container" ref={mapRef}></div>
         
+        {gpsError && (
+          <div className="gps-error-banner" onClick={startLocationTracking}>
+            <span className="material-icons">location_off</span>
+            <span>GPS no disponible — toca para reintentar</span>
+          </div>
+        )}
+
         <button
           className="menu-fab"
           onClick={onToggleDrawer}

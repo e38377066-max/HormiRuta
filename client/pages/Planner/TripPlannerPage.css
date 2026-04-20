@@ -1752,3 +1752,28 @@
 .nav-app-btn:active {
   background: #2a2a3e;
 }
+
+.gps-error-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(239, 68, 68, 0.92);
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 10;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.gps-error-banner .material-icons {
+  font-size: 16px;
+}
