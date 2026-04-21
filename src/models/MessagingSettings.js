@@ -225,6 +225,12 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
   openai_api_key: {
     type: DataTypes.STRING(200),
     allowNull: true
+  },
+  // Modo conversacional: la IA conduce la conversación libremente en vez de seguir la máquina de estados rígida
+  conversational_mode: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: 'Si true, la IA actúa como vendedor humano fluido en vez del state machine'
   }
 }, {
   tableName: 'messaging_settings',
@@ -284,6 +290,7 @@ MessagingSettings.prototype.toDict = function() {
     followup_message_2: this.followup_message_2,
     ai_enabled: this.ai_enabled,
     has_openai_key: !!this.openai_api_key,
+    conversational_mode: this.conversational_mode,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

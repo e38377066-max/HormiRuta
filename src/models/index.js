@@ -16,6 +16,8 @@ import UserToken from './UserToken.js';
 import WholesaleClient from './WholesaleClient.js';
 import BotMemory from './BotMemory.js';
 import BotKnowledge from './BotKnowledge.js';
+import CustomerProfile from './CustomerProfile.js';
+import AgentStyleProfile from './AgentStyleProfile.js';
 
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
 Route.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -99,6 +101,12 @@ BotMemory.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 User.hasMany(BotKnowledge, { foreignKey: 'user_id', as: 'botKnowledge', onDelete: 'CASCADE' });
 BotKnowledge.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+User.hasMany(CustomerProfile, { foreignKey: 'user_id', as: 'customerProfiles', onDelete: 'CASCADE' });
+CustomerProfile.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+User.hasOne(AgentStyleProfile, { foreignKey: 'user_id', as: 'agentStyle', onDelete: 'CASCADE' });
+AgentStyleProfile.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
 export { 
   sequelize, 
   User, 
@@ -117,5 +125,7 @@ export {
   UserToken,
   WholesaleClient,
   BotMemory,
-  BotKnowledge
+  BotKnowledge,
+  CustomerProfile,
+  AgentStyleProfile
 };

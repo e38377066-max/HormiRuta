@@ -5,6 +5,8 @@ import ServiceAgent from '../models/ServiceAgent.js';
 import AddressValidationService from './addressValidation.js';
 import respondApiService from './respondApiService.js';
 import AIService from './aiService.js';
+import CustomerProfileService from './customerProfileService.js';
+import StyleLearningService from './styleLearningService.js';
 
 class ChatbotService {
   constructor(userId, settings, isTestMode = false) {
@@ -936,6 +938,19 @@ class ChatbotService {
       }
     }
 
+    // ====================================================================
+    // MODO CONVERSACIONAL (FASE 1+2+3)
+    // Si está activo, la IA conduce la conversación libremente como un vendedor humano,
+    // usando el perfil del cliente, el estilo de los agentes y las lecciones aprobadas.
+    // Bypass de la máquina de estados rígida.
+    // ====================================================================
+    if (this.settings?.conversational_mode && this.ai.isAvailable && convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && !convState.agent_active) {
+      const convResult = await this.handleConversational(contact, messageText, convState);
+      if (convResult) return convResult;
+      // Si falló (parsing, API), cae al state machine como respaldo
+      console.warn(`[Bot] Modo conversacional falló para ${contact.id}, usando state machine de respaldo`);
+    }
+
     // Procesar según estado actual
     switch (convState.state) {
       case 'initial':
@@ -1683,6 +1698,113 @@ class ChatbotService {
   }
 
   // ==================== UTILIDADES ====================
+
+  // ====================================================================
+  // FASE 1 — Handler conversacional (vendedor humano fluido)
+  // ====================================================================
+  async handleConversational(contact, messageText, convState) {
+    try {
+      // Trae historial de la conversación (Respond.io)
+      let recentMessages = [];
+      try {
+        const histResult = await this.api.listMessages(`id:${contact.id}`, 25);
+        if (histResult.success && histResult.items) {
+          recentMessages = histResult.items.map(m => ({
+            text: m.body?.text || m.text || '',
+            isFromBot: m.sender?.source === 'bot' || m.sender?.source === 'automation',
+            isFromAgent: m.sender?.source === 'user' && m.traffic === 'outgoing',
+            isFromCustomer: m.traffic === 'incoming'
+          })).filter(m => m.text).reverse();
+        }
+      } catch (_) {}
+
+      // Carga perfil del cliente y estilo de los agentes (en paralelo)
+      const [customerProfile, agentStyle] = await Promise.all([
+        CustomerProfileService.get(this.userId, contact.id).catch(() => null),
+        StyleLearningService.getActive(this.userId).catch(() => null)
+      ]);
+
+      // Si todavía no tenemos producto y aún no se intentó, detectarlo del anuncio
+      if (!convState.selected_product && !convState.greeting_sent) {
+        try {
+          const adProduct = await this.extractAdProductHint(contact);
+          if (adProduct?.name) {
+            await this.updateConversationState(contact.id, { selected_product: adProduct.name });
+            convState.selected_product = adProduct.name;
+            await this.addTrackingTag(contact.id, `Producto_${adProduct.name}`);
+            await this.addComment(contact.id, `[Bot] Cliente vino del anuncio de Facebook con producto detectado: ${adProduct.name}.`);
+          }
+        } catch (_) {}
+      }
+
+      // Llama a la IA conversacional
+      const ai = await this.ai.generateConversationalReply({
+        contact,
+        messageText,
+        recentMessages,
+        convState,
+        customerProfile,
+        agentStyle
+      });
+
+      if (!ai || !ai.reply) return null;
+
+      // Aplica datos extraídos al estado de la conversación
+      const stateUpdate = { greeting_sent: true, last_customer_message_at: new Date() };
+      const ext = ai.extracted || {};
+      if (ext.zip_code && /^\d{5}$/.test(ext.zip_code) && !convState.validated_zip) {
+        stateUpdate.validated_zip = ext.zip_code;
+      }
+      if (ext.product && !convState.selected_product) {
+        // Solo aceptar productos del catálogo
+        const products = this.settings?.products || [];
+        const found = products.find(p =>
+          p.name.toLowerCase() === ext.product.toLowerCase() ||
+          (p.keywords || []).some(k => ext.product.toLowerCase().includes(k.toLowerCase()))
+        );
+        if (found) {
+          stateUpdate.selected_product = found.name;
+          await this.addTrackingTag(contact.id, `Producto_${found.name}`);
+        }
+      }
+
+      // Envía la respuesta
+      await this.sendMessage(contact.id, ai.reply);
+
+      // Decide handoff
+      const needsHandoff = ai.next_action === 'handoff_to_agent'
+        || ai.needs_human === true
+        || ai.intent === 'frustracion'
+        || (stateUpdate.validated_zip && (stateUpdate.selected_product || convState.selected_product));
+
+      if (needsHandoff) {
+        const finalProduct = stateUpdate.selected_product || convState.selected_product;
+        const finalZip = stateUpdate.validated_zip || convState.validated_zip;
+        if (finalProduct && finalZip) {
+          stateUpdate.state = 'assigned';
+          await this.updateConversationState(contact.id, stateUpdate);
+          await this.assignToDefaultAgent(contact.id);
+          await this.addComment(contact.id, `[Bot] Conversación lista para agente. Producto: ${finalProduct}, ZIP: ${finalZip}.`);
+          // Refresca perfil del cliente en background
+          CustomerProfileService.refreshFromConversation(this.userId, contact).catch(() => {});
+          return { handled: true, action: 'conversational_handoff', message: ai.reply };
+        }
+        if (ai.intent === 'frustracion' || ai.needs_human === true) {
+          stateUpdate.state = 'assigned';
+          await this.updateConversationState(contact.id, stateUpdate);
+          await this.assignToDefaultAgent(contact.id);
+          CustomerProfileService.refreshFromConversation(this.userId, contact).catch(() => {});
+          return { handled: true, action: 'conversational_handoff_human_needed', message: ai.reply };
+        }
+      }
+
+      await this.updateConversationState(contact.id, stateUpdate);
+      return { handled: true, action: `conversational_${ai.next_action || 'reply'}`, message: ai.reply };
+    } catch (e) {
+      console.error('[Bot] handleConversational error:', e.message);
+      return null;
+    }
+  }
 
   async assignToDefaultAgent(contactId) {
     const agentId = this.settings.default_agent_id || this.settings.default_agent_email;

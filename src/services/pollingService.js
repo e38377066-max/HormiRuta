@@ -463,6 +463,33 @@ class PollingService {
         
         if (!hasCloseAfterAgent) {
           await this.markAgentActivity(userId, contact.id);
+          // Guardar mensajes de agente en el log para que el aprendizaje de estilo tenga datos
+          for (const msg of outgoingAgentMessages) {
+            try {
+              const text = msg.message?.text || msg.body?.text || msg.text || '';
+              if (text && msg.messageId) {
+                const exists = await MessageLog.findOne({
+                  where: { respond_message_id: msg.messageId.toString() }
+                });
+                if (!exists) {
+                  await MessageLog.create({
+                    user_id: userId,
+                    contact_id: contact.id.toString(),
+                    contact_name: `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre',
+                    contact_phone: contact.phone || null,
+                    channel: 'respond.io',
+                    direction: 'outgoing',
+                    message_type: 'agent',
+                    message_content: text,
+                    respond_message_id: msg.messageId.toString(),
+                    processed: true
+                  });
+                }
+              }
+            } catch (logErr) {
+              // No crítico
+            }
+          }
           for (const msg of outgoingAgentMessages) {
             poller.processedMessageIds.add(`out_${msg.messageId}`);
           }

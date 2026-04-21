@@ -31,6 +31,22 @@ const MessageLog = sequelize.define('MessageLog', {
     type: DataTypes.STRING(100),
     allowNull: true
   },
+  contact_id: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  contact_name: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  contact_phone: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  channel: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
   direction: {
     type: DataTypes.STRING(10),
     allowNull: false
@@ -42,6 +58,14 @@ const MessageLog = sequelize.define('MessageLog', {
   content: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  message_content: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  processed: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
   channel_type: {
     type: DataTypes.STRING(50),

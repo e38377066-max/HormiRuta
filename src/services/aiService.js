@@ -173,7 +173,8 @@ class AIService {
 - Diseño gráfico personalizado`;
   }
 
-  getSystemPrompt(memories = [], knowledge = []) {
+  getSystemPrompt(memories = [], knowledge = [], extras = {}) {
+    const { customerProfile = null, agentStyle = null } = extras;
     const products = this.getProductsList();
     let memoriesSection = '';
     if (memories && memories.length > 0) {
@@ -227,7 +228,36 @@ Eres el cerebro del bot de WhatsApp/Facebook Messenger. Tu trabajo es:
 - Siempre en español
 - Tono amigable, cálido y profesional
 - Si no estás seguro, indica que un agente ayudará
-- El negocio atiende a la comunidad hispana de DFW${knowledgeSection}${memoriesSection}`;
+- El negocio atiende a la comunidad hispana de DFW${knowledgeSection}${memoriesSection}${this._renderStyleSection(agentStyle)}${this._renderCustomerSection(customerProfile)}`;
+  }
+
+  _renderStyleSection(style) {
+    if (!style) return '';
+    const phrases = Array.isArray(style.do_phrases) && style.do_phrases.length
+      ? `\nFrases típicas a IMITAR:\n${style.do_phrases.slice(0, 8).map(p => `  • "${p}"`).join('\n')}`
+      : '';
+    const avoid = Array.isArray(style.dont_phrases) && style.dont_phrases.length
+      ? `\nFrases a EVITAR (suenan robóticas):\n${style.dont_phrases.slice(0, 6).map(p => `  • "${p}"`).join('\n')}`
+      : '';
+    const closings = style.closing_techniques ? `\nCómo cerrar ventas: ${style.closing_techniques}` : '';
+    const emojis = style.emoji_usage ? `\nUso de emojis: ${style.emoji_usage}` : '';
+    return `\n\n## ESTILO DE LOS AGENTES HUMANOS DE AREA 862 (imítalo)
+${style.style_summary || ''}${emojis}${closings}${phrases}${avoid}`;
+  }
+
+  _renderCustomerSection(profile) {
+    if (!profile) return '';
+    const prefs = profile.preferences && Object.keys(profile.preferences).length
+      ? `\nPreferencias: ${JSON.stringify(profile.preferences)}`
+      : '';
+    const past = Array.isArray(profile.past_products) && profile.past_products.length
+      ? `\nProductos anteriores: ${profile.past_products.join(', ')}`
+      : '';
+    const loc = profile.zip_code || profile.city ? `\nUbicación: ${[profile.city, profile.zip_code].filter(Boolean).join(' ')}` : '';
+    const notes = profile.notes ? `\nNotas: ${profile.notes}` : '';
+    return `\n\n## QUÉ SABEMOS DE ESTE CLIENTE
+Conversaciones previas: ${profile.total_conversations || 0}
+${profile.summary || 'Sin resumen aún.'}${loc}${past}${prefs}${notes}`;
   }
 
   async callOpenAI(messages, maxTokens = 300, model = null) {
@@ -822,6 +852,172 @@ Responde con JSON exacto:
     } catch (e) {
       console.error('[AI] analyzeClosingContext error:', e.message);
       return { isClosingFlow: false, product: null, hasPendingQuestion: true, reason: e.message };
+    }
+  }
+
+  // ============================================================================
+  // FASE 1 — Respuesta conversacional libre (vendedor humano)
+  // En vez de máquina de estados rígida, la IA genera respuesta natural usando:
+  //   - Historial completo de la conversación
+  //   - Lo que ya sabemos del cliente (perfil)
+  //   - Estilo de los agentes humanos
+  //   - Lecciones aprobadas + base de conocimiento
+  //   - Objetivo del flujo: conseguir ZIP, producto y manejar la venta
+  // Devuelve JSON con el texto a enviar y datos extraídos.
+  // ============================================================================
+  async generateConversationalReply({ contact, messageText, recentMessages = [], convState = {}, customerProfile = null, agentStyle = null }) {
+    if (!this.isAvailable) return null;
+
+    try {
+      const memories = await this.loadActiveMemories(this.userId || null);
+      const knowledge = await this.loadKnowledge(this.userId || null);
+
+      const history = (recentMessages || [])
+        .slice(-20)
+        .map(m => {
+          const role = m.isFromAgent ? 'AGENTE' : m.isFromBot ? 'BOT' : 'CLIENTE';
+          return `${role}: ${m.text || ''}`;
+        })
+        .join('\n');
+
+      const customerName = `${contact?.firstName || ''} ${contact?.lastName || ''}`.trim() || 'cliente';
+      const knownData = {
+        zip: convState?.validated_zip || customerProfile?.zip_code || null,
+        city: customerProfile?.city || null,
+        product: convState?.selected_product || null,
+        is_existing: !!convState?.is_existing_customer
+      };
+
+      const objectivo = `OBJETIVO DEL VENDEDOR (en orden):
+1. Saludar de forma cálida y natural (mencionando lo que ya sabes del cliente).
+2. Si NO hay ZIP, conseguirlo (pero respondiendo primero cualquier pregunta del cliente).
+3. Si NO hay producto seleccionado, identificar qué quiere (sin inventarlo — si vino de un anuncio, ya sabes qué producto).
+4. Cuando ya tengas ZIP + producto, despedirte diciendo que pasarás al especialista para precios y diseños.
+5. NUNCA ofrecer un producto que el cliente no mencionó ni que no esté en el catálogo.
+6. NUNCA inventar precios.`;
+
+      const sys = this.getSystemPrompt(memories, knowledge, { customerProfile, agentStyle });
+
+      const userBlock = `Cliente: ${customerName}
+Datos que ya tenemos: ${JSON.stringify(knownData)}
+
+${objectivo}
+
+HISTORIAL RECIENTE:
+${history || '(inicio de conversación)'}
+
+ÚLTIMO MENSAJE DEL CLIENTE: "${messageText}"
+
+Responde con JSON exacto (sin markdown, sin explicaciones):
+{
+  "reply": "el mensaje natural y cálido para enviar (máx 4 líneas, como un vendedor humano)",
+  "extracted": {
+    "zip_code": "5 dígitos o null",
+    "city": "nombre de ciudad o null",
+    "product": "nombre exacto del catálogo o null si no está claro",
+    "quantity": "número o null",
+    "wants_handoff": true/false
+  },
+  "next_action": "ask_zip|ask_product|continue|handoff_to_agent|out_of_scope",
+  "intent": "saludo|pregunta|frustracion|fuera_de_tema|cierre|otro",
+  "needs_human": true/false,
+  "confidence": "alta|media|baja"
+}`;
+
+      const messages = [
+        { role: 'system', content: sys },
+        { role: 'user', content: userBlock }
+      ];
+
+      const response = await this.callOpenAI(messages, 600);
+      if (response.success) {
+        const parsed = this.parseJsonFromResponse(response.content);
+        if (parsed && parsed.reply) {
+          console.log(`[AI-Conv] reply="${parsed.reply.substring(0, 60)}..." action=${parsed.next_action}`);
+          return parsed;
+        }
+        console.warn('[AI-Conv] No se pudo parsear respuesta JSON');
+      }
+      return null;
+    } catch (e) {
+      console.error('[AI-Conv] generateConversationalReply error:', e.message);
+      return null;
+    }
+  }
+
+  // ============================================================================
+  // FASE 2 — Análisis del estilo de los agentes humanos
+  // ============================================================================
+  async analyzeAgentStyle(agentMessagesSample) {
+    if (!this.isAvailable) return null;
+    try {
+      const messages = [
+        {
+          role: 'system',
+          content: `Eres un analizador de estilo conversacional. Te van a dar mensajes reales que los agentes humanos de Area 862 Graphics (imprenta de Dallas) envían a clientes hispanos por WhatsApp/Messenger. Tu tarea: extraer el ESTILO de comunicación para que un bot pueda imitarlo.
+
+Devuelve JSON exacto:
+{
+  "style_summary": "2-3 líneas describiendo el tono (ej: cálido, informal, usa diminutivos, mezcla español/inglés)",
+  "common_phrases": ["frases típicas que repiten"],
+  "emoji_usage": "descripción breve de cómo usan emojis (cuáles, frecuencia)",
+  "closing_techniques": "cómo cierran ventas o invitan a la acción",
+  "do_phrases": ["5-10 frases ejemplares que el bot DEBE imitar"],
+  "dont_phrases": ["3-5 frases que serían demasiado robóticas o formales"]
+}`
+        },
+        { role: 'user', content: `Muestra de mensajes de agentes:\n${agentMessagesSample}\n\nExtrae el estilo.` }
+      ];
+      const response = await this.callOpenAI(messages, 900);
+      if (response.success) {
+        const parsed = this.parseJsonFromResponse(response.content);
+        return parsed || null;
+      }
+      return null;
+    } catch (e) {
+      console.error('[AI-Style] analyzeAgentStyle error:', e.message);
+      return null;
+    }
+  }
+
+  // ============================================================================
+  // FASE 3 — Resumen del cliente para memoria persistente
+  // ============================================================================
+  async summarizeCustomer(contact, transcript, existing = null) {
+    if (!this.isAvailable) return null;
+    try {
+      const previous = existing?.summary
+        ? `\n\nResumen previo (actualízalo, no lo borres):\n${existing.summary}`
+        : '';
+      const messages = [
+        {
+          role: 'system',
+          content: `Eres un asistente de CRM. Tu tarea es generar un perfil breve y útil de un cliente de Area 862 Graphics basado en su historial de conversación, para que un bot lo trate como ya conocido la próxima vez.
+
+Devuelve JSON exacto:
+{
+  "summary": "2-4 líneas en español: quién es, qué pidió, cómo se comunica, datos relevantes",
+  "preferences": { "tono": "formal|informal", "idioma_preferido": "español|inglés|mixto", "forma_pago": "..." o null },
+  "past_products": ["productos que mencionó o pidió"],
+  "zip_code": "5 dígitos o null",
+  "city": "ciudad o null",
+  "notes": "1 línea con cualquier observación especial (ej: 'siempre regatea precio', 'responde tarde') o null"
+}`
+        },
+        {
+          role: 'user',
+          content: `Cliente: ${contact?.firstName || ''} ${contact?.lastName || ''}${previous}\n\nHistorial de conversación:\n${transcript}\n\nGenera el perfil.`
+        }
+      ];
+      const response = await this.callOpenAI(messages, 500);
+      if (response.success) {
+        const parsed = this.parseJsonFromResponse(response.content);
+        return parsed || null;
+      }
+      return null;
+    } catch (e) {
+      console.error('[AI-CustProfile] summarizeCustomer error:', e.message);
+      return null;
     }
   }
 

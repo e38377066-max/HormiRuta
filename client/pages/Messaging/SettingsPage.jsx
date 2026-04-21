@@ -103,7 +103,8 @@ export default function SettingsPage() {
     test_mode: false,
     test_contact_id: '',
     ai_enabled: false,
-    openai_api_key: ''
+    openai_api_key: '',
+    conversational_mode: false
   })
   const [hasExistingToken, setHasExistingToken] = useState(false)
 
@@ -255,7 +256,8 @@ export default function SettingsPage() {
           test_mode: settings.test_mode || false,
           test_contact_id: settings.test_contact_id || '',
           ai_enabled: settings.ai_enabled || false,
-          openai_api_key: ''
+          openai_api_key: '',
+          conversational_mode: settings.conversational_mode || false
         })
         setHasOpenAIKey(settings.has_openai_key || settings.has_openai_env_key || false)
         if (settings.has_openai_env_key && !settings.ai_enabled) {
@@ -1358,6 +1360,22 @@ export default function SettingsPage() {
                         Error de conexion. Verifica tu API key
                       </span>
                     )}
+                  </div>
+
+                  <div style={{marginTop: '24px', padding: '16px', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px'}}>
+                    <div className="checkbox-row" style={{marginBottom: '8px'}}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={form.conversational_mode}
+                          onChange={(e) => handleInputChange('conversational_mode', e.target.checked)}
+                        />
+                        <span style={{fontWeight: 600, color: '#fbbf24'}}>🧠 Modo Vendedor Humano (conversacional)</span>
+                      </label>
+                    </div>
+                    <p style={{color: '#cbd5e1', fontSize: '13px', margin: '4px 0 0 26px', lineHeight: '1.5'}}>
+                      Cuando esté activo, el bot dejará de seguir un guion rígido y conversará libremente como un agente humano: responderá preguntas laterales, mantendrá el objetivo (conseguir ZIP y producto), y aprenderá del estilo de tus agentes y de cada cliente con el tiempo. Solo activarlo cuando ya tengas el cerebro IA probado.
+                    </p>
                   </div>
                 </>
               )}
