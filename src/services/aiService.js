@@ -701,6 +701,7 @@ Retoma la conversación de forma cálida. Pregunta si quiere continuar o necesit
       facebook_ad_welcome: `El cliente viene de un anuncio de Facebook/Instagram. Es su primer contacto.
 ${name ? `Nombre: ${name}` : ''}
 Mensaje del cliente: "${lastMessage || ''}"
+${product ? `Producto del anuncio: ${product} — MENCIÓNALO en el saludo para confirmar que ya sabes por qué te escribió ("vi que vienes por nuestras ${product}…" o similar). NO ofrezcas un producto distinto.` : ''}
 Salúdalo calurosamente, agradece su interés. Dile que para verificar si tienen cobertura en su zona necesitas su código postal (ZIP). Ejemplo: 75208.`,
 
       product_info_sent: `Se le envió información sobre el producto ${product} al cliente.

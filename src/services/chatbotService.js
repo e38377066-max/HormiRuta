@@ -1042,6 +1042,65 @@ class ChatbotService {
     return 'unknown';
   }
 
+  /**
+   * Intenta extraer el producto del que vino el cliente cuando hizo clic
+   * en un anuncio (Click-To-WhatsApp / Facebook Ad). Recorre los primeros
+   * mensajes y campos del contacto buscando texto que mencione un producto
+   * conocido (ej. "1000 Tarjetas por $65 USD" → tarjetas).
+   * Devuelve el objeto producto si lo identifica, o null.
+   */
+  async extractAdProductHint(contact) {
+    try {
+      const candidates = [];
+
+      // Texto de tags
+      const tags = contact.tags || [];
+      for (const t of tags) {
+        if (typeof t === 'string') candidates.push(t);
+        else if (t?.name) candidates.push(t.name);
+      }
+
+      // Custom fields del contacto (por si el ad name viene aquí)
+      const cfs = contact.custom_fields || contact.customFields || [];
+      for (const f of cfs) {
+        if (f?.value && typeof f.value === 'string') candidates.push(f.value);
+        if (f?.name && typeof f.name === 'string') candidates.push(f.name);
+      }
+
+      // Algunos campos directos comunes
+      ['source', 'channel', 'lastChannel', 'firstChannelMessage', 'note', 'description']
+        .forEach(k => { if (typeof contact[k] === 'string') candidates.push(contact[k]); });
+
+      // Primeros mensajes — la referral del Facebook Ad suele venir en el
+      // primer mensaje entrante (headline/body/source_url, según el canal).
+      try {
+        const histResult = await this.api.listMessages(`id:${contact.id}`, 5);
+        if (histResult.success && histResult.items) {
+          for (const m of histResult.items) {
+            // Volcamos todo el JSON del mensaje a string para no depender
+            // del nombre exacto del campo (referral, ad, headline, etc.)
+            try { candidates.push(JSON.stringify(m)); } catch {}
+          }
+        }
+      } catch {}
+
+      // Buscamos un producto en cada candidato usando solo palabras clave
+      for (const text of candidates) {
+        if (!text || typeof text !== 'string') continue;
+        // Saltamos textos muy cortos para evitar falsos positivos
+        if (text.length < 4) continue;
+        const product = await this.parseProductSelection(text, true);
+        if (product && !product.isOther) {
+          console.log(`[Bot] Producto detectado del anuncio: "${product.name}" desde texto: "${text.substring(0, 120)}..."`);
+          return product;
+        }
+      }
+    } catch (e) {
+      console.error('[Bot] extractAdProductHint error:', e.message);
+    }
+    return null;
+  }
+
   detectFacebookAdOrigin(contact) {
     // Detectar si viene de Facebook Ad por el canal o fuente
     const source = contact.source?.toLowerCase() || '';
@@ -1102,25 +1161,37 @@ class ChatbotService {
       return { handled: true, action: 'welcome_existing_show_menu' };
     }
     
-    // Si viene de Facebook Ad, saludar y pedir ZIP directo (flujo sin info)
+    // Si viene de Facebook Ad, saludar y pedir ZIP directo (flujo sin info).
+    // Intentamos identificar el producto del anuncio (ej. "Tarjetas") leyendo
+    // tags, custom fields y los primeros mensajes — así el bot ya sabe de qué
+    // vino el cliente y nunca tendrá que adivinar más adelante.
     if (isFromFacebookAd) {
+      const adProduct = await this.extractAdProductHint(contact);
+
       const greeting = await this.getAIMsg(
         'facebook_ad_welcome',
-        { customerName, lastMessage: messageText },
+        { customerName, lastMessage: messageText, product: adProduct?.name || null },
         this.settings.welcome_from_ads || 'Hola! 👋 Gracias por tu interes.\n\nPara verificar si tenemos cobertura en tu zona, por favor enviame tu codigo postal (ZIP) 📍\n\nPor ejemplo: 75208'
       );
       await this.sendMessage(contact.id, greeting);
-      
+
       await this.updateConversationState(contact.id, {
         state: 'awaiting_zip_no_info',
         has_prior_info: false,
         from_ads: true,
         awaiting_response: 'zip_code',
-        greeting_sent: true
+        greeting_sent: true,
+        selected_product: adProduct?.name || null
       });
       await this.addTrackingTag(contact.id, 'FacebookAd');
-      
-      return { handled: true, action: 'facebook_ad_direct_zip' };
+      if (adProduct) {
+        await this.addTrackingTag(contact.id, `Producto_${adProduct.name}`);
+        await this.addComment(contact.id, `[Bot] Cliente vino del anuncio de Facebook con producto detectado: ${adProduct.name}.`);
+      } else {
+        await this.addComment(contact.id, '[Bot] Cliente vino de Facebook Ad pero no se pudo identificar el producto del anuncio.');
+      }
+
+      return { handled: true, action: 'facebook_ad_direct_zip', product: adProduct?.name || null };
     }
     
     // Para cualquier mensaje genérico: saludar y preguntar si ya tiene información previa
