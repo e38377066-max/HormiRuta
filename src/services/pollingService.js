@@ -1081,6 +1081,7 @@ class PollingService {
       let latestAddress = null;
       let mapsLink = null;
       let locationCoords = null;
+      const incomingTexts = [];
 
       for (const msg of messages) {
         if (msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
@@ -1097,10 +1098,49 @@ class PollingService {
           break;
         }
 
+        // Solo recolectamos texto del cliente (incoming) para la IA
+        if (msg.traffic === 'incoming' || !msg.traffic) {
+          incomingTexts.push(text);
+        }
+
         const extractedAddress = extractor.extractAddressFromMessage(text);
-        if (extractedAddress) {
+        if (extractedAddress && !latestAddress) {
           latestAddress = extractedAddress;
-          break;
+        }
+      }
+
+      // Capa IA: si hay texto del cliente, dejamos que la IA verifique/extraiga.
+      // Esto corrige fallas del regex (ej: "Casa 8219 Elam Rd...") y previene
+      // que se guarden direcciones incorrectas o de otros mensajes.
+      if (!mapsLink && !locationCoords && incomingTexts.length > 0) {
+        try {
+          const settingsForAI = await MessagingSettings.findOne({ where: { user_id: userId } });
+          const aiKey = settingsForAI?.openai_api_key || process.env.OPENAI_API_KEY;
+          const aiEnabled = settingsForAI?.ai_enabled && aiKey;
+          if (!aiEnabled) {
+            // Sin IA disponible, seguimos con lo del regex tal cual
+            // (no se imprime nada para no llenar logs)
+          } else {
+          const aiService = new AIService(aiKey, settingsForAI, userId);
+          const aiAddr = await aiService.extractAddressFromMessages(incomingTexts);
+          if (aiAddr && aiAddr.fullAddress && (aiAddr.confidence === 'high' || aiAddr.confidence === 'medium')) {
+            const aiNorm = aiAddr.fullAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const regexNorm = (latestAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (latestAddress && aiNorm !== regexNorm) {
+              console.log(`[AddressScan-AI] IA corrigio direccion para ${contactName}: regex="${latestAddress}" -> AI="${aiAddr.fullAddress}" (conf=${aiAddr.confidence})`);
+            } else if (!latestAddress) {
+              console.log(`[AddressScan-AI] IA detecto direccion que regex omitio para ${contactName}: "${aiAddr.fullAddress}" (conf=${aiAddr.confidence})`);
+            }
+            latestAddress = aiAddr.fullAddress;
+          } else if (latestAddress && aiAddr === null) {
+            // IA dice que NO hay dirección clara — mejor descartamos lo del regex
+            // para no guardar basura tipo "Casa 7200" o un fragmento equivocado.
+            console.log(`[AddressScan-AI] IA descarto direccion dudosa para ${contactName}: regex="${latestAddress}" (IA no encontro direccion clara)`);
+            latestAddress = null;
+          }
+          }
+        } catch (aiErr) {
+          console.error(`[AddressScan-AI] Error en verificacion IA:`, aiErr.message);
         }
       }
 

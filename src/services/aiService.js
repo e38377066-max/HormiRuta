@@ -400,6 +400,80 @@ Responde SOLO con el ZIP, la ciudad, o la palabra null.`
     }
   }
 
+  // Extract a US delivery address from one or more recent customer messages.
+  // Returns { fullAddress, streetNumber, street, unit, city, state, zip, confidence } or null.
+  // Designed to handle Spanish prefixes like "Casa 8219 Elam Rd...", "Mi casa es...",
+  // typos, and pieces of address spread across multiple messages.
+  async extractAddressFromMessages(recentTexts) {
+    if (!this.isAvailable) return null;
+    if (!Array.isArray(recentTexts)) recentTexts = [recentTexts];
+    const cleaned = recentTexts
+      .filter(t => typeof t === 'string' && t.trim().length > 0)
+      .slice(-8);
+    if (cleaned.length === 0) return null;
+
+    try {
+      const numbered = cleaned.map((t, i) => `(${i + 1}) ${t.trim()}`).join('\n');
+      const messages = [
+        {
+          role: 'system',
+          content: `Eres un extractor de DIRECCIONES de entrega en Estados Unidos (Texas/DFW principalmente).
+Recibes los últimos mensajes de un cliente (puede haber español, inglés, errores ortográficos, abreviaciones, o palabras como "Casa", "House", "Mi dir", "Apto").
+Tu tarea: identificar la dirección física más reciente que el cliente proporcionó como punto de entrega.
+
+REGLAS CRÍTICAS:
+1. NO inventes nada. Si el cliente NO escribió un número y nombre de calle real, devuelve null.
+2. Ignora palabras introductorias como "Casa", "House", "Mi casa es", "Direccion:", "Address", "Apartamento" — pero CONSERVA el número y la calle reales.
+3. Si el cliente escribió "Casa 8219 Elam Rd dallas tx 75217", el streetNumber es 8219 (NO inventes otro número).
+4. Si el cliente solo dio ZIP o ciudad sin calle, devuelve null (no es dirección completa).
+5. Si hay varios mensajes, usa el MÁS RECIENTE que contenga la dirección completa. Combina pedazos solo si están en mensajes consecutivos del cliente.
+6. NO devuelvas direcciones que ya estaban guardadas en el sistema o que el agente confirmó — solo lo que el cliente acaba de escribir.
+7. confidence: "high" si la dirección está completa y clara; "medium" si falta zip o estado; "low" si dudas.
+
+Responde SOLO con JSON válido (sin markdown):
+{"fullAddress":"8219 Elam Rd, Dallas, TX 75217","streetNumber":"8219","street":"Elam Rd","unit":null,"city":"Dallas","state":"TX","zip":"75217","confidence":"high"}
+o {"fullAddress":null,"confidence":"none"} si no hay dirección.`
+        },
+        {
+          role: 'user',
+          content: `Últimos mensajes del cliente (más reciente al final):\n${numbered}`
+        }
+      ];
+
+      const response = await this.callOpenAI(messages, 250);
+      if (!response.success) return null;
+
+      let raw = response.content.trim();
+      raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (!m) return null;
+        try { parsed = JSON.parse(m[0]); } catch { return null; }
+      }
+
+      if (!parsed || !parsed.fullAddress || parsed.confidence === 'none') return null;
+      if (!parsed.streetNumber || !parsed.street) return null;
+
+      return {
+        fullAddress: String(parsed.fullAddress).trim(),
+        streetNumber: parsed.streetNumber ? String(parsed.streetNumber).trim() : null,
+        street: parsed.street ? String(parsed.street).trim() : null,
+        unit: parsed.unit ? String(parsed.unit).trim() : null,
+        city: parsed.city ? String(parsed.city).trim() : null,
+        state: parsed.state ? String(parsed.state).trim().toUpperCase() : null,
+        zip: parsed.zip ? String(parsed.zip).trim().slice(0, 5) : null,
+        confidence: parsed.confidence || 'medium'
+      };
+    } catch (e) {
+      console.error('[AI] extractAddressFromMessages error:', e.message);
+      return null;
+    }
+  }
+
   // Detect frustration in a message
   async detectFrustration(messageText) {
     if (!this.isAvailable) return false;
