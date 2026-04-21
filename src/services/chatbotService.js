@@ -1178,12 +1178,8 @@ class ChatbotService {
     const msgs = this.getMessages();
     const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
 
-    // Si el cliente menciona un producto directamente, cortocircuitar el flujo.
-    // IMPORTANTE: aquí el cliente está respondiendo a una pregunta sí/no, NO eligiendo
-    // producto. Usamos solo palabras clave (sin IA) para evitar que la IA alucine un
-    // producto cuando el mensaje es una pregunta general (ej. "tu fabricas los diseños
-    // o también"), lo cual provocaba ofrecer post cards al cliente sin que lo pidiera.
-    const directProduct = await this.parseProductSelection(messageText, true);
+    // Si el cliente menciona un producto directamente, cortocircuitar el flujo
+    const directProduct = await this.parseProductSelection(messageText);
     if (directProduct && !directProduct.isOther) {
       return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName);
     }

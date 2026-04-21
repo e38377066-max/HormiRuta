@@ -411,10 +411,18 @@ ${productsText}
 ${productsList.length + 1}. Otros
 
 REGLAS ESTRICTAS:
-- Solo responde con un número si el mensaje menciona EXPLÍCITAMENTE uno de los productos por su nombre o un sinónimo claro.
-- Si el mensaje parece ser información de contacto (nombre, teléfono, dirección, referido), responde null.
-- Si el mensaje es un saludo, pregunta general, o no menciona claramente un producto, responde null.
-- Cuando tengas duda, responde null. Es mejor null que equivocarse.
+- Solo responde con un número si el mensaje NOMBRA EXPLÍCITAMENTE uno de los productos (o un sinónimo directo del producto, como "tarjeta de presentación" para Tarjetas, "imán" para Magnéticos, "playera/camiseta" para Playeras).
+- Una pregunta GENERAL sobre el negocio NO es una selección de producto. Ejemplos que SIEMPRE deben responder null:
+  · "¿Tú fabricas los diseños?" → null (pregunta sobre diseños, no pide producto)
+  · "¿Hacen entregas?" → null
+  · "¿Cuánto tardan?" → null
+  · "¿Tienen tienda física?" → null
+  · "Quiero más información" → null
+  · "Hola, buenos días" → null
+  · Información de contacto (nombre, teléfono, dirección, ZIP) → null
+- La palabra "diseño/diseños" sola NO es un producto.
+- "Cards" o "card" en inglés sin más contexto puede referirse a Tarjetas O Post Cards: si no se aclara, responde null.
+- Cuando tengas la mínima duda, responde null. Es MUCHO mejor null que equivocarte.
 - Responde SOLO con el número de la opción (1, 2, 3...) o exactamente la palabra "null".`
         },
         {
@@ -667,9 +675,15 @@ Tu tarea: Escribe un mensaje personalizado que:
 ${name ? `Nombre: ${name}` : ''}
 Responde con empatía genuina, discúlpate brevemente sin dramatizar. Diles que vas a conectarlos de inmediato con un agente para resolver su situación. Sé calmado y profesional.`,
 
-      remind_yes_no: `El cliente no respondió claramente sí o no. 
+      remind_yes_no: `Eres vendedor/a de Area 862 Graphics. Le acabas de preguntar al cliente si ya recibió información previa sobre los productos y precios (esperabas un sí o un no), pero respondió otra cosa.
 Mensaje del cliente: "${lastMessage || ''}"
-Recuérdale amablemente que necesitas saber si ya recibió información previa sobre los productos y precios. Hazlo simple y sin presionar.`,
+${name ? `Nombre del cliente: ${name}` : ''}
+
+Tu tarea (en UN SOLO mensaje):
+1. Si el cliente hizo una pregunta lateral (por ejemplo: "¿hacen diseños?", "¿hacen entregas?", "¿tienen tienda?"), respóndela brevemente como vendedor/a — sí, en Area 862 hacemos diseños desde cero, hacemos entregas en el área de DFW, etc. Responde solo lo que sepas con seguridad; si no sabes algo concreto (precios exactos, tiempos exactos), di que un agente le dará el detalle.
+2. Inmediatamente después, vuelve a hacer la pregunta original del flujo de forma amable: si ya algún agente le brindó información previa sobre los productos y precios — esperando un sí o un no.
+
+NO selecciones producto, NO pidas ZIP, NO te saltes pasos. Solo contesta la duda y repite la pregunta sí/no. Máximo 4 líneas.`,
 
       remind_zip: `El cliente no envió su código postal o lo que envió no parece ser un ZIP válido.
 Mensaje del cliente: "${lastMessage || ''}"
