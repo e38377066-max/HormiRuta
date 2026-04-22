@@ -2016,15 +2016,21 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
     });
     const allRouteIds = allDriverRoutes.map(r => r.id);
     const allRouteStops = allRouteIds.length > 0
-      ? await Stop.findAll({ where: { route_id: { [Op.in]: allRouteIds } }, attributes: ['route_id'] })
+      ? await Stop.findAll({ where: { route_id: { [Op.in]: allRouteIds } }, attributes: ['route_id', 'amount_collected'] })
       : [];
     const stopCountMap = {};
-    allRouteStops.forEach(s => { stopCountMap[s.route_id] = (stopCountMap[s.route_id] || 0) + 1; });
+    const stopCollectedMap = {};
+    allRouteStops.forEach(s => {
+      stopCountMap[s.route_id] = (stopCountMap[s.route_id] || 0) + 1;
+      stopCollectedMap[s.route_id] = (stopCollectedMap[s.route_id] || 0) + Number(s.amount_collected || 0);
+    });
     const driverUser = await User.findByPk(req.userId, { attributes: ['commission_per_stop'] });
     const driverCommission = Number(driverUser?.commission_per_stop || 0);
 
     totals.to_deliver = allDriverRoutes.reduce((sum, r) => {
-      const collected = Number(r.route_total_collected || 0);
+      // Mismo fallback que /my-completed-routes: si route_total_collected aun no esta seteado
+      // (chofer no marco como entregado), sumar desde los stops
+      const collected = Number(r.route_total_collected || 0) || (stopCollectedMap[r.id] || 0);
       const stopCount = stopCountMap[r.id] || 0;
       const commission = driverCommission * stopCount;
       const grossToDeliver = collected - commission;
