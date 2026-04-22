@@ -2027,6 +2027,7 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
     const driverUser = await User.findByPk(req.userId, { attributes: ['commission_per_stop'] });
     const driverCommission = Number(driverUser?.commission_per_stop || 0);
 
+    let pendingStops = 0;
     totals.to_deliver = allDriverRoutes.reduce((sum, r) => {
       // Mismo fallback que /my-completed-routes: si route_total_collected aun no esta seteado
       // (chofer no marco como entregado), sumar desde los stops
@@ -2035,8 +2036,11 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
       const commission = driverCommission * stopCount;
       const grossToDeliver = collected - commission;
       const received = Number(r.admin_amount_received || 0);
-      return sum + Math.max(0, grossToDeliver - received);
+      const pending = Math.max(0, grossToDeliver - received);
+      if (pending > 0) pendingStops += stopCount;
+      return sum + pending;
     }, 0);
+    totals.stops_pending = pendingStops;
 
     res.json({
       months,

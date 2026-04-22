@@ -98,7 +98,7 @@ export default function DriverAccountingPage() {
         <div className="dac-hero">
           <div className="dac-hero-label">Total a Entregar</div>
           <div className="dac-hero-amount">{fmt(totals.to_deliver)}</div>
-          <div className="dac-hero-sub">{totals.stops} entrega{totals.stops !== 1 ? 's' : ''} registradas</div>
+          <div className="dac-hero-sub">{totals.stops_pending || 0} parada{(totals.stops_pending || 0) !== 1 ? 's' : ''} pendiente{(totals.stops_pending || 0) !== 1 ? 's' : ''} de entrega</div>
         </div>
 
         <div className="dac-stats-row">
