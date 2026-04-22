@@ -1842,6 +1842,24 @@ class ChatbotService {
 
   // Paso 0: Envía el mensaje de aprobación con imagen aviso
   async startClosingFlow(contact, product = 'tarjetas') {
+    // Guard: si ya hay un flujo de cierre activo iniciado en los ultimos 30 min, no re-disparar
+    try {
+      const existingState = await ConversationState.findOne({ where: { contact_id: String(contact.id) } });
+      if (existingState && existingState.state === 'closing_approval') {
+        const startedAt = existingState.context_data?.closing_started_at;
+        if (startedAt) {
+          const startedMs = new Date(startedAt).getTime();
+          const ageMin = (Date.now() - startedMs) / 60000;
+          if (ageMin < 30) {
+            console.log(`[Bot] Flujo de cierre ya activo para ${contact.id} (hace ${ageMin.toFixed(1)} min) - omitiendo re-disparo`);
+            return { handled: true, action: 'closing_flow_already_active', product };
+          }
+        }
+      }
+    } catch (guardErr) {
+      // continuar si el chequeo falla
+    }
+
     const msg0 = 'Hola, veo que ya está aprobando su orden 🎉\n\nTome unos minutos y lea este mensaje para asegurar que todo esté bien.\n\n✅ POR FAVOR escriba:\n- *APROBADO* si todo está correcto\n- *Necesita cambios* si desea modificar algo';
 
     // Enviar imagen aviso (URL configurada en settings o la predeterminada de producción)

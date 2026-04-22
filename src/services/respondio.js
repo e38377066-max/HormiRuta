@@ -343,9 +343,10 @@ class RespondioService {
 
   async updateContactCustomFields(contactIdentifier, customFields) {
     try {
-      const identifier = typeof contactIdentifier === 'number' 
-        ? `id:${contactIdentifier}` 
-        : contactIdentifier;
+      const idStr = String(contactIdentifier);
+      const identifier = (typeof contactIdentifier === 'number' || /^\d+$/.test(idStr))
+        ? `id:${idStr}`
+        : idStr;
 
       const custom_fields = Object.entries(customFields).map(([name, value]) => ({
         name,
