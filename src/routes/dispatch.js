@@ -1322,13 +1322,36 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
       where: { route_id: route.id }
     });
 
+    const settingsCache = new Map();
     for (const order of orders) {
       order.assigned_driver_id = driver_id;
       order.driver_name = driver.username;
-      if (order.order_status !== 'ups_shipped') {
+      const prevStatus = order.order_status;
+      const willChangeToOnDelivery = prevStatus !== 'ups_shipped' && prevStatus !== 'on_delivery';
+      if (prevStatus !== 'ups_shipped') {
         order.order_status = 'on_delivery';
       }
       await order.save();
+
+      // Sincronizar lifecycle en Respond.io solo cuando realmente hubo
+      // transicion a on_delivery (evita llamadas redundantes y desyncs como
+      // dispatch="En Entrega" / Respond="Pending").
+      if (willChangeToOnDelivery && order.respond_contact_id) {
+        try {
+          let settings = settingsCache.get(order.user_id);
+          if (settings === undefined) {
+            settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
+            settingsCache.set(order.user_id, settings);
+          }
+          if (settings?.respond_api_token) {
+            respondApiService.setContext(order.user_id, settings.respond_api_token);
+            await respondApiService.updateLifecycle(order.respond_contact_id, 'On Delivery');
+            console.log(`[Dispatch] Ruta asignada - Lifecycle: ${order.customer_name} -> On Delivery`);
+          }
+        } catch (lcErr) {
+          console.error(`[Dispatch] Error lifecycle asignacion ${order.customer_name}:`, lcErr.message);
+        }
+      }
     }
 
     res.json({

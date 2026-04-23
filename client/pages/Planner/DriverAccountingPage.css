@@ -132,9 +132,10 @@
   text-align: center;
 }
 
-.dac-stat-green { color: #86efac; }
-.dac-stat-blue  { color: #93c5fd; }
-.dac-stat-gray  { color: #cbd5e1; }
+.dac-stat-green  { color: #86efac; }
+.dac-stat-blue   { color: #93c5fd; }
+.dac-stat-gray   { color: #cbd5e1; }
+.dac-stat-orange { color: #fdba74; }
 
 .dac-stat-divider {
   width: 1px;

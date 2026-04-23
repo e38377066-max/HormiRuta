@@ -96,7 +96,7 @@ export default function DriverAccountingPage() {
 
       <div className="dac-body">
         <div className="dac-hero">
-          <div className="dac-hero-label">Total a Entregar</div>
+          <div className="dac-hero-label">Pendiente de Entregar</div>
           <div className="dac-hero-amount">{fmt(totals.to_deliver)}</div>
           <div className="dac-hero-sub">{totals.stops_pending || 0} parada{(totals.stops_pending || 0) !== 1 ? 's' : ''} pendiente{(totals.stops_pending || 0) !== 1 ? 's' : ''} de entrega</div>
         </div>
@@ -105,7 +105,13 @@ export default function DriverAccountingPage() {
           <div className="dac-stat dac-stat-green">
             <span className="material-icons">payments</span>
             <div className="dac-stat-val">{fmt(totals.collected)}</div>
-            <div className="dac-stat-lbl">Cobrado</div>
+            <div className="dac-stat-lbl">Bruto cobrado</div>
+          </div>
+          <div className="dac-stat-divider" />
+          <div className="dac-stat dac-stat-orange">
+            <span className="material-icons">account_balance_wallet</span>
+            <div className="dac-stat-val">{fmt((Number(totals.collected) || 0) - (Number(totals.commission) || 0))}</div>
+            <div className="dac-stat-lbl">Neto (− comisión)</div>
           </div>
           <div className="dac-stat-divider" />
           <div className="dac-stat dac-stat-blue">
