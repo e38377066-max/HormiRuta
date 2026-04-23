@@ -269,13 +269,8 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
     const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
     if (lifecycleName && (order.respond_contact_id || order.customer_phone)) {
       try {
-        let settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
-        if (!settings?.respond_api_token) {
-          settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-        }
-        if (!settings?.respond_api_token) {
-          settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
-        }
+        // Solo usar el token del dueño de la orden (sin fallback cross-tenant)
+        const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
         if (settings?.respond_api_token) {
           respondApiService.setContext(settings.user_id, settings.respond_api_token);
           let identifier = order.respond_contact_id || null;
@@ -304,8 +299,16 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
 
 router.put('/orders/:id/notes', requireAuth, async (req, res) => {
   try {
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+
+    // Solo admin o el chofer asignado a esta orden pueden editar notas
+    if (user.role !== 'admin' && !(user.role === 'driver' && order.assigned_driver_id === user.id)) {
+      return res.status(403).json({ error: 'No tienes permisos para editar esta orden' });
+    }
 
     order.notes = req.body.notes || '';
     await order.save();
@@ -488,14 +491,8 @@ router.post('/orders/:id/refresh', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Esta orden fue creada manualmente. Usa el botón de editar para cambiar la dirección.' });
     }
 
-    let settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
-    if (!settings?.respond_api_token) {
-      settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-    }
-    if (!settings?.respond_api_token) {
-      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
-    }
-
+    // Solo usar el token del dueño de la orden (sin fallback cross-tenant)
+    const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No se encontró token de Respond.io para leer mensajes.' });
     }
@@ -925,19 +922,15 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
 
     const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
     if (lifecycleName) {
-      let cachedSettings = null;
+      const settingsCache = new Map();
       for (const o of ordersToUpdate) {
         if (!o.respond_contact_id && !o.customer_phone) continue;
         try {
-          let settings = await MessagingSettings.findOne({ where: { user_id: o.user_id } });
-          if (!settings?.respond_api_token) {
-            settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-          }
-          if (!settings?.respond_api_token) {
-            if (!cachedSettings) {
-              cachedSettings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
-            }
-            settings = cachedSettings;
+          // Solo usar el token del dueño de la orden (sin fallback cross-tenant)
+          let settings = settingsCache.get(o.user_id);
+          if (settings === undefined) {
+            settings = await MessagingSettings.findOne({ where: { user_id: o.user_id } });
+            settingsCache.set(o.user_id, settings);
           }
           if (settings?.respond_api_token) {
             respondApiService.setContext(settings.user_id, settings.respond_api_token);
@@ -1380,13 +1373,8 @@ router.get('/drivers', requireAdmin, async (req, res) => {
 
 router.get('/respond-users', requireAdmin, async (req, res) => {
   try {
-    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-    if (!settings?.respond_api_token) {
-      settings = await MessagingSettings.findOne({
-        where: { respond_api_token: { [Op.ne]: null } },
-        order: [['id', 'ASC']]
-      });
-    }
+    // Solo usar el token del admin autenticado (sin fallback cross-tenant)
+    const settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
     if (!settings?.respond_api_token) {
       return res.status(400).json({ error: 'No hay token de API de Respond.io configurado' });
     }
@@ -1712,8 +1700,16 @@ router.put('/routes/:id/admin-confirm-payment', requireAdmin, async (req, res) =
 
 router.get('/routes/:id/detail', requireAuth, async (req, res) => {
   try {
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
     const route = await Route.findByPk(req.params.id);
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    // Solo admin o el chofer asignado pueden ver el detalle de la ruta
+    if (user.role !== 'admin' && route.assigned_driver_id !== user.id) {
+      return res.status(403).json({ error: 'No tienes permisos para ver esta ruta' });
+    }
 
     const routeDict = await route.toDict();
     const driver = route.assigned_driver_id ? await User.findByPk(route.assigned_driver_id) : null;
@@ -1766,8 +1762,9 @@ router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
 
-    if (user.role === 'driver' && order.assigned_driver_id !== user.id) {
-      return res.status(403).json({ error: 'Esta orden no te fue asignada' });
+    // Solo admin o el chofer asignado pueden marcar la orden como entregada
+    if (user.role !== 'admin' && !(user.role === 'driver' && order.assigned_driver_id === user.id)) {
+      return res.status(403).json({ error: 'No tienes permisos para esta orden' });
     }
 
     order.order_status = 'delivered';
@@ -1785,25 +1782,10 @@ router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
 
 router.get('/templates', requireAuth, async (req, res) => {
   try {
+    // Solo usar el token del usuario autenticado (sin fallback cross-tenant)
     const settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-    if (!settings) {
-      const adminSettings = await MessagingSettings.findOne();
-      if (!adminSettings || !adminSettings.respond_api_token || !adminSettings.default_channel_id) {
-        return res.json({ templates: [] });
-      }
-      respondApiService.setContext(adminSettings.user_id, adminSettings.respond_api_token);
-      const result = await respondApiService.listMessageTemplates(adminSettings.default_channel_id, 50);
-      return res.json({ templates: result?.data || [] });
-    }
-
-    if (!settings.respond_api_token || !settings.default_channel_id) {
-      const adminSettings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
-      if (!adminSettings || !adminSettings.default_channel_id) {
-        return res.json({ templates: [] });
-      }
-      respondApiService.setContext(adminSettings.user_id, adminSettings.respond_api_token);
-      const result = await respondApiService.listMessageTemplates(adminSettings.default_channel_id, 50);
-      return res.json({ templates: result?.data || [] });
+    if (!settings || !settings.respond_api_token || !settings.default_channel_id) {
+      return res.json({ templates: [] });
     }
 
     respondApiService.setContext(req.userId, settings.respond_api_token);
@@ -1820,14 +1802,21 @@ router.post('/orders/:id/send-template', requireAuth, async (req, res) => {
     const { templateName, languageCode, components } = req.body;
     if (!templateName) return res.status(400).json({ error: 'Template requerido' });
 
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
     if (!order.respond_contact_id) return res.status(400).json({ error: 'Este cliente no tiene contacto en Respond.io' });
 
-    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-    if (!settings || !settings.respond_api_token) {
-      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+    // Solo admin o el chofer asignado pueden enviar mensajes por esta orden
+    if (user.role !== 'admin' && !(user.role === 'driver' && order.assigned_driver_id === user.id)) {
+      return res.status(403).json({ error: 'No tienes permisos para enviar mensajes por esta orden' });
     }
+
+    // Buscar token del dueño de la orden. Sin fallback cross-tenant para evitar
+    // que un chofer use credenciales de otro tenant.
+    const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
     if (!settings || !settings.respond_api_token) {
       return res.status(400).json({ error: 'API de Respond.io no configurada' });
     }
@@ -1857,14 +1846,18 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ error: 'Mensaje requerido' });
 
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
     if (!order.respond_contact_id) return res.status(400).json({ error: 'Este cliente no tiene contacto en Respond.io' });
 
-    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-    if (!settings || !settings.respond_api_token) {
-      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
+    if (user.role !== 'admin' && !(user.role === 'driver' && order.assigned_driver_id === user.id)) {
+      return res.status(403).json({ error: 'No tienes permisos para enviar mensajes por esta orden' });
     }
+
+    const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
     if (!settings || !settings.respond_api_token) {
       return res.status(400).json({ error: 'API de Respond.io no configurada' });
     }
@@ -1888,8 +1881,18 @@ router.post('/stops/:id/send-template', requireAuth, async (req, res) => {
     const { templateName, languageCode, components } = req.body;
     if (!templateName) return res.status(400).json({ error: 'Template requerido' });
 
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
     const stop = await Stop.findByPk(req.params.id);
     if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+
+    const route = await Route.findByPk(stop.route_id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    if (user.role !== 'admin' && route.assigned_driver_id !== user.id) {
+      return res.status(403).json({ error: 'No tienes permisos para esta ruta' });
+    }
 
     const routeOrders = await ValidatedAddress.findAll({ where: { route_id: stop.route_id } });
     const order = routeOrders.find(o =>
@@ -1899,10 +1902,7 @@ router.post('/stops/:id/send-template', requireAuth, async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Orden no encontrada para esta parada' });
     if (!order.respond_contact_id) return res.status(400).json({ error: 'Este cliente no tiene contacto en Respond.io' });
 
-    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-    if (!settings || !settings.respond_api_token) {
-      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
-    }
+    const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
     if (!settings || !settings.respond_api_token) {
       return res.status(400).json({ error: 'API de Respond.io no configurada' });
     }
@@ -1928,8 +1928,18 @@ router.post('/stops/:id/send-message', requireAuth, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ error: 'Mensaje requerido' });
 
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
     const stop = await Stop.findByPk(req.params.id);
     if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+
+    const route = await Route.findByPk(stop.route_id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    if (user.role !== 'admin' && route.assigned_driver_id !== user.id) {
+      return res.status(403).json({ error: 'No tienes permisos para esta ruta' });
+    }
 
     const routeOrders = await ValidatedAddress.findAll({ where: { route_id: stop.route_id } });
     const order = routeOrders.find(o =>
@@ -1939,10 +1949,7 @@ router.post('/stops/:id/send-message', requireAuth, async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Orden no encontrada para esta parada' });
     if (!order.respond_contact_id) return res.status(400).json({ error: 'Este cliente no tiene contacto en Respond.io' });
 
-    let settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
-    if (!settings || !settings.respond_api_token) {
-      settings = await MessagingSettings.findOne({ where: { respond_api_token: { [Op.ne]: null } } });
-    }
+    const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
     if (!settings || !settings.respond_api_token) {
       return res.status(400).json({ error: 'API de Respond.io no configurada' });
     }
@@ -2310,7 +2317,8 @@ router.post('/bot/initiate-closing/:contactId', requireAuth, async (req, res) =>
     const { contactId } = req.params;
     const product = req.body.product || 'tarjetas';
 
-    const settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
+    // Solo usar la configuración del usuario autenticado (sin fallback cross-tenant)
+    const settings = await MessagingSettings.findOne({ where: { user_id: req.userId } });
     if (!settings) return res.status(400).json({ success: false, error: 'No hay configuración de mensajería' });
     if (!settings.respond_api_token) return res.status(400).json({ success: false, error: 'Token de API no configurado' });
 

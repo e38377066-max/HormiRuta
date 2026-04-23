@@ -19,6 +19,7 @@ console.log('===========================================');
 
 import { sequelize } from './models/index.js';
 
+import { requireAuth } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import routesRoutes from './routes/routes.js';
 import stopsRoutes from './routes/stops.js';
@@ -92,8 +93,10 @@ app.use('/api/wholesale', wholesaleRoutes);
 app.use('/api/bot-memory', botMemoryRoutes);
 app.use('/api/ai-learning', aiLearningRoutes);
 
+// Uploads contiene evidencia de entrega, reportes y archivos con PII.
+// Gating con autenticacion para que solo usuarios logueados puedan descargarlos.
 const uploadsPath = path.join(__dirname, '..', 'uploads');
-app.use('/uploads', express.static(uploadsPath));
+app.use('/uploads', requireAuth, express.static(uploadsPath));
 
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath, { 
