@@ -536,6 +536,14 @@ class ChatbotService {
       }
     }
     
+    // En modo solo-palabras-clave NO usamos fuzzy matching: palabras comunes
+    // del español ("casa", "buena", "fabrica") tienen similitud >0.6 con
+    // variantes de productos ("camisa", "tarjeta", "flayers") y disparaban
+    // falsos positivos como "Estoy en casa" -> Playeras.
+    if (keywordOnly) {
+      return null;
+    }
+
     const allUserWords = [...new Set([
       ...cleanText.split(/\s+/).filter(w => w.length >= 3),
       ...cleanTextLettersOnly.split(/\s+/).filter(w => w.length >= 3)

@@ -2147,21 +2147,12 @@ class PollingService {
             await order.destroy();
             syncedCount++;
           } else if (newStatus) {
-            const closedUpdateFields = {};
-            const closedTerminal = ['delivered', 'ups_shipped'];
-            if (newStatus !== order.order_status && !order.route_id && !closedTerminal.includes(order.order_status)) {
-              closedUpdateFields.order_status = newStatus;
-            }
-            if (order.dispatch_status === 'archived') {
-              closedUpdateFields.dispatch_status = 'available';
-            }
-            if (Object.keys(closedUpdateFields).length > 0) {
-              await order.update(closedUpdateFields);
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" ${order.order_status} -> ${newStatus} (contacto ${order.respond_contact_id})`);
-              syncedCount++;
-            } else if (!order.route_id && order.dispatch_status !== 'archived' && !['delivered', 'ups_shipped'].includes(order.order_status)) {
+            // Chat cerrado: NO desarchivar nunca. Si no tiene ruta y no es terminal,
+            // archivar siempre. La reapertura del chat cambiara el lifecycle y el
+            // AddressScan (sobre contactos abiertos) lo reactivara automaticamente.
+            if (!order.route_id && order.dispatch_status !== 'archived' && !['delivered', 'ups_shipped'].includes(order.order_status)) {
               await order.update({ dispatch_status: 'archived' });
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, archivada del dispatch (estado ${order.order_status} sin avance)`);
+              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, archivada del dispatch (estado ${order.order_status})`);
               syncedCount++;
             }
           } else if (!newStatus && contactLifecycle) {
