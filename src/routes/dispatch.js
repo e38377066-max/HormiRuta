@@ -151,14 +151,17 @@ router.get('/orders', requireAuth, async (req, res) => {
 
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
+    // Excluye archivadas en TODOS los contadores (las archivadas no se muestran
+    // en la grilla principal del dispatcher, asi que tampoco deben contarse).
+    const notArchived = { dispatch_status: { [Op.ne]: 'archived' } };
     const [total, approved, ordered, pickupReady, onDelivery, upsShipped, delivered] = await Promise.all([
-      ValidatedAddress.count(),
-      ValidatedAddress.count({ where: { order_status: 'approved' } }),
-      ValidatedAddress.count({ where: { order_status: 'ordered' } }),
-      ValidatedAddress.count({ where: { order_status: 'pickup_ready' } }),
-      ValidatedAddress.count({ where: { order_status: 'on_delivery' } }),
-      ValidatedAddress.count({ where: { order_status: 'ups_shipped' } }),
-      ValidatedAddress.count({ where: { order_status: 'delivered' } })
+      ValidatedAddress.count({ where: notArchived }),
+      ValidatedAddress.count({ where: { ...notArchived, order_status: 'approved' } }),
+      ValidatedAddress.count({ where: { ...notArchived, order_status: 'ordered' } }),
+      ValidatedAddress.count({ where: { ...notArchived, order_status: 'pickup_ready' } }),
+      ValidatedAddress.count({ where: { ...notArchived, order_status: 'on_delivery' } }),
+      ValidatedAddress.count({ where: { ...notArchived, order_status: 'ups_shipped' } }),
+      ValidatedAddress.count({ where: { ...notArchived, order_status: 'delivered' } })
     ]);
 
     res.json({

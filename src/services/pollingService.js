@@ -1302,7 +1302,9 @@ class PollingService {
 
       if (allContacts.length === 0) return;
 
-      const excludedTags = ['rec'];
+      // Tags que NO deben llegar al dispatcher: 'rec' (clientes en retencion) e
+      // 'iprintpos-chats' (buzon de impresion POS, flujo aparte).
+      const excludedTags = ['rec', 'iprintpos-chats'];
       const tagFilteredContacts = allContacts.filter(contact => {
         const contactTags = contact.tags || [];
         const tagNames = contactTags.map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
@@ -1325,7 +1327,7 @@ class PollingService {
             }
           );
           if (archivedCount > 0) {
-            console.log(`[AddressScan] ${archivedCount} orden(es) archivada(s) del dispatcher por tag excluido (rec)`);
+            console.log(`[AddressScan] ${archivedCount} orden(es) archivada(s) del dispatcher por tag excluido (rec / iprintpos-chats)`);
           }
         } catch (err) {
           console.error(`[AddressScan] Error archivando tags excluidos:`, err.message);
@@ -1337,8 +1339,13 @@ class PollingService {
       await this.syncClosedConversationLifecycles(userId, apiToken, tagFilteredContacts);
       await this.cleanupDuplicateAddresses(userId);
       await this.cleanupDeliveredOrders();
+      // UPS Shipped es un flujo paralelo (envios por paqueteria), NO debe
+      // vivir en dispatch. Archiva cualquier orden que se haya colado.
+      await this.archiveUpsShippedOrders(tagFilteredContacts);
 
-      const excludedLifecycles = ['new lead', 'impropos', 'iprintpos'];
+      // 'ups shipped' se excluye del scan de mensajes para no procesar nuevas
+      // direcciones en chats que ya estan en ese flujo paralelo.
+      const excludedLifecycles = ['new lead', 'impropos', 'iprintpos', 'ups shipped'];
       const scanContacts = tagFilteredContacts.filter(contact => {
         const lc = (contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
         if (lc && excludedLifecycles.includes(lc)) {
@@ -2497,6 +2504,37 @@ class PollingService {
     };
   }
 
+  // Archiva las ordenes en dispatch cuyo contacto en Respond este en
+  // lifecycle "UPS Shipped". Ese flujo es paqueteria, no entrega local.
+  async archiveUpsShippedOrders(contacts) {
+    try {
+      const upsContactIds = contacts
+        .filter(c => {
+          const lc = (c.lifecycle || c.lifecycleStage || '').toLowerCase();
+          return lc === 'ups shipped';
+        })
+        .map(c => c.id.toString());
+
+      if (upsContactIds.length === 0) return;
+
+      const [archivedCount] = await ValidatedAddress.update(
+        { dispatch_status: 'archived' },
+        {
+          where: {
+            respond_contact_id: { [Op.in]: upsContactIds },
+            dispatch_status: { [Op.ne]: 'archived' },
+            route_id: null
+          }
+        }
+      );
+      if (archivedCount > 0) {
+        console.log(`[AddressScan] ${archivedCount} orden(es) archivada(s) por estar en UPS Shipped`);
+      }
+    } catch (err) {
+      console.error('[AddressScan] Error archivando UPS Shipped:', err.message);
+    }
+  }
+
   // Reconciliacion una sola vez al arrancar el servidor: trae todas las
   // conversaciones abiertas en Respond.io y ajusta cualquier orden cuyo
   // lifecycle en dispatch no coincida (incluyendo reactivacion de entregadas
@@ -2532,12 +2570,39 @@ class PollingService {
 
       if (allContacts.length === 0) return;
 
-      const excludedTags = ['rec'];
+      const excludedTags = ['rec', 'iprintpos-chats'];
       const tagFilteredContacts = allContacts.filter(contact => {
         const contactTags = contact.tags || [];
         const tagNames = contactTags.map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
         return !tagNames.some(tag => excludedTags.includes(tag));
       });
+
+      // Archiva en dispatch los contactos con tag excluido (rec / iprintpos-chats)
+      // por si se colaron antes de que se aplicaran los filtros nuevos.
+      const tagExcludedIds = allContacts
+        .filter(c => !tagFilteredContacts.includes(c))
+        .map(c => c.id.toString());
+      if (tagExcludedIds.length > 0) {
+        try {
+          const [tagArchived] = await ValidatedAddress.update(
+            { dispatch_status: 'archived' },
+            {
+              where: {
+                respond_contact_id: { [Op.in]: tagExcludedIds },
+                dispatch_status: { [Op.ne]: 'archived' }
+              }
+            }
+          );
+          if (tagArchived > 0) {
+            console.log(`[StartupReconcile] ${tagArchived} orden(es) archivada(s) por tag excluido (rec / iprintpos-chats)`);
+          }
+        } catch (err) {
+          console.error('[StartupReconcile] Error archivando tags excluidos:', err.message);
+        }
+      }
+
+      // Tambien archiva las que quedaron en UPS Shipped (flujo paralelo).
+      await this.archiveUpsShippedOrders(tagFilteredContacts);
 
       const contactIds = tagFilteredContacts.map(c => c.id.toString());
       if (contactIds.length === 0) return;
@@ -2571,9 +2636,19 @@ class PollingService {
 
         const isInTerminal = terminalStatuses.includes(existing.order_status);
         const respondIsActive = reactiveStatuses.includes(orderStatus);
+        // UPS Shipped no debe llegar al dispatcher: actualiza estado pero
+        // mantiene/forza dispatch_status='archived'.
+        const isUpsShippedTarget = orderStatus === 'ups_shipped';
 
         try {
-          if (isInTerminal && respondIsActive) {
+          if (isUpsShippedTarget) {
+            await ValidatedAddress.update(
+              { order_status: 'ups_shipped', dispatch_status: 'archived' },
+              { where: { id: existing.id } }
+            );
+            mismatchKept++;
+            console.log(`[StartupReconcile] Archivada UPS: "${existing.customer_name}" ${existing.order_status} -> ups_shipped`);
+          } else if (isInTerminal && respondIsActive) {
             await ValidatedAddress.update(
               this.buildReactivationFields(orderStatus),
               { where: { id: existing.id } }
@@ -2680,6 +2755,8 @@ class PollingService {
       }
 
       const isRecByName = /\bREC\b/i.test(customerName) || /-REC/i.test(customerName);
+      // UPS Shipped es flujo paralelo (paqueteria), nunca debe vivir en dispatch.
+      const isUpsShipped = orderStatus === 'ups_shipped';
 
       if (!record) {
         record = await ValidatedAddress.create({
@@ -2697,13 +2774,17 @@ class PollingService {
           confidence: geocoded.confidence || null,
           source: sourceOverride || 'scanner',
           order_status: orderStatus || 'pending',
-          dispatch_status: isRecByName ? 'archived' : 'available'
+          dispatch_status: (isRecByName || isUpsShipped) ? 'archived' : 'available'
         });
         if (isRecByName) console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (nombre contiene -REC)`);
+        if (isUpsShipped) console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (UPS Shipped)`);
         created = true;
       } else if (isRecByName && record.dispatch_status !== 'archived') {
         await record.update({ dispatch_status: 'archived' });
         console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (nombre contiene -REC)`);
+      } else if (isUpsShipped && record.dispatch_status !== 'archived' && !record.route_id) {
+        await record.update({ dispatch_status: 'archived' });
+        console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (UPS Shipped)`);
       }
 
       if (created) {
