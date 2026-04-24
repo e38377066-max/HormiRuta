@@ -120,7 +120,22 @@ async function startServer() {
     await sequelize.sync({ alter: { drop: false } });
     console.log('Database tables synchronized.');
 
-    pollingService.cleanupDeliveredOrders().catch(e => console.error('[Cleanup] Error inicial:', e.message));
+    // Secuencial para evitar carrera: primero reconcile (puede reactivar
+    // entregadas que el cliente volvio a pedir), despues cleanup (archiva
+    // entregadas viejas). Si cleanup corriera en paralelo podria re-archivar
+    // una orden recien reactivada por el reconcile.
+    (async () => {
+      try {
+        await pollingService.reconcileLifecyclesOnStartup();
+      } catch (e) {
+        console.error('[StartupReconcile] Error inicial:', e.message);
+      }
+      try {
+        await pollingService.cleanupDeliveredOrders();
+      } catch (e) {
+        console.error('[Cleanup] Error inicial:', e.message);
+      }
+    })();
 
     // Inicia el aprendizaje periódico del estilo de los agentes (cada hora, primera vez a los 5 min)
     StyleLearningService.startScheduler();

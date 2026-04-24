@@ -63,11 +63,16 @@ const VALID_TRANSITIONS = {
 
 async function saveToDeliveryHistory(order) {
   try {
-    const existing = await DeliveryHistory.findOne({ where: { original_order_id: order.id } });
+    // Dedup por (orden, instante de entrega): permite varios snapshots cuando
+    // la misma orden se reactiva (cliente vuelve a pedir) y se vuelve a entregar.
+    const deliveredAt = order.delivered_at || new Date();
+    const existing = await DeliveryHistory.findOne({
+      where: { original_order_id: order.id, delivered_at: deliveredAt }
+    });
     if (existing) return;
 
     const driver = order.assigned_driver_id ? await User.findByPk(order.assigned_driver_id) : null;
-    const now = order.delivered_at || new Date();
+    const now = deliveredAt;
     const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     await DeliveryHistory.create({

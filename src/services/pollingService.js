@@ -1407,25 +1407,34 @@ class PollingService {
           continue;
         }
         // Respond.io es fuente de verdad para el estado (avance Y retroceso).
-        // Safeguards: no tocar ordenes con ruta asignada (chofer en marcha) ni
-        // estados terminales (delivered/ups_shipped) ya cerrados en dispatch.
+        // Safeguards: no tocar ordenes con ruta asignada (chofer en marcha).
+        // Para estados terminales (delivered/ups_shipped) en dispatch, si Respond
+        // tiene un lifecycle activo (no terminal), eso indica un NUEVO ciclo de
+        // orden (mismo cliente vuelve a pedir): reactivamos la orden reseteando
+        // los campos de la entrega anterior. La entrega anterior ya quedo
+        // guardada en DeliveryHistory cuando se marco como delivered.
         const terminalStatuses = ['delivered', 'ups_shipped'];
-        const canSync = orderStatus && existing.order_status !== orderStatus &&
-          !existing.route_id &&
-          !terminalStatuses.includes(existing.order_status);
-        if (canSync) {
+        const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
+        const isInTerminal = terminalStatuses.includes(existing.order_status);
+        const respondIsActive = orderStatus && reactiveStatuses.includes(orderStatus);
+
+        if (orderStatus && existing.order_status !== orderStatus && !existing.route_id && isInTerminal && respondIsActive) {
+          // Nuevo ciclo: cliente entregado vuelve a pedir
+          Object.assign(updateFields, this.buildReactivationFields(orderStatus));
+          console.log(`[AddressScan] Lifecycle reactivacion: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (nuevo ciclo) (${contactIdStr})`);
+        } else if (orderStatus && existing.order_status !== orderStatus && !existing.route_id && !isInTerminal) {
           updateFields.order_status = orderStatus;
           if (existing.dispatch_status === 'archived') {
             updateFields.dispatch_status = 'available';
           }
           const direction = this.statusCanAdvance(existing.order_status, orderStatus) ? 'avance' : 'retroceso';
           console.log(`[AddressScan] Lifecycle sync (${direction}): "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
-        } else if (orderStatus && existing.dispatch_status === 'archived') {
+        } else if (orderStatus && existing.dispatch_status === 'archived' && !isInTerminal) {
           updateFields.dispatch_status = 'available';
         } else if (orderStatus && existing.order_status !== orderStatus && existing.route_id) {
           console.log(`[AddressScan] Lifecycle MISMATCH ignorado (ruta asignada): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} route=${existing.route_id} (${contactIdStr})`);
-        } else if (orderStatus && existing.order_status !== orderStatus && terminalStatuses.includes(existing.order_status)) {
-          console.log(`[AddressScan] Lifecycle MISMATCH ignorado (terminal): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} (${contactIdStr})`);
+        } else if (orderStatus && existing.order_status !== orderStatus && isInTerminal && !respondIsActive) {
+          console.log(`[AddressScan] Lifecycle MISMATCH ignorado (terminal->terminal): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} (${contactIdStr})`);
         }
 
         if (Object.keys(updateFields).length > 0) {
@@ -2469,6 +2478,129 @@ class PollingService {
     const newIdx = STATUS_ORDER.indexOf(newStatus);
     if (currentIdx === -1 || newIdx === -1) return newIdx !== -1;
     return newIdx > currentIdx;
+  }
+
+  // Campos a resetear cuando una orden entregada/ups_shipped se reactiva
+  // por un nuevo ciclo (cliente vuelve a pedir, lifecycle en Respond es activo).
+  // La entrega previa ya esta archivada en DeliveryHistory.
+  buildReactivationFields(newOrderStatus) {
+    return {
+      order_status: newOrderStatus,
+      delivered_at: null,
+      route_id: null,
+      assigned_driver_id: null,
+      driver_name: null,
+      payment_status: 'pending',
+      amount_collected: null,
+      payment_method: null,
+      dispatch_status: 'available'
+    };
+  }
+
+  // Reconciliacion una sola vez al arrancar el servidor: trae todas las
+  // conversaciones abiertas en Respond.io y ajusta cualquier orden cuyo
+  // lifecycle en dispatch no coincida (incluyendo reactivacion de entregadas
+  // que volvieron a pedir).
+  async reconcileLifecyclesOnStartup() {
+    try {
+      const settings = await getGlobalSettings();
+      if (!settings?.respond_api_token || !settings.is_active) {
+        console.log('[StartupReconcile] Saltado: no hay token activo de Respond.io');
+        return;
+      }
+      const userId = settings.user_id;
+      const apiToken = settings.respond_api_token;
+      const respondio = this.getRespondioInstance(apiToken);
+
+      console.log('[StartupReconcile] Iniciando reconciliacion de lifecycle...');
+      let allContacts = [];
+      let cursorId = null;
+      let pageCount = 0;
+      while (true) {
+        const result = await respondio.listOpenConversations({ limit: 99, cursorId });
+        if (!result.success) {
+          console.error('[StartupReconcile] Error obteniendo conversaciones:', result.error);
+          break;
+        }
+        const items = result.items || [];
+        allContacts = [...allContacts, ...items];
+        pageCount++;
+        if (!result.pagination?.nextCursor || items.length < 99) break;
+        cursorId = result.pagination.nextCursor;
+      }
+      console.log(`[StartupReconcile] ${allContacts.length} conversaciones abiertas en ${pageCount} pagina(s)`);
+
+      if (allContacts.length === 0) return;
+
+      const excludedTags = ['rec'];
+      const tagFilteredContacts = allContacts.filter(contact => {
+        const contactTags = contact.tags || [];
+        const tagNames = contactTags.map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
+        return !tagNames.some(tag => excludedTags.includes(tag));
+      });
+
+      const contactIds = tagFilteredContacts.map(c => c.id.toString());
+      if (contactIds.length === 0) return;
+
+      const existingAddresses = await ValidatedAddress.findAll({
+        where: { respond_contact_id: { [Op.in]: contactIds } }
+      });
+      const addressMap = new Map();
+      for (const va of existingAddresses) addressMap.set(va.respond_contact_id, va);
+
+      const terminalStatuses = ['delivered', 'ups_shipped'];
+      const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
+      let reactivated = 0;
+      let synced = 0;
+      let mismatchKept = 0;
+
+      for (const contact of tagFilteredContacts) {
+        const contactIdStr = contact.id.toString();
+        const existing = addressMap.get(contactIdStr);
+        if (!existing) continue;
+
+        const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
+        const orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
+        if (!orderStatus || existing.order_status === orderStatus) continue;
+
+        if (existing.route_id) {
+          mismatchKept++;
+          console.log(`[StartupReconcile] MISMATCH ignorado (ruta): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} route=${existing.route_id}`);
+          continue;
+        }
+
+        const isInTerminal = terminalStatuses.includes(existing.order_status);
+        const respondIsActive = reactiveStatuses.includes(orderStatus);
+
+        try {
+          if (isInTerminal && respondIsActive) {
+            await ValidatedAddress.update(
+              this.buildReactivationFields(orderStatus),
+              { where: { id: existing.id } }
+            );
+            reactivated++;
+            console.log(`[StartupReconcile] Reactivado: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (nuevo ciclo)`);
+          } else if (!isInTerminal) {
+            const updateFields = { order_status: orderStatus };
+            if (existing.dispatch_status === 'archived') {
+              updateFields.dispatch_status = 'available';
+            }
+            await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+            synced++;
+            console.log(`[StartupReconcile] Sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus}`);
+          } else {
+            mismatchKept++;
+            console.log(`[StartupReconcile] MISMATCH ignorado (terminal->terminal): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus}`);
+          }
+        } catch (err) {
+          console.error(`[StartupReconcile] Error ${contactIdStr}:`, err.message);
+        }
+      }
+
+      console.log(`[StartupReconcile] Completado: ${reactivated} reactivada(s), ${synced} sincronizada(s), ${mismatchKept} ignorada(s)`);
+    } catch (error) {
+      console.error('[StartupReconcile] Error general:', error.message);
+    }
   }
 
   lifecycleToOrderStatus(lifecycle) {
