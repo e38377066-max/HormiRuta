@@ -680,78 +680,72 @@ router.get('/accounting', requireAdmin, async (req, res) => {
   try {
     const { driver_id, date_from, date_to } = req.query;
 
-    const whereOrder = { order_status: 'delivered', assigned_driver_id: { [Op.ne]: null } };
+    // Fuente: DeliveryHistory (snapshot permanente). Esto garantiza que el
+    // resumen NO desaparezca cuando una orden se reactiva (cliente vuelve a
+    // pedir) o se archiva por el cleanup. Cada entrega real queda contada.
+    const whereDel = { driver_id: { [Op.ne]: null } };
+    if (driver_id) whereDel.driver_id = parseInt(driver_id);
     if (date_from || date_to) {
-      whereOrder.delivered_at = {};
-      if (date_from) whereOrder.delivered_at[Op.gte] = new Date(date_from + 'T00:00:00');
-      if (date_to) whereOrder.delivered_at[Op.lte] = new Date(date_to + 'T23:59:59');
+      whereDel.delivered_at = {};
+      if (date_from) whereDel.delivered_at[Op.gte] = new Date(date_from + 'T00:00:00');
+      if (date_to) whereDel.delivered_at[Op.lte] = new Date(date_to + 'T23:59:59');
     }
-    if (driver_id) whereOrder.assigned_driver_id = parseInt(driver_id);
 
-    const orders = await ValidatedAddress.findAll({ where: whereOrder });
+    const deliveries = await DeliveryHistory.findAll({
+      where: whereDel,
+      order: [['delivered_at', 'DESC']]
+    });
 
-    const driverIds = [...new Set(orders.map(o => o.assigned_driver_id))];
-    const drivers = await User.findAll({ where: { id: { [Op.in]: driverIds } } });
+    const driverIds = [...new Set(deliveries.map(d => d.driver_id).filter(Boolean))];
+    const drivers = driverIds.length > 0
+      ? await User.findAll({ where: { id: { [Op.in]: driverIds } } })
+      : [];
     const driverMap = {};
     drivers.forEach(d => { driverMap[d.id] = d; });
 
-    const routeIds = [...new Set(orders.filter(o => o.route_id).map(o => o.route_id))];
-    const allStops = routeIds.length > 0
-      ? await Stop.findAll({ where: { route_id: { [Op.in]: routeIds } } })
-      : [];
-
-    const stopsByRoute = {};
-    allStops.forEach(s => {
-      if (!stopsByRoute[s.route_id]) stopsByRoute[s.route_id] = [];
-      stopsByRoute[s.route_id].push(s);
-    });
-
     const grouped = {};
-    for (const order of orders) {
-      const did = order.assigned_driver_id;
+    for (const del of deliveries) {
+      const did = del.driver_id;
       if (!grouped[did]) {
         const driver = driverMap[did];
         grouped[did] = {
           driver_id: did,
-          driver_name: driver?.username || order.driver_name || `Chofer #${did}`,
-          commission_per_stop: driver?.commission_per_stop || 0,
+          driver_name: driver?.username || del.driver_name || `Chofer #${did}`,
+          // Comision por parada actual del chofer (para mostrar en columna).
+          // El total se calcula con el snapshot de cada entrega.
+          commission_per_stop: driver?.commission_per_stop || del.commission_per_stop || 0,
           stops_count: 0,
           total_order_cost: 0,
           total_deposit: 0,
           total_collected: 0,
+          total_commission: 0,
           orders: []
         };
       }
 
-      let collected = order.amount_collected || 0;
-      if (order.route_id && stopsByRoute[order.route_id]) {
-        const stops = stopsByRoute[order.route_id];
-        const matchStop = stops.find(s =>
-          Math.abs(s.lat - order.address_lat) < 0.0001 && Math.abs(s.lng - order.address_lng) < 0.0001
-        ) || stops.find(s => s.address === order.validated_address);
-        if (matchStop?.amount_collected != null) collected = matchStop.amount_collected;
-      }
-
       grouped[did].stops_count += 1;
-      grouped[did].total_order_cost += order.order_cost || 0;
-      grouped[did].total_deposit += order.deposit_amount || 0;
-      grouped[did].total_collected += collected;
+      grouped[did].total_order_cost += Number(del.order_cost) || 0;
+      grouped[did].total_deposit += Number(del.deposit_amount) || 0;
+      grouped[did].total_collected += Number(del.amount_collected) || 0;
+      grouped[did].total_commission += Number(del.commission_per_stop) || 0;
       grouped[did].orders.push({
-        id: order.id,
-        customer_name: order.customer_name,
-        order_cost: order.order_cost,
-        deposit_amount: order.deposit_amount,
-        total_to_collect: order.total_to_collect,
-        amount_collected: collected,
-        payment_method: order.payment_method,
-        delivered_at: order.delivered_at
+        // Usamos el id del snapshot (DeliveryHistory.id) como key para evitar
+        // colisiones cuando la misma orden se reactiva y se vuelve a entregar.
+        id: del.id,
+        original_order_id: del.original_order_id,
+        customer_name: del.customer_name,
+        order_cost: del.order_cost,
+        deposit_amount: del.deposit_amount,
+        total_to_collect: del.total_to_collect,
+        amount_collected: del.amount_collected,
+        payment_method: del.payment_method,
+        delivered_at: del.delivered_at
       });
     }
 
     const report = Object.values(grouped).map(g => ({
       ...g,
-      total_commission: g.stops_count * (g.commission_per_stop || 0),
-      balance: g.total_collected - g.stops_count * (g.commission_per_stop || 0)
+      balance: g.total_collected - g.total_commission
     }));
 
     report.sort((a, b) => a.driver_name.localeCompare(b.driver_name));
