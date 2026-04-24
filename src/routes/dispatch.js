@@ -2222,6 +2222,276 @@ router.delete('/favorites/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Auditoria autoritativa: para cada orden activa del dispatcher consulta el
+// lifecycle ACTUAL en Respond.io via getContact (no el campo cacheado del
+// listado masivo) y reporta diferencias. Usar antes de aplicar resync.
+router.get('/lifecycle-audit', requireAdmin, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay token activo de Respond.io' });
+    }
+
+    const orders = await ValidatedAddress.findAll({
+      where: {
+        respond_contact_id: { [Op.ne]: null },
+        dispatch_status: { [Op.ne]: 'archived' }
+      },
+      order: [['customer_name', 'ASC']]
+    });
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const lifecycleToOrderStatus = (lifecycle) => {
+      if (!lifecycle) return null;
+      const map = {
+        'pending': 'pending',
+        'approved': 'approved',
+        'ordered': 'ordered',
+        'pickup ready': 'pickup_ready',
+        'on delivery': 'on_delivery',
+        'delivered': 'delivered',
+        'ups shipped': 'ups_shipped'
+      };
+      return map[lifecycle.toLowerCase()] || null;
+    };
+
+    const mismatches = [];
+    let matchCount = 0;
+    let errorCount = 0;
+    const DELAY_MS = 250;
+
+    for (let i = 0; i < orders.length; i++) {
+      const order = orders[i];
+      if (i > 0) await new Promise(r => setTimeout(r, DELAY_MS));
+
+      try {
+        const contactRes = await respondio.getContact(parseInt(order.respond_contact_id));
+        if (!contactRes.success || !contactRes.data) {
+          mismatches.push({
+            id: order.id,
+            customer_name: order.customer_name,
+            respond_contact_id: order.respond_contact_id,
+            dispatcher_status: order.order_status,
+            respond_lifecycle: null,
+            expected_status: null,
+            route_id: order.route_id,
+            action: 'NOT_FOUND_IN_RESPOND',
+            note: contactRes.notFound ? 'Contacto no existe en Respond.io' : 'Error consultando Respond.io'
+          });
+          errorCount++;
+          continue;
+        }
+
+        const contact = contactRes.data;
+        const lifecycle = contact.lifecycle || contact.lifecycleStage || '';
+        const expectedStatus = lifecycleToOrderStatus(lifecycle);
+        const lcLow = (lifecycle || '').toLowerCase();
+        const tags = (contact.tags || []).map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
+        const isExcludedTag = tags.includes('rec') || tags.includes('iprintpos-chats');
+        const isExcludedLifecycle = ['new lead', 'impropos', 'iprintpos'].includes(lcLow);
+        const isUpsShipped = lcLow === 'ups shipped';
+
+        let action = 'OK';
+        let note = '';
+
+        if (isExcludedTag) {
+          action = 'SHOULD_ARCHIVE_TAG';
+          note = `Tag excluido (${tags.find(t => t === 'rec' || t === 'iprintpos-chats')})`;
+        } else if (isExcludedLifecycle) {
+          action = 'SHOULD_ARCHIVE_LIFECYCLE';
+          note = `Lifecycle excluido: ${lifecycle}`;
+        } else if (isUpsShipped) {
+          action = 'SHOULD_ARCHIVE_UPS';
+          note = 'UPS Shipped (flujo paqueteria)';
+        } else if (expectedStatus && expectedStatus !== order.order_status) {
+          action = 'WRONG_COLUMN';
+          note = `Dispatcher dice "${order.order_status}", Respond dice "${lifecycle}"`;
+        } else if (!expectedStatus) {
+          action = 'UNKNOWN_LIFECYCLE';
+          note = `Lifecycle no mapeado: "${lifecycle || '(vacio)'}"`;
+        }
+
+        if (action === 'OK') {
+          matchCount++;
+        } else {
+          mismatches.push({
+            id: order.id,
+            customer_name: order.customer_name,
+            respond_contact_id: order.respond_contact_id,
+            dispatcher_status: order.order_status,
+            respond_lifecycle: lifecycle,
+            expected_status: expectedStatus,
+            route_id: order.route_id,
+            action,
+            note
+          });
+        }
+      } catch (err) {
+        console.error(`[LifecycleAudit] Error en ${order.respond_contact_id}:`, err.message);
+        errorCount++;
+      }
+    }
+
+    res.json({
+      total: orders.length,
+      ok: matchCount,
+      mismatches: mismatches.length,
+      errors: errorCount,
+      details: mismatches
+    });
+  } catch (error) {
+    console.error('Error en lifecycle audit:', error);
+    res.status(500).json({ error: 'Error al auditar lifecycles' });
+  }
+});
+
+// Aplica las correcciones detectadas por la auditoria. Respeta route_id
+// (ordenes con chofer asignado NO se tocan). Si action es WRONG_COLUMN
+// y respond.lifecycle es 'delivered', la orden tambien se respeta porque
+// marcar como entregada disparara el flujo de DeliveryHistory en su sitio.
+router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
+  try {
+    const settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
+    if (!settings?.respond_api_token) {
+      return res.status(400).json({ error: 'No hay token activo de Respond.io' });
+    }
+
+    const orders = await ValidatedAddress.findAll({
+      where: {
+        respond_contact_id: { [Op.ne]: null },
+        dispatch_status: { [Op.ne]: 'archived' }
+      }
+    });
+
+    const respondio = new RespondioService(settings.respond_api_token);
+    const lifecycleToOrderStatus = (lifecycle) => {
+      if (!lifecycle) return null;
+      const map = {
+        'pending': 'pending', 'approved': 'approved', 'ordered': 'ordered',
+        'pickup ready': 'pickup_ready', 'on delivery': 'on_delivery',
+        'delivered': 'delivered', 'ups shipped': 'ups_shipped'
+      };
+      return map[lifecycle.toLowerCase()] || null;
+    };
+
+    const result = {
+      archived: 0, updated: 0, skipped_route: 0, errors: 0, deleted: 0,
+      skipped_delivered: 0, total: orders.length
+    };
+    const DELAY_MS = 250;
+
+    for (let i = 0; i < orders.length; i++) {
+      const order = orders[i];
+      if (i > 0) await new Promise(r => setTimeout(r, DELAY_MS));
+
+      try {
+        // Validacion estricta: solo IDs numericos puros. Evita id:NaN -> notFound -> destroy().
+        const contactIdNum = /^\d+$/.test(String(order.respond_contact_id))
+          ? parseInt(order.respond_contact_id, 10)
+          : null;
+        if (contactIdNum === null) {
+          result.errors++;
+          console.log(`[LifecycleResync] ID invalido, no se toca: "${order.customer_name}" id=${order.respond_contact_id}`);
+          continue;
+        }
+
+        const contactRes = await respondio.getContact(contactIdNum);
+        if (!contactRes.success || !contactRes.data) {
+          if (contactRes.notFound) {
+            // Borrado atomico: solo si sigue sin ruta (evita race con asignacion concurrente).
+            const destroyed = await ValidatedAddress.destroy({
+              where: { id: order.id, route_id: null }
+            });
+            if (destroyed > 0) {
+              result.deleted++;
+              console.log(`[LifecycleResync] Eliminada (no existe en Respond): "${order.customer_name}"`);
+            } else {
+              result.skipped_route++;
+            }
+          } else {
+            result.errors++;
+          }
+          continue;
+        }
+
+        const contact = contactRes.data;
+        const lifecycle = contact.lifecycle || contact.lifecycleStage || '';
+        const lcLow = (lifecycle || '').toLowerCase();
+        const tags = (contact.tags || []).map(t => (typeof t === 'string' ? t : t.name || '').toLowerCase());
+        const isExcludedTag = tags.includes('rec') || tags.includes('iprintpos-chats');
+        const isExcludedLifecycle = ['new lead', 'impropos', 'iprintpos'].includes(lcLow);
+        const isUpsShipped = lcLow === 'ups shipped';
+        const expectedStatus = lifecycleToOrderStatus(lifecycle);
+
+        // Re-fetch para obtener el estado actual (otra request puede haber asignado ruta).
+        const fresh = await ValidatedAddress.findByPk(order.id);
+        if (!fresh) continue;
+
+        if (fresh.route_id) {
+          if (
+            (expectedStatus && expectedStatus !== fresh.order_status && !['delivered', 'ups_shipped'].includes(expectedStatus)) ||
+            isExcludedTag || isExcludedLifecycle || isUpsShipped
+          ) {
+            result.skipped_route++;
+            console.log(`[LifecycleResync] SKIP (ruta): "${fresh.customer_name}" route=${fresh.route_id}`);
+          }
+          continue;
+        }
+
+        if (isExcludedTag || isExcludedLifecycle || isUpsShipped) {
+          if (fresh.dispatch_status !== 'archived') {
+            // Update atomico: solo si sigue sin ruta.
+            const [updated] = await ValidatedAddress.update(
+              {
+                dispatch_status: 'archived',
+                ...(isUpsShipped ? { order_status: 'ups_shipped' } : {})
+              },
+              { where: { id: fresh.id, route_id: null } }
+            );
+            if (updated > 0) {
+              result.archived++;
+              console.log(`[LifecycleResync] Archivada: "${fresh.customer_name}" (${isExcludedTag ? 'tag' : isUpsShipped ? 'ups' : 'lifecycle'})`);
+            } else {
+              result.skipped_route++;
+            }
+          }
+          continue;
+        }
+
+        if (expectedStatus && expectedStatus !== fresh.order_status) {
+          // 'delivered' requiere flujo formal (saveToDeliveryHistory para
+          // commission/accounting). NO lo aplicamos aqui: lo dejamos para
+          // que el admin lo marque desde la UI normal del dispatcher.
+          if (expectedStatus === 'delivered') {
+            result.skipped_delivered++;
+            console.log(`[LifecycleResync] SKIP (delivered requiere flujo manual): "${fresh.customer_name}" ${fresh.order_status} -> ${expectedStatus}`);
+            continue;
+          }
+          // Update atomico: solo si sigue sin ruta.
+          const [updated] = await ValidatedAddress.update(
+            { order_status: expectedStatus },
+            { where: { id: fresh.id, route_id: null } }
+          );
+          if (updated > 0) {
+            result.updated++;
+            console.log(`[LifecycleResync] Sync: "${fresh.customer_name}" ${fresh.order_status} -> ${expectedStatus}`);
+          } else {
+            result.skipped_route++;
+          }
+        }
+      } catch (err) {
+        console.error(`[LifecycleResync] Error en ${order.respond_contact_id}:`, err.message);
+        result.errors++;
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error en lifecycle resync:', error);
+    res.status(500).json({ error: 'Error al resincronizar lifecycles' });
+  }
+});
+
 router.post('/cleanup-duplicates', requireAdmin, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);

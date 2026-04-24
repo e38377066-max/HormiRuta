@@ -83,6 +83,8 @@ export default function DispatchMap() {
   const [deliveredOrders, setDeliveredOrders] = useState([])
   const [loadingDelivered, setLoadingDelivered] = useState(false)
   const [cleaningDuplicates, setCleaningDuplicates] = useState(false)
+  const [resyncing, setResyncing] = useState(false)
+  const [auditPreview, setAuditPreview] = useState(null)
   const [evidenceModal, setEvidenceModal] = useState(null)
   const [editingBilling, setEditingBilling] = useState(null)
   const [billingValues, setBillingValues] = useState({ order_cost: '', deposit_amount: '', total_to_collect: '' })
@@ -939,6 +941,36 @@ export default function DispatchMap() {
     }
   }
 
+  const handleLifecycleAudit = async () => {
+    if (!window.confirm('Auditar lifecycles: consultará Respond.io para cada orden activa. Puede tardar 1-2 minutos. ¿Continuar?')) return
+    setResyncing(true)
+    setAuditPreview(null)
+    try {
+      const res = await api.get('/api/dispatch/lifecycle-audit')
+      setAuditPreview(res.data)
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al auditar lifecycles')
+    } finally {
+      setResyncing(false)
+    }
+  }
+
+  const handleLifecycleResync = async () => {
+    if (!auditPreview) return
+    if (!window.confirm(`Aplicar correcciones: ${auditPreview.mismatches} orden(es) serán movidas/archivadas. Las que están en ruta NO se tocarán. ¿Continuar?`)) return
+    setResyncing(true)
+    try {
+      const res = await api.post('/api/dispatch/lifecycle-resync')
+      alert(`Resync completado:\n- Actualizadas: ${res.data.updated}\n- Archivadas: ${res.data.archived}\n- Eliminadas (no existen en Respond): ${res.data.deleted}\n- Saltadas por ruta asignada: ${res.data.skipped_route}\n- Saltadas (delivered, marcar manual): ${res.data.skipped_delivered || 0}\n- Errores: ${res.data.errors}`)
+      setAuditPreview(null)
+      await fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al resincronizar')
+    } finally {
+      setResyncing(false)
+    }
+  }
+
   const handleDriverCommission = async (driverId) => {
     const val = parseFloat(driverCommissions[driverId])
     if (isNaN(val) || val < 0) return
@@ -1230,6 +1262,72 @@ export default function DispatchMap() {
             >
               <span className="material-icons">{cleaningDuplicates ? 'hourglass_empty' : 'auto_fix_high'}</span>
             </button>
+            <button
+              className="dstat-cleanup-btn"
+              title="Auditar y resincronizar lifecycles con Respond.io"
+              onClick={handleLifecycleAudit}
+              disabled={resyncing}
+            >
+              <span className="material-icons">{resyncing ? 'hourglass_empty' : 'sync_alt'}</span>
+            </button>
+          </div>
+        )}
+
+        {auditPreview && isAdmin && (
+          <div className="lifecycle-audit-panel" style={{
+            background: '#1a1a1a', border: '1px solid #333', borderRadius: 8,
+            padding: 16, margin: '12px 0', maxHeight: 400, overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <strong style={{ color: '#fff' }}>
+                Auditoría: {auditPreview.ok}/{auditPreview.total} OK · {auditPreview.mismatches} a corregir · {auditPreview.errors} errores
+              </strong>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={handleLifecycleResync}
+                  disabled={resyncing || auditPreview.mismatches === 0}
+                  style={{
+                    background: '#4caf50', color: '#fff', border: 'none',
+                    padding: '6px 14px', borderRadius: 4, cursor: 'pointer'
+                  }}
+                >
+                  Aplicar correcciones ({auditPreview.mismatches})
+                </button>
+                <button
+                  onClick={() => setAuditPreview(null)}
+                  style={{
+                    background: '#555', color: '#fff', border: 'none',
+                    padding: '6px 14px', borderRadius: 4, cursor: 'pointer'
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+            {auditPreview.details && auditPreview.details.length > 0 && (
+              <table style={{ width: '100%', fontSize: 12, color: '#ddd', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #444', textAlign: 'left' }}>
+                    <th style={{ padding: 4 }}>Cliente</th>
+                    <th style={{ padding: 4 }}>Dispatcher</th>
+                    <th style={{ padding: 4 }}>Respond</th>
+                    <th style={{ padding: 4 }}>Acción</th>
+                    <th style={{ padding: 4 }}>Nota</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditPreview.details.map(d => (
+                    <tr key={d.id} style={{ borderBottom: '1px solid #2a2a2a' }}>
+                      <td style={{ padding: 4 }}>{d.customer_name}{d.route_id ? ' (en ruta)' : ''}</td>
+                      <td style={{ padding: 4, color: '#ff9800' }}>{d.dispatcher_status}</td>
+                      <td style={{ padding: 4, color: '#4fc3f7' }}>{d.respond_lifecycle || '—'}</td>
+                      <td style={{ padding: 4 }}>{d.action}</td>
+                      <td style={{ padding: 4, color: '#999' }}>{d.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
