@@ -1406,21 +1406,26 @@ class PollingService {
           }
           continue;
         }
-        // Respond.io es fuente de verdad para el estado.
-        // Solo protegemos: órdenes con ruta asignada, estados terminales, y regresiones de estado.
+        // Respond.io es fuente de verdad para el estado (avance Y retroceso).
+        // Safeguards: no tocar ordenes con ruta asignada (chofer en marcha) ni
+        // estados terminales (delivered/ups_shipped) ya cerrados en dispatch.
         const terminalStatuses = ['delivered', 'ups_shipped'];
         const canSync = orderStatus && existing.order_status !== orderStatus &&
           !existing.route_id &&
-          !terminalStatuses.includes(existing.order_status) &&
-          this.statusCanAdvance(existing.order_status, orderStatus);
+          !terminalStatuses.includes(existing.order_status);
         if (canSync) {
           updateFields.order_status = orderStatus;
           if (existing.dispatch_status === 'archived') {
             updateFields.dispatch_status = 'available';
           }
-          console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
+          const direction = this.statusCanAdvance(existing.order_status, orderStatus) ? 'avance' : 'retroceso';
+          console.log(`[AddressScan] Lifecycle sync (${direction}): "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
         } else if (orderStatus && existing.dispatch_status === 'archived') {
           updateFields.dispatch_status = 'available';
+        } else if (orderStatus && existing.order_status !== orderStatus && existing.route_id) {
+          console.log(`[AddressScan] Lifecycle MISMATCH ignorado (ruta asignada): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} route=${existing.route_id} (${contactIdStr})`);
+        } else if (orderStatus && existing.order_status !== orderStatus && terminalStatuses.includes(existing.order_status)) {
+          console.log(`[AddressScan] Lifecycle MISMATCH ignorado (terminal): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} (${contactIdStr})`);
         }
 
         if (Object.keys(updateFields).length > 0) {
@@ -2589,10 +2594,10 @@ class PollingService {
         }
         const saveTerminal = ['delivered', 'ups_shipped'];
         if (orderStatus && record.order_status !== orderStatus &&
-            !record.route_id && !saveTerminal.includes(record.order_status) &&
-            this.statusCanAdvance(record.order_status, orderStatus)) {
+            !record.route_id && !saveTerminal.includes(record.order_status)) {
           updateData.order_status = orderStatus;
-          console.log(`[ValidatedAddr] Lifecycle sync: ${customerName} ${record.order_status} -> ${orderStatus}`);
+          const direction = this.statusCanAdvance(record.order_status, orderStatus) ? 'avance' : 'retroceso';
+          console.log(`[ValidatedAddr] Lifecycle sync (${direction}): ${customerName} ${record.order_status} -> ${orderStatus}`);
         }
         await record.update(updateData);
         console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})${sourceOverride ? ` [${sourceOverride}]` : ''}`);
