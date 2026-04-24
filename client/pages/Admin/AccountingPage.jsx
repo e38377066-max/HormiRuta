@@ -550,6 +550,7 @@ export default function AccountingPage() {
                       <th>Ruta</th>
                       <th>Chofer</th>
                       <th style={{ textAlign: 'right' }}>Total Cobrado</th>
+                      <th style={{ textAlign: 'right' }}>Comisión</th>
                       <th>Estado del pago</th>
                       <th>Método chofer</th>
                       <th>Fecha Finalización</th>
@@ -577,6 +578,14 @@ export default function AccountingPage() {
                         </td>
                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#2e7d32' }}>
                           {fmt(r.route_total_collected)}
+                          {Number(r.route_gross_collected || 0) !== Number(r.route_total_collected || 0) && (
+                            <div style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>
+                              Bruto: {fmt(r.route_gross_collected)}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#ef6c00', fontWeight: 600 }}>
+                          {Number(r.route_total_commission || 0) > 0 ? fmt(r.route_total_commission) : <span style={{ color: '#bbb', fontWeight: 400 }}>—</span>}
                         </td>
                         <td>{getStatusBadge(r)}</td>
                         <td>
@@ -610,7 +619,10 @@ export default function AccountingPage() {
                     <tr className="accounting-totals">
                       <td colSpan={2}><strong>TOTAL ({filtered.length} rutas)</strong></td>
                       <td style={{ textAlign: 'right', color: '#2e7d32' }}>
-                        <strong>{fmt(filtered.reduce((s, r) => s + r.route_total_collected, 0))}</strong>
+                        <strong>{fmt(filtered.reduce((s, r) => s + Number(r.route_total_collected || 0), 0))}</strong>
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#ef6c00' }}>
+                        <strong>{fmt(filtered.reduce((s, r) => s + Number(r.route_total_commission || 0), 0))}</strong>
                       </td>
                       <td>
                         <span style={{ fontSize: 12, color: '#888' }}>

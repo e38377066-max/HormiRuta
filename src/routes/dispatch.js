@@ -1201,7 +1201,7 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
 
     const driverIds = [...new Set(routes.map(r => r.assigned_driver_id).filter(Boolean))];
     const drivers = driverIds.length > 0
-      ? await User.findAll({ where: { id: { [Op.in]: driverIds } }, attributes: ['id', 'username', 'email'] })
+      ? await User.findAll({ where: { id: { [Op.in]: driverIds } }, attributes: ['id', 'username', 'email', 'commission_per_stop'] })
       : [];
     const driverMap = {};
     drivers.forEach(d => { driverMap[d.id] = d; });
@@ -1220,7 +1220,11 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
 
     const result = routes.map(r => {
       const driver = r.assigned_driver_id ? driverMap[r.assigned_driver_id] : null;
-      const total = Number(r.route_total_collected || 0);
+      const grossCollected = Number(r.route_total_collected || 0);
+      const stopCount = stopCountMap[r.id] || 0;
+      const commissionPerStop = Number(driver?.commission_per_stop || 0);
+      const totalCommission = commissionPerStop * stopCount;
+      const netToCompany = Math.max(0, grossCollected - totalCommission);
       const received = Number(r.admin_amount_received || 0);
       return {
         id: r.id,
@@ -1228,15 +1232,18 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
         driver_id: r.assigned_driver_id,
         driver_name: driver ? (driver.username || driver.email) : 'Sin chofer',
         completed_at: r.completed_at,
-        stops_count: stopCountMap[r.id] || 0,
-        route_total_collected: total,
+        stops_count: stopCount,
+        route_gross_collected: grossCollected,
+        route_total_commission: totalCommission,
+        commission_per_stop: commissionPerStop,
+        route_total_collected: netToCompany,
         payment_delivered: r.payment_delivered || false,
         payment_delivery_method: r.payment_delivery_method || null,
         payment_delivered_at: r.payment_delivered_at || null,
         admin_confirmed: r.admin_confirmed || false,
         admin_amount_received: received,
         admin_payment_records: Array.isArray(r.admin_payment_records) ? r.admin_payment_records : [],
-        admin_remaining: Math.max(0, total - received)
+        admin_remaining: Math.max(0, netToCompany - received)
       };
     });
 
