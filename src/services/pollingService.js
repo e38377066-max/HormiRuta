@@ -2570,13 +2570,16 @@ class PollingService {
 
       if (upsContactIds.length === 0) return;
 
+      // Respond es fuente de verdad ABSOLUTA: archiva incluso con ruta y libera la ruta vieja.
       const [archivedCount] = await ValidatedAddress.update(
-        { dispatch_status: 'archived' },
+        { dispatch_status: 'archived', order_status: 'ups_shipped', route_id: null },
         {
           where: {
             respond_contact_id: { [Op.in]: upsContactIds },
-            dispatch_status: { [Op.ne]: 'archived' },
-            route_id: null
+            [Op.or]: [
+              { dispatch_status: { [Op.ne]: 'archived' } },
+              { route_id: { [Op.ne]: null } }
+            ]
           }
         }
       );
@@ -2585,6 +2588,40 @@ class PollingService {
       }
     } catch (err) {
       console.error('[AddressScan] Error archivando UPS Shipped:', err.message);
+    }
+  }
+
+  // Archiva en dispatch los contactos cuyo lifecycle en Respond es excluido
+  // (New Lead / Impropos / IprintPOS). Libera ruta tambien (Respond manda).
+  async archiveExcludedLifecycleOrders(contacts) {
+    try {
+      const excluded = ['new lead', 'impropos', 'iprintpos'];
+      const excludedContactIds = contacts
+        .filter(c => {
+          const lc = (c.lifecycle || c.lifecycleStage || '').toLowerCase();
+          return excluded.includes(lc);
+        })
+        .map(c => c.id.toString());
+
+      if (excludedContactIds.length === 0) return;
+
+      const [archivedCount] = await ValidatedAddress.update(
+        { dispatch_status: 'archived', route_id: null },
+        {
+          where: {
+            respond_contact_id: { [Op.in]: excludedContactIds },
+            [Op.or]: [
+              { dispatch_status: { [Op.ne]: 'archived' } },
+              { route_id: { [Op.ne]: null } }
+            ]
+          }
+        }
+      );
+      if (archivedCount > 0) {
+        console.log(`[StartupReconcile] ${archivedCount} orden(es) archivada(s) por lifecycle excluido (New Lead/Impropos/IprintPOS)`);
+      }
+    } catch (err) {
+      console.error('[StartupReconcile] Error archivando lifecycles excluidos:', err.message);
     }
   }
 
@@ -2656,6 +2693,9 @@ class PollingService {
 
       // Tambien archiva las que quedaron en UPS Shipped (flujo paralelo).
       await this.archiveUpsShippedOrders(tagFilteredContacts);
+
+      // Y las que estan en lifecycles excluidos (New Lead / Impropos / IprintPOS).
+      await this.archiveExcludedLifecycleOrders(tagFilteredContacts);
 
       const contactIds = tagFilteredContacts.map(c => c.id.toString());
       if (contactIds.length === 0) return;
