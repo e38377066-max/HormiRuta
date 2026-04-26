@@ -14,6 +14,7 @@ import ConversationState from '../models/ConversationState.js';
 import ValidatedAddress from '../models/ValidatedAddress.js';
 import WholesaleClient from '../models/WholesaleClient.js';
 import User from '../models/User.js';
+import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
 
 function contactIsWholesale(name) {
   return /\bMAY\b/i.test(name) || /\-MAY\b/i.test(name) || /\bMAY\-/i.test(name);
@@ -1413,23 +1414,74 @@ class PollingService {
           }
           continue;
         }
-        // Respond.io es fuente de verdad para el estado (avance Y retroceso).
-        // Safeguards: no tocar ordenes con ruta asignada (chofer en marcha).
-        // Para estados terminales (delivered/ups_shipped) en dispatch, si Respond
-        // tiene un lifecycle activo (no terminal), eso indica un NUEVO ciclo de
-        // orden (mismo cliente vuelve a pedir): reactivamos la orden reseteando
-        // los campos de la entrega anterior. La entrega anterior ya quedo
-        // guardada en DeliveryHistory cuando se marco como delivered.
+        // Respond.io es fuente de verdad para el estado de la orden.
+        // Reglas (ordenadas por seguridad):
+        //  1. Reactivacion (terminal->activo): cliente vuelve a pedir. Limpia
+        //     route_id viejo (la entrega anterior ya esta en DeliveryHistory).
+        //     Permitida AUN con route_id porque la ruta vieja ya termino.
+        //  2. Avance a delivered (activo->delivered) con route_id: chofer
+        //     completo la entrega. Guarda snapshot a DeliveryHistory.
+        //  3. Avance/retroceso entre activos sin ruta: aplica directo.
+        //  4. Mismatch entre activos CON ruta: bloqueado para no romper
+        //     una ruta en marcha (driver podria estar trabajando).
         const terminalStatuses = ['delivered', 'ups_shipped'];
         const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
         const isInTerminal = terminalStatuses.includes(existing.order_status);
         const respondIsActive = orderStatus && reactiveStatuses.includes(orderStatus);
+        const respondIsDelivered = orderStatus === 'delivered';
 
-        if (orderStatus && existing.order_status !== orderStatus && !existing.route_id && isInTerminal && respondIsActive) {
-          // Nuevo ciclo: cliente entregado vuelve a pedir
-          Object.assign(updateFields, this.buildReactivationFields(orderStatus));
-          console.log(`[AddressScan] Lifecycle reactivacion: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (nuevo ciclo) (${contactIdStr})`);
+        if (orderStatus && existing.order_status !== orderStatus && isInTerminal && respondIsActive) {
+          // Caso 1: nuevo ciclo. Snapshot defensivo (por si la entrega previa
+          // nunca se guardo) y reactivacion atomica (solo si route_id sigue
+          // siendo el mismo, asi no pisamos un reasignamiento concurrente).
+          await saveToDeliveryHistory(existing);
+          const [updated] = await ValidatedAddress.update(
+            this.buildReactivationFields(orderStatus),
+            { where: { id: existing.id, route_id: existing.route_id } }
+          );
+          if (updated > 0) {
+            const reactNote = existing.route_id ? ` (ruta vieja ${existing.route_id} liberada)` : '';
+            console.log(`[AddressScan] Lifecycle reactivacion: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (nuevo ciclo)${reactNote} (${contactIdStr})`);
+            updatedCount++;
+          } else {
+            console.log(`[AddressScan] Reactivacion saltada (route_id cambio durante sync): "${existing.customer_name}" (${contactIdStr})`);
+          }
+          // Aplica updateFields adicionales (ej. customer_name) por separado.
+          if (Object.keys(updateFields).length > 0) {
+            try {
+              await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+              if (updateFields.customer_name) {
+                console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
+              }
+            } catch (err) {
+              console.error(`[AddressScan] Error sync nombre ${contactIdStr}:`, err.message);
+            }
+          }
+          continue;
+        } else if (orderStatus && existing.order_status !== orderStatus && existing.route_id && respondIsDelivered) {
+          // Caso 2: avance a delivered con ruta asignada. Snapshot a history y
+          // update atomico (solo si la ruta sigue asignada).
+          await saveToDeliveryHistory(existing);
+          const [updated] = await ValidatedAddress.update(
+            { order_status: 'delivered', delivered_at: existing.delivered_at || new Date() },
+            { where: { id: existing.id, route_id: existing.route_id } }
+          );
+          if (updated > 0) {
+            console.log(`[AddressScan] Lifecycle avance a delivered: "${existing.customer_name}" ${existing.order_status} -> delivered (route=${existing.route_id}) (${contactIdStr})`);
+            updatedCount++;
+          } else {
+            console.log(`[AddressScan] Avance a delivered saltado (route_id cambio): "${existing.customer_name}" (${contactIdStr})`);
+          }
+          if (Object.keys(updateFields).length > 0) {
+            try {
+              await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+            } catch (err) {
+              console.error(`[AddressScan] Error sync nombre ${contactIdStr}:`, err.message);
+            }
+          }
+          continue;
         } else if (orderStatus && existing.order_status !== orderStatus && !existing.route_id && !isInTerminal) {
+          // Caso 3: avance/retroceso entre activos, sin ruta.
           updateFields.order_status = orderStatus;
           if (existing.dispatch_status === 'archived') {
             updateFields.dispatch_status = 'available';
@@ -1439,6 +1491,7 @@ class PollingService {
         } else if (orderStatus && existing.dispatch_status === 'archived' && !isInTerminal) {
           updateFields.dispatch_status = 'available';
         } else if (orderStatus && existing.order_status !== orderStatus && existing.route_id) {
+          // Caso 4: mismatch con ruta activa, no es delivered. Se bloquea para no romper la ruta.
           console.log(`[AddressScan] Lifecycle MISMATCH ignorado (ruta asignada): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} route=${existing.route_id} (${contactIdStr})`);
         } else if (orderStatus && existing.order_status !== orderStatus && isInTerminal && !respondIsActive) {
           console.log(`[AddressScan] Lifecycle MISMATCH ignorado (terminal->terminal): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} (${contactIdStr})`);
@@ -2504,6 +2557,7 @@ class PollingService {
     };
   }
 
+
   // Archiva las ordenes en dispatch cuyo contacto en Respond este en
   // lifecycle "UPS Shipped". Ese flujo es paqueteria, no entrega local.
   async archiveUpsShippedOrders(contacts) {
@@ -2628,17 +2682,20 @@ class PollingService {
         const orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
         if (!orderStatus || existing.order_status === orderStatus) continue;
 
-        if (existing.route_id) {
+        const isInTerminal = terminalStatuses.includes(existing.order_status);
+        const respondIsActive = reactiveStatuses.includes(orderStatus);
+        const respondIsDelivered = orderStatus === 'delivered';
+        // UPS Shipped no debe llegar al dispatcher: actualiza estado pero
+        // mantiene/forza dispatch_status='archived'.
+        const isUpsShippedTarget = orderStatus === 'ups_shipped';
+
+        // Bloquea solo activo->activo con ruta asignada (driver podria estar
+        // trabajando). Reactivacion y avance-a-delivered se permiten siempre.
+        if (existing.route_id && !isInTerminal && !respondIsDelivered && !isUpsShippedTarget) {
           mismatchKept++;
           console.log(`[StartupReconcile] MISMATCH ignorado (ruta): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} route=${existing.route_id}`);
           continue;
         }
-
-        const isInTerminal = terminalStatuses.includes(existing.order_status);
-        const respondIsActive = reactiveStatuses.includes(orderStatus);
-        // UPS Shipped no debe llegar al dispatcher: actualiza estado pero
-        // mantiene/forza dispatch_status='archived'.
-        const isUpsShippedTarget = orderStatus === 'ups_shipped';
 
         try {
           if (isUpsShippedTarget) {
@@ -2649,12 +2706,31 @@ class PollingService {
             mismatchKept++;
             console.log(`[StartupReconcile] Archivada UPS: "${existing.customer_name}" ${existing.order_status} -> ups_shipped`);
           } else if (isInTerminal && respondIsActive) {
-            await ValidatedAddress.update(
+            // Snapshot defensivo, luego update atomico por route_id.
+            await saveToDeliveryHistory(existing);
+            const [updRows] = await ValidatedAddress.update(
               this.buildReactivationFields(orderStatus),
-              { where: { id: existing.id } }
+              { where: { id: existing.id, route_id: existing.route_id } }
             );
-            reactivated++;
-            console.log(`[StartupReconcile] Reactivado: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (nuevo ciclo)`);
+            if (updRows > 0) {
+              reactivated++;
+              const reactNote = existing.route_id ? ` (ruta vieja ${existing.route_id} liberada)` : '';
+              console.log(`[StartupReconcile] Reactivado: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (nuevo ciclo)${reactNote}`);
+            } else {
+              console.log(`[StartupReconcile] Reactivacion saltada (route_id cambio): "${existing.customer_name}"`);
+            }
+          } else if (existing.route_id && respondIsDelivered) {
+            await saveToDeliveryHistory(existing);
+            const [updRows] = await ValidatedAddress.update(
+              { order_status: 'delivered', delivered_at: existing.delivered_at || new Date() },
+              { where: { id: existing.id, route_id: existing.route_id } }
+            );
+            if (updRows > 0) {
+              synced++;
+              console.log(`[StartupReconcile] Avance a delivered: "${existing.customer_name}" ${existing.order_status} -> delivered (route=${existing.route_id})`);
+            } else {
+              console.log(`[StartupReconcile] Avance a delivered saltado (route_id cambio): "${existing.customer_name}"`);
+            }
           } else if (!isInTerminal) {
             const updateFields = { order_status: orderStatus };
             if (existing.dispatch_status === 'archived') {

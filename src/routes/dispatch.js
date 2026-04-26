@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress } from '../models/index.js';
+import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op, literal } from 'sequelize';
 import bcrypt from 'bcryptjs';
@@ -60,45 +61,6 @@ const VALID_TRANSITIONS = {
   ups_shipped: ['delivered'],
   delivered: []
 };
-
-async function saveToDeliveryHistory(order) {
-  try {
-    // Dedup por (orden, instante de entrega): permite varios snapshots cuando
-    // la misma orden se reactiva (cliente vuelve a pedir) y se vuelve a entregar.
-    const deliveredAt = order.delivered_at || new Date();
-    const existing = await DeliveryHistory.findOne({
-      where: { original_order_id: order.id, delivered_at: deliveredAt }
-    });
-    if (existing) return;
-
-    const driver = order.assigned_driver_id ? await User.findByPk(order.assigned_driver_id) : null;
-    const now = deliveredAt;
-    const monthYear = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    await DeliveryHistory.create({
-      original_order_id: order.id,
-      customer_name: order.customer_name,
-      customer_phone: order.customer_phone,
-      address: order.validated_address,
-      city: order.city,
-      state: order.state,
-      driver_id: order.assigned_driver_id,
-      driver_name: driver?.username || order.driver_name || null,
-      commission_per_stop: driver?.commission_per_stop || 0,
-      order_cost: order.order_cost || 0,
-      deposit_amount: order.deposit_amount || 0,
-      total_to_collect: order.total_to_collect || 0,
-      amount_collected: order.amount_collected || 0,
-      payment_method: order.payment_method,
-      payment_status: order.payment_status,
-      delivered_at: now,
-      month_year: monthYear,
-      archived: false
-    });
-  } catch (err) {
-    console.error('[DeliveryHistory] Error guardando historial:', err.message);
-  }
-}
 
 router.get('/orders', requireAuth, async (req, res) => {
   try {
@@ -2376,9 +2338,12 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
 
     const result = {
       archived: 0, updated: 0, skipped_route: 0, errors: 0, deleted: 0,
-      skipped_delivered: 0, total: orders.length
+      skipped_delivered: 0, reactivated: 0, advanced_to_delivered: 0,
+      total: orders.length
     };
     const DELAY_MS = 250;
+    const TERMINAL = ['delivered', 'ups_shipped'];
+    const ACTIVE = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
 
     for (let i = 0; i < orders.length; i++) {
       const order = orders[i];
@@ -2427,13 +2392,65 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
         const fresh = await ValidatedAddress.findByPk(order.id);
         if (!fresh) continue;
 
+        const isInTerminal = TERMINAL.includes(fresh.order_status);
+        const expectedIsActive = expectedStatus && ACTIVE.includes(expectedStatus);
+        const expectedIsDelivered = expectedStatus === 'delivered';
+
+        // Reactivacion (terminal->activo): nuevo ciclo. Limpia route_id viejo.
+        // Permitida AUN con route_id (la ruta vieja ya termino). Snapshot
+        // defensivo + update atomico (route_id=fresh.route_id) para no pisar
+        // un reasignamiento concurrente.
+        if (expectedIsActive && isInTerminal && expectedStatus !== fresh.order_status) {
+          await saveToDeliveryHistory(fresh);
+          const [reUpd] = await ValidatedAddress.update(
+            {
+              order_status: expectedStatus,
+              delivered_at: null,
+              route_id: null,
+              assigned_driver_id: null,
+              driver_name: null,
+              payment_status: 'pending',
+              amount_collected: null,
+              payment_method: null,
+              dispatch_status: 'available'
+            },
+            { where: { id: fresh.id, route_id: fresh.route_id } }
+          );
+          if (reUpd > 0) {
+            result.reactivated++;
+            const reactNote = fresh.route_id ? ` (ruta vieja ${fresh.route_id} liberada)` : '';
+            console.log(`[LifecycleResync] Reactivada: "${fresh.customer_name}" ${fresh.order_status} -> ${expectedStatus} (nuevo ciclo)${reactNote}`);
+          } else {
+            result.skipped_route++;
+            console.log(`[LifecycleResync] SKIP reactivacion (route_id cambio): "${fresh.customer_name}"`);
+          }
+          continue;
+        }
+
+        // Avance a delivered con ruta asignada: chofer completo, snapshot a history.
+        if (expectedIsDelivered && fresh.route_id && fresh.order_status !== 'delivered') {
+          await saveToDeliveryHistory(fresh);
+          const [adUpd] = await ValidatedAddress.update(
+            { order_status: 'delivered', delivered_at: fresh.delivered_at || new Date() },
+            { where: { id: fresh.id, route_id: fresh.route_id } }
+          );
+          if (adUpd > 0) {
+            result.advanced_to_delivered++;
+            console.log(`[LifecycleResync] Avance a delivered: "${fresh.customer_name}" ${fresh.order_status} -> delivered (route=${fresh.route_id})`);
+          } else {
+            result.skipped_route++;
+            console.log(`[LifecycleResync] SKIP avance delivered (route_id cambio): "${fresh.customer_name}"`);
+          }
+          continue;
+        }
+
         if (fresh.route_id) {
           if (
             (expectedStatus && expectedStatus !== fresh.order_status && !['delivered', 'ups_shipped'].includes(expectedStatus)) ||
             isExcludedTag || isExcludedLifecycle || isUpsShipped
           ) {
             result.skipped_route++;
-            console.log(`[LifecycleResync] SKIP (ruta): "${fresh.customer_name}" route=${fresh.route_id}`);
+            console.log(`[LifecycleResync] SKIP (ruta activa): "${fresh.customer_name}" route=${fresh.route_id} dispatch=${fresh.order_status} respond=${expectedStatus || lifecycle}`);
           }
           continue;
         }
@@ -2459,12 +2476,19 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
         }
 
         if (expectedStatus && expectedStatus !== fresh.order_status) {
-          // 'delivered' requiere flujo formal (saveToDeliveryHistory para
-          // commission/accounting). NO lo aplicamos aqui: lo dejamos para
-          // que el admin lo marque desde la UI normal del dispatcher.
+          // delivered sin ruta: tambien guarda snapshot por consistencia.
           if (expectedStatus === 'delivered') {
-            result.skipped_delivered++;
-            console.log(`[LifecycleResync] SKIP (delivered requiere flujo manual): "${fresh.customer_name}" ${fresh.order_status} -> ${expectedStatus}`);
+            await saveToDeliveryHistory(fresh);
+            const [updated] = await ValidatedAddress.update(
+              { order_status: 'delivered', delivered_at: fresh.delivered_at || new Date() },
+              { where: { id: fresh.id, route_id: null } }
+            );
+            if (updated > 0) {
+              result.updated++;
+              console.log(`[LifecycleResync] Marcada delivered: "${fresh.customer_name}" ${fresh.order_status} -> delivered`);
+            } else {
+              result.skipped_route++;
+            }
             continue;
           }
           // Update atomico: solo si sigue sin ruta.
