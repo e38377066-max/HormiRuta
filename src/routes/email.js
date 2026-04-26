@@ -80,6 +80,18 @@ function getSignificantWords(name) {
     .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
 }
 
+// Matching ESTRICTO entre nombre del email (Gmail/4over) y nombre del cliente
+// en el dispatcher. Evita falsos positivos como "MARTINEZ" matcheando "Martin"
+// o nombres de una sola palabra comun matcheando multiples clientes.
+//
+// Reglas (en orden):
+//   1. Match normalizado exacto -> true (alta confianza).
+//   2. Un nombre contiene al otro como substring CON limites de palabra y
+//      el lado corto tiene >= 6 chars -> true (alta confianza).
+//   3. Comparacion por palabras significativas SOLO con coincidencia EXACTA
+//      de palabras (sin substring). Requiere >= 2 palabras coincidentes
+//      cuando ambos lados tienen >= 2 palabras significativas. Un solo
+//      match de palabra NO es suficiente (demasiado ambiguo).
 function namesMatch(orderName, gmailName) {
   const normOrder = normalizeForMatch(orderName);
   const normGmail = normalizeForMatch(gmailName);
@@ -88,32 +100,32 @@ function namesMatch(orderName, gmailName) {
 
   if (normOrder === normGmail) return true;
 
-  if (normOrder.includes(normGmail) && normGmail.length >= 5) return true;
-  if (normGmail.includes(normOrder) && normOrder.length >= 5) return true;
+  // Containment con limites de palabra (no medio-palabra) y minimo 6 chars
+  // del lado corto. Asi "abc tile co" matchea "maria garcia abc tile co"
+  // pero "martin" no matchea "martinez".
+  const wordBoundary = (haystack, needle) => {
+    const re = new RegExp(`(^|\\s)${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
+    return re.test(haystack);
+  };
+  if (normGmail.length >= 6 && wordBoundary(normOrder, normGmail)) return true;
+  if (normOrder.length >= 6 && wordBoundary(normGmail, normOrder)) return true;
 
   const orderWords = getSignificantWords(orderName);
   const gmailWords = getSignificantWords(gmailName);
 
-  if (!orderWords.length || !gmailWords.length) {
-    const rawOrderWords = normOrder.split(' ').filter(w => w.length >= 3);
-    const rawGmailWords = normGmail.split(' ').filter(w => w.length >= 3);
-    if (!rawOrderWords.length || !rawGmailWords.length) return false;
-    return rawOrderWords.some(ow => rawGmailWords.some(gw => ow === gw || ow.includes(gw) || gw.includes(ow)));
-  }
+  if (!orderWords.length || !gmailWords.length) return false;
 
+  // Solo coincidencia EXACTA de palabras significativas. Sin substring.
   let matches = 0;
   for (const gw of gmailWords) {
-    for (const ow of orderWords) {
-      if (gw === ow || (gw.length >= 5 && ow.includes(gw)) || (ow.length >= 5 && gw.includes(ow))) {
-        matches++;
-        break;
-      }
-    }
+    if (orderWords.includes(gw)) matches++;
   }
 
+  // Una sola palabra coincidente NO es suficiente: demasiado riesgo
+  // (ej. "Tamayo" matchea a 5 clientes distintos). Requiere >= 2.
   const minWords = Math.min(orderWords.length, gmailWords.length);
-  const required = minWords === 1 ? 1 : Math.ceil(minWords * 0.5);
-  return matches >= required;
+  if (minWords < 2) return false;
+  return matches >= 2;
 }
 
 function isWholesaleName(name) {
@@ -161,9 +173,22 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
     for (const gmailOrder of gmailOrders) {
       if (processedGmailOrders.has(gmailOrder.messageId)) continue;
 
-      const match = candidates.find(c =>
+      // Busca TODOS los candidatos que matchean. Si hay ambiguedad (>1),
+      // NO actualiza ninguno: prefiere falso negativo (orden queda en su
+      // estado actual) que falso positivo (orden equivocada movida a pickup).
+      const allMatches = candidates.filter(c =>
         c.customer_name && namesMatch(c.customer_name, gmailOrder.clientName)
       );
+
+      if (allMatches.length > 1) {
+        const names = allMatches.map(m => m.customer_name).join(' | ');
+        console.warn(`[Email Sync] AMBIGUEDAD ignorada: Gmail="${gmailOrder.clientName}" matchea ${allMatches.length} clientes: ${names}`);
+        processedGmailOrders.add(gmailOrder.messageId);
+        skipped.push(`${gmailOrder.clientName} (ambiguo: ${allMatches.length} candidatos)`);
+        continue;
+      }
+
+      const match = allMatches[0];
 
       if (match) {
         processedGmailOrders.add(gmailOrder.messageId);
@@ -199,9 +224,18 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
       }
 
       if (isWholesaleName(gmailOrder.clientName)) {
-        const wClient = wholesaleClients.find(wc =>
+        // Mismo criterio anti-ambiguedad para mayoristas.
+        const wMatches = wholesaleClients.filter(wc =>
           namesMatch(wc.customer_name, gmailOrder.clientName)
         );
+        if (wMatches.length > 1) {
+          const names = wMatches.map(m => m.customer_name).join(' | ');
+          console.warn(`[Email Sync MAY] AMBIGUEDAD ignorada: Gmail="${gmailOrder.clientName}" matchea ${wMatches.length} mayoristas: ${names}`);
+          processedGmailOrders.add(gmailOrder.messageId);
+          skipped.push(`${gmailOrder.clientName} (MAY ambiguo: ${wMatches.length})`);
+          continue;
+        }
+        const wClient = wMatches[0];
 
         if (wClient) {
           processedGmailOrders.add(gmailOrder.messageId);
