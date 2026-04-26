@@ -2444,64 +2444,45 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
           continue;
         }
 
-        if (fresh.route_id) {
-          if (
-            (expectedStatus && expectedStatus !== fresh.order_status && !['delivered', 'ups_shipped'].includes(expectedStatus)) ||
-            isExcludedTag || isExcludedLifecycle || isUpsShipped
-          ) {
-            result.skipped_route++;
-            console.log(`[LifecycleResync] SKIP (ruta activa): "${fresh.customer_name}" route=${fresh.route_id} dispatch=${fresh.order_status} respond=${expectedStatus || lifecycle}`);
-          }
-          continue;
-        }
+        // Respond es fuente de verdad ABSOLUTA. Cualquier cambio se aplica
+        // aqui sin excepcion. Cuando hay ruta activa:
+        //  - Excluido/UPS: archiva y libera ruta (ya no es entrega local).
+        //  - Activo->activo: actualiza order_status, MANTIENE route_id (chofer
+        //    sigue con la parada hasta terminar).
 
         if (isExcludedTag || isExcludedLifecycle || isUpsShipped) {
-          if (fresh.dispatch_status !== 'archived') {
-            // Update atomico: solo si sigue sin ruta.
-            const [updated] = await ValidatedAddress.update(
-              {
-                dispatch_status: 'archived',
-                ...(isUpsShipped ? { order_status: 'ups_shipped' } : {})
-              },
-              { where: { id: fresh.id, route_id: null } }
-            );
-            if (updated > 0) {
-              result.archived++;
-              console.log(`[LifecycleResync] Archivada: "${fresh.customer_name}" (${isExcludedTag ? 'tag' : isUpsShipped ? 'ups' : 'lifecycle'})`);
-            } else {
-              result.skipped_route++;
-            }
+          if (fresh.dispatch_status !== 'archived' || fresh.route_id) {
+            const updateData = { dispatch_status: 'archived' };
+            if (isUpsShipped) updateData.order_status = 'ups_shipped';
+            if (fresh.route_id) updateData.route_id = null;
+            await ValidatedAddress.update(updateData, { where: { id: fresh.id } });
+            result.archived++;
+            const note = fresh.route_id ? ` (ruta vieja ${fresh.route_id} liberada)` : '';
+            console.log(`[LifecycleResync] Archivada: "${fresh.customer_name}" (${isExcludedTag ? 'tag' : isUpsShipped ? 'ups' : 'lifecycle'})${note}`);
           }
           continue;
         }
 
         if (expectedStatus && expectedStatus !== fresh.order_status) {
           // delivered sin ruta: tambien guarda snapshot por consistencia.
-          if (expectedStatus === 'delivered') {
+          if (expectedStatus === 'delivered' && !fresh.route_id) {
             await saveToDeliveryHistory(fresh);
-            const [updated] = await ValidatedAddress.update(
+            await ValidatedAddress.update(
               { order_status: 'delivered', delivered_at: fresh.delivered_at || new Date() },
-              { where: { id: fresh.id, route_id: null } }
+              { where: { id: fresh.id } }
             );
-            if (updated > 0) {
-              result.updated++;
-              console.log(`[LifecycleResync] Marcada delivered: "${fresh.customer_name}" ${fresh.order_status} -> delivered`);
-            } else {
-              result.skipped_route++;
-            }
+            result.updated++;
+            console.log(`[LifecycleResync] Marcada delivered: "${fresh.customer_name}" ${fresh.order_status} -> delivered`);
             continue;
           }
-          // Update atomico: solo si sigue sin ruta.
-          const [updated] = await ValidatedAddress.update(
+          // Activo->activo (con o sin ruta). NO se toca route_id.
+          await ValidatedAddress.update(
             { order_status: expectedStatus },
-            { where: { id: fresh.id, route_id: null } }
+            { where: { id: fresh.id } }
           );
-          if (updated > 0) {
-            result.updated++;
-            console.log(`[LifecycleResync] Sync: "${fresh.customer_name}" ${fresh.order_status} -> ${expectedStatus}`);
-          } else {
-            result.skipped_route++;
-          }
+          result.updated++;
+          const routeNote = fresh.route_id ? ` (ruta=${fresh.route_id} mantenida)` : '';
+          console.log(`[LifecycleResync] Sync: "${fresh.customer_name}" ${fresh.order_status} -> ${expectedStatus}${routeNote}`);
         }
       } catch (err) {
         console.error(`[LifecycleResync] Error en ${order.respond_contact_id}:`, err.message);

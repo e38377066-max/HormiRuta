@@ -1396,34 +1396,31 @@ class PollingService {
         const excludedLifecycles = ['New Lead', 'Impropos', 'IprintPOS'];
         const isExcluded = excludedLifecycles.some(ex => ex.toLowerCase() === contactLifecycle.toLowerCase());
         if (!orderStatus && contactLifecycle && isExcluded) {
-          if (!existing.route_id) {
-            try {
-              if (existing.dispatch_status !== 'archived') {
-                await ValidatedAddress.update(
-                  { dispatch_status: 'archived' },
-                  { where: { id: existing.id } }
-                );
-                console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" archivada (lifecycle=${contactLifecycle}) (${contactIdStr})`);
-                updatedCount++;
-              }
-            } catch (err) {
-              console.error(`[AddressScan] Error archivando ${contactIdStr}:`, err.message);
+          // Respond es fuente de verdad: archiva siempre, incluso con ruta.
+          // Si tiene ruta vieja, la libera (Respond saco la orden del flujo de entrega).
+          try {
+            if (existing.dispatch_status !== 'archived' || existing.route_id) {
+              const updateData = { dispatch_status: 'archived' };
+              if (existing.route_id) updateData.route_id = null;
+              await ValidatedAddress.update(updateData, { where: { id: existing.id } });
+              const note = existing.route_id ? ` (ruta vieja ${existing.route_id} liberada)` : '';
+              console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" archivada (lifecycle=${contactLifecycle})${note} (${contactIdStr})`);
+              updatedCount++;
             }
-          } else {
-            console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" lifecycle=${contactLifecycle} pero tiene ruta asignada, no se archiva (${contactIdStr})`);
+          } catch (err) {
+            console.error(`[AddressScan] Error archivando ${contactIdStr}:`, err.message);
           }
           continue;
         }
-        // Respond.io es fuente de verdad para el estado de la orden.
-        // Reglas (ordenadas por seguridad):
+        // Respond.io es fuente de verdad ABSOLUTA. Cualquier cambio en Respond
+        // se refleja aqui sin excepcion. Reglas (ordenadas por especificidad):
         //  1. Reactivacion (terminal->activo): cliente vuelve a pedir. Limpia
-        //     route_id viejo (la entrega anterior ya esta en DeliveryHistory).
-        //     Permitida AUN con route_id porque la ruta vieja ya termino.
-        //  2. Avance a delivered (activo->delivered) con route_id: chofer
-        //     completo la entrega. Guarda snapshot a DeliveryHistory.
-        //  3. Avance/retroceso entre activos sin ruta: aplica directo.
-        //  4. Mismatch entre activos CON ruta: bloqueado para no romper
-        //     una ruta en marcha (driver podria estar trabajando).
+        //     route_id viejo y campos de entrega. Snapshot defensivo a history.
+        //  2. Avance a delivered (activo->delivered): chofer completo. Snapshot
+        //     a history y marca delivered (mantiene route_id).
+        //  3. Cualquier otro mismatch: actualiza order_status. Si hay ruta
+        //     activa, NO se toca route_id (chofer sigue con la parada hasta
+        //     que termine; el dispatcher refleja el estado real de Respond).
         const terminalStatuses = ['delivered', 'ups_shipped'];
         const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
         const isInTerminal = terminalStatuses.includes(existing.order_status);
@@ -1480,21 +1477,23 @@ class PollingService {
             }
           }
           continue;
-        } else if (orderStatus && existing.order_status !== orderStatus && !existing.route_id && !isInTerminal) {
-          // Caso 3: avance/retroceso entre activos, sin ruta.
+        } else if (orderStatus && existing.order_status !== orderStatus && !isInTerminal) {
+          // Caso 3: avance/retroceso entre activos. Aplica el cambio de Respond
+          // SIN tocar route_id (chofer sigue con la parada si la tiene; el
+          // dispatcher refleja el estado real de Respond).
           updateFields.order_status = orderStatus;
           if (existing.dispatch_status === 'archived') {
             updateFields.dispatch_status = 'available';
           }
           const direction = this.statusCanAdvance(existing.order_status, orderStatus) ? 'avance' : 'retroceso';
-          console.log(`[AddressScan] Lifecycle sync (${direction}): "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
+          const routeNote = existing.route_id ? ` (ruta=${existing.route_id} mantenida)` : '';
+          console.log(`[AddressScan] Lifecycle sync (${direction}): "${existing.customer_name}" ${existing.order_status} -> ${orderStatus}${routeNote} (${contactIdStr})`);
         } else if (orderStatus && existing.dispatch_status === 'archived' && !isInTerminal) {
           updateFields.dispatch_status = 'available';
-        } else if (orderStatus && existing.order_status !== orderStatus && existing.route_id) {
-          // Caso 4: mismatch con ruta activa, no es delivered. Se bloquea para no romper la ruta.
-          console.log(`[AddressScan] Lifecycle MISMATCH ignorado (ruta asignada): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} route=${existing.route_id} (${contactIdStr})`);
         } else if (orderStatus && existing.order_status !== orderStatus && isInTerminal && !respondIsActive) {
-          console.log(`[AddressScan] Lifecycle MISMATCH ignorado (terminal->terminal): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} (${contactIdStr})`);
+          // terminal->terminal (ej. delivered<->ups_shipped). Respond manda.
+          updateFields.order_status = orderStatus;
+          console.log(`[AddressScan] Lifecycle sync (terminal): "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (${contactIdStr})`);
         }
 
         if (Object.keys(updateFields).length > 0) {
@@ -2689,22 +2688,19 @@ class PollingService {
         // mantiene/forza dispatch_status='archived'.
         const isUpsShippedTarget = orderStatus === 'ups_shipped';
 
-        // Bloquea solo activo->activo con ruta asignada (driver podria estar
-        // trabajando). Reactivacion y avance-a-delivered se permiten siempre.
-        if (existing.route_id && !isInTerminal && !respondIsDelivered && !isUpsShippedTarget) {
-          mismatchKept++;
-          console.log(`[StartupReconcile] MISMATCH ignorado (ruta): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus} route=${existing.route_id}`);
-          continue;
-        }
+        // Respond es fuente de verdad ABSOLUTA. Solo se mantiene route_id si
+        // el cambio es entre estados activos (chofer sigue con la parada);
+        // se libera si Respond mando a UPS o reactivacion.
 
         try {
           if (isUpsShippedTarget) {
-            await ValidatedAddress.update(
-              { order_status: 'ups_shipped', dispatch_status: 'archived' },
-              { where: { id: existing.id } }
-            );
+            // UPS: archiva y libera ruta (ya no es entrega local).
+            const updateData = { order_status: 'ups_shipped', dispatch_status: 'archived' };
+            if (existing.route_id) updateData.route_id = null;
+            await ValidatedAddress.update(updateData, { where: { id: existing.id } });
             mismatchKept++;
-            console.log(`[StartupReconcile] Archivada UPS: "${existing.customer_name}" ${existing.order_status} -> ups_shipped`);
+            const note = existing.route_id ? ` (ruta vieja ${existing.route_id} liberada)` : '';
+            console.log(`[StartupReconcile] Archivada UPS: "${existing.customer_name}" ${existing.order_status} -> ups_shipped${note}`);
           } else if (isInTerminal && respondIsActive) {
             // Snapshot defensivo, luego update atomico por route_id.
             await saveToDeliveryHistory(existing);
@@ -2732,16 +2728,24 @@ class PollingService {
               console.log(`[StartupReconcile] Avance a delivered saltado (route_id cambio): "${existing.customer_name}"`);
             }
           } else if (!isInTerminal) {
+            // Activo->activo. Respond manda. NO se toca route_id (chofer sigue
+            // con la parada si la tiene).
             const updateFields = { order_status: orderStatus };
             if (existing.dispatch_status === 'archived') {
               updateFields.dispatch_status = 'available';
             }
             await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
             synced++;
-            console.log(`[StartupReconcile] Sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus}`);
+            const routeNote = existing.route_id ? ` (ruta=${existing.route_id} mantenida)` : '';
+            console.log(`[StartupReconcile] Sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus}${routeNote}`);
           } else {
-            mismatchKept++;
-            console.log(`[StartupReconcile] MISMATCH ignorado (terminal->terminal): "${existing.customer_name}" dispatch=${existing.order_status} respond=${orderStatus}`);
+            // Terminal->terminal (ej. delivered<->ups_shipped). Respond manda.
+            await ValidatedAddress.update(
+              { order_status: orderStatus },
+              { where: { id: existing.id } }
+            );
+            synced++;
+            console.log(`[StartupReconcile] Sync (terminal): "${existing.customer_name}" ${existing.order_status} -> ${orderStatus}`);
           }
         } catch (err) {
           console.error(`[StartupReconcile] Error ${contactIdStr}:`, err.message);
