@@ -2854,6 +2854,40 @@ class PollingService {
         }
       }
 
+      // VACIADO: archiva en dispatcher cualquier orden cuyo contacto NO este
+      // en NINGUN lifecycle activo de Respond (10 lifecycles consultados).
+      // Esto incluye contactos eliminados de Respond, contactos sin lifecycle,
+      // o contactos en lifecycles desconocidos. Respond es fuente de verdad
+      // ABSOLUTA: si no esta en Respond activo, no debe estar en dispatcher.
+      try {
+        const respondContactIds = allContacts.map(c => c.id.toString());
+        const orphanWhere = {
+          respond_contact_id: { [Op.ne]: null },
+          dispatch_status: { [Op.ne]: 'archived' }
+        };
+        if (respondContactIds.length > 0) {
+          orphanWhere.respond_contact_id = { [Op.notIn]: respondContactIds };
+        }
+        const orphans = await ValidatedAddress.findAll({ where: orphanWhere });
+        let archivedOrphans = 0;
+        for (const orphan of orphans) {
+          // Validacion estricta: solo IDs numericos (evita borrar manuales con
+          // respond_contact_id raro). Las ordenes manuales no tienen contact_id.
+          if (!/^\d+$/.test(String(orphan.respond_contact_id))) continue;
+          const updateData = { dispatch_status: 'archived' };
+          if (orphan.route_id) updateData.route_id = null;
+          await ValidatedAddress.update(updateData, { where: { id: orphan.id } });
+          archivedOrphans++;
+          const note = orphan.route_id ? ` (ruta vieja ${orphan.route_id} liberada)` : '';
+          console.log(`[StartupReconcile] Vaciada (no esta en lifecycle activo de Respond): "${orphan.customer_name}" id=${orphan.respond_contact_id}${note}`);
+        }
+        if (archivedOrphans > 0) {
+          console.log(`[StartupReconcile] ${archivedOrphans} orden(es) vaciada(s) por no existir en lifecycle activo de Respond`);
+        }
+      } catch (err) {
+        console.error('[StartupReconcile] Error vaciando huerfanos:', err.message);
+      }
+
       console.log(`[StartupReconcile] Completado: ${reactivated} reactivada(s), ${synced} sincronizada(s), ${mismatchKept} ignorada(s)`);
     } catch (error) {
       console.error('[StartupReconcile] Error general:', error.message);
