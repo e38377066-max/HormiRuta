@@ -158,6 +158,25 @@ class PollingService {
       setTimeout(() => botReactiveScanFn(), 5000);
       poller.botReactiveScanIntervalId = setInterval(botReactiveScanFn, 3000);
       console.log(`[BotReactiveScan] Escáner de reactivación ACTIVO cada 3s`);
+
+      // Reconciliacion COMPLETA por lifecycle cada 5 min. Trae TODOS los
+      // contactos por lifecycle (no solo conversaciones abiertas), garantizando
+      // que las columnas del dispatcher coincidan EXACTAMENTE con Respond
+      // incluso cuando la conversacion esta cerrada.
+      const fullReconcileFn = async () => {
+        if (!poller.isRunning) return;
+        if (poller.fullReconcileInProgress) return;
+        poller.fullReconcileInProgress = true;
+        try {
+          await this.reconcileLifecyclesOnStartup();
+        } catch (err) {
+          console.error('[FullReconcile] Error en ciclo periodico:', err.message);
+        } finally {
+          poller.fullReconcileInProgress = false;
+        }
+      };
+      poller.fullReconcileIntervalId = setInterval(fullReconcileFn, 5 * 60 * 1000);
+      console.log(`[FullReconcile] Reconciliacion completa por lifecycle ACTIVA cada 5 min`);
     })();
 
     return { success: true, message: `Polling iniciado cada ${intervalSeconds} segundos` };
@@ -175,6 +194,9 @@ class PollingService {
       }
       if (poller.botReactiveScanIntervalId) {
         clearInterval(poller.botReactiveScanIntervalId);
+      }
+      if (poller.fullReconcileIntervalId) {
+        clearInterval(poller.fullReconcileIntervalId);
       }
       this.activePollers.delete(userId);
       console.log(`Stopped polling and address scanner for user ${userId}`);
@@ -244,6 +266,8 @@ class PollingService {
       poller.isRunning = false;
       if (poller.intervalId) clearInterval(poller.intervalId);
       if (poller.scanIntervalId) clearInterval(poller.scanIntervalId);
+      if (poller.botReactiveScanIntervalId) clearInterval(poller.botReactiveScanIntervalId);
+      if (poller.fullReconcileIntervalId) clearInterval(poller.fullReconcileIntervalId);
       this.activePollers.delete(userId);
       console.log(`[Polling] Detenido para usuario ${userId} (admin stop all)`);
     }
@@ -2625,10 +2649,62 @@ class PollingService {
     }
   }
 
-  // Reconciliacion una sola vez al arrancar el servidor: trae todas las
-  // conversaciones abiertas en Respond.io y ajusta cualquier orden cuyo
-  // lifecycle en dispatch no coincida (incluyendo reactivacion de entregadas
-  // que volvieron a pedir).
+  // Trae TODOS los contactos en cada lifecycle de Respond.io (no solo los que
+  // tienen conversacion abierta). Esto resuelve el problema de columnas que no
+  // coinciden con Respond porque la API de conversaciones abiertas dejaba
+  // afuera contactos cuya conversacion fue cerrada por el agente. Se itera
+  // por cada lifecycle y se inyecta el campo lifecycle al contacto.
+  async fetchAllActiveLifecycleContacts(respondio) {
+    const lifecycles = [
+      'Pending', 'Approved', 'Ordered', 'Pickup Ready',
+      'On Delivery', 'UPS Shipped', 'Delivered',
+      'New Lead', 'Impropos', 'IprintPOS'
+    ];
+    const allContacts = [];
+    const seen = new Set();
+    const counts = {};
+
+    for (const lifecycle of lifecycles) {
+      let cursorId = null;
+      let pages = 0;
+      let lifecycleTotal = 0;
+      while (true) {
+        const result = await respondio.listContactsByLifecycleValue({
+          lifecycle,
+          limit: 99,
+          cursorId
+        });
+        if (!result.success) {
+          console.error(`[FullReconcile] Error fetching ${lifecycle}:`, result.error);
+          break;
+        }
+        const items = result.items || [];
+        for (const c of items) {
+          const idStr = c.id.toString();
+          // Inyecta el lifecycle (el endpoint filtrado garantiza que es ese).
+          c.lifecycle = lifecycle;
+          c.lifecycleStage = lifecycle;
+          if (seen.has(idStr)) continue;
+          seen.add(idStr);
+          allContacts.push(c);
+          lifecycleTotal++;
+        }
+        pages++;
+        if (!result.pagination?.nextCursor || items.length < 99) break;
+        cursorId = result.pagination.nextCursor;
+      }
+      counts[lifecycle] = lifecycleTotal;
+    }
+    const summary = Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(' ');
+    console.log(`[FullReconcile] Total contactos por lifecycle => ${summary}`);
+    return allContacts;
+  }
+
+  // Reconciliacion completa: trae TODOS los contactos por lifecycle (no solo
+  // conversaciones abiertas) y ajusta cualquier orden cuyo lifecycle en
+  // dispatch no coincida. Se ejecuta al arrancar y luego cada 5 min via
+  // setInterval, asegurando que las columnas del dispatcher reflejen Respond
+  // EXACTAMENTE incluso si la conversacion del cliente esta cerrada.
   async reconcileLifecyclesOnStartup() {
     try {
       const settings = await getGlobalSettings();
@@ -2640,23 +2716,9 @@ class PollingService {
       const apiToken = settings.respond_api_token;
       const respondio = this.getRespondioInstance(apiToken);
 
-      console.log('[StartupReconcile] Iniciando reconciliacion de lifecycle...');
-      let allContacts = [];
-      let cursorId = null;
-      let pageCount = 0;
-      while (true) {
-        const result = await respondio.listOpenConversations({ limit: 99, cursorId });
-        if (!result.success) {
-          console.error('[StartupReconcile] Error obteniendo conversaciones:', result.error);
-          break;
-        }
-        const items = result.items || [];
-        allContacts = [...allContacts, ...items];
-        pageCount++;
-        if (!result.pagination?.nextCursor || items.length < 99) break;
-        cursorId = result.pagination.nextCursor;
-      }
-      console.log(`[StartupReconcile] ${allContacts.length} conversaciones abiertas en ${pageCount} pagina(s)`);
+      console.log('[StartupReconcile] Iniciando reconciliacion completa por lifecycle...');
+      const allContacts = await this.fetchAllActiveLifecycleContacts(respondio);
+      console.log(`[StartupReconcile] ${allContacts.length} contactos en lifecycles activos+excluidos`);
 
       if (allContacts.length === 0) return;
 
