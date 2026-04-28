@@ -2690,8 +2690,8 @@ class PollingService {
       let pages = 0;
       let lifecycleTotal = 0;
       while (true) {
-        const result = await respondio.listContactsByLifecycleValue({
-          lifecycle,
+        const result = await respondio.listContactsByLifecycle({
+          lifecycleStage: lifecycle,
           limit: 99,
           cursorId
         });
