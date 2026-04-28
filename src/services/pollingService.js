@@ -1836,11 +1836,32 @@ class PollingService {
               const agentNorm = agentAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
               const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
               const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const cfNorm = (contactFieldAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
               if (agentNorm !== existValidNorm && agentNorm !== existOrigNorm) {
                 const agentGeocoded = await geocodingService.geocodeAddress(agentAddress);
                 const agentFinal = agentGeocoded.success ? agentGeocoded.fullAddress : agentAddress;
                 console.log(`[AddressScan] Dirección corregida por agente en chat para ${contactName} (${contact.id}): "${agentFinal}" (anterior: "${existing.validated}") [agent_chat_corrected]`);
                 await this.saveValidatedAddress(userId, contact, agentFinal, agentAddress, agentGeocoded.zip || null, agentGeocoded, 'contact_corrected');
+
+                // Push back al campo Address del contacto en Respond.io si difiere.
+                // Si el agente corrigio en el chat pero nunca actualizo el campo
+                // del contacto, lo hacemos automaticamente para que Respond
+                // refleje la direccion correcta (Felipe-fix).
+                if (agentNorm !== cfNorm) {
+                  try {
+                    const upd = await respondio.updateContactCustomFields(contact.id, {
+                      Address: agentFinal
+                    });
+                    if (upd.success) {
+                      console.log(`[AddressScan] Campo Address actualizado en Respond para ${contactName} (${contact.id}): "${contactFieldAddress || '(vacio)'}" -> "${agentFinal}"`);
+                    } else {
+                      console.error(`[AddressScan] Error actualizando Address en Respond ${contact.id}: ${upd.error}`);
+                    }
+                  } catch (pushErr) {
+                    console.error(`[AddressScan] Error push Address ${contact.id}:`, pushErr.message);
+                  }
+                }
+
                 this.addressScannedContacts.delete(contactIdStr);
                 continue;
               }
