@@ -1184,38 +1184,6 @@ class ChatbotService {
       return { handled: true, action: 'welcome_existing_show_menu' };
     }
     
-    // Si viene de Facebook Ad, saludar y pedir ZIP directo (flujo sin info).
-    // Intentamos identificar el producto del anuncio (ej. "Tarjetas") leyendo
-    // tags, custom fields y los primeros mensajes — así el bot ya sabe de qué
-    // vino el cliente y nunca tendrá que adivinar más adelante.
-    if (isFromFacebookAd) {
-      const adProduct = await this.extractAdProductHint(contact);
-
-      const greeting = await this.getAIMsg(
-        'facebook_ad_welcome',
-        { customerName, lastMessage: messageText, product: adProduct?.name || null },
-        this.settings.welcome_from_ads || 'Hola! 👋 Gracias por tu interes.\n\nPara verificar si tenemos cobertura en tu zona, por favor enviame tu codigo postal (ZIP) 📍\n\nPor ejemplo: 75208'
-      );
-      await this.sendMessage(contact.id, greeting);
-
-      await this.updateConversationState(contact.id, {
-        state: 'awaiting_zip_no_info',
-        has_prior_info: false,
-        from_ads: true,
-        awaiting_response: 'zip_code',
-        greeting_sent: true,
-        selected_product: adProduct?.name || null
-      });
-      await this.addTrackingTag(contact.id, 'FacebookAd');
-      if (adProduct) {
-        await this.addTrackingTag(contact.id, `Producto_${adProduct.name}`);
-        await this.addComment(contact.id, `[Bot] Cliente vino del anuncio de Facebook con producto detectado: ${adProduct.name}.`);
-      } else {
-        await this.addComment(contact.id, '[Bot] Cliente vino de Facebook Ad pero no se pudo identificar el producto del anuncio.');
-      }
-
-      return { handled: true, action: 'facebook_ad_direct_zip', product: adProduct?.name || null };
-    }
     
     // Para cualquier mensaje genérico: saludar y preguntar si ya tiene información previa
     const welcomeMsg = await this.getAIMsg('welcome_new', { customerName, lastMessage: messageText }, msgs.welcomeNew);
@@ -1732,18 +1700,9 @@ class ChatbotService {
         StyleLearningService.getActive(this.userId).catch(() => null)
       ]);
 
-      // Si todavía no tenemos producto y aún no se intentó, detectarlo del anuncio
-      if (!convState.selected_product && !convState.greeting_sent) {
-        try {
-          const adProduct = await this.extractAdProductHint(contact);
-          if (adProduct?.name) {
-            await this.updateConversationState(contact.id, { selected_product: adProduct.name });
-            convState.selected_product = adProduct.name;
-            await this.addTrackingTag(contact.id, `Producto_${adProduct.name}`);
-            await this.addComment(contact.id, `[Bot] Cliente vino del anuncio de Facebook con producto detectado: ${adProduct.name}.`);
-          }
-        } catch (_) {}
-      }
+      // NOTA: No inferimos el producto desde el anuncio. Solo se confirma cuando
+      // el cliente lo menciona explícitamente y la IA lo extrae de su mensaje
+      // (ver el bloque ext.product abajo).
 
       // Llama a la IA conversacional
       const ai = await this.ai.generateConversationalReply({
