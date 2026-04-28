@@ -241,39 +241,49 @@ class RespondioService {
 
   async listContactsByLifecycle(options = {}) {
     const { lifecycleStage = 'Pending', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
-    
-    try {
-      const params = {};
-      if (limit) params.limit = Math.min(limit, 99);
-      if (cursorId) params.cursorId = cursorId;
 
-      const body = {
-        search: '',
-        timezone: timezone,
-        filter: {
-          $and: [{
-            category: 'contactField',
-            field: 'lifecycleStage',
-            operator: 'isEqualTo',
-            value: lifecycleStage
-          }]
-        }
-      };
+    const params = {};
+    if (limit) params.limit = Math.min(limit, 99);
+    if (cursorId) params.cursorId = cursorId;
 
-      const response = await this.requestWithRetry('post', '/contact/list', body, { params });
-      return {
-        success: true,
-        items: response.data?.items || [],
-        pagination: response.data?.pagination || null
-      };
-    } catch (error) {
-      console.error(`Respond.io list contacts by lifecycle (${lifecycleStage}) error:`, error.response?.data || error.message);
-      return {
-        success: false,
-        items: [],
-        error: error.response?.data?.message || error.message
-      };
+    // El endpoint /contact/list de Respond.io es exigente con el formato del
+    // filtro por lifecycle. Probamos varios formatos hasta que uno funcione.
+    const filterCandidates = [
+      { category: 'lifecycle', name: 'lifecycle', operator: 'isEqualTo', value: lifecycleStage },
+      { category: 'lifecycle', operator: 'isEqualTo', name: 'lifecycleStage', value: lifecycleStage },
+      { category: 'systemField', field: 'lifecycle', operator: 'isEqualTo', value: lifecycleStage },
+      { category: 'systemField', field: 'lifecycleStage', operator: 'isEqualTo', value: lifecycleStage },
+      { category: 'contactField', field: 'lifecycle', operator: 'isEqualTo', value: lifecycleStage },
+      { category: 'contactField', field: 'lifecycleStage', operator: 'isEqualTo', value: lifecycleStage }
+    ];
+
+    let lastError = null;
+    for (const filter of filterCandidates) {
+      try {
+        const body = {
+          search: '',
+          timezone: timezone,
+          filter: { $and: [filter] }
+        };
+        const response = await this.requestWithRetry('post', '/contact/list', body, { params });
+        return {
+          success: true,
+          items: response.data?.items || [],
+          pagination: response.data?.pagination || null
+        };
+      } catch (error) {
+        lastError = error;
+        const status = error.response?.status;
+        if (status !== 400 && status !== 422) break;
+      }
     }
+
+    console.error(`Respond.io list contacts by lifecycle (${lifecycleStage}) error:`, lastError?.response?.data || lastError?.message);
+    return {
+      success: false,
+      items: [],
+      error: lastError?.response?.data?.message || lastError?.message || 'Unknown error'
+    };
   }
 
   async listContactsByLifecycleValue(options = {}) {
