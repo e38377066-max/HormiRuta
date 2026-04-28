@@ -62,70 +62,43 @@ router.post('/pickup-ready/refresh', requireAdmin, async (req, res) => {
 });
 
 function normalizeForMatch(name) {
-  return name
+  return String(name || '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-const STOP_WORDS = new Set([
-  'the', 'and', 'for', 'las', 'los', 'del', 'por', 'con', 'una', 'uno',
-  'de', 'la', 'el', 'en', 'bc', 'from', 'to', 'set', 'shipment'
+// Etiquetas cortas que 4over antepone al nombre del cliente en el correo
+// (ej. "bc Diaz Cleaning" -> bc = business cards). Se eliminan ANTES de
+// comparar para que el resto se compare 100% igual al nombre del pickup.
+const PREFIX_LABELS = new Set([
+  'bc', 'pc', 'fl', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm'
 ]);
 
-function getSignificantWords(name) {
-  return normalizeForMatch(name)
-    .split(' ')
-    .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+function stripPrefixLabel(name) {
+  if (!name) return '';
+  const trimmed = String(name).trim();
+  const m = trimmed.match(/^([A-Za-z]{2,4})\s+(.+)$/);
+  if (m && PREFIX_LABELS.has(m[1].toLowerCase())) {
+    return m[2].trim();
+  }
+  return trimmed;
 }
 
-// Matching ESTRICTO entre nombre del email (Gmail/4over) y nombre del cliente
-// en el dispatcher. Evita falsos positivos como "MARTINEZ" matcheando "Martin"
-// o nombres de una sola palabra comun matcheando multiples clientes.
-//
-// Reglas (en orden):
-//   1. Match normalizado exacto -> true (alta confianza).
-//   2. Un nombre contiene al otro como substring CON limites de palabra y
-//      el lado corto tiene >= 6 chars -> true (alta confianza).
-//   3. Comparacion por palabras significativas SOLO con coincidencia EXACTA
-//      de palabras (sin substring). Requiere >= 2 palabras coincidentes
-//      cuando ambos lados tienen >= 2 palabras significativas. Un solo
-//      match de palabra NO es suficiente (demasiado ambiguo).
+// Matching ESTRICTO entre el nombre del email (Gmail/4over) y el nombre del
+// cliente en el dispatcher. Despues de normalizar (minusculas, sin signos) y
+// de quitar etiquetas iniciales como "bc", los dos nombres deben ser 100%
+// IGUALES. NO se aceptan coincidencias por substring, palabras parciales,
+// proximidad ni palabras compartidas (asi "Anita's Cleaning" NO matchea
+// "Diaz Cleaning" solo porque ambos tienen "Cleaning").
 function namesMatch(orderName, gmailName) {
-  const normOrder = normalizeForMatch(orderName);
-  const normGmail = normalizeForMatch(gmailName);
+  const normOrder = normalizeForMatch(stripPrefixLabel(orderName));
+  const normGmail = normalizeForMatch(stripPrefixLabel(gmailName));
 
   if (!normOrder || !normGmail) return false;
 
-  if (normOrder === normGmail) return true;
-
-  // Containment con limites de palabra (no medio-palabra) y minimo 6 chars
-  // del lado corto. Asi "abc tile co" matchea "maria garcia abc tile co"
-  // pero "martin" no matchea "martinez".
-  const wordBoundary = (haystack, needle) => {
-    const re = new RegExp(`(^|\\s)${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
-    return re.test(haystack);
-  };
-  if (normGmail.length >= 6 && wordBoundary(normOrder, normGmail)) return true;
-  if (normOrder.length >= 6 && wordBoundary(normGmail, normOrder)) return true;
-
-  const orderWords = getSignificantWords(orderName);
-  const gmailWords = getSignificantWords(gmailName);
-
-  if (!orderWords.length || !gmailWords.length) return false;
-
-  // Solo coincidencia EXACTA de palabras significativas. Sin substring.
-  let matches = 0;
-  for (const gw of gmailWords) {
-    if (orderWords.includes(gw)) matches++;
-  }
-
-  // Una sola palabra coincidente NO es suficiente: demasiado riesgo
-  // (ej. "Tamayo" matchea a 5 clientes distintos). Requiere >= 2.
-  const minWords = Math.min(orderWords.length, gmailWords.length);
-  if (minWords < 2) return false;
-  return matches >= 2;
+  return normOrder === normGmail;
 }
 
 function isWholesaleName(name) {
