@@ -2673,51 +2673,64 @@ class PollingService {
   // Trae TODOS los contactos en cada lifecycle de Respond.io (no solo los que
   // tienen conversacion abierta). Esto resuelve el problema de columnas que no
   // coinciden con Respond porque la API de conversaciones abiertas dejaba
-  // afuera contactos cuya conversacion fue cerrada por el agente. Se itera
-  // por cada lifecycle y se inyecta el campo lifecycle al contacto.
+  // afuera contactos cuya conversacion fue cerrada por el agente.
+  //
+  // Estrategia: el endpoint /contact/list de Respond.io NO acepta filtro por
+  // lifecycle de forma confiable, pero el campo `lifecycle` viene incluido en
+  // cada contacto. Asi que paginamos TODOS los contactos (open + closed) y
+  // filtramos del lado nuestro por el campo lifecycle.
   async fetchAllActiveLifecycleContacts(respondio) {
-    const lifecycles = [
+    const targetLifecycles = new Set([
       'Pending', 'Approved', 'Ordered', 'Pickup Ready',
       'On Delivery', 'UPS Shipped', 'Delivered',
       'New Lead', 'Impropos', 'IprintPOS'
-    ];
+    ]);
     const allContacts = [];
     const seen = new Set();
     const counts = {};
+    for (const lc of targetLifecycles) counts[lc] = 0;
 
-    for (const lifecycle of lifecycles) {
+    const fetchByStatus = async (status) => {
       let cursorId = null;
       let pages = 0;
-      let lifecycleTotal = 0;
+      let total = 0;
       while (true) {
-        const result = await respondio.listContactsByLifecycle({
-          lifecycleStage: lifecycle,
-          limit: 99,
-          cursorId
-        });
+        const result = status === 'open'
+          ? await respondio.listOpenConversations({ limit: 99, cursorId })
+          : await respondio.listClosedConversations({ limit: 99, cursorId });
         if (!result.success) {
-          console.error(`[FullReconcile] Error fetching ${lifecycle}:`, result.error);
+          console.error(`[FullReconcile] Error paginando contactos status=${status}:`, result.error);
           break;
         }
         const items = result.items || [];
         for (const c of items) {
-          const idStr = c.id.toString();
-          // Inyecta el lifecycle (el endpoint filtrado garantiza que es ese).
-          c.lifecycle = lifecycle;
-          c.lifecycleStage = lifecycle;
-          if (seen.has(idStr)) continue;
+          const idStr = c.id?.toString();
+          if (!idStr || seen.has(idStr)) continue;
+          const lc = c.lifecycle || c.lifecycleStage;
+          if (!lc || !targetLifecycles.has(lc)) continue;
+          c.lifecycle = lc;
+          c.lifecycleStage = lc;
           seen.add(idStr);
           allContacts.push(c);
-          lifecycleTotal++;
+          counts[lc]++;
+          total++;
         }
         pages++;
         if (!result.pagination?.nextCursor || items.length < 99) break;
         cursorId = result.pagination.nextCursor;
+        if (pages > 200) {
+          console.warn(`[FullReconcile] Limite de paginas alcanzado para status=${status} (${pages})`);
+          break;
+        }
       }
-      counts[lifecycle] = lifecycleTotal;
-    }
+      return total;
+    };
+
+    const openTotal = await fetchByStatus('open');
+    const closedTotal = await fetchByStatus('closed');
+
     const summary = Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(' ');
-    console.log(`[FullReconcile] Total contactos por lifecycle => ${summary}`);
+    console.log(`[FullReconcile] Contactos en lifecycles activos => ${summary} (open:${openTotal}, closed:${closedTotal})`);
     return allContacts;
   }
 
