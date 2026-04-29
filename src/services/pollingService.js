@@ -1821,9 +1821,61 @@ class PollingService {
           const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
           const outgoingMessages = messagesResult.items.filter(m => m.traffic === 'outgoing');
 
-          // Si ya tiene dirección validada, revisar si el agente envió una dirección
-          // más reciente en el chat para actualizar (corrección enviada en conversación).
+          // Si ya tiene dirección validada, revisar dos cosas:
+          // 1. Si el CLIENTE envió una dirección nueva en el chat (incoming) que
+          //    difiere de la guardada — actualizarla y pushear a Respond.
+          // 2. Si el AGENTE escribió/confirmo una dirección distinta — corrección.
           if (existing && existing.validated) {
+            // (1) Mirar mensajes entrantes del cliente: dirección nueva o
+            // diferente que requiere push al campo Address de Respond.
+            let customerAddress = null;
+            for (const msg of incomingMessages) {
+              const text = msg.message?.text || '';
+              if (!text || text.length < 5) continue;
+              const extracted = extractor.extractAddressFromMessage(text);
+              if (extracted) { customerAddress = extracted; break; }
+            }
+            if (customerAddress) {
+              const custNorm = customerAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const cfNorm = (contactFieldAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              // Caso A: cliente envió direccion DIFERENTE a la guardada — guardar como nueva
+              if (custNorm !== existValidNorm && custNorm !== existOrigNorm) {
+                const custGeocoded = await geocodingService.geocodeAddress(customerAddress);
+                const custFinal = custGeocoded.success ? custGeocoded.fullAddress : customerAddress;
+                console.log(`[AddressScan] Cliente envio direccion NUEVA en chat para ${contactName} (${contact.id}): "${custFinal}" (anterior: "${existing.validated}")`);
+                await this.saveValidatedAddress(userId, contact, custFinal, customerAddress, custGeocoded.zip || null, custGeocoded, 'chat_message');
+                if (custNorm !== cfNorm) {
+                  try {
+                    const upd = await respondio.updateContactCustomFields(contact.id, { Address: custFinal });
+                    if (upd.success) {
+                      console.log(`[AddressScan] Campo Address actualizado en Respond para ${contactName} (${contact.id}): "${contactFieldAddress || '(vacio)'}" -> "${custFinal}"`);
+                    } else {
+                      console.error(`[AddressScan] Error actualizando Address en Respond ${contact.id}: ${upd.error}`);
+                    }
+                  } catch (pushErr) {
+                    console.error(`[AddressScan] Error push Address ${contact.id}:`, pushErr.message);
+                  }
+                }
+                this.addressScannedContacts.delete(contactIdStr);
+                continue;
+              }
+              // Caso B: cliente envió la MISMA direccion guardada pero el campo
+              // Address en Respond esta vacio o desactualizado — push igual.
+              if (custNorm === existValidNorm && cfNorm !== existValidNorm) {
+                try {
+                  const upd = await respondio.updateContactCustomFields(contact.id, { Address: existing.validated });
+                  if (upd.success) {
+                    console.log(`[AddressScan] Campo Address vacio en Respond, pusheando direccion ya validada para ${contactName} (${contact.id}): "${existing.validated}"`);
+                  }
+                } catch (pushErr) {
+                  console.error(`[AddressScan] Error push Address ${contact.id}:`, pushErr.message);
+                }
+              }
+            }
+
+            // (2) Mirar mensajes del agente para detectar correcciones.
             const agentMessages = outgoingMessages.filter(m => m.sender?.source === 'user');
             let agentAddress = null;
             for (const msg of agentMessages) {
