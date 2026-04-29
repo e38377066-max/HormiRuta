@@ -652,21 +652,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 12px;
-  background: rgba(251,146,60,0.15);
-  border: 1px solid rgba(251,146,60,0.3);
-  border-radius: 12px;
+  min-height: 56px;
+  padding: 16px 20px;
+  background: rgba(251,146,60,0.18);
+  border: 1px solid rgba(251,146,60,0.35);
+  border-radius: 14px;
   color: #fdba74;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
 .dac-deliver-btn:active {
-  background: rgba(251,146,60,0.25);
+  background: rgba(251,146,60,0.3);
 }
 
 .dac-deliver-btn:disabled {
@@ -675,22 +677,37 @@
 }
 
 .dac-deliver-btn .material-icons {
-  font-size: 18px;
+  font-size: 22px;
 }
 
 .dac-pay-form {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.dac-pay-form .dac-month-select {
+  flex: 1 1 100%;
+  min-height: 52px;
+  font-size: 16px;
+  padding: 12px 14px;
+}
+
+.dac-pay-form .dac-deliver-btn {
+  flex: 1 1 60%;
+  min-width: 140px;
 }
 
 .dac-cancel-btn {
-  padding: 10px 14px;
-  background: rgba(100,116,139,0.15);
-  border: 1px solid rgba(100,116,139,0.2);
-  border-radius: 12px;
-  color: #94a3b8;
-  font-size: 13px;
+  flex: 1 1 30%;
+  min-height: 52px;
+  padding: 14px 18px;
+  background: rgba(100,116,139,0.18);
+  border: 1px solid rgba(100,116,139,0.28);
+  border-radius: 14px;
+  color: #cbd5e1;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
