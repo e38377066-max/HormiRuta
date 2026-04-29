@@ -231,6 +231,7 @@ function CompletedRouteCard({ r, onRefresh }) {
   const [delivering, setDelivering] = useState(false)
   const [method, setMethod] = useState('')
   const [showPayForm, setShowPayForm] = useState(false)
+  const [showStops, setShowStops] = useState(false)
 
   const handleDeliver = async () => {
     if (!method) return
@@ -308,6 +309,63 @@ function CompletedRouteCard({ r, onRefresh }) {
             </span>
           )}
         </div>
+      )}
+
+      {Array.isArray(r.stops) && r.stops.length > 0 && (
+        <>
+          <button
+            className="dac-stops-toggle"
+            onClick={() => setShowStops(v => !v)}
+          >
+            <span className="material-icons">{showStops ? 'expand_less' : 'expand_more'}</span>
+            {showStops ? 'Ocultar paradas' : `Ver ${r.stops.length} parada${r.stops.length !== 1 ? 's' : ''}`}
+          </button>
+          {showStops && (
+            <div className="dac-stops-list">
+              {r.stops.map((s, idx) => {
+                const isCompleted = s.status === 'completed'
+                const isSkipped = s.status === 'skipped' || s.status === 'failed'
+                return (
+                  <div
+                    key={s.id}
+                    className={`dac-stop-row ${isCompleted ? 'is-completed' : ''} ${isSkipped ? 'is-skipped' : ''}`}
+                  >
+                    <span className={`dac-stop-icon material-icons ${isCompleted ? 'ico-completed' : isSkipped ? 'ico-skipped' : 'ico-pending'}`}>
+                      {isCompleted ? 'check_circle' : isSkipped ? 'cancel' : 'radio_button_unchecked'}
+                    </span>
+                    <div className="dac-stop-body">
+                      <div className="dac-stop-name">
+                        <span className="dac-stop-num">{idx + 1}.</span>
+                        <span className="dac-stop-text">{s.customer_name || 'Sin nombre'}</span>
+                        {isSkipped && <span className="dac-stop-badge dac-stop-badge-skipped">Saltada</span>}
+                        {isCompleted && <span className="dac-stop-badge dac-stop-badge-completed">Entregada</span>}
+                      </div>
+                      {s.address && (
+                        <div className="dac-stop-addr">
+                          <span className="material-icons">place</span>
+                          <span>{s.address}{s.apartment_number ? `, Apt ${s.apartment_number}` : ''}</span>
+                        </div>
+                      )}
+                      {(Number(s.amount_collected) > 0 || s.payment_method) && (
+                        <div className="dac-stop-chips">
+                          {Number(s.amount_collected) > 0 && (
+                            <span className="dac-stop-chip c-green">+{fmt(s.amount_collected)}</span>
+                          )}
+                          {s.payment_method && (
+                            <span className="dac-stop-chip">{s.payment_method}</span>
+                          )}
+                        </div>
+                      )}
+                      {isSkipped && s.failed_reason && (
+                        <div className="dac-stop-reason">{s.failed_reason}</div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {!r.payment_delivered && (

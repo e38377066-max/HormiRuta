@@ -2098,7 +2098,9 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
     });
 
     const result = routes.map(r => {
-      const routeStops = stopMap[r.id] || [];
+      const routeStops = (stopMap[r.id] || [])
+        .slice()
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
       const totalCollected = Number(r.route_total_collected || 0) || routeStops.reduce((sum, s) => sum + Number(s.amount_collected || 0), 0);
       const commission = commissionPerStop * routeStops.length;
       const grossToDeliver = totalCollected - commission;
@@ -2117,7 +2119,21 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
         payment_delivered_at: r.payment_delivered_at || null,
         admin_confirmed: r.admin_confirmed || false,
         admin_amount_received: received,
-        admin_remaining: pendingToDeliver
+        admin_remaining: pendingToDeliver,
+        stops: routeStops.map(s => ({
+          id: s.id,
+          order: s.order,
+          status: s.status,
+          customer_name: s.customer_name,
+          address: s.address,
+          apartment_number: s.apartment_number,
+          phone: s.phone,
+          completed_at: s.completed_at,
+          amount_collected: s.amount_collected,
+          payment_method: s.payment_method,
+          total_to_collect: s.total_to_collect,
+          failed_reason: s.failed_reason
+        }))
       };
     });
 
