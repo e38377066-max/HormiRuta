@@ -1826,25 +1826,79 @@ class PollingService {
           //    difiere de la guardada — actualizarla y pushear a Respond.
           // 2. Si el AGENTE escribió/confirmo una dirección distinta — corrección.
           if (existing && existing.validated) {
-            // (1) Mirar mensajes entrantes del cliente: dirección nueva o
-            // diferente que requiere push al campo Address de Respond.
+            // Buscamos la mejor candidata en mensajes entrantes (cliente) y en
+            // mensajes salientes del agente, comparando timestamps. La MÁS
+            // RECIENTE gana (Felipe-fix preservado: si el agente corrige
+            // despues, su correccion prevalece sobre el ultimo mensaje del
+            // cliente; pero si el cliente envia una direccion nueva despues,
+            // se respeta tambien).
+            const tsOf = (m) => new Date(m?.createdAt || m?.timestamp || 0).getTime();
+
             let customerAddress = null;
+            let customerTs = 0;
             for (const msg of incomingMessages) {
               const text = msg.message?.text || '';
               if (!text || text.length < 5) continue;
               const extracted = extractor.extractAddressFromMessage(text);
-              if (extracted) { customerAddress = extracted; break; }
+              if (extracted) { customerAddress = extracted; customerTs = tsOf(msg); break; }
             }
-            if (customerAddress) {
+
+            const agentMessages = outgoingMessages.filter(m => m.sender?.source === 'user');
+            let agentAddress = null;
+            let agentTs = 0;
+            for (const msg of agentMessages) {
+              const text = msg.message?.text || '';
+              if (!text || text.length < 5) continue;
+              const extracted = extractor.extractAddressFromMessage(text);
+              if (extracted) { agentAddress = extracted; agentTs = tsOf(msg); break; }
+            }
+
+            // Decide cual aplicar (la mas reciente gana). Si solo hay uno, ese
+            // gana. Si no hay ninguno, marcar escaneado y continuar.
+            let applyKind = null; // 'agent' | 'customer' | null
+            if (agentAddress && customerAddress) {
+              applyKind = agentTs >= customerTs ? 'agent' : 'customer';
+            } else if (agentAddress) {
+              applyKind = 'agent';
+            } else if (customerAddress) {
+              applyKind = 'customer';
+            }
+
+            const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cfNorm = (contactFieldAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+            if (applyKind === 'agent') {
+              const agentNorm = agentAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (agentNorm !== existValidNorm && agentNorm !== existOrigNorm) {
+                const agentGeocoded = await geocodingService.geocodeAddress(agentAddress);
+                const agentFinal = agentGeocoded.success ? agentGeocoded.fullAddress : agentAddress;
+                console.log(`[AddressScan] Dirección corregida por agente en chat para ${contactName} (${contact.id}): "${agentFinal}" (anterior: "${existing.validated}") [agent_chat_corrected, ts=${agentTs}]`);
+                await this.saveValidatedAddress(userId, contact, agentFinal, agentAddress, agentGeocoded.zip || null, agentGeocoded, 'contact_corrected');
+
+                // Push back al campo Address del contacto en Respond.io si difiere.
+                if (agentNorm !== cfNorm) {
+                  try {
+                    const upd = await respondio.updateContactCustomFields(contact.id, { Address: agentFinal });
+                    if (upd.success) {
+                      console.log(`[AddressScan] Campo Address actualizado en Respond para ${contactName} (${contact.id}): "${contactFieldAddress || '(vacio)'}" -> "${agentFinal}"`);
+                    } else {
+                      console.error(`[AddressScan] Error actualizando Address en Respond ${contact.id}: ${upd.error}`);
+                    }
+                  } catch (pushErr) {
+                    console.error(`[AddressScan] Error push Address ${contact.id}:`, pushErr.message);
+                  }
+                }
+                this.addressScannedContacts.delete(contactIdStr);
+                continue;
+              }
+            } else if (applyKind === 'customer') {
               const custNorm = customerAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              const cfNorm = (contactFieldAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
               // Caso A: cliente envió direccion DIFERENTE a la guardada — guardar como nueva
               if (custNorm !== existValidNorm && custNorm !== existOrigNorm) {
                 const custGeocoded = await geocodingService.geocodeAddress(customerAddress);
                 const custFinal = custGeocoded.success ? custGeocoded.fullAddress : customerAddress;
-                console.log(`[AddressScan] Cliente envio direccion NUEVA en chat para ${contactName} (${contact.id}): "${custFinal}" (anterior: "${existing.validated}")`);
+                console.log(`[AddressScan] Cliente envio direccion NUEVA en chat para ${contactName} (${contact.id}): "${custFinal}" (anterior: "${existing.validated}") [ts=${customerTs}]`);
                 await this.saveValidatedAddress(userId, contact, custFinal, customerAddress, custGeocoded.zip || null, custGeocoded, 'chat_message');
                 if (custNorm !== cfNorm) {
                   try {
@@ -1875,49 +1929,6 @@ class PollingService {
               }
             }
 
-            // (2) Mirar mensajes del agente para detectar correcciones.
-            const agentMessages = outgoingMessages.filter(m => m.sender?.source === 'user');
-            let agentAddress = null;
-            for (const msg of agentMessages) {
-              const text = msg.message?.text || '';
-              if (!text || text.length < 5) continue;
-              const extracted = extractor.extractAddressFromMessage(text);
-              if (extracted) { agentAddress = extracted; break; }
-            }
-            if (agentAddress) {
-              const agentNorm = agentAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              const cfNorm = (contactFieldAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (agentNorm !== existValidNorm && agentNorm !== existOrigNorm) {
-                const agentGeocoded = await geocodingService.geocodeAddress(agentAddress);
-                const agentFinal = agentGeocoded.success ? agentGeocoded.fullAddress : agentAddress;
-                console.log(`[AddressScan] Dirección corregida por agente en chat para ${contactName} (${contact.id}): "${agentFinal}" (anterior: "${existing.validated}") [agent_chat_corrected]`);
-                await this.saveValidatedAddress(userId, contact, agentFinal, agentAddress, agentGeocoded.zip || null, agentGeocoded, 'contact_corrected');
-
-                // Push back al campo Address del contacto en Respond.io si difiere.
-                // Si el agente corrigio en el chat pero nunca actualizo el campo
-                // del contacto, lo hacemos automaticamente para que Respond
-                // refleje la direccion correcta (Felipe-fix).
-                if (agentNorm !== cfNorm) {
-                  try {
-                    const upd = await respondio.updateContactCustomFields(contact.id, {
-                      Address: agentFinal
-                    });
-                    if (upd.success) {
-                      console.log(`[AddressScan] Campo Address actualizado en Respond para ${contactName} (${contact.id}): "${contactFieldAddress || '(vacio)'}" -> "${agentFinal}"`);
-                    } else {
-                      console.error(`[AddressScan] Error actualizando Address en Respond ${contact.id}: ${upd.error}`);
-                    }
-                  } catch (pushErr) {
-                    console.error(`[AddressScan] Error push Address ${contact.id}:`, pushErr.message);
-                  }
-                }
-
-                this.addressScannedContacts.delete(contactIdStr);
-                continue;
-              }
-            }
             this.addressScannedContacts.add(contactIdStr);
             continue;
           }
@@ -2742,16 +2753,22 @@ class PollingService {
     const counts = {};
     for (const lc of targetLifecycles) counts[lc] = 0;
 
+    // `complete` se vuelve false si la paginacion se corta por error de API o
+    // por el cap de seguridad. Si NO esta completa, downstream debe SALTAR
+    // archivado de huerfanos para no archivar ordenes validas por accidente.
+    let complete = true;
     const fetchByStatus = async (status) => {
       let cursorId = null;
       let pages = 0;
       let total = 0;
+      const HARD_PAGE_CAP = 500;
       while (true) {
         const result = status === 'open'
           ? await respondio.listOpenConversations({ limit: 99, cursorId })
           : await respondio.listClosedConversations({ limit: 99, cursorId });
         if (!result.success) {
           console.error(`[FullReconcile] Error paginando contactos status=${status}:`, result.error);
+          complete = false;
           break;
         }
         const items = result.items || [];
@@ -2768,10 +2785,14 @@ class PollingService {
           total++;
         }
         pages++;
-        if (!result.pagination?.nextCursor || items.length < 99) break;
+        // Stop SOLO si Respond no entrego nextCursor — paginacion terminada.
+        // Antes parabamos tambien si items<99, pero algunas APIs entregan
+        // paginas cortas con cursor valido y se perdian contactos.
+        if (!result.pagination?.nextCursor) break;
         cursorId = result.pagination.nextCursor;
-        if (pages > 200) {
-          console.warn(`[FullReconcile] Limite de paginas alcanzado para status=${status} (${pages})`);
+        if (pages >= HARD_PAGE_CAP) {
+          console.warn(`[FullReconcile] Cap de seguridad alcanzado para status=${status} (${pages} paginas) — marcando crawl INCOMPLETO`);
+          complete = false;
           break;
         }
       }
@@ -2782,7 +2803,10 @@ class PollingService {
     const closedTotal = await fetchByStatus('closed');
 
     const summary = Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(' ');
-    console.log(`[FullReconcile] Contactos en lifecycles activos => ${summary} (open:${openTotal}, closed:${closedTotal})`);
+    console.log(`[FullReconcile] Contactos en lifecycles activos => ${summary} (open:${openTotal}, closed:${closedTotal}, completo:${complete})`);
+    // Adjuntamos la bandera al array para que reconcileLifecyclesOnStartup
+    // pueda decidir si es seguro hacer archivado de huerfanos.
+    allContacts.crawlComplete = complete;
     return allContacts;
   }
 
@@ -2945,6 +2969,16 @@ class PollingService {
       // Esto incluye contactos eliminados de Respond, contactos sin lifecycle,
       // o contactos en lifecycles desconocidos. Respond es fuente de verdad
       // ABSOLUTA: si no esta en Respond activo, no debe estar en dispatcher.
+      //
+      // SEGURIDAD: si el crawl de paginacion no fue completo (error de API o
+      // cap de seguridad alcanzado), SALTAMOS el archivado de huerfanos. De
+      // otro modo se archivarian ordenes validas cuyos contactos quedaron
+      // fuera del crawl truncado. Mejor esperar al siguiente ciclo (5 min).
+      if (allContacts.crawlComplete === false) {
+        console.warn('[StartupReconcile] Crawl incompleto: SALTANDO archivado de huerfanos para evitar falsos positivos');
+        console.log(`[StartupReconcile] Completado parcial: ${reactivated} reactivada(s), ${synced} sincronizada(s), ${mismatchKept} ignorada(s)`);
+        return;
+      }
       try {
         const respondContactIds = allContacts.map(c => c.id.toString());
         const orphanWhere = {
