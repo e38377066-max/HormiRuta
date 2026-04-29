@@ -1317,12 +1317,21 @@ class PollingService {
 
       let allContacts = [];
       let cursorId = null;
+      let pages = 0;
+      const HARD_PAGE_CAP = 500;
       while (true) {
         const result = await respondio.listOpenConversations({ limit: 99, cursorId });
         if (!result.success) break;
         allContacts = [...allContacts, ...(result.items || [])];
-        if (!result.pagination?.nextCursor || (result.items || []).length < 99) break;
+        pages++;
+        // Solo parar cuando Respond no entrega cursor — algunas paginas vienen
+        // cortas con cursor valido y se perdian contactos.
+        if (!result.pagination?.nextCursor) break;
         cursorId = result.pagination.nextCursor;
+        if (pages >= HARD_PAGE_CAP) {
+          console.warn(`[AddressScan] Cap de seguridad de paginacion alcanzado (${pages})`);
+          break;
+        }
       }
 
       if (allContacts.length === 0) return;
@@ -1768,16 +1777,21 @@ class PollingService {
             }
           }
 
-          if (existing && existing.source === 'contact_corrected') {
-            if (contactFieldAddress) {
-              const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (cfNorm !== existOrigNorm) {
-                const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
-                if (cfGeocoded.success) {
-                  console.log(`[AddressScan] Direccion re-corregida en contacto ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}" [contact_corrected]`);
-                  await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
-                }
+          // Si el contacto ya fue corregido (source=contact_corrected) Y el
+          // campo Address en Respond sigue presente, evaluamos si cambio para
+          // re-corregir. Si el campo Address esta VACIO en Respond NO hacemos
+          // continue: dejamos que el flujo de mensajes (mas abajo) revise si
+          // el cliente envio una direccion nueva en el chat — caso Roble Tree
+          // donde el agente dejo el campo vacio pero el cliente respondio con
+          // la direccion en mensaje.
+          if (existing && existing.source === 'contact_corrected' && contactFieldAddress) {
+            const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cfNorm !== existOrigNorm) {
+              const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
+              if (cfGeocoded.success) {
+                console.log(`[AddressScan] Direccion re-corregida en contacto ${contactName} (${contact.id}): "${cfGeocoded.fullAddress}" [contact_corrected]`);
+                await this.saveValidatedAddress(userId, contact, cfGeocoded.fullAddress, contactFieldAddress, cfGeocoded.zip, cfGeocoded, 'contact_corrected');
               }
             }
             this.addressScannedContacts.add(contactIdStr);
