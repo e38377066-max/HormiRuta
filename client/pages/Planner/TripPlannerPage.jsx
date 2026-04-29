@@ -1694,12 +1694,6 @@ export default function TripPlannerPage() {
                             <a href={`tel:${stop.phone.replace(/[^0-9+]/g, '')}`} className="stop-contact-btn stop-call-btn">
                               <span className="material-icons" style={{ fontSize: 16 }}>call</span>
                             </a>
-                            <button 
-                              className="stop-contact-btn stop-wa-btn"
-                              onClick={() => openMessageModal(stop)}
-                            >
-                              <span className="material-icons" style={{ fontSize: 16 }}>chat</span>
-                            </button>
                           </div>
                         </div>
                       )}
