@@ -2097,12 +2097,6 @@ export default function TripPlannerPage() {
                     <a href={`tel:${stops[showEvidenceModal].phone.replace(/[^0-9+]/g, '')}`} className="evidence-contact-btn evidence-call-btn" onClick={e => e.stopPropagation()}>
                       <span className="material-icons">call</span> Llamar
                     </a>
-                    <button 
-                      className="evidence-contact-btn evidence-wa-btn"
-                      onClick={(e) => { e.stopPropagation(); openMessageModal(stops[showEvidenceModal]); }}
-                    >
-                      <span className="material-icons">chat</span> Respond.io
-                    </button>
                   </div>
                 </div>
               )}
