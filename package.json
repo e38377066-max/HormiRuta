@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "postinstall": "node scripts/patch-geolocation-podspec.cjs",
     "build": "vite build",
     "build:copy-assets": "node -e \"const fs=require('fs');const path=require('path');['png','svg'].forEach(ext=>{fs.readdirSync('public').filter(f=>f.endsWith('.'+ext)).forEach(f=>fs.copyFileSync(path.join('public',f),path.join('dist',f)))});\"",
     "build:mobile": "node scripts/bump-version.js && npm run build && npx cap sync",
