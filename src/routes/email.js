@@ -73,7 +73,8 @@ function normalizeForMatch(name) {
 // (ej. "bc Diaz Cleaning" -> bc = business cards). Se eliminan ANTES de
 // comparar para que el resto se compare 100% igual al nombre del pickup.
 const PREFIX_LABELS = new Set([
-  'bc', 'pc', 'fl', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm'
+  'bc', 'pc', 'fl', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm',
+  'ys', 'dh', 'bann'
 ]);
 
 function stripPrefixLabel(name) {
@@ -86,9 +87,33 @@ function stripPrefixLabel(name) {
   return trimmed;
 }
 
-// Matching ESTRICTO entre el nombre del email (Gmail/4over) y el nombre del
-// cliente en el dispatcher. Despues de normalizar (minusculas, sin signos) y
-// de quitar etiquetas iniciales como "bc", los dos nombres deben ser 100%
+// Sufijos genericos de nombres comerciales que se ignoran al comparar.
+// Permite que "Vazquez Tree Services" matchee con "Vazquez Tree" del correo,
+// "Lopez Cleaning Services" con "Lopez Cleaning", "Naveda FT Motors" con
+// "Naveda FT", etc. SOLO se quitan si quedan al final del nombre y nunca se
+// quita la unica palabra (asi "Services" solo NO se vacia).
+const SUFFIX_WORDS = new Set([
+  'services', 'service', 'srv',
+  'llc', 'inc', 'corp', 'co', 'company', 'ltd',
+  'motors', 'motor',
+  'realtor', 'realty',
+  'group', 'solutions',
+  'shop', 'store'
+]);
+
+function stripGenericSuffixes(normName) {
+  if (!normName) return '';
+  const words = normName.split(' ').filter(Boolean);
+  while (words.length > 1 && SUFFIX_WORDS.has(words[words.length - 1])) {
+    words.pop();
+  }
+  return words.join(' ');
+}
+
+// Matching CONTROLADO entre el nombre del email (Gmail/4over) y el nombre del
+// cliente en el dispatcher. Despues de normalizar (minusculas, sin signos),
+// quitar etiquetas iniciales (bc/pc/...) y quitar sufijos comerciales
+// genericos (Services/LLC/Motors/...), los dos nombres deben ser 100%
 // IGUALES. NO se aceptan coincidencias por substring, palabras parciales,
 // proximidad ni palabras compartidas (asi "Anita's Cleaning" NO matchea
 // "Diaz Cleaning" solo porque ambos tienen "Cleaning").
@@ -97,8 +122,17 @@ function namesMatch(orderName, gmailName) {
   const normGmail = normalizeForMatch(stripPrefixLabel(gmailName));
 
   if (!normOrder || !normGmail) return false;
+  if (normOrder === normGmail) return true;
 
-  return normOrder === normGmail;
+  const cleanOrder = stripGenericSuffixes(normOrder);
+  const cleanGmail = stripGenericSuffixes(normGmail);
+
+  if (!cleanOrder || !cleanGmail) return false;
+  // Exigimos al menos 4 caracteres para evitar falsos positivos en nombres muy
+  // cortos (ej. "Leo" matcheando todo lo que empiece con "Leo").
+  if (cleanOrder.length < 4 || cleanGmail.length < 4) return false;
+
+  return cleanOrder === cleanGmail;
 }
 
 function isWholesaleName(name) {
