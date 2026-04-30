@@ -1535,7 +1535,11 @@ export default function DispatchMap() {
               {pickupSyncResult.success ? 'check_circle' : 'error'}
             </span>
             {pickupSyncResult.success
-              ? `${pickupSyncResult.synced} orden(es) marcadas como Listo p/Recoger`
+              ? (pickupSyncResult.synced > 0
+                  ? `${pickupSyncResult.synced} nueva(s) marcadas como Listo p/Recoger${pickupSyncResult.alreadyProcessed ? ` (${pickupSyncResult.alreadyProcessed} ya estaban)` : ''}`
+                  : pickupSyncResult.alreadyProcessed > 0
+                    ? `Sin nuevas. ${pickupSyncResult.alreadyProcessed} ya estaban en Pickup Ready, ${(pickupSyncResult.skipped || []).length} sin coincidencia`
+                    : (pickupSyncResult.message || 'Sin órdenes nuevas para procesar'))
               : (pickupSyncResult.error || 'Error al sincronizar')}
             <button onClick={() => setPickupSyncResult(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
               <span className="material-icons" style={{ fontSize: 14 }}>close</span>

@@ -79,10 +79,19 @@ const PREFIX_LABELS = new Set([
 
 function stripPrefixLabel(name) {
   if (!name) return '';
-  const trimmed = String(name).trim();
+  let trimmed = String(name).trim();
+  // Caso 1: prefijo separado por espacio. Ej: "bc Diaz Cleaning" -> "Diaz Cleaning"
   const m = trimmed.match(/^([A-Za-z]{2,4})\s+(.+)$/);
   if (m && PREFIX_LABELS.has(m[1].toLowerCase())) {
     return m[2].trim();
+  }
+  // Caso 2: prefijo PEGADO sin espacio antes de letra mayuscula.
+  // Ej: "bcLEO-3" -> "LEO-3", "bcIRE-carpinteria" -> "IRE-carpinteria",
+  // "bcIRESalon" -> "IRESalon". Solo se quita si las primeras 2-4 letras
+  // minusculas estan en el listado de prefijos y luego viene una mayuscula.
+  const m2 = trimmed.match(/^([a-z]{2,4})([A-Z].*)$/);
+  if (m2 && PREFIX_LABELS.has(m2[1])) {
+    return m2[2].trim();
   }
   return trimmed;
 }
@@ -96,24 +105,45 @@ function stripPrefixLabel(name) {
 const SUFFIX_WORDS = new Set([
   'services', 'service', 'srv', 'srvs',
   'llc', 'inc', 'corp', 'co', 'company', 'ltd',
-  'motors', 'motor',
+  'motors', 'motor', 'auto', 'autos',
   'realtor', 'realty',
   'mechanic', 'mechanics',
   'esp',
   'group', 'solutions',
   'shop', 'store',
   'experts', 'expert',
-  'taqueria', 'restaurant',
+  'taqueria', 'restaurant', 'pizza',
   'lawn', 'care',
   'cleaning',
+  'detailing',
+  'landscaping',
+  'painting',
+  'roofing',
+  'concrete',
+  'plumbing',
+  'remodeling',
+  'construction',
+  'wash',
   'barber', 'salon', 'beauty',
-  'tree', 'trees'
+  'tree', 'trees',
+  'iglesia', 'church'
 ]);
 
 function stripGenericSuffixes(normName) {
   if (!normName) return '';
-  const words = normName.split(' ').filter(Boolean);
+  let words = normName.split(' ').filter(Boolean);
+  // Quitar tokens al final que sean SOLO digitos (numero de orden 4over,
+  // ej. "Flowers by me -2" -> "flowers by me 2" -> "flowers by me").
+  while (words.length > 1 && /^\d+$/.test(words[words.length - 1])) {
+    words.pop();
+  }
+  // Quitar palabras de sufijo comercial generico (services, llc, motors, etc.)
   while (words.length > 1 && SUFFIX_WORDS.has(words[words.length - 1])) {
+    words.pop();
+  }
+  // Volver a quitar digitos finales por si quedaron expuestos despues de
+  // remover los sufijos.
+  while (words.length > 1 && /^\d+$/.test(words[words.length - 1])) {
     words.pop();
   }
   return words.join(' ');
