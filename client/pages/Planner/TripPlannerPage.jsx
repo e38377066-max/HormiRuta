@@ -1164,17 +1164,19 @@ export default function TripPlannerPage() {
     const visibleStops = stopsList.filter(s => !s.completed && !s.skipped)
     const hasActivePending = stopsList.some(s => !s.completed && !s.skipped && !s.skippedOnce)
 
+    let visibleCounter = 0
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
         if (stop.completed || stop.skipped) return
         if (navigationMode && stop.skippedOnce && hasActivePending) return
+        visibleCounter += 1
         const color = '#EA4335'
         
         const marker = new window.google.maps.Marker({
           position: { lat: stop.latitude, lng: stop.longitude },
           map: mapInstanceRef.current,
           label: {
-            text: String(index + 1),
+            text: String(visibleCounter),
             color: 'white',
             fontSize: '12px',
             fontWeight: 'bold'
@@ -1650,7 +1652,14 @@ export default function TripPlannerPage() {
           {stops.length > 0 && (
             <>
               <div className="stops-section-header">Parada</div>
-              {stops.map((stop, index) => (
+              {(() => {
+                let listCounter = 0
+                return stops.map((stop, index) => {
+                  const isActive = !stop.completed && !stop.skipped
+                  const displayNumber = isActive ? ++listCounter : null
+                  return { stop, index, displayNumber }
+                })
+              })().map(({ stop, index, displayNumber }) => (
                 <div
                   key={stop.id}
                   className={`stop-row ${navigationMode ? 'stop-row-nav' : ''} ${stop.skipped ? 'stop-row-skipped' : ''} ${navigationMode && selectedStopIndex === index ? 'stop-row-selected' : ''}`}
@@ -1678,11 +1687,11 @@ export default function TripPlannerPage() {
                         {stop.completed ? 'check_circle' : stop.skipped ? 'cancel' : 'radio_button_unchecked'}
                       </span>
                     ) : (
-                      <span className="stop-number">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="stop-number">{displayNumber != null ? String(displayNumber).padStart(2, '0') : '--'}</span>
                     )}
                     <div className="stop-info-block">
                       <span className={`stop-name ${stop.completed ? 'stop-completed' : ''} ${stop.skipped ? 'stop-skipped-label' : ''} ${stop.skippedOnce ? 'stop-skipped-label' : ''}`}>
-                        <span className="stop-num-inline">{index + 1}.</span> {stop.name || stop.address?.split(',')[0] || 'Parada'}
+                        <span className="stop-num-inline">{displayNumber != null ? `${displayNumber}.` : ''}</span> {stop.name || stop.address?.split(',')[0] || 'Parada'}
                         {stop.skipped && <span className="badge-saltada">Saltada</span>}
                         {stop.skippedOnce && <span className="badge-diferida">Al final</span>}
                       </span>
@@ -1778,7 +1787,7 @@ export default function TripPlannerPage() {
                       onClick={() => { skipStop(selectedStopIndex); setSelectedStopIndex(null); localStorage.removeItem('selectedStop') }}
                     >
                       <span className="material-icons">skip_next</span>
-                      Saltar parada
+                      {stops[selectedStopIndex]?.skippedOnce ? 'Saltar definitivo' : 'Saltar parada'}
                     </button>
                   </>
                 ) : (
