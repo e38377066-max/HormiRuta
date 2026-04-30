@@ -223,11 +223,26 @@ const ALREADY_PROCESSED_STATUSES = new Set([
 router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
   try {
     clearPickupCache();
-    const gmailOrders = await getPickupReadyOrders(true);
+    const allGmailOrders = await getPickupReadyOrders(true);
 
-    if (!gmailOrders.length) {
+    if (!allGmailOrders.length) {
       return res.json({ success: true, synced: 0, message: 'No hay correos Pickup Ready en Gmail' });
     }
+
+    // Carga los messageIds que ya fueron procesados antes (asociados a una
+    // orden ya marcada como pickup_ready/on_delivery/etc) para saltarlos.
+    const alreadyProcessedRows = await ValidatedAddress.findAll({
+      attributes: ['pickup_email_id'],
+      where: { pickup_email_id: { [Op.ne]: null } }
+    });
+    const processedEmailIds = new Set(
+      alreadyProcessedRows.map(r => r.pickup_email_id).filter(Boolean)
+    );
+
+    const gmailOrders = allGmailOrders.filter(g => !processedEmailIds.has(g.messageId));
+    const skippedAsAlreadyProcessed = allGmailOrders.length - gmailOrders.length;
+
+    console.log(`[Email Sync] ${allGmailOrders.length} correos en Gmail, ${skippedAsAlreadyProcessed} ya procesados antes (omitidos), ${gmailOrders.length} por evaluar.`);
 
     const candidates = await ValidatedAddress.findAll({
       where: {
@@ -279,11 +294,19 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
 
         if (ALREADY_PROCESSED_STATUSES.has(match.order_status)) {
           alreadyDone.push(match.customer_name);
+          // Si esta orden ya esta procesada pero todavia no tiene messageId
+          // asociado, lo guardamos ahora para que en el proximo sync ya no
+          // tengamos que volver a evaluar este correo.
+          if (!match.pickup_email_id) {
+            match.pickup_email_id = gmailOrder.messageId;
+            await match.save();
+          }
           continue;
         }
 
         console.log(`[Email Sync] Coincidencia encontrada: Gmail="${gmailOrder.clientName}" -> Sistema="${match.customer_name}"`);
         match.order_status = 'pickup_ready';
+        match.pickup_email_id = gmailOrder.messageId;
         await match.save();
 
         if (settings?.respond_api_token) {
@@ -334,6 +357,30 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
 
           if (activeOrder) {
             alreadyDone.push(`${wClient.customer_name} (MAY)`);
+            if (!activeOrder.pickup_email_id) {
+              activeOrder.pickup_email_id = gmailOrder.messageId;
+              await activeOrder.save();
+            }
+            continue;
+          }
+
+          // Si existe una orden ya completada (delivered, ups_shipped) con este
+          // nombre y SIN pickup_email_id, asumimos que ese correo ya fue
+          // procesado antes (legado) y solo registramos el messageId para que
+          // futuros syncs lo salten. Evita crear duplicados de mayoristas.
+          const legacyOrder = await ValidatedAddress.findOne({
+            where: {
+              customer_name: wClient.customer_name,
+              order_status: { [Op.in]: Array.from(ALREADY_PROCESSED_STATUSES) },
+              pickup_email_id: null,
+              dispatch_status: { [Op.ne]: 'archived' }
+            },
+            order: [['updated_at', 'DESC']]
+          });
+          if (legacyOrder) {
+            legacyOrder.pickup_email_id = gmailOrder.messageId;
+            await legacyOrder.save();
+            alreadyDone.push(`${wClient.customer_name} (MAY legado)`);
             continue;
           }
 
@@ -361,6 +408,7 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
             order_cost: null,
             deposit_amount: null,
             total_to_collect: null,
+            pickup_email_id: gmailOrder.messageId,
             notes: `Auto-generado desde correo Pickup Ready (${gmailOrder.date || 'sin fecha'})`
           });
 
@@ -418,11 +466,21 @@ router.post('/pickup-ready/diagnose', requireAdmin, async (req, res) => {
   try {
     // No limpiamos cache: el diagnostico debe usar los mismos correos que ya
     // se intentaron sincronizar, sin forzar otra lectura completa de Gmail.
-    const gmailOrders = await getPickupReadyOrders(false);
+    const allGmailOrders = await getPickupReadyOrders(false);
 
-    if (!gmailOrders.length) {
+    if (!allGmailOrders.length) {
       return res.json({ success: true, total: 0, unmatched: [] });
     }
+
+    // Saltar correos cuyo messageId ya esta asociado a una orden procesada.
+    const alreadyProcessedRows = await ValidatedAddress.findAll({
+      attributes: ['pickup_email_id'],
+      where: { pickup_email_id: { [Op.ne]: null } }
+    });
+    const processedEmailIds = new Set(
+      alreadyProcessedRows.map(r => r.pickup_email_id).filter(Boolean)
+    );
+    const gmailOrders = allGmailOrders.filter(g => !processedEmailIds.has(g.messageId));
 
     const candidates = await ValidatedAddress.findAll({
       where: {

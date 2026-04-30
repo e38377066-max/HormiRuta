@@ -133,6 +133,12 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
     type: DataTypes.STRING(50),
     allowNull: true,
     defaultValue: null
+  },
+  pickup_email_id: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Gmail messageId del correo 4over Pickup Ready que marco esta orden. Se usa para no reprocesar correos ya procesados.'
   }
 }, {
   tableName: 'validated_addresses',
@@ -181,6 +187,7 @@ ValidatedAddress.prototype.toDict = function() {
     amount_collected: this.amount_collected,
     payment_status: this.payment_status,
     apartment_number: this.apartment_number,
+    pickup_email_id: this.pickup_email_id,
     created_at: this.created_at,
     updated_at: this.updated_at
   };
