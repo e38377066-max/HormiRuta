@@ -105,6 +105,18 @@ function isWholesaleName(name) {
   return /\bMAY\b/i.test(name) || /\-MAY\b/i.test(name) || /\bMAY\-/i.test(name);
 }
 
+// Calcula similitud Jaccard entre conjuntos de palabras de dos nombres.
+// Retorna entre 0 y 1 (1 = identicos, 0 = sin palabras en comun).
+function nameSimilarity(a, b) {
+  const tokensA = new Set(normalizeForMatch(stripPrefixLabel(a)).split(' ').filter(w => w.length > 1));
+  const tokensB = new Set(normalizeForMatch(stripPrefixLabel(b)).split(' ').filter(w => w.length > 1));
+  if (tokensA.size === 0 || tokensB.size === 0) return 0;
+  let inter = 0;
+  for (const t of tokensA) if (tokensB.has(t)) inter++;
+  const union = tokensA.size + tokensB.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
 const ALREADY_PROCESSED_STATUSES = new Set([
   'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'
 ]);
@@ -292,6 +304,99 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('[Email] Error sincronizando pickup-ready:', error);
+    if (error instanceof GmailScopeError) {
+      return res.json({ success: false, scopeError: true, error: error.message });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Endpoint de diagnostico: lista los correos Pickup Ready de Gmail que NO
+// matchean ningun cliente del sistema, junto con las 3 sugerencias mas
+// parecidas (por similitud de palabras) tanto del despacho como de mayoristas.
+// Sirve para que el usuario alinee manualmente los nombres en Respond.io.
+router.post('/pickup-ready/diagnose', requireAdmin, async (req, res) => {
+  try {
+    // No limpiamos cache: el diagnostico debe usar los mismos correos que ya
+    // se intentaron sincronizar, sin forzar otra lectura completa de Gmail.
+    const gmailOrders = await getPickupReadyOrders(false);
+
+    if (!gmailOrders.length) {
+      return res.json({ success: true, total: 0, unmatched: [] });
+    }
+
+    const candidates = await ValidatedAddress.findAll({
+      where: {
+        order_status: { [Op.in]: ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'] },
+        dispatch_status: { [Op.ne]: 'archived' }
+      }
+    });
+
+    const wholesaleClients = await WholesaleClient.findAll({
+      where: { is_active: true }
+    });
+
+    const dedupGmail = [];
+    const seen = new Set();
+    for (const g of gmailOrders) {
+      if (seen.has(g.messageId)) continue;
+      seen.add(g.messageId);
+      dedupGmail.push(g);
+    }
+
+    const unmatched = [];
+    for (const gmailOrder of dedupGmail) {
+      const exact = candidates.some(c =>
+        c.customer_name && namesMatch(c.customer_name, gmailOrder.clientName)
+      );
+      if (exact) continue;
+
+      const wholesaleExact = isWholesaleName(gmailOrder.clientName) &&
+        wholesaleClients.some(wc => namesMatch(wc.customer_name, gmailOrder.clientName));
+      if (wholesaleExact) continue;
+
+      const scored = [];
+      for (const c of candidates) {
+        if (!c.customer_name) continue;
+        const sim = nameSimilarity(c.customer_name, gmailOrder.clientName);
+        if (sim > 0) scored.push({ name: c.customer_name, source: 'despacho', similarity: sim });
+      }
+      for (const wc of wholesaleClients) {
+        if (!wc.customer_name) continue;
+        const sim = nameSimilarity(wc.customer_name, gmailOrder.clientName);
+        if (sim > 0) scored.push({ name: wc.customer_name, source: 'mayorista', similarity: sim });
+      }
+
+      scored.sort((a, b) => b.similarity - a.similarity);
+      const seenSug = new Set();
+      const top = [];
+      for (const s of scored) {
+        const key = s.name.toLowerCase();
+        if (seenSug.has(key)) continue;
+        seenSug.add(key);
+        top.push(s);
+        if (top.length >= 3) break;
+      }
+
+      unmatched.push({
+        gmailName: gmailOrder.clientName,
+        date: gmailOrder.date || null,
+        suggestions: top.map(s => ({
+          name: s.name,
+          source: s.source,
+          similarity: Math.round(s.similarity * 100)
+        }))
+      });
+    }
+
+    res.json({
+      success: true,
+      total: dedupGmail.length,
+      unmatchedCount: unmatched.length,
+      unmatched
+    });
+  } catch (error) {
+    console.error('[Email] Error diagnosticando pickup-ready:', error);
     if (error instanceof GmailScopeError) {
       return res.json({ success: false, scopeError: true, error: error.message });
     }

@@ -125,6 +125,8 @@ export default function DispatchMap() {
   const [loadingPickupReady, setLoadingPickupReady] = useState(false)
   const [syncingPickupReady, setSyncingPickupReady] = useState(false)
   const [pickupSyncResult, setPickupSyncResult] = useState(null)
+  const [diagnosingPickup, setDiagnosingPickup] = useState(false)
+  const [pickupDiagnose, setPickupDiagnose] = useState(null)
 
   const selectedOrders = selectionList.filter(x => x.type === 'order').map(x => x.id)
   const selectedFavorites = selectionList.filter(x => x.type === 'favorite').map(x => x.id)
@@ -1216,6 +1218,19 @@ export default function DispatchMap() {
     }
   }
 
+  const diagnosePickupReady = async () => {
+    setDiagnosingPickup(true)
+    setPickupDiagnose(null)
+    try {
+      const res = await api.post('/api/email/pickup-ready/diagnose')
+      setPickupDiagnose(res.data)
+    } catch (error) {
+      setPickupDiagnose({ success: false, error: error.response?.data?.error || 'Error al diagnosticar' })
+    } finally {
+      setDiagnosingPickup(false)
+    }
+  }
+
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
 
   return (
@@ -1389,9 +1404,123 @@ export default function DispatchMap() {
                   {syncingPickupReady ? 'hourglass_empty' : 'mark_email_read'}
                 </span>
               </button>
+              <button
+                className="btn-add-manual-order"
+                onClick={diagnosePickupReady}
+                disabled={diagnosingPickup}
+                title="Diagnosticar nombres sin coincidencia"
+                style={{ background: '#7b1fa2', marginRight: 4 }}
+              >
+                <span className="material-icons" style={{ fontSize: 18 }}>
+                  {diagnosingPickup ? 'hourglass_empty' : 'troubleshoot'}
+                </span>
+              </button>
               <button className="btn-add-manual-order" onClick={openManualOrderModal} title="Agregar orden manual">
                 <span className="material-icons">add</span>
               </button>
+            </div>
+          </div>
+        )}
+
+        {isAdmin && diagnosingPickup && !pickupDiagnose && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+          }}>
+            <div style={{
+              background: '#fff', borderRadius: 12, padding: '24px 32px',
+              display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, color: '#555'
+            }}>
+              <span className="material-icons" style={{ animation: 'spin 1.2s linear infinite', color: '#7b1fa2' }}>autorenew</span>
+              Diagnosticando correos...
+            </div>
+          </div>
+        )}
+
+        {isAdmin && pickupDiagnose && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+          }}
+            onClick={() => setPickupDiagnose(null)}
+          >
+            <div style={{
+              background: '#fff', borderRadius: 12, maxWidth: 720, width: '100%',
+              maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column'
+            }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{
+                padding: '14px 18px', background: '#7b1fa2', color: '#fff',
+                display: 'flex', alignItems: 'center', gap: 8
+              }}>
+                <span className="material-icons">troubleshoot</span>
+                <strong style={{ flex: 1 }}>Diagnóstico de nombres</strong>
+                <button onClick={() => setPickupDiagnose(null)}
+                  style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+                  <span className="material-icons">close</span>
+                </button>
+              </div>
+              <div style={{ padding: 16, overflow: 'auto', fontSize: 14 }}>
+                {!pickupDiagnose.success && (
+                  <div style={{ color: '#c62828' }}>{pickupDiagnose.error || 'Error'}</div>
+                )}
+                {pickupDiagnose.success && (
+                  <>
+                    <div style={{ marginBottom: 12, color: '#555' }}>
+                      <strong>{pickupDiagnose.unmatchedCount}</strong> de <strong>{pickupDiagnose.total}</strong> correos sin coincidencia exacta.
+                      Renombra el cliente en Respond.io para que sea EXACTAMENTE como aparece en el correo (sin el prefijo bc/pc/etc).
+                    </div>
+                    {pickupDiagnose.unmatched.length === 0 ? (
+                      <div style={{ color: '#2e7d32', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className="material-icons">check_circle</span>
+                        Todos los correos tienen coincidencia exacta.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {pickupDiagnose.unmatched.map((u, i) => (
+                          <div key={i} style={{
+                            border: '1px solid #e0e0e0', borderRadius: 8, padding: 10
+                          }}>
+                            <div style={{ fontWeight: 600, color: '#7b1fa2', marginBottom: 6 }}>
+                              <span className="material-icons" style={{ fontSize: 16, verticalAlign: 'middle', marginRight: 4 }}>email</span>
+                              {u.gmailName}
+                              {u.date && <span style={{ fontSize: 11, color: '#888', fontWeight: 400, marginLeft: 8 }}>{u.date}</span>}
+                            </div>
+                            {u.suggestions.length === 0 ? (
+                              <div style={{ color: '#999', fontSize: 12, fontStyle: 'italic' }}>
+                                Sin clientes parecidos en el sistema. Revisa Respond.io.
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <div style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  Posibles clientes en sistema:
+                                </div>
+                                {u.suggestions.map((s, j) => (
+                                  <div key={j} style={{
+                                    display: 'flex', alignItems: 'center', gap: 8,
+                                    padding: '4px 8px', background: '#f5f5f5', borderRadius: 4, fontSize: 13
+                                  }}>
+                                    <span style={{ flex: 1 }}>{s.name}</span>
+                                    <span style={{
+                                      fontSize: 10, padding: '1px 6px', borderRadius: 3,
+                                      background: s.source === 'mayorista' ? '#ff9800' : '#1976d2',
+                                      color: '#fff', textTransform: 'uppercase'
+                                    }}>{s.source}</span>
+                                    <span style={{ fontSize: 11, color: '#666', minWidth: 32, textAlign: 'right' }}>{s.similarity}%</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}
