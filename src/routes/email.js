@@ -70,10 +70,11 @@ function normalizeForMatch(name) {
 }
 
 // Etiquetas cortas que 4over antepone al nombre del cliente en el correo
-// (ej. "bc Diaz Cleaning" -> bc = business cards). Se eliminan ANTES de
-// comparar para que el resto se compare 100% igual al nombre del pickup.
+// (ej. "bc Diaz Cleaning" -> bc = business cards, "ys" = yard signs,
+// "dh" = door hangers, "bann" = banner). Se eliminan ANTES de comparar.
 const PREFIX_LABELS = new Set([
-  'bc', 'pc', 'fl', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm'
+  'bc', 'pc', 'fl', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm',
+  'ys', 'dh', 'bann', 'sn'
 ]);
 
 function stripPrefixLabel(name) {
@@ -86,19 +87,87 @@ function stripPrefixLabel(name) {
   return trimmed;
 }
 
-// Matching ESTRICTO entre el nombre del email (Gmail/4over) y el nombre del
-// cliente en el dispatcher. Despues de normalizar (minusculas, sin signos) y
-// de quitar etiquetas iniciales como "bc", los dos nombres deben ser 100%
-// IGUALES. NO se aceptan coincidencias por substring, palabras parciales,
-// proximidad ni palabras compartidas (asi "Anita's Cleaning" NO matchea
-// "Diaz Cleaning" solo porque ambos tienen "Cleaning").
+// Sufijos comerciales que se quitan SIEMPRE que van al final del nombre.
+// Como se quitan de AMBOS lados y luego se compara igualdad, no causan
+// falsos positivos: "Anita's Cleaning" -> "anitas" vs "Diaz Cleaning" ->
+// "diaz" siguen siendo diferentes. La proteccion contra ambiguedad
+// (allMatches.length > 1) ademas evita que dos clientes que terminen
+// quedando con el mismo nombre limpio se actualicen por error.
+const SUFFIX_WORDS = new Set([
+  'services', 'service', 'srv', 'srvs',
+  'llc', 'inc', 'corp', 'co', 'company', 'ltd',
+  'motors', 'motor',
+  'realtor', 'realty',
+  'mechanic', 'mechanics',
+  'esp',
+  'group', 'solutions',
+  'shop', 'store',
+  'experts', 'expert',
+  'taqueria', 'restaurant',
+  'lawn', 'care',
+  'cleaning',
+  'barber', 'salon', 'beauty',
+  'tree', 'trees'
+]);
+
+function stripGenericSuffixes(normName) {
+  if (!normName) return '';
+  const words = normName.split(' ').filter(Boolean);
+  while (words.length > 1 && SUFFIX_WORDS.has(words[words.length - 1])) {
+    words.pop();
+  }
+  return words.join(' ');
+}
+
+// Normalizacion fonetica para Espanol: aproxima sonidos similares para que
+// "Alonzo" y "Alonso" se reconozcan como el mismo apellido (z y s suenan
+// igual en LatAm), y "Vasquez" = "Vazquez", "Hernandez" = "Ernandez", etc.
+// NO hace proximidad de palabras: solo ajusta letras que suenan igual.
+function spanishPhonetic(s) {
+  if (!s) return '';
+  return s
+    .toLowerCase()
+    .replace(/h/g, '')           // h muda
+    .replace(/z/g, 's')          // z suena como s
+    .replace(/v/g, 'b')          // v suena como b
+    .replace(/ll/g, 'y')         // ll suena como y
+    .replace(/qu/g, 'k')         // qu suena como k
+    .replace(/c([ei])/g, 's$1')  // ce/ci suena se/si
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Matching CONTROLADO entre el nombre del email (Gmail/4over) y el nombre
+// del cliente en el dispatcher. Aplica 3 capas de comparacion estricta:
+// 1) Igualdad exacta tras quitar prefijo de 4over.
+// 2) Igualdad exacta tras quitar tambien sufijos comerciales (Services,
+//    Realtor, ESP, Mechanic, LLC, etc.).
+// 3) Igualdad exacta tras normalizar foneticamente (z=s, v=b, h muda,
+//    ll=y) - asi "Marty Alonzo" matchea "Marty Alonso Realtor".
+// NO acepta coincidencias por proximidad, substring, palabras parciales
+// ni palabras compartidas. Si los nombres tienen tipos reales (letras
+// faltantes/extra) NO matchean - el usuario debe corregir la ortografia.
 function namesMatch(orderName, gmailName) {
   const normOrder = normalizeForMatch(stripPrefixLabel(orderName));
   const normGmail = normalizeForMatch(stripPrefixLabel(gmailName));
 
   if (!normOrder || !normGmail) return false;
+  if (normOrder === normGmail) return true;
 
-  return normOrder === normGmail;
+  const cleanOrder = stripGenericSuffixes(normOrder);
+  const cleanGmail = stripGenericSuffixes(normGmail);
+
+  if (!cleanOrder || !cleanGmail) return false;
+  // Minimo 3 caracteres tras la limpieza para evitar matches en nombres muy
+  // cortos (ej. "Leo").
+  if (cleanOrder.length < 3 || cleanGmail.length < 3) return false;
+  if (cleanOrder === cleanGmail) return true;
+
+  const phonOrder = spanishPhonetic(cleanOrder);
+  const phonGmail = spanishPhonetic(cleanGmail);
+  if (phonOrder.length < 3 || phonGmail.length < 3) return false;
+
+  return phonOrder === phonGmail;
 }
 
 function isWholesaleName(name) {
