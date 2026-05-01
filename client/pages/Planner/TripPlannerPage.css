@@ -1590,7 +1590,8 @@
   font-size: 16px;
 }
 
-.payment-method-btn.active {
+.payment-method-btn.active,
+.payment-method-btn.selected {
   background: rgba(91, 141, 239, 0.2);
   border-color: #5b8def;
   color: #5b8def;
@@ -1598,6 +1599,62 @@
 
 .payment-method-btn:active {
   transform: scale(0.95);
+}
+
+.payment-methods-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.payment-method-label {
+  font-size: 13px;
+  color: #ccc;
+  text-align: center;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.btn-confirm-delivery {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 60px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #ffffff !important;
+  border: none;
+  border-radius: 14px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);
+  transition: transform 0.1s, box-shadow 0.15s, opacity 0.15s;
+}
+
+.btn-confirm-delivery .material-icons {
+  font-size: 22px;
+  color: #ffffff !important;
+}
+
+.btn-confirm-delivery:active:not(:disabled) {
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
+}
+
+.btn-confirm-delivery:disabled {
+  background: #4a4a55 !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.btn-confirm-delivery:disabled .material-icons {
+  color: rgba(255, 255, 255, 0.5) !important;
 }
 
 .payment-amount-row {

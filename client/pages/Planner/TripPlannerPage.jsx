@@ -292,8 +292,6 @@ export default function TripPlannerPage() {
       polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5, strokeOpacity: 0.8 }
     })
 
-    mapInstanceRef.current.addListener('click', handleMapClick)
-
     mapInstanceRef.current.addListener('dragstart', () => {
       if (navigationMode) {
         setAutoFollow(false)
@@ -1320,10 +1318,26 @@ export default function TripPlannerPage() {
     localStorage.setItem('navMode', 'true')
     localStorage.removeItem('selectedStop')
     keepScreenAwake()
-    if (userLocation && mapInstanceRef.current) {
-      mapInstanceRef.current.panTo(userLocation)
-      mapInstanceRef.current.setZoom(16)
+
+    if (mapInstanceRef.current) {
+      const bounds = new window.google.maps.LatLngBounds()
+      let hasPoint = false
+      if (userLocation) {
+        bounds.extend(userLocation)
+        hasPoint = true
+      }
+      stops.forEach(s => {
+        if (!s.completed && !s.skipped && s.latitude && s.longitude) {
+          bounds.extend({ lat: s.latitude, lng: s.longitude })
+          hasPoint = true
+        }
+      })
+      if (hasPoint) {
+        mapInstanceRef.current.fitBounds(bounds, 80)
+      }
     }
+
+    recalculateNavRoute(stops)
   }
 
   const exitNavigation = () => {
@@ -1803,15 +1817,20 @@ export default function TripPlannerPage() {
               <span className="material-icons">navigation</span>
               Iniciar ruta
             </button>
-          ) : (
-            <button 
-              className="btn-optimize" 
-              onClick={stops.length >= 2 ? optimizeRoute : focusSearch} 
+          ) : stops.length >= 2 ? (
+            <button
+              className="btn-optimize"
+              onClick={optimizeRoute}
               disabled={optimizing}
             >
-              <span className="material-icons">{stops.length >= 2 ? 'autorenew' : 'add'}</span>
-              {optimizing ? 'Optimizando...' : stops.length >= 2 ? 'Optimizar la ruta' : 'Añadir paradas'}
+              <span className="material-icons">autorenew</span>
+              {optimizing ? 'Optimizando...' : 'Optimizar la ruta'}
             </button>
+          ) : (
+            <span className="nav-footer-hint">
+              <span className="material-icons" style={{ fontSize: 16, verticalAlign: 'middle', marginRight: 4 }}>assignment</span>
+              Selecciona una ruta asignada
+            </span>
           )}
         </div>
       </div>
@@ -2295,7 +2314,6 @@ export default function TripPlannerPage() {
                 className="btn-confirm-delivery"
                 disabled={!payDeliveryMethod || deliveringPay}
                 onClick={deliverRoutePayment}
-                style={{ background: payDeliveryMethod ? '#22c55e' : '#ccc' }}
               >
                 <span className="material-icons">check_circle</span>
                 {deliveringPay ? 'Registrando...' : 'Confirmar entrega de pago'}
