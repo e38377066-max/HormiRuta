@@ -1489,9 +1489,29 @@ export default function DispatchMap() {
                               {u.gmailName}
                               {u.date && <span style={{ fontSize: 11, color: '#888', fontWeight: 400, marginLeft: 8 }}>{u.date}</span>}
                             </div>
+                            {u.aiSuggestion && (
+                              <div style={{
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '6px 10px', marginBottom: 6,
+                                background: 'linear-gradient(90deg, #4a148c, #7b1fa2)',
+                                borderRadius: 4, fontSize: 13, color: '#fff',
+                                border: '1px solid #ce93d8'
+                              }}>
+                                <span className="material-icons" style={{ fontSize: 16 }}>auto_awesome</span>
+                                <span style={{ fontSize: 11, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  IA sugiere:
+                                </span>
+                                <span style={{ flex: 1, fontWeight: 600 }}>{u.aiSuggestion.name}</span>
+                                <span style={{
+                                  fontSize: 10, padding: '1px 6px', borderRadius: 3,
+                                  background: u.aiSuggestion.source === 'mayorista' ? '#ff9800' : '#1976d2',
+                                  color: '#fff', textTransform: 'uppercase'
+                                }}>{u.aiSuggestion.source}</span>
+                              </div>
+                            )}
                             {u.suggestions.length === 0 ? (
                               <div style={{ color: '#999', fontSize: 12, fontStyle: 'italic' }}>
-                                Sin clientes parecidos en el sistema. Revisa Respond.io.
+                                {u.aiSuggestion ? 'Sin sugerencias adicionales por similitud.' : 'Sin clientes parecidos en el sistema. Revisa Respond.io.'}
                               </div>
                             ) : (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1536,7 +1556,7 @@ export default function DispatchMap() {
             </span>
             {pickupSyncResult.success
               ? (pickupSyncResult.synced > 0
-                  ? `${pickupSyncResult.synced} nueva(s) marcadas como Listo p/Recoger${pickupSyncResult.alreadyProcessed ? ` (${pickupSyncResult.alreadyProcessed} ya estaban)` : ''}`
+                  ? `${pickupSyncResult.synced} nueva(s) marcadas como Listo p/Recoger${(pickupSyncResult.aiMatchedNames || []).length > 0 ? ` (${(pickupSyncResult.aiMatchedNames || []).length} via IA)` : ''}${pickupSyncResult.alreadyProcessed ? ` · ${pickupSyncResult.alreadyProcessed} ya estaban` : ''}`
                   : pickupSyncResult.alreadyProcessed > 0
                     ? `Sin nuevas. ${pickupSyncResult.alreadyProcessed} ya estaban en Pickup Ready, ${(pickupSyncResult.skipped || []).length} sin coincidencia`
                     : (pickupSyncResult.message || 'Sin órdenes nuevas para procesar'))

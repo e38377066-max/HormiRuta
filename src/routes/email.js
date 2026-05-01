@@ -1,4 +1,5 @@
 import express from 'express';
+import axios from 'axios';
 import { Op } from 'sequelize';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { sendEmail, verifyGmailConnection } from '../services/gmailService.js';
@@ -167,16 +168,54 @@ function spanishPhonetic(s) {
     .trim();
 }
 
+// Singulariza una palabra quitando 's' final cuando aplica (sin tocar
+// palabras cortas o terminadas en 'ss'). Permite que "robles" matchee
+// "roble", "veras" con "vera", "trees" con "tree".
+function singularizeWord(w) {
+  if (!w || w.length < 4) return w;
+  if (/ss$/.test(w)) return w;
+  if (/s$/.test(w)) return w.slice(0, -1);
+  return w;
+}
+
+function singularizeName(s) {
+  return String(s || '')
+    .split(' ')
+    .filter(Boolean)
+    .map(singularizeWord)
+    .join(' ');
+}
+
+// Devuelve los tokens utiles del nombre normalizado (incluye digitos),
+// sin limitar por longitud. Sirve para evaluar contencion de conjuntos.
+function tokensOf(s) {
+  return String(s || '').split(' ').filter(Boolean);
+}
+
+// Conjuntos auxiliares para token-subset
+function isDistinctiveToken(t) {
+  if (!t || t.length < 3) return false;
+  if (SUFFIX_WORDS.has(t)) return false;
+  if (PREFIX_LABELS.has(t)) return false;
+  return true;
+}
+
 // Matching CONTROLADO entre el nombre del email (Gmail/4over) y el nombre
-// del cliente en el dispatcher. Aplica 3 capas de comparacion estricta:
+// del cliente en el dispatcher. Aplica capas de comparacion estricta:
 // 1) Igualdad exacta tras quitar prefijo de 4over.
 // 2) Igualdad exacta tras quitar tambien sufijos comerciales (Services,
 //    Realtor, ESP, Mechanic, LLC, etc.).
 // 3) Igualdad exacta tras normalizar foneticamente (z=s, v=b, h muda,
 //    ll=y) - asi "Marty Alonzo" matchea "Marty Alonso Realtor".
-// NO acepta coincidencias por proximidad, substring, palabras parciales
-// ni palabras compartidas. Si los nombres tienen tipos reales (letras
-// faltantes/extra) NO matchean - el usuario debe corregir la ortografia.
+// 4) Igualdad tras singularizar palabras (Robles=Roble, Trees=Tree).
+// 5) Token-subset: si todos los tokens utiles del nombre mas corto estan
+//    contenidos en el mas largo y hay al menos 1 token distintivo de
+//    >=3 letras que no es sufijo/prefijo (ej. "Rafael Flyer Iglesia"
+//    matchea "Flyer Iglesia" porque {flyer, iglesia} ⊂ {rafael, flyer,
+//    iglesia} y "flyer" es distintivo).
+// La proteccion contra ambiguedad (allMatches.length > 1) en el sync
+// evita que dos clientes con nombres limpios coincidentes se actualicen
+// por error.
 function namesMatch(orderName, gmailName) {
   const normOrder = normalizeForMatch(stripPrefixLabel(orderName));
   const normGmail = normalizeForMatch(stripPrefixLabel(gmailName));
@@ -188,16 +227,169 @@ function namesMatch(orderName, gmailName) {
   const cleanGmail = stripGenericSuffixes(normGmail);
 
   if (!cleanOrder || !cleanGmail) return false;
-  // Minimo 3 caracteres tras la limpieza para evitar matches en nombres muy
-  // cortos (ej. "Leo").
-  if (cleanOrder.length < 3 || cleanGmail.length < 3) return false;
-  if (cleanOrder === cleanGmail) return true;
+  if (cleanOrder.length >= 3 && cleanGmail.length >= 3) {
+    if (cleanOrder === cleanGmail) return true;
 
-  const phonOrder = spanishPhonetic(cleanOrder);
-  const phonGmail = spanishPhonetic(cleanGmail);
-  if (phonOrder.length < 3 || phonGmail.length < 3) return false;
+    const phonOrder = spanishPhonetic(cleanOrder);
+    const phonGmail = spanishPhonetic(cleanGmail);
+    if (phonOrder.length >= 3 && phonGmail.length >= 3 && phonOrder === phonGmail) {
+      return true;
+    }
 
-  return phonOrder === phonGmail;
+    // Layer 4: singularizar tokens despues del strip foneticamente.
+    const singOrder = spanishPhonetic(singularizeName(cleanOrder));
+    const singGmail = spanishPhonetic(singularizeName(cleanGmail));
+    if (singOrder.length >= 3 && singGmail.length >= 3 && singOrder === singGmail) {
+      return true;
+    }
+  }
+
+  // Layer 5: token-subset sobre tokens normalizados+foneticamente
+  // singularizados (sin strip de sufijos para conservar palabras como
+  // "iglesia" que distinguen al cliente).
+  const toksOrder = tokensOf(spanishPhonetic(singularizeName(normOrder)));
+  const toksGmail = tokensOf(spanishPhonetic(singularizeName(normGmail)));
+  if (toksOrder.length && toksGmail.length) {
+    const setO = new Set(toksOrder);
+    const setG = new Set(toksGmail);
+    const [small, large] = setO.size <= setG.size ? [setO, setG] : [setG, setO];
+    if (small.size >= 2) {
+      let allIn = true;
+      for (const t of small) {
+        if (!large.has(t)) { allIn = false; break; }
+      }
+      if (allIn) {
+        let distinctive = 0;
+        for (const t of small) if (isDistinctiveToken(t)) distinctive++;
+        if (distinctive >= 1) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// ===== Respaldo con razonamiento IA =====
+// Cache en memoria para evitar repetir llamadas a OpenAI sobre el mismo
+// nombre de Gmail con la misma lista de candidatos. TTL: 30 min.
+const aiMatchCache = new Map();
+const AI_CACHE_TTL_MS = 30 * 60 * 1000;
+
+function aiCacheKey(gmailName, candidateNames) {
+  const sortedHash = candidateNames.slice().sort().join('||');
+  return `${normalizeForMatch(gmailName)}::${sortedHash}`;
+}
+
+async function getOpenAIKey() {
+  if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
+  try {
+    const settings = await MessagingSettings.findOne({
+      where: { openai_api_key: { [Op.ne]: null } }
+    });
+    return settings?.openai_api_key || null;
+  } catch {
+    return null;
+  }
+}
+
+// Pregunta a GPT-4o-mini si el nombre del correo corresponde a alguno de
+// los candidatos. Devuelve el nombre exacto del candidato (tal como
+// aparece en la lista) o null. Es CONSERVADOR: si hay ambiguedad o no
+// esta seguro, devuelve null.
+async function aiNameMatch(gmailName, candidateNames, apiKey) {
+  if (!apiKey || !gmailName || !candidateNames || candidateNames.length === 0) return null;
+
+  const cacheKey = aiCacheKey(gmailName, candidateNames);
+  const cached = aiMatchCache.get(cacheKey);
+  if (cached && (Date.now() - cached.at) < AI_CACHE_TTL_MS) {
+    return cached.result;
+  }
+
+  const numbered = candidateNames.map((n, i) => `${i + 1}. ${n}`).join('\n');
+  const prompt = `Eres un asistente que decide si un nombre de cliente que aparece en el asunto de un correo de imprenta corresponde al mismo cliente que ya existe en una lista de ordenes activas del sistema.
+
+Nombre en el correo: "${gmailName}"
+
+Candidatos en el sistema:
+${numbered}
+
+Reglas:
+- Acepta variaciones tipograficas obvias en espanol (Robles=Roble, Vazquez=Vasquez, h muda, ll=y, v=b).
+- Acepta sufijos comerciales agregados u omitidos (Services, LLC, Painting, Cleaning, Tree, Lawn Care, Iglesia, etc.).
+- Acepta nombre de pila extra u omitido (ej. "Rafael Flyer iglesia" = "Flyer iglesia"; "Marty Alonso" = "Marty Alonso Realtor").
+- Acepta orden de palabras invertido si los tokens distintivos coinciden.
+- IGNORA prefijos de producto al inicio como "bc", "pc", "dh", "ys", "fl", "ma" (son codigos de imprenta).
+- NO inventes coincidencias entre clientes claramente distintos (ej. "Roble Tree" NO es lo mismo que "Vazquez Tree" aunque ambos sean tree services).
+- Si dos o mas candidatos podrian ser el correcto, responde "NONE" (preferimos no actualizar a actualizar el cliente equivocado).
+
+Responde SOLO con JSON valido en este formato:
+{"match": "NONE o el nombre EXACTO de un candidato copiado letra por letra", "razon": "explicacion breve"}`;
+
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        max_tokens: 150,
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'user', content: prompt }]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 20000
+      }
+    );
+
+    const content = response.data?.choices?.[0]?.message?.content;
+    if (!content) {
+      aiMatchCache.set(cacheKey, { at: Date.now(), result: null });
+      return null;
+    }
+
+    let parsed;
+    try { parsed = JSON.parse(content); } catch { parsed = null; }
+    if (!parsed) {
+      aiMatchCache.set(cacheKey, { at: Date.now(), result: null });
+      return null;
+    }
+
+    const matched = (parsed.match || '').toString().trim();
+    if (!matched || matched.toUpperCase() === 'NONE') {
+      console.log(`[Email Sync AI] "${gmailName}" -> NONE (${parsed.razon || ''})`);
+      aiMatchCache.set(cacheKey, { at: Date.now(), result: null });
+      return null;
+    }
+
+    // Validar que el match retornado este EXACTAMENTE en la lista
+    // (la IA debe copiar letra por letra; si no esta, descartamos).
+    const exact = candidateNames.find(n => n === matched)
+      || candidateNames.find(n => normalizeForMatch(n) === normalizeForMatch(matched));
+    if (!exact) {
+      console.warn(`[Email Sync AI] IA respondio "${matched}" pero no existe en lista, descartando.`);
+      aiMatchCache.set(cacheKey, { at: Date.now(), result: null });
+      return null;
+    }
+
+    console.log(`[Email Sync AI] "${gmailName}" -> "${exact}" (${parsed.razon || ''})`);
+    aiMatchCache.set(cacheKey, { at: Date.now(), result: exact });
+    return exact;
+  } catch (err) {
+    console.error('[Email Sync AI] Error consultando OpenAI:', err.message);
+    return null;
+  }
+}
+
+// Top N candidatos mas parecidos por Jaccard, para acotar el prompt a IA.
+function topCandidatesByName(gmailName, candidates, getName, n = 10) {
+  return candidates
+    .map(c => ({ c, sim: nameSimilarity(getName(c), gmailName) }))
+    .filter(x => x.sim > 0)
+    .sort((a, b) => b.sim - a.sim)
+    .slice(0, n);
 }
 
 function isWholesaleName(name) {
@@ -263,9 +455,12 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
     const skipped = [];
     const alreadyDone = [];
     const wholesaleSynced = [];
+    const aiMatched = [];
 
+    const aiKey = await getOpenAIKey();
     console.log(`[Email Sync] Cotejando ${gmailOrders.length} correos vs ${candidates.length} órdenes en sistema...`);
     console.log(`[Email Sync] Mayoristas registrados: ${wholesaleClients.length}`);
+    console.log(`[Email Sync] Respaldo IA: ${aiKey ? 'ACTIVO (gpt-4o-mini)' : 'INACTIVO (sin OPENAI_API_KEY)'}`);
 
     const processedGmailOrders = new Set();
 
@@ -287,28 +482,22 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
         continue;
       }
 
-      const match = allMatches[0];
-
-      if (match) {
+      // Helper local para aplicar el match a una orden encontrada (heuristico o IA)
+      const applyRegularMatch = async (match, viaAI = false) => {
         processedGmailOrders.add(gmailOrder.messageId);
-
         if (ALREADY_PROCESSED_STATUSES.has(match.order_status)) {
           alreadyDone.push(match.customer_name);
-          // Si esta orden ya esta procesada pero todavia no tiene messageId
-          // asociado, lo guardamos ahora para que en el proximo sync ya no
-          // tengamos que volver a evaluar este correo.
           if (!match.pickup_email_id) {
             match.pickup_email_id = gmailOrder.messageId;
             await match.save();
           }
-          continue;
+          return;
         }
-
-        console.log(`[Email Sync] Coincidencia encontrada: Gmail="${gmailOrder.clientName}" -> Sistema="${match.customer_name}"`);
+        const tag = viaAI ? '(AI)' : '';
+        console.log(`[Email Sync] Coincidencia ${tag} Gmail="${gmailOrder.clientName}" -> Sistema="${match.customer_name}"`);
         match.order_status = 'pickup_ready';
         match.pickup_email_id = gmailOrder.messageId;
         await match.save();
-
         if (settings?.respond_api_token) {
           try {
             respondApiService.setContext(settings.user_id, settings.respond_api_token);
@@ -325,9 +514,37 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
             console.error(`[Email Sync] Error lifecycle ${match.customer_name}:`, lcErr.message);
           }
         }
+        if (viaAI) aiMatched.push(match.customer_name);
+        else synced.push(match.customer_name);
+      };
 
-        synced.push(match.customer_name);
+      const match = allMatches[0];
+
+      if (match) {
+        await applyRegularMatch(match, false);
         continue;
+      }
+
+      // Heuristico fallo. Si hay clave de OpenAI, pedimos a la IA que
+      // razone con los 10 candidatos mas parecidos (ahorra tokens y evita
+      // que la IA invente nombres). Solo aceptamos respuestas que copien
+      // un candidato EXACTO de la lista.
+      if (aiKey) {
+        const top = topCandidatesByName(gmailOrder.clientName, candidates, c => c.customer_name, 10);
+        if (top.length > 0) {
+          const aiName = await aiNameMatch(
+            gmailOrder.clientName,
+            top.map(x => x.c.customer_name),
+            aiKey
+          );
+          if (aiName) {
+            const aiMatchedRow = top.find(x => x.c.customer_name === aiName)?.c;
+            if (aiMatchedRow) {
+              await applyRegularMatch(aiMatchedRow, true);
+              continue;
+            }
+          }
+        }
       }
 
       if (isWholesaleName(gmailOrder.clientName)) {
@@ -342,7 +559,26 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
           skipped.push(`${gmailOrder.clientName} (MAY ambiguo: ${wMatches.length})`);
           continue;
         }
-        const wClient = wMatches[0];
+        let wClient = wMatches[0];
+
+        // Si el heuristico no encontro mayorista pero hay clave IA, intentamos
+        // con razonamiento sobre los 10 mayoristas mas parecidos.
+        if (!wClient && aiKey) {
+          const wTop = topCandidatesByName(gmailOrder.clientName, wholesaleClients, wc => wc.customer_name, 10);
+          if (wTop.length > 0) {
+            const aiName = await aiNameMatch(
+              gmailOrder.clientName,
+              wTop.map(x => x.c.customer_name),
+              aiKey
+            );
+            if (aiName) {
+              wClient = wTop.find(x => x.c.customer_name === aiName)?.c || null;
+              if (wClient) {
+                console.log(`[Email Sync MAY] (AI) Mayorista identificado: "${gmailOrder.clientName}" -> "${wClient.customer_name}"`);
+              }
+            }
+          }
+        }
 
         if (wClient) {
           processedGmailOrders.add(gmailOrder.messageId);
@@ -438,13 +674,14 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
       }
     }
 
-    const totalSynced = synced.length + wholesaleSynced.length;
-    console.log(`[Email Sync] Sincronizados: ${totalSynced} (regulares: ${synced.length}, mayoristas: ${wholesaleSynced.length}), Ya procesados: ${alreadyDone.length}, Sin coincidencia real: ${skipped.length}`);
+    const totalSynced = synced.length + wholesaleSynced.length + aiMatched.length;
+    console.log(`[Email Sync] Sincronizados: ${totalSynced} (heuristico: ${synced.length}, IA: ${aiMatched.length}, mayoristas: ${wholesaleSynced.length}), Ya procesados: ${alreadyDone.length}, Sin coincidencia real: ${skipped.length}`);
 
     res.json({
       success: true,
       synced: totalSynced,
       syncedNames: synced,
+      aiMatchedNames: aiMatched,
       wholesaleSynced: wholesaleSynced,
       alreadyProcessed: alreadyDone.length,
       skipped
@@ -501,6 +738,7 @@ router.post('/pickup-ready/diagnose', requireAdmin, async (req, res) => {
       dedupGmail.push(g);
     }
 
+    const aiKey = await getOpenAIKey();
     const unmatched = [];
     for (const gmailOrder of dedupGmail) {
       const exact = candidates.some(c =>
@@ -535,6 +773,36 @@ router.post('/pickup-ready/diagnose', requireAdmin, async (req, res) => {
         if (top.length >= 3) break;
       }
 
+      // Sugerencia con razonamiento IA: usa los 10 candidatos mas
+      // parecidos (combinando despacho + mayorista). Si la IA identifica
+      // una coincidencia, la marcamos para que el usuario decida.
+      let aiSuggestion = null;
+      if (aiKey) {
+        const top10 = scored.slice(0, 10);
+        const seenTop = new Set();
+        const topNames = [];
+        for (const s of top10) {
+          const k = s.name.toLowerCase();
+          if (seenTop.has(k)) continue;
+          seenTop.add(k);
+          topNames.push(s.name);
+        }
+        if (topNames.length > 0) {
+          try {
+            const aiName = await aiNameMatch(gmailOrder.clientName, topNames, aiKey);
+            if (aiName) {
+              const fromList = scored.find(s => s.name === aiName);
+              aiSuggestion = {
+                name: aiName,
+                source: fromList?.source || 'desconocido'
+              };
+            }
+          } catch (e) {
+            console.error('[Email Diagnose AI] Error:', e.message);
+          }
+        }
+      }
+
       unmatched.push({
         gmailName: gmailOrder.clientName,
         date: gmailOrder.date || null,
@@ -542,7 +810,8 @@ router.post('/pickup-ready/diagnose', requireAdmin, async (req, res) => {
           name: s.name,
           source: s.source,
           similarity: Math.round(s.similarity * 100)
-        }))
+        })),
+        aiSuggestion
       });
     }
 
@@ -550,6 +819,7 @@ router.post('/pickup-ready/diagnose', requireAdmin, async (req, res) => {
       success: true,
       total: dedupGmail.length,
       unmatchedCount: unmatched.length,
+      aiEnabled: !!aiKey,
       unmatched
     });
   } catch (error) {
