@@ -20,6 +20,7 @@ export default function TripPlannerPage() {
   const navRendererRef = useRef(null)
   const pendingNavRestoreRef = useRef(false)
   const userToStopLineRef = useRef(null)
+  const fullRouteFallbackRef = useRef(null)
   const [userLocation, setUserLocation] = useState(null)
   const [gpsError, setGpsError] = useState(false)
   const [selectedPoint, setSelectedPoint] = useState(null)
@@ -414,8 +415,62 @@ export default function TripPlannerPage() {
     }
   }, [userLocation, navigationMode, stops])
 
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.google) return
+
+    if (!navigationMode) {
+      if (fullRouteFallbackRef.current) {
+        fullRouteFallbackRef.current.setMap(null)
+        fullRouteFallbackRef.current = null
+      }
+      return
+    }
+
+    const pending = stops.filter(s => !s.completed && !s.skipped && s.latitude && s.longitude)
+    if (pending.length === 0) {
+      if (fullRouteFallbackRef.current) {
+        fullRouteFallbackRef.current.setMap(null)
+        fullRouteFallbackRef.current = null
+      }
+      return
+    }
+
+    const path = []
+    if (userLocation) path.push(userLocation)
+    pending.forEach(s => path.push({ lat: s.latitude, lng: s.longitude }))
+
+    if (fullRouteFallbackRef.current) {
+      fullRouteFallbackRef.current.setPath(path)
+    } else {
+      fullRouteFallbackRef.current = new window.google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: '#4285F4',
+        strokeOpacity: 0.55,
+        strokeWeight: 4,
+        map: mapInstanceRef.current,
+        zIndex: 1
+      })
+    }
+  }, [navigationMode, userLocation, stops])
+
+  const lastRecalcUserLocRef = useRef(null)
+  useEffect(() => {
+    if (!navigationMode || !userLocation || stops.length === 0) return
+    const last = lastRecalcUserLocRef.current
+    if (last) {
+      const dLat = (userLocation.lat - last.lat) * 111000
+      const dLng = (userLocation.lng - last.lng) * 111000 * Math.cos(userLocation.lat * Math.PI / 180)
+      const distM = Math.sqrt(dLat * dLat + dLng * dLng)
+      if (distM < 200) return
+    }
+    lastRecalcUserLocRef.current = { lat: userLocation.lat, lng: userLocation.lng }
+    recalculateNavRoute(stops)
+  }, [userLocation, navigationMode])
+
   const navLastUpdateRef = useRef(0)
   const navLastRouteRef = useRef(null)
+  const fullRouteLastUpdateRef = useRef(0)
 
   const isOffRoute = (currentPos) => {
     if (!navLastRouteRef.current) return true
@@ -1226,7 +1281,15 @@ export default function TripPlannerPage() {
     }
   }
 
-  const recalculateNavRoute = async (stopsList) => {
+  const recalculateNavRoute = async (stopsList, force = false) => {
+    if (!directionsRendererRef.current || !window.google) {
+      console.warn('[NavRoute] Map not ready yet')
+      return
+    }
+    const now = Date.now()
+    if (!force && now - fullRouteLastUpdateRef.current < 25000) return
+    fullRouteLastUpdateRef.current = now
+
     const hasActive = stopsList.some(s => !s.completed && !s.skipped && !s.skippedOnce)
     const pending = stopsList.filter(s => {
       if (s.completed || s.skipped || !s.latitude || !s.longitude) return false
@@ -1234,9 +1297,7 @@ export default function TripPlannerPage() {
       return true
     })
     if (pending.length < 1) {
-      if (directionsRendererRef.current) {
-        directionsRendererRef.current.setDirections({ routes: [] })
-      }
+      directionsRendererRef.current.setDirections({ routes: [] })
       return
     }
     try {
@@ -1245,7 +1306,10 @@ export default function TripPlannerPage() {
       const origin = gpsOrigin || { lat: pending[0].latitude, lng: pending[0].longitude }
       const stopsForRoute = gpsOrigin ? pending : pending.slice(1)
 
-      if (stopsForRoute.length === 0) return
+      if (stopsForRoute.length === 0) {
+        directionsRendererRef.current.setDirections({ routes: [] })
+        return
+      }
 
       const destination = { lat: stopsForRoute[stopsForRoute.length - 1].latitude, lng: stopsForRoute[stopsForRoute.length - 1].longitude }
       const waypoints = stopsForRoute.slice(0, -1).map(stop => ({
@@ -1253,6 +1317,7 @@ export default function TripPlannerPage() {
         stopover: true
       }))
 
+      console.log('[NavRoute] Solicitando ruta', { origin, waypoints: waypoints.length, destination, hasGps: !!gpsOrigin })
       const result = await directionsService.route({
         origin,
         destination,
@@ -1264,8 +1329,9 @@ export default function TripPlannerPage() {
         }
       })
       directionsRendererRef.current.setDirections(result)
+      console.log('[NavRoute] Ruta dibujada con', result.routes?.[0]?.legs?.length || 0, 'tramos')
     } catch (err) {
-      console.error('Nav route recalculation error:', err)
+      console.error('[NavRoute] Error al calcular ruta:', err?.message || err, err)
     }
   }
 
@@ -1337,7 +1403,7 @@ export default function TripPlannerPage() {
       }
     }
 
-    recalculateNavRoute(stops)
+    recalculateNavRoute(stops, true)
   }
 
   const exitNavigation = () => {
