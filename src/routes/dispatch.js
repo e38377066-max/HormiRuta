@@ -1661,6 +1661,7 @@ router.put('/returns/:id/release', requireAdmin, async (req, res) => {
     order.skip_reason = null;
     order.skipped_at = null;
     order.returned_at = null;
+    order.dispatch_status = 'available';
     await order.save();
     res.json({ success: true, order: order.toDict() });
   } catch (error) {

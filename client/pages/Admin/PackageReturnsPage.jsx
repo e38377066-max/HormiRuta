@@ -154,7 +154,24 @@ export default function PackageReturnsPage() {
                     </button>
                   )}
                   {o.package_disposition === 'held_by_driver' && (
-                    <span className="pr-hint">Se cargara automatico en la proxima ruta del chofer</span>
+                    <>
+                      <button
+                        className="pr-btn pr-btn-receive"
+                        disabled={busy === o.id}
+                        onClick={() => receive(o.id)}
+                      >
+                        <span className="material-icons">inbox</span>
+                        Recibir en oficina
+                      </button>
+                      <button
+                        className="pr-btn pr-btn-release"
+                        disabled={busy === o.id}
+                        onClick={() => release(o.id)}
+                      >
+                        <span className="material-icons">redo</span>
+                        Liberar directo
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
