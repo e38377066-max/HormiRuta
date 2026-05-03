@@ -1282,41 +1282,48 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
     route.assigned_driver_id = driver_id;
     await route.save();
 
-    // Auto-incluir paquetes que el chofer se quedo de rutas anteriores
-    const heldOrders = await ValidatedAddress.findAll({
-      where: {
-        held_by_driver_id: driver_id,
-        package_disposition: 'held_by_driver',
-        route_id: null
+    // Auto-incluir paquetes que el chofer se quedo de rutas anteriores.
+    // Se usa una transaccion con SELECT FOR UPDATE para evitar doble-carga
+    // si dos peticiones de asignacion llegan al mismo tiempo.
+    const sequelize = ValidatedAddress.sequelize;
+    await sequelize.transaction(async (t) => {
+      const heldOrders = await ValidatedAddress.findAll({
+        where: {
+          held_by_driver_id: driver_id,
+          package_disposition: 'held_by_driver',
+          route_id: null
+        },
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+      if (heldOrders.length > 0) {
+        const existingStops = await Stop.count({ where: { route_id: route.id }, transaction: t });
+        let stopOrder = existingStops;
+        for (const held of heldOrders) {
+          await Stop.create({
+            route_id: route.id,
+            address: held.validated_address,
+            lat: held.address_lat,
+            lng: held.address_lng,
+            order: stopOrder++,
+            customer_name: held.customer_name,
+            phone: held.customer_phone,
+            note: held.notes ? `[Recargada] ${held.notes}` : '[Paquete recargado del dia anterior]',
+            order_cost: held.order_cost,
+            deposit_amount: held.deposit_amount,
+            total_to_collect: held.total_to_collect,
+            apartment_number: held.apartment_number
+          }, { transaction: t });
+          held.route_id = route.id;
+          held.package_disposition = 'normal';
+          held.held_by_driver_id = null;
+          held.skip_reason = null;
+          held.skipped_at = null;
+          await held.save({ transaction: t });
+        }
+        console.log(`[Dispatch] ${heldOrders.length} paquete(s) recargados del chofer ${driver.username} agregados a ruta ${route.id}`);
       }
     });
-    if (heldOrders.length > 0) {
-      const existingStops = await Stop.count({ where: { route_id: route.id } });
-      let stopOrder = existingStops;
-      for (const held of heldOrders) {
-        await Stop.create({
-          route_id: route.id,
-          address: held.validated_address,
-          lat: held.address_lat,
-          lng: held.address_lng,
-          order: stopOrder++,
-          customer_name: held.customer_name,
-          phone: held.customer_phone,
-          note: held.notes ? `[Recargada] ${held.notes}` : '[Paquete recargado del dia anterior]',
-          order_cost: held.order_cost,
-          deposit_amount: held.deposit_amount,
-          total_to_collect: held.total_to_collect,
-          apartment_number: held.apartment_number
-        });
-        held.route_id = route.id;
-        held.package_disposition = 'normal';
-        held.held_by_driver_id = null;
-        held.skip_reason = null;
-        held.skipped_at = null;
-        await held.save();
-      }
-      console.log(`[Dispatch] ${heldOrders.length} paquete(s) recargados del chofer ${driver.username} agregados a ruta ${route.id}`);
-    }
 
     const orders = await ValidatedAddress.findAll({
       where: { route_id: route.id }
