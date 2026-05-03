@@ -139,6 +139,29 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
     allowNull: true,
     defaultValue: null,
     comment: 'Gmail messageId del correo 4over Pickup Ready que marco esta orden. Se usa para no reprocesar correos ya procesados.'
+  },
+  package_disposition: {
+    type: DataTypes.STRING(30),
+    allowNull: false,
+    defaultValue: 'normal',
+    comment: 'normal | held_by_driver | pending_return | returned_to_office'
+  },
+  held_by_driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: { model: 'users', key: 'id' }
+  },
+  skip_reason: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  skipped_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  returned_at: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   tableName: 'validated_addresses',
@@ -188,6 +211,11 @@ ValidatedAddress.prototype.toDict = function() {
     payment_status: this.payment_status,
     apartment_number: this.apartment_number,
     pickup_email_id: this.pickup_email_id,
+    package_disposition: this.package_disposition,
+    held_by_driver_id: this.held_by_driver_id,
+    skip_reason: this.skip_reason,
+    skipped_at: this.skipped_at,
+    returned_at: this.returned_at,
     created_at: this.created_at,
     updated_at: this.updated_at
   };

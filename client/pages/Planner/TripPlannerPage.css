@@ -1834,3 +1834,104 @@
 .gps-error-banner .material-icons {
   font-size: 16px;
 }
+
+.skip-disp-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  width: 92%;
+  max-width: 440px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+}
+.skip-disp-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.skip-disp-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: #1f2937;
+}
+.skip-disp-sub {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skip-disp-question {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+}
+.skip-disp-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: #f9fafb;
+  cursor: pointer;
+  margin-bottom: 10px;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+.skip-disp-option:hover {
+  background: #f3f4f6;
+}
+.skip-disp-option-keep {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+.skip-disp-option-keep:hover {
+  background: #fef3c7;
+}
+.skip-disp-option-keep .material-icons {
+  color: #d97706;
+  font-size: 28px;
+}
+.skip-disp-option-return {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+.skip-disp-option-return:hover {
+  background: #dbeafe;
+}
+.skip-disp-option-return .material-icons {
+  color: #2563eb;
+  font-size: 28px;
+}
+.skip-disp-option-text {
+  flex: 1;
+}
+.skip-disp-option-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1f2937;
+}
+.skip-disp-option-desc {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+.skip-disp-reason {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  box-sizing: border-box;
+}

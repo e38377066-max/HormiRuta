@@ -1282,6 +1282,42 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
     route.assigned_driver_id = driver_id;
     await route.save();
 
+    // Auto-incluir paquetes que el chofer se quedo de rutas anteriores
+    const heldOrders = await ValidatedAddress.findAll({
+      where: {
+        held_by_driver_id: driver_id,
+        package_disposition: 'held_by_driver',
+        route_id: null
+      }
+    });
+    if (heldOrders.length > 0) {
+      const existingStops = await Stop.count({ where: { route_id: route.id } });
+      let stopOrder = existingStops;
+      for (const held of heldOrders) {
+        await Stop.create({
+          route_id: route.id,
+          address: held.validated_address,
+          lat: held.address_lat,
+          lng: held.address_lng,
+          order: stopOrder++,
+          customer_name: held.customer_name,
+          phone: held.customer_phone,
+          note: held.notes ? `[Recargada] ${held.notes}` : '[Paquete recargado del dia anterior]',
+          order_cost: held.order_cost,
+          deposit_amount: held.deposit_amount,
+          total_to_collect: held.total_to_collect,
+          apartment_number: held.apartment_number
+        });
+        held.route_id = route.id;
+        held.package_disposition = 'normal';
+        held.held_by_driver_id = null;
+        held.skip_reason = null;
+        held.skipped_at = null;
+        await held.save();
+      }
+      console.log(`[Dispatch] ${heldOrders.length} paquete(s) recargados del chofer ${driver.username} agregados a ruta ${route.id}`);
+    }
+
     const orders = await ValidatedAddress.findAll({
       where: { route_id: route.id }
     });
@@ -1497,6 +1533,10 @@ router.post('/stops/:id/evidence', requireAuth, upload.single('photo'), async (r
 
 router.put('/stops/:id/skip', requireAuth, async (req, res) => {
   try {
+    const { disposition, reason } = req.body || {};
+    const validDispositions = ['held_by_driver', 'pending_return'];
+    const finalDisposition = validDispositions.includes(disposition) ? disposition : 'pending_return';
+
     const stop = await Stop.findByPk(req.params.id);
     if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
 
@@ -1522,13 +1562,103 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
     if (orderMatch) {
       orderMatch.route_id = null;
       orderMatch.order_status = 'approved';
+      orderMatch.package_disposition = finalDisposition;
+      orderMatch.skip_reason = reason || null;
+      orderMatch.skipped_at = new Date();
+      orderMatch.returned_at = null;
+      if (finalDisposition === 'held_by_driver') {
+        orderMatch.held_by_driver_id = route.assigned_driver_id || req.userId;
+      } else {
+        orderMatch.held_by_driver_id = null;
+      }
       await orderMatch.save();
     }
 
-    res.json({ success: true, stop: stop.toDict() });
+    res.json({ success: true, stop: stop.toDict(), disposition: finalDisposition });
   } catch (error) {
     console.error('Error skipping stop:', error);
     res.status(500).json({ error: 'Error al saltar parada' });
+  }
+});
+
+// Listado de paquetes saltados (Recepcion / Contabilidad de devoluciones)
+router.get('/returns', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'No autenticado' });
+    if (user.role !== 'admin' && user.role !== 'driver') {
+      return res.status(403).json({ error: 'Sin permisos' });
+    }
+
+    const where = { package_disposition: { [Op.in]: ['held_by_driver', 'pending_return', 'returned_to_office'] } };
+    if (user.role === 'driver') {
+      where.held_by_driver_id = user.id;
+    }
+
+    const orders = await ValidatedAddress.findAll({
+      where,
+      order: [['skipped_at', 'DESC']]
+    });
+
+    const driverIds = [...new Set(orders.map(o => o.held_by_driver_id).filter(Boolean))];
+    const drivers = driverIds.length
+      ? await User.findAll({ where: { id: { [Op.in]: driverIds } }, attributes: ['id', 'username'] })
+      : [];
+    const driverMap = new Map(drivers.map(d => [d.id, d.username]));
+
+    const result = orders.map(o => {
+      const dict = o.toDict();
+      dict.held_by_driver_name = o.held_by_driver_id ? (driverMap.get(o.held_by_driver_id) || null) : null;
+      return dict;
+    });
+
+    res.json({ orders: result });
+  } catch (error) {
+    console.error('Error fetching returns:', error);
+    res.status(500).json({ error: 'Error al cargar devoluciones' });
+  }
+});
+
+// Marcar paquete recibido en oficina
+router.put('/returns/:id/receive', requireAdmin, async (req, res) => {
+  try {
+    const order = await ValidatedAddress.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (!['pending_return', 'held_by_driver'].includes(order.package_disposition)) {
+      return res.status(400).json({ error: 'Esta orden no esta pendiente de devolucion' });
+    }
+    order.package_disposition = 'returned_to_office';
+    order.returned_at = new Date();
+    order.held_by_driver_id = null;
+    await order.save();
+    res.json({ success: true, order: order.toDict() });
+  } catch (error) {
+    console.error('Error receiving return:', error);
+    res.status(500).json({ error: 'Error al marcar como recibido' });
+  }
+});
+
+// Liberar paquete (volver a "normal" disponible para nueva ruta)
+router.put('/returns/:id/release', requireAdmin, async (req, res) => {
+  try {
+    const order = await ValidatedAddress.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
+    if (!['returned_to_office', 'pending_return', 'held_by_driver'].includes(order.package_disposition)) {
+      return res.status(400).json({ error: 'Esta orden no esta marcada como devolucion' });
+    }
+    if (order.route_id) {
+      return res.status(400).json({ error: 'La orden ya esta asignada a una ruta' });
+    }
+    order.package_disposition = 'normal';
+    order.held_by_driver_id = null;
+    order.skip_reason = null;
+    order.skipped_at = null;
+    order.returned_at = null;
+    await order.save();
+    res.json({ success: true, order: order.toDict() });
+  } catch (error) {
+    console.error('Error releasing return:', error);
+    res.status(500).json({ error: 'Error al liberar paquete' });
   }
 });
 

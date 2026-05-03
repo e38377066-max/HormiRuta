@@ -87,6 +87,10 @@ export default function DashboardLayout() {
                 <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>receipt_long</span>
                 <span>Contabilidad</span>
               </NavLink>
+              <NavLink to="/admin/returns" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
+                <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>assignment_return</span>
+                <span>Recepcion de Paquetes</span>
+              </NavLink>
             </>
           )}
 

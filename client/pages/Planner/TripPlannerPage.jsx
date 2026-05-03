@@ -84,6 +84,8 @@ export default function TripPlannerPage() {
   const [deliveringPay, setDeliveringPay] = useState(false)
   const [navChooserOpen, setNavChooserOpen] = useState(false)
   const [navChooserStop, setNavChooserStop] = useState(null)
+  const [skipDispositionModal, setSkipDispositionModal] = useState(null)
+  const [skipReason, setSkipReason] = useState('')
   const fileInputRef = useRef(null)
   const isDragging = useRef(false)
   const startY = useRef(0)
@@ -950,17 +952,31 @@ export default function TripPlannerPage() {
       return
     }
 
+    setSkipDispositionModal({ index, stop })
+    closeModal()
+  }
+
+  const confirmSkipDefinitive = async (disposition) => {
+    const data = skipDispositionModal
+    if (!data) return
+    const { index, stop } = data
     const stopDbId = stop.dbId || stop.id
     try {
       if (stopDbId && currentRouteId) {
-        await api.put(`/api/dispatch/stops/${stopDbId}/skip`)
+        await api.put(`/api/dispatch/stops/${stopDbId}/skip`, {
+          disposition,
+          reason: skipReason || null
+        })
       }
       const updatedStops = stops.map((s, i) =>
-        i === index ? { ...s, skipped: true, skippedOnce: false, completed: false } : s
+        i === index ? { ...s, skipped: true, skippedOnce: false, completed: false, package_disposition: disposition } : s
       )
       setStops(updatedStops)
       updateMapMarkers(updatedStops)
-      closeModal()
+      setSkipDispositionModal(null)
+      setSkipReason('')
+      setSelectedStopIndex(null)
+      localStorage.removeItem('selectedStop')
     } catch (err) {
       console.error('Error skipping stop:', err)
       alert(err.response?.data?.error || 'Error al saltar parada')
@@ -2412,6 +2428,56 @@ export default function TripPlannerPage() {
               )}
             </div>
             <button className="btn-flat" style={{ marginTop: 12, width: '100%' }} onClick={() => setNavChooserOpen(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {skipDispositionModal && (
+        <div className="modal-overlay" onClick={() => { setSkipDispositionModal(null); setSkipReason('') }}>
+          <div className="skip-disp-modal" onClick={e => e.stopPropagation()}>
+            <div className="skip-disp-header">
+              <span className="material-icons" style={{ color: '#f59e0b', fontSize: 32 }}>inventory_2</span>
+              <div>
+                <div className="skip-disp-title">Saltar parada definitivamente</div>
+                <div className="skip-disp-sub">{skipDispositionModal.stop?.name || skipDispositionModal.stop?.address}</div>
+              </div>
+            </div>
+
+            <div className="skip-disp-question">¿Que vas a hacer con el paquete?</div>
+
+            <button
+              className="skip-disp-option skip-disp-option-keep"
+              onClick={() => confirmSkipDefinitive('held_by_driver')}
+            >
+              <span className="material-icons">local_shipping</span>
+              <div className="skip-disp-option-text">
+                <div className="skip-disp-option-title">Quedarme con el paquete</div>
+                <div className="skip-disp-option-desc">Se recargara automaticamente en tu proxima ruta asignada</div>
+              </div>
+            </button>
+
+            <button
+              className="skip-disp-option skip-disp-option-return"
+              onClick={() => confirmSkipDefinitive('pending_return')}
+            >
+              <span className="material-icons">assignment_return</span>
+              <div className="skip-disp-option-text">
+                <div className="skip-disp-option-title">Devolver a oficina</div>
+                <div className="skip-disp-option-desc">Aparecera en Recepcion de Paquetes para que el dispatcher lo registre</div>
+              </div>
+            </button>
+
+            <textarea
+              className="skip-disp-reason"
+              placeholder="Motivo (opcional): cliente no estaba, direccion mala, etc."
+              value={skipReason}
+              onChange={e => setSkipReason(e.target.value)}
+              rows={2}
+            />
+
+            <button className="btn-flat" style={{ width: '100%', marginTop: 8 }} onClick={() => { setSkipDispositionModal(null); setSkipReason('') }}>
               Cancelar
             </button>
           </div>
