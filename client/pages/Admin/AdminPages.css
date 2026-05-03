@@ -1552,3 +1552,42 @@ button.section-item.danger-item:disabled {
   color: #666;
   font-size: 12px;
 }
+
+/* ==================== ADMIN PAGE WRAPPER ==================== */
+.admin-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 16px;
+}
+
+.admin-header {
+  margin-bottom: 24px;
+}
+
+.admin-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.admin-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+@media (max-width: 600px) {
+  .admin-page {
+    padding: 16px 12px;
+  }
+
+  .admin-header {
+    margin-bottom: 16px;
+  }
+
+  .admin-header h1 {
+    font-size: 1.2rem;
+  }
+}
