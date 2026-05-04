@@ -2898,6 +2898,59 @@ class PollingService {
       let synced = 0;
       let mismatchKept = 0;
 
+      // ── NUEVA SECCIÓN: capturar contactos sin registro en DB ──────────────
+      // El escáner de conversaciones abiertas sólo procesa conversaciones
+      // open. Si un contacto tenía conversación cerrada nunca fue escaneado.
+      // Aquí, para los contactos con lifecycle activo SIN registro en DB,
+      // llamamos getContact para leer su campo Address y crear el registro.
+      const newContacts = tagFilteredContacts.filter(c => {
+        if (addressMap.has(c.id.toString())) return false;
+        const lc = (c.lifecycle || c.lifecycleStage || '').toLowerCase();
+        return lc === 'pending' || lc === 'approved' || lc === 'ordered' ||
+               lc === 'pickup ready' || lc === 'on delivery';
+      });
+
+      if (newContacts.length > 0) {
+        console.log(`[StartupReconcile] ${newContacts.length} contacto(s) con lifecycle activo sin registro en DB — revisando campo Address...`);
+        let picked = 0;
+        const normalizeFieldName = (n) => (n || '').toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        for (const c of newContacts) {
+          try {
+            const detail = await respondio.getContact(c.id);
+            if (!detail.success || !detail.data) continue;
+            const cData = detail.data;
+            const cfAddress = cData.custom_fields?.find(f => {
+              const fn = normalizeFieldName(f.name);
+              return fn === 'address' || fn === 'direccion' ||
+                fn === 'delivery address' || fn === 'delivery' ||
+                fn === 'address line 1' || fn === 'direccion de entrega';
+            });
+            if (!cfAddress?.value || cfAddress.value.trim().length < 5) continue;
+            const rawAddr = cfAddress.value.trim();
+            const contactForSave = {
+              id: c.id,
+              firstName: cData.firstName || cData.first_name || c.firstName || '',
+              lastName: cData.lastName || cData.last_name || c.lastName || '',
+              phone: cData.phone || c.phone || null,
+              lifecycle: c.lifecycle || c.lifecycleStage || ''
+            };
+            const cfGeocoded = await geocodingService.geocodeAddress(rawAddr);
+            const addressToSave = cfGeocoded.success ? cfGeocoded.fullAddress : rawAddr;
+            const contactName = `${contactForSave.firstName} ${contactForSave.lastName}`.trim() || `ID:${c.id}`;
+            console.log(`[StartupReconcile] Dirección desde campo Address (nuevo): "${contactName}" (${c.id}): "${addressToSave}" [contact_corrected]`);
+            await this.saveValidatedAddress(userId, contactForSave, addressToSave, rawAddr, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
+            picked++;
+            // Pequeña pausa para no saturar la API de Respond.io
+            await new Promise(r => setTimeout(r, 300));
+          } catch (err) {
+            console.error(`[StartupReconcile] Error leyendo contacto ${c.id}:`, err.message);
+          }
+        }
+        if (picked > 0) console.log(`[StartupReconcile] ${picked} dirección(es) nueva(s) capturada(s) desde campo Address`);
+      }
+      // ── FIN nueva sección ──────────────────────────────────────────────────
+
       for (const contact of tagFilteredContacts) {
         const contactIdStr = contact.id.toString();
         const existing = addressMap.get(contactIdStr);
@@ -3100,7 +3153,29 @@ class PollingService {
 
       const geocodedState = geocoded?.stateShort || geocoded?.state || null;
       if (geocodedState && geocodedState.toUpperCase() !== 'TX') {
-        console.log(`[ValidatedAddr] Dirección de ${customerName} fuera de TX (${geocodedState}): "${finalAddress}" — ignorada`);
+        console.log(`[ValidatedAddr] Dirección de ${customerName} fuera de TX (${geocodedState}): "${finalAddress}" — archivada para evitar rescan infinito`);
+        // Crear/mantener registro archivado para que el escáner no reprocese
+        // este contacto en cada ciclo (evita llamadas innecesarias a la API).
+        if (!record) {
+          await ValidatedAddress.create({
+            user_id: userId,
+            respond_contact_id: contactIdStr,
+            customer_name: customerName,
+            customer_phone: contact.phone || null,
+            original_address: originalAddress,
+            validated_address: finalAddress,
+            address_lat: lat,
+            address_lng: lng,
+            zip_code: finalZip,
+            city: geocoded?.city || null,
+            state: geocodedState,
+            confidence: geocoded?.confidence || null,
+            source: sourceOverride || 'scanner',
+            order_status: orderStatus || 'pending',
+            dispatch_status: 'archived'
+          });
+          console.log(`[ValidatedAddr] Registro archivado creado para ${customerName} (fuera de TX: ${geocodedState})`);
+        }
         return null;
       }
 
