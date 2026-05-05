@@ -2358,3 +2358,72 @@
   padding: 4px 8px;
   font-size: 0.75rem;
 }
+
+/* ── Sección Mayoristas ─────────────────────────────────────── */
+.wholesale-section {
+  margin: 8px 0 4px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid #b2dfdb;
+}
+
+.wholesale-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: linear-gradient(90deg, #e0f2f1, #f1f8e9);
+  font-size: 13px;
+  font-weight: 700;
+  color: #00695c;
+  border-bottom: 1px solid #b2dfdb;
+}
+
+.wholesale-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: #00897b;
+  background: #b2dfdb;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+
+.wholesale-client-group {
+  background: #fafffe;
+  border-bottom: 1px solid #e8f5e9;
+}
+
+.wholesale-client-group:last-child {
+  border-bottom: none;
+}
+
+.wholesale-client-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px 3px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #00695c;
+  background: #f1f9f8;
+  border-bottom: 1px solid #e0f2f1;
+  letter-spacing: 0.3px;
+}
+
+.wholesale-order {
+  margin: 3px 8px;
+  border-radius: 7px;
+  background: #f9fffe;
+  border: 1.5px solid #e0f2f1;
+}
+
+.wholesale-order:hover {
+  background: #e8f5e9;
+  border-color: #80cbc4;
+}
+
+.wholesale-order.selected {
+  border-color: #00897b;
+  background: #e0f2f1;
+}

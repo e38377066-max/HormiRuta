@@ -73,7 +73,11 @@ router.get('/orders', requireAuth, async (req, res) => {
       where.assigned_driver_id = user.id;
       where.order_status = { [Op.in]: ['on_delivery', 'delivered'] };
     } else if (user.role === 'admin') {
-      if (req.query.status) {
+      if (req.query.status === 'wholesale') {
+        // Filtro especial: solo mayoristas (source = wholesale_email), todos los estados activos
+        where.source = 'wholesale_email';
+        where.order_status = { [Op.notIn]: ['delivered'] };
+      } else if (req.query.status) {
         where.order_status = req.query.status;
       } else {
         where.order_status = { [Op.notIn]: ['delivered'] };

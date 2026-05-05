@@ -1392,6 +1392,7 @@ export default function DispatchMap() {
                 <option value="on_delivery">En Entrega</option>
                 <option value="ups_shipped">UPS Shipped</option>
                 <option value="delivered">Entregadas</option>
+                <option value="wholesale">⬛ Mayoristas</option>
               </select>
               <button
                 className="btn-add-manual-order"
@@ -1691,6 +1692,19 @@ export default function DispatchMap() {
               const filteredFavs = searchQuery
                 ? favorites.filter(f => (f.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (f.address || '').toLowerCase().includes(searchQuery.toLowerCase()))
                 : favorites
+              // Separar mayoristas del resto
+              const isWholesaleOrder = o => o.source === 'wholesale_email'
+              const regularOrders = filtered.filter(o => !isWholesaleOrder(o))
+              const wholesaleOrders = filtered.filter(o => isWholesaleOrder(o))
+              // Agrupar mayoristas por nombre de cliente
+              const wholesaleGrouped = Object.entries(
+                wholesaleOrders.reduce((acc, o) => {
+                  const k = o.customer_name || 'Sin nombre'
+                  if (!acc[k]) acc[k] = []
+                  acc[k].push(o)
+                  return acc
+                }, {})
+              )
               return (
               <>
               {filtered.length === 0 && filteredFavs.length === 0 ? (
@@ -1699,7 +1713,7 @@ export default function DispatchMap() {
                   <p>{searchQuery ? 'No se encontraron ordenes' : 'No hay ordenes con direccion'}</p>
                 </div>
               ) : null}
-              {filtered.map(order => {
+              {regularOrders.map(order => {
                 const cfg = getStatusConfig(order.order_status)
                 const isSelected = selectedOrders.includes(order.id)
                 return (
@@ -1911,6 +1925,73 @@ export default function DispatchMap() {
                   </div>
                 )
               })}
+              {wholesaleGrouped.length > 0 && (
+                <div className="wholesale-section">
+                  <div className="wholesale-header">
+                    <span className="material-icons" style={{ color: '#00897b', fontSize: 16 }}>storefront</span>
+                    <span>Mayoristas</span>
+                    <span className="wholesale-count">{wholesaleOrders.length} orden{wholesaleOrders.length !== 1 ? 'es' : ''}</span>
+                  </div>
+                  {wholesaleGrouped.map(([clientName, clientOrders]) => (
+                    <div key={clientName} className="wholesale-client-group">
+                      <div className="wholesale-client-name">
+                        <span className="material-icons" style={{ fontSize: 14, color: '#00897b' }}>business</span>
+                        {clientName}
+                      </div>
+                      {clientOrders.map(order => {
+                        const cfg = getStatusConfig(order.order_status)
+                        const isSelected = selectedOrders.includes(order.id)
+                        return (
+                          <div
+                            key={order.id}
+                            className={`dispatch-order wholesale-order ${isSelected ? 'selected' : ''}`}
+                            onClick={() => {
+                              if (isAdmin) toggleOrderSelection(order.id)
+                              if (mapInstance.current && order.address_lat) {
+                                mapInstance.current.panTo({ lat: order.address_lat, lng: order.address_lng })
+                                mapInstance.current.setZoom(15)
+                              }
+                            }}
+                          >
+                            <div className="do-status-dot" style={{ backgroundColor: cfg.color, border: cfg.color === '#ffffff' ? '2px solid #555' : 'none' }}></div>
+                            <div className="do-content">
+                              <div className="do-top">
+                                <span className="do-tag" style={{ backgroundColor: cfg.color === '#ffffff' ? '#f5f5f5' : `${cfg.color}20`, color: cfg.color === '#ffffff' ? '#555' : cfg.color, borderColor: cfg.color === '#ffffff' ? '#999' : cfg.color, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 12, fontSize: 12, border: '1px solid', fontWeight: 600 }}>
+                                  <span className="material-icons" style={{ fontSize: 13 }}>{cfg.icon}</span>
+                                  {cfg.label}
+                                </span>
+                                <span className="do-id">#{order.id}</span>
+                              </div>
+                              {order.address && <div className="do-address" style={{ fontSize: 12, color: '#555', marginTop: 2 }}>{order.address}</div>}
+                              {order.notes && <div className="do-notes-preview" style={{ fontSize: 11 }}>{order.notes}</div>}
+                              {isAdmin && (
+                                <div className="do-actions" onClick={e => e.stopPropagation()}>
+                                  <div className="do-lifecycle-row">
+                                    {getNextStatus(order.order_status) && (() => {
+                                      const nextCfg = getStatusConfig(getNextStatus(order.order_status))
+                                      const isWhiteBg = nextCfg.color === '#ffffff'
+                                      return (
+                                        <button
+                                          className="dbtn do-lifecycle-btn"
+                                          style={{ backgroundColor: nextCfg.color, color: isWhiteBg ? '#333' : '#fff', border: isWhiteBg ? '1px solid #bbb' : 'none' }}
+                                          onClick={() => handleUpdateStatus(order.id, getNextStatus(order.order_status))}
+                                        >
+                                          <span className="material-icons" style={{ fontSize: 16, color: isWhiteBg ? '#333' : '#fff' }}>{nextCfg.icon}</span>
+                                          {nextCfg.label}
+                                        </button>
+                                      )
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
               {filteredFavs.length > 0 && (
                 <div className="fav-orders-section">
                   <div className="fav-orders-header">
