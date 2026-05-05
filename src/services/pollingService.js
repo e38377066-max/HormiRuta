@@ -1412,7 +1412,7 @@ class PollingService {
         addressMap.set(va.respond_contact_id, va);
       }
 
-      let updatedCount = 0;
+      
       for (const contact of contacts) {
         const contactIdStr = contact.id.toString();
         const existing = addressMap.get(contactIdStr);
@@ -1542,8 +1542,8 @@ class PollingService {
         }
       }
 
-      if (updatedCount > 0) {
-        console.log(`[AddressScan] ${updatedCount} contacto(s) sincronizado(s)`);
+      if (counter.updated > 0) {
+        console.log(`[AddressScan] ${counter.updated} contacto(s) sincronizado(s)`);
       }
     } catch (error) {
       console.error(`[AddressScan] Error en syncContactNames:`, error.message);
@@ -1553,9 +1553,9 @@ class PollingService {
   async scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings) {
     try {
       const extractor = new AddressExtractorService();
-      let updatedCount = 0;
+      const counter = { updated: 0 };
       const RESCAN_INTERVAL_MS = 5 * 60 * 1000;
-      const DELAY_BETWEEN_CONTACTS_MS = 300;
+      const BATCH_CONCURRENCY = 6;
 
       let contactsToScan = allContacts.filter((contact, index, self) =>
         index === self.findIndex(c => c.id === contact.id)
@@ -1639,13 +1639,9 @@ class PollingService {
         }
       }
 
-      for (let i = 0; i < batch.length; i++) {
-        const contact = batch[i];
+      const processContact = async (contact) => {
         const contactIdStr = contact.id.toString();
 
-        if (i > 0) {
-          await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_CONTACTS_MS));
-        }
 
         try {
           const contactName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
@@ -1664,7 +1660,7 @@ class PollingService {
                 );
                 console.log(`[AddressScan] Contacto ${contact.id} eliminado en Respond.io, archivando registro de "${existing.customer_name}"`);
               }
-              continue;
+              return;
             }
             if (contactDetail.success && contactDetail.data) {
               const cData = contactDetail.data;
@@ -1795,7 +1791,7 @@ class PollingService {
               }
             }
             this.addressScannedContacts.add(contactIdStr);
-            continue;
+            return;
           }
 
           if (contactFieldAddress) {
@@ -1809,10 +1805,10 @@ class PollingService {
                 console.log(`[AddressScan] Direccion corregida en contacto ${contactName} (${contact.id}): "${contactFieldAddress}"${cfGeocoded.success ? ` -> "${cfGeocoded.fullAddress}"` : ' (geocodificacion fallida, guardando igualmente)'} [contact_corrected]`);
                 await this.saveValidatedAddress(userId, contact, addressToSave, contactFieldAddress, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
                 this.addressScannedContacts.add(contactIdStr);
-                continue;
+                return;
               } else {
                 this.addressScannedContacts.add(contactIdStr);
-                continue;
+                return;
               }
             } else {
               const cfGeocoded = await geocodingService.geocodeAddress(contactFieldAddress);
@@ -1820,7 +1816,7 @@ class PollingService {
               console.log(`[AddressScan] Direccion desde contacto (sin registro previo) ${contactName} (${contact.id}): "${addressToSave}"${cfGeocoded.success ? '' : ' (geocodificacion fallida, guardando igualmente)'} [contact_corrected]`);
               await this.saveValidatedAddress(userId, contact, addressToSave, contactFieldAddress, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
               this.addressScannedContacts.add(contactIdStr);
-              continue;
+              return;
             }
           }
 
@@ -1829,7 +1825,7 @@ class PollingService {
             if (existing && existing.validated) {
               this.addressScannedContacts.add(contactIdStr);
             }
-            continue;
+            return;
           }
 
           const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
@@ -1852,7 +1848,7 @@ class PollingService {
             let customerTs = 0;
             for (const msg of incomingMessages) {
               const text = msg.message?.text || '';
-              if (!text || text.length < 5) continue;
+              if (!text || text.length < 5) return;
               const extracted = extractor.extractAddressFromMessage(text);
               if (extracted) { customerAddress = extracted; customerTs = tsOf(msg); break; }
             }
@@ -1871,7 +1867,7 @@ class PollingService {
             let agentTs = 0;
             for (const msg of agentMessages) {
               const text = msg.message?.text || '';
-              if (!text || text.length < 5) continue;
+              if (!text || text.length < 5) return;
               const extracted = extractor.extractAddressFromMessage(text);
               if (extracted) { agentAddress = extracted; agentTs = tsOf(msg); break; }
             }
@@ -1913,7 +1909,7 @@ class PollingService {
                   }
                 }
                 this.addressScannedContacts.delete(contactIdStr);
-                continue;
+                return;
               }
             } else if (applyKind === 'customer') {
               const custNorm = customerAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1936,7 +1932,7 @@ class PollingService {
                   }
                 }
                 this.addressScannedContacts.delete(contactIdStr);
-                continue;
+                return;
               }
               // Caso B: cliente envió la MISMA direccion guardada pero el campo
               // Address en Respond esta vacio o desactualizado — push igual.
@@ -1953,7 +1949,7 @@ class PollingService {
             }
 
             this.addressScannedContacts.add(contactIdStr);
-            continue;
+            return;
           }
           let latestExtracted = null;
           let scanMapsLink = null;
@@ -1965,7 +1961,7 @@ class PollingService {
               break;
             }
             const text = msg.message?.text || '';
-            if (!text || text.length < 5) continue;
+            if (!text || text.length < 5) return;
             const gLink = extractor.extractGoogleMapsLink(text);
             if (gLink) {
               scanMapsLink = gLink;
@@ -2001,7 +1997,7 @@ class PollingService {
             ];
             for (const msg of outgoingMessages) {
               const text = msg.message?.text || '';
-              if (!text || text.length < 5) continue;
+              if (!text || text.length < 5) return;
 
               const gLink = extractor.extractGoogleMapsLink(text);
               if (gLink) {
@@ -2046,8 +2042,8 @@ class PollingService {
             result = extractor.extractAddressFromConversation(messagesResult.items);
           }
 
-          if (!result) continue;
-          if (!result.address && !result.googleMapsLink && !result.googleMapsCoords) continue;
+          if (!result) return;
+          if (!result.address && !result.googleMapsLink && !result.googleMapsCoords) return;
 
           let finalAddress = result.address;
           let finalZip = null;
@@ -2061,11 +2057,11 @@ class PollingService {
                 finalZip = geocoded.zip;
                 console.log(`[AddressScan] Ubicacion de ${contactName} (${contact.id}): ${finalAddress}`);
               } else {
-                continue;
+                return;
               }
             } catch (err) {
               console.error(`[AddressScan] Error reverse geocoding:`, err.message);
-              continue;
+              return;
             }
           } else if (result.googleMapsLink) {
             try {
@@ -2081,14 +2077,14 @@ class PollingService {
                   finalZip = geocoded.zip;
                   console.log(`[AddressScan] Google Maps de ${contactName} (${contact.id}): ${finalAddress}`);
                 } else {
-                  continue;
+                  return;
                 }
               } else {
-                continue;
+                return;
               }
             } catch (err) {
               console.error(`[AddressScan] Error resolving maps link:`, err.message);
-              continue;
+              return;
             }
           } else if (result.address) {
             const existing = addressMap.get(contactIdStr);
@@ -2099,7 +2095,7 @@ class PollingService {
               const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
               if (newAddrNorm === existOrigNorm || newAddrNorm === existValidNorm) {
-                continue;
+                return;
               }
               console.log(`[AddressScan] Nueva direccion detectada para ${contactName} (${contact.id}): "${result.address}" (anterior: "${existing.validated}")`);
             }
@@ -2122,10 +2118,10 @@ class PollingService {
               console.log(`[AddressScan] Geocoding no disponible, usando dirección original: "${result.address}"`);
             }
           } else {
-            continue;
+            return;
           }
 
-          if (!finalAddress) continue;
+          if (!finalAddress) return;
 
           const existingDb = addressMap.get(contactIdStr);
           if (existingDb) {
@@ -2133,7 +2129,7 @@ class PollingService {
             const existOrigNorm = (existingDb.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             const existValidNorm = (existingDb.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             if (newAddrNorm === existOrigNorm || newAddrNorm === existValidNorm) {
-              continue;
+              return;
             }
           }
 
@@ -2150,11 +2146,11 @@ class PollingService {
           } catch (updateErr) {
             console.log(`[AddressScan] No se pudo actualizar ${contactName} (${contact.id}), se reintentará después`);
             this.addressScannedContacts.delete(contactIdStr);
-            continue;
+            return;
           }
 
           if (updateResult.success) {
-            updatedCount++;
+            counter.updated++;
             console.log(`[AddressScan] Direccion actualizada para ${contactName} (${contact.id}): "${finalAddress}"${finalZip ? ` ZIP: ${finalZip}` : ''}`);
           } else {
             const altFieldsUpdate = {};
@@ -2166,7 +2162,7 @@ class PollingService {
             try {
               const altResult = await respondio.updateContactCustomFields(contact.id, altFieldsUpdate);
               if (altResult.success) {
-                updatedCount++;
+                counter.updated++;
                 console.log(`[AddressScan] Direccion actualizada (alt) para ${contactName} (${contact.id}): "${finalAddress}"`);
               } else {
                 console.error(`[AddressScan] Error actualizando direccion de ${contactName} (${contact.id}):`, updateResult.error);
@@ -2182,10 +2178,18 @@ class PollingService {
         } catch (contactError) {
           console.error(`[AddressScan] Error procesando contacto ${contact.id}:`, contactError.message);
         }
+      };
+
+      // Procesar contactos en lotes paralelos (BATCH_CONCURRENCY simultáneos).
+      // setImmediate entre lotes cede el event loop a otros sistemas (bot, reconcile).
+      for (let batchStart = 0; batchStart < batch.length; batchStart += BATCH_CONCURRENCY) {
+        const batchSlice = batch.slice(batchStart, batchStart + BATCH_CONCURRENCY);
+        await Promise.allSettled(batchSlice.map(c => processContact(c)));
+        await new Promise(r => setImmediate(r));
       }
 
-      if (updatedCount > 0) {
-        console.log(`[AddressScan] === ${updatedCount} contactos actualizados con direccion ===`);
+      if (counter.updated > 0) {
+        console.log(`[AddressScan] === ${counter.updated} contactos actualizados con direccion ===`);
       }
 
       const validLifecycles = ['approved', 'ordered', 'on delivery', 'pickup ready'];
@@ -2932,13 +2936,13 @@ class PollingService {
 
       if (newContacts.length > 0) {
         console.log(`[StartupReconcile] ${newContacts.length} contacto(s) con lifecycle activo sin registro en DB — revisando campo Address...`);
-        let picked = 0;
+        const pickedCounter = { count: 0 };
         const normalizeFieldName = (n) => (n || '').toLowerCase()
           .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-        for (const c of newContacts) {
+        const processNewContact = async (c) => {
           try {
             const detail = await respondio.getContact(c.id);
-            if (!detail.success || !detail.data) continue;
+            if (!detail.success || !detail.data) return;
             const cData = detail.data;
             const cfAddress = cData.custom_fields?.find(f => {
               const fn = normalizeFieldName(f.name);
@@ -2946,7 +2950,7 @@ class PollingService {
                 fn === 'delivery address' || fn === 'delivery' ||
                 fn === 'address line 1' || fn === 'direccion de entrega';
             });
-            if (!cfAddress?.value || cfAddress.value.trim().length < 5) continue;
+            if (!cfAddress?.value || cfAddress.value.trim().length < 5) return;
             const rawAddr = cfAddress.value.trim();
             const contactForSave = {
               id: c.id,
@@ -2960,14 +2964,18 @@ class PollingService {
             const contactName = `${contactForSave.firstName} ${contactForSave.lastName}`.trim() || `ID:${c.id}`;
             console.log(`[StartupReconcile] Dirección desde campo Address (nuevo): "${contactName}" (${c.id}): "${addressToSave}" [contact_corrected]`);
             await this.saveValidatedAddress(userId, contactForSave, addressToSave, rawAddr, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
-            picked++;
-            // Pequeña pausa para no saturar la API de Respond.io
-            await new Promise(r => setTimeout(r, 300));
+            pickedCounter.count++;
           } catch (err) {
             console.error(`[StartupReconcile] Error leyendo contacto ${c.id}:`, err.message);
           }
+        };
+        const RECONCILE_BATCH = 6;
+        for (let rb = 0; rb < newContacts.length; rb += RECONCILE_BATCH) {
+          const slice = newContacts.slice(rb, rb + RECONCILE_BATCH);
+          await Promise.allSettled(slice.map(c => processNewContact(c)));
+          await new Promise(r => setImmediate(r));
         }
-        if (picked > 0) console.log(`[StartupReconcile] ${picked} dirección(es) nueva(s) capturada(s) desde campo Address`);
+        if (pickedCounter.count > 0) console.log(`[StartupReconcile] ${pickedCounter.count} dirección(es) nueva(s) capturada(s) desde campo Address`);
       }
       // ── FIN nueva sección ──────────────────────────────────────────────────
 
