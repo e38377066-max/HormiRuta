@@ -1,7 +1,7 @@
 class AddressExtractorService {
   constructor() {
     this.streetSuffixes = [
-      'street', 'st', 'avenue', 'ave', 'road', 'rd', 'drive', 'dr',
+      'street', 'st', 'avenue', 'ave', 'av', 'road', 'rd', 'drive', 'dr',
       'lane', 'ln', 'boulevard', 'blvd', 'way', 'court', 'ct',
       'place', 'pl', 'circle', 'cir', 'highway', 'hwy', 'pkwy', 'parkway',
       'trail', 'trl', 'terrace', 'ter', 'loop', 'crossing', 'xing',
@@ -109,7 +109,10 @@ class AddressExtractorService {
 
   hasAddressWithCity(text) {
     const lowerText = text.toLowerCase();
-    const hasNumber = /^\d+\s+\w/.test(text);
+    // Acepta número al inicio O después de un prefijo de unidad (Apt X, Unit X, #X)
+    const hasNumber = /^\d+\s+\w/.test(text) ||
+      /^(?:apt|apartment|unit|suite|ste|#)\s*[\w\d]+\s+\d+\s+\w/i.test(text) ||
+      /\b\d{3,5}\s+[A-Za-z]/.test(text);
     if (!hasNumber) return false;
 
     const hasCity = this.knownCities.some(city => {
@@ -117,12 +120,26 @@ class AddressExtractorService {
       return cityRegex.test(lowerText);
     });
 
-    const hasState = /\b[A-Z]{2}\b/.test(text) && [...this.stateAbbrSet].some(abbr => {
-      const stateRegex = new RegExp(`\\b${abbr}\\b`);
+    const hasState = [...this.stateAbbrSet].some(abbr => {
+      const stateRegex = new RegExp(`\\b${abbr}\\b`, 'i');
       return stateRegex.test(text);
     });
 
     return hasCity || hasState;
+  }
+
+  // Elimina prefijo de unidad al inicio si va antes del número de calle.
+  // Ej: "Apt 14 4608 Columbia av" → "4608 Columbia av, Apt 14"
+  // Devuelve el texto normalizado para que empiece con el número de calle.
+  _normalizeUnitPrefix(text) {
+    // Patrón: (Apt|Unit|Suite|#) <identificador> <número_calle> <resto>
+    const m = text.match(/^(apt|apartment|unit|suite|ste|#)\s*([\w\d]+)\s+(\d{2,5}\s+.+)/i);
+    if (!m) return text;
+    const unitLabel = m[1];
+    const unitNum = m[2];
+    const rest = m[3].trim();
+    // Reescribir como "<número_calle> <calle>, <Apt X>"
+    return `${rest}, ${unitLabel} ${unitNum}`;
   }
 
   extractAddressFromMessage(messageText) {
@@ -136,18 +153,22 @@ class AddressExtractorService {
 
     if (this.isConversationalMessage(cleanText)) return null;
 
-    const hasStreetNumber = /^\d+\s+\w/.test(cleanText) || /\b\d+\s+[A-Za-z]/.test(cleanText);
+    // Intentar también con el prefijo de unidad normalizado (Apt X 4608 St → 4608 St, Apt X)
+    const normalizedText = this._normalizeUnitPrefix(cleanText);
+    const textToCheck = normalizedText !== cleanText ? normalizedText : cleanText;
+
+    const hasStreetNumber = /^\d+\s+\w/.test(textToCheck) || /\b\d+\s+[A-Za-z]/.test(cleanText);
     if (!hasStreetNumber) return null;
 
     const suffixPattern = this.streetSuffixes.map(s => s.replace('.', '\\.')).join('|');
     const streetRegex = new RegExp(`\\b(${suffixPattern})\\b\\.?`, 'i');
-    const hasStreetSuffix = streetRegex.test(cleanText);
+    const hasStreetSuffix = streetRegex.test(textToCheck);
 
-    if (!hasStreetSuffix && !this.hasAddressWithCity(cleanText)) return null;
+    if (!hasStreetSuffix && !this.hasAddressWithCity(textToCheck) && !this.hasAddressWithCity(cleanText)) return null;
 
-    const address = this.cleanAddress(cleanText);
+    const address = this.cleanAddress(textToCheck);
 
-    if (this.validateAddressFormat(address) || this.hasAddressWithCity(cleanText)) {
+    if (this.validateAddressFormat(address) || this.hasAddressWithCity(textToCheck) || this.hasAddressWithCity(cleanText)) {
       return address;
     }
 
