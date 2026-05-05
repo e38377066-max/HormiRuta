@@ -1402,6 +1402,7 @@ class PollingService {
 
   async syncContactNames(userId, contacts) {
     try {
+      let updatedCount = 0;
       const contactIds = contacts.map(c => c.id.toString());
       const existingAddresses = await ValidatedAddress.findAll({
         where: {
@@ -1546,8 +1547,8 @@ class PollingService {
         }
       }
 
-      if (counter.updated > 0) {
-        console.log(`[AddressScan] ${counter.updated} contacto(s) sincronizado(s)`);
+      if (updatedCount > 0) {
+        console.log(`[AddressScan] ${updatedCount} contacto(s) sincronizado(s)`);
       }
     } catch (error) {
       console.error(`[AddressScan] Error en syncContactNames:`, error.message);
