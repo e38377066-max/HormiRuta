@@ -1301,7 +1301,7 @@ class PollingService {
       contact_phone: contact.phone || null,
       channel: 'respond.io',
       direction: 'outgoing',
-      message_type: messageType,
+      message_type: (messageType || 'chatbot').substring(0, 100),
       message_content: text,
       processed: true
     });

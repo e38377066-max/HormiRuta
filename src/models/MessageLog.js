@@ -52,7 +52,7 @@ const MessageLog = sequelize.define('MessageLog', {
     allowNull: false
   },
   message_type: {
-    type: DataTypes.STRING(30),
+    type: DataTypes.STRING(100),
     defaultValue: 'text'
   },
   content: {
