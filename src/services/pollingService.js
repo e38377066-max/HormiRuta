@@ -111,17 +111,19 @@ class PollingService {
       }
     };
 
-    const scanFn = async () => {
-      if (!poller.isRunning) return;
-      if (poller.scanInProgress) return;
-      
-      poller.scanInProgress = true;
-      try {
-        await this.runAddressScanCycle(userId, settings.respond_api_token, settings);
-      } catch (error) {
-        console.error(`[AddressScan] ERROR en ciclo de escaneo:`, error.message);
-      } finally {
-        poller.scanInProgress = false;
+    // Loop auto-programado: el siguiente ciclo arranca apenas termina el anterior.
+    // No se salta ciclos por `inProgress` — si un ciclo tarda 30s, el próximo
+    // empieza 3s después de que termine, sin acumularse en paralelo.
+    const runScanLoop = async () => {
+      while (poller.isRunning) {
+        try {
+          await this.runAddressScanCycle(userId, settings.respond_api_token, settings);
+        } catch (error) {
+          console.error(`[AddressScan] ERROR en ciclo de escaneo:`, error.message);
+        }
+        if (poller.isRunning) {
+          await new Promise(r => setTimeout(r, 3000));
+        }
       }
     };
 
@@ -139,9 +141,11 @@ class PollingService {
       poller.intervalId = setInterval(pollFn, poller.intervalMs);
       console.log(`[Polling] Bot ACTIVO para usuario ${userId} cada ${intervalSeconds}s`);
 
-      setTimeout(() => scanFn(), 5000);
-      poller.scanIntervalId = setInterval(scanFn, 20000);
-      console.log(`[AddressScan] Scanner ACTIVO para usuario ${userId} cada 20s (independiente del bot)`);
+      // Inicia el loop continuo tras 5s de carga inicial.
+      // El loop se detiene solo cuando poller.isRunning = false.
+      poller.scanIntervalId = null; // no hay intervalo fijo; el loop es auto-programado
+      setTimeout(() => runScanLoop(), 5000);
+      console.log(`[AddressScan] Scanner ACTIVO para usuario ${userId} — loop continuo (ciclo cada ~3s tras finalizar, lotes de ${10} paralelos)`);
 
       const botReactiveScanFn = async () => {
         if (!poller.isRunning) return;
@@ -1555,7 +1559,7 @@ class PollingService {
       const extractor = new AddressExtractorService();
       const counter = { updated: 0 };
       const RESCAN_INTERVAL_MS = 5 * 60 * 1000;
-      const BATCH_CONCURRENCY = 6;
+      const BATCH_CONCURRENCY = 10;
 
       let contactsToScan = allContacts.filter((contact, index, self) =>
         index === self.findIndex(c => c.id === contact.id)
@@ -2180,12 +2184,10 @@ class PollingService {
         }
       };
 
-      // Procesar contactos en lotes paralelos (BATCH_CONCURRENCY simultáneos).
-      // setImmediate entre lotes cede el event loop a otros sistemas (bot, reconcile).
+      // Procesar contactos en lotes paralelos — máxima velocidad, sin pausas entre lotes.
       for (let batchStart = 0; batchStart < batch.length; batchStart += BATCH_CONCURRENCY) {
         const batchSlice = batch.slice(batchStart, batchStart + BATCH_CONCURRENCY);
         await Promise.allSettled(batchSlice.map(c => processContact(c)));
-        await new Promise(r => setImmediate(r));
       }
 
       if (counter.updated > 0) {
@@ -2969,11 +2971,10 @@ class PollingService {
             console.error(`[StartupReconcile] Error leyendo contacto ${c.id}:`, err.message);
           }
         };
-        const RECONCILE_BATCH = 6;
+        const RECONCILE_BATCH = 10;
         for (let rb = 0; rb < newContacts.length; rb += RECONCILE_BATCH) {
           const slice = newContacts.slice(rb, rb + RECONCILE_BATCH);
           await Promise.allSettled(slice.map(c => processNewContact(c)));
-          await new Promise(r => setImmediate(r));
         }
         if (pickedCounter.count > 0) console.log(`[StartupReconcile] ${pickedCounter.count} dirección(es) nueva(s) capturada(s) desde campo Address`);
       }
