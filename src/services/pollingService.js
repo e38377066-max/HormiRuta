@@ -1852,7 +1852,7 @@ class PollingService {
             let customerTs = 0;
             for (const msg of incomingMessages) {
               const text = msg.message?.text || '';
-              if (!text || text.length < 5) return;
+              if (!text || text.length < 5) continue;
               const extracted = extractor.extractAddressFromMessage(text);
               if (extracted) { customerAddress = extracted; customerTs = tsOf(msg); break; }
             }
@@ -1866,12 +1866,15 @@ class PollingService {
               }
             }
 
-            const agentMessages = outgoingMessages.filter(m => m.sender?.source === 'user');
+            const businessMsgPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa|atendemos\s+de|direcci[oó]n\s+de\s+nuestro/i;
+            const agentMessages = outgoingMessages.filter(m =>
+              m.sender?.source === 'user' && !businessMsgPattern.test(m.message?.text || '')
+            );
             let agentAddress = null;
             let agentTs = 0;
             for (const msg of agentMessages) {
               const text = msg.message?.text || '';
-              if (!text || text.length < 5) return;
+              if (!text || text.length < 5) continue;
               const extracted = extractor.extractAddressFromMessage(text);
               if (extracted) { agentAddress = extracted; agentTs = tsOf(msg); break; }
             }

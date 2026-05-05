@@ -252,17 +252,21 @@ class AddressExtractorService {
     }
 
     const confirmPatterns = [
-      /(?:esta|esta es|tu|su|la)\s+(?:direccion|dir|address)/i,
+      /(?:esta es|tu|su)\s+(?:direccion|dir|address)/i,
       /(?:confirm|verific|correct|bien)\s+.*(?:direccion|dir|address)/i,
       /(?:direccion|address)\s+(?:es|seria|correcta|confirmada)/i,
       /(?:te|le)\s+(?:mando|envio|confirmo)\s+(?:la|tu|su)?\s*(?:direccion|dir|address)/i,
       /(?:entrega|delivery|envio)\s+(?:a|en|para)\s*:?\s*/i
     ];
+    // Mensajes del agente que hablan de la dirección DEL NEGOCIO, no del cliente.
+    // Estos deben ser ignorados aunque coincidan con un patrón de confirmación.
+    const businessAddressPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa|atendemos\s+de|nuestras?\s+instalaciones|direcci[oó]n\s+de\s+nuestro/i;
     const outgoingMessages = messages.filter(msg => msg.traffic === 'outgoing');
     for (let i = outgoingMessages.length - 1; i >= 0; i--) {
       const msg = outgoingMessages[i];
       const text = msg.message?.text;
       if (!text || text.length < 10) continue;
+      if (businessAddressPattern.test(text)) continue;
       const isConfirmation = confirmPatterns.some(p => p.test(text));
       if (!isConfirmation) continue;
       const mapsLink = this.extractGoogleMapsLink(text);
