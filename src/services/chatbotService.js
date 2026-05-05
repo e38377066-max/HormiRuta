@@ -1773,7 +1773,9 @@ class ChatbotService {
       }
       if (ext.product && !convState.selected_product) {
         // Solo aceptar productos del catálogo
-        const products = this.settings?.products || [];
+        let products = this.settings?.products_list || [];
+        if (typeof products === 'string') { try { products = JSON.parse(products); } catch { products = []; } }
+        if (!Array.isArray(products)) products = [];
         const found = products.find(p =>
           p.name.toLowerCase() === ext.product.toLowerCase() ||
           (p.keywords || []).some(k => ext.product.toLowerCase().includes(k.toLowerCase()))
