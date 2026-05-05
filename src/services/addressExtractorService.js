@@ -202,91 +202,62 @@ class AddressExtractorService {
   }
 
   extractAddressFromConversation(messages) {
-    const incomingMessages = messages.filter(msg => msg.traffic === 'incoming');
+    // Mensajes del negocio (salientes) que hablan de SU PROPIA ubicación — ignorar.
+    const businessAddressPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa|atendemos\s+de|nuestras?\s+instalaciones|direcci[oó]n\s+de\s+nuestro/i;
 
-    for (let i = incomingMessages.length - 1; i >= 0; i--) {
-      const msg = incomingMessages[i];
+    // Recoger todos los candidatos con su timestamp para que gane el más reciente.
+    // Se analizan mensajes entrantes (cliente) Y salientes (agente confirmando
+    // dirección del cliente) — sin bloquear una dirección por ser saliente.
+    const candidates = [];
+    const tsOf = (msg) => {
+      const raw = msg.createdAt || msg.timestamp || 0;
+      return typeof raw === 'number' ? raw : new Date(raw).getTime();
+    };
 
-      if (msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
-        return {
-          address: null,
-          googleMapsCoords: { lat: msg.message.latitude, lng: msg.message.longitude },
-          messageId: msg.messageId,
-          timestamp: msg.createdAt || msg.timestamp
-        };
+    for (const msg of messages) {
+      const isOutgoing = msg.traffic === 'outgoing';
+
+      // Excluir mensajes salientes que hablen de la dirección del negocio.
+      if (isOutgoing && businessAddressPattern.test(msg.message?.text || '')) continue;
+
+      const ts = tsOf(msg);
+
+      // Ubicación GPS (solo entrantes)
+      if (!isOutgoing && msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
+        candidates.push({ ts, result: { address: null, googleMapsCoords: { lat: msg.message.latitude, lng: msg.message.longitude }, messageId: msg.messageId, timestamp: msg.createdAt || msg.timestamp } });
+        continue;
       }
 
       const text = msg.message?.text;
-      if (!text) continue;
+      if (!text || msg.message?.type === 'image') continue;
 
+      // Google Maps link
       const mapsLink = this.extractGoogleMapsLink(text);
       if (mapsLink) {
-        return {
-          address: null,
-          googleMapsLink: mapsLink,
-          messageId: msg.messageId,
-          timestamp: msg.createdAt || msg.timestamp
-        };
+        candidates.push({ ts, result: { address: null, googleMapsLink: mapsLink, messageId: msg.messageId, timestamp: msg.createdAt || msg.timestamp } });
+        continue;
       }
 
-      if (msg.message?.type !== 'text') continue;
+      if (msg.message?.type && msg.message.type !== 'text') continue;
 
+      // Dirección en texto
       const address = this.extractAddressFromMessage(text);
       if (address) {
-        return {
-          address,
-          messageId: msg.messageId,
-          timestamp: msg.createdAt || msg.timestamp
-        };
+        candidates.push({ ts, result: { address, messageId: msg.messageId, timestamp: msg.createdAt || msg.timestamp } });
       }
     }
 
-    // Fallback: ventana deslizante sobre mensajes entrantes
+    // Ordenar por timestamp descendente (más reciente primero) y devolver el primero.
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.ts - a.ts);
+      return candidates[0].result;
+    }
+
+    // Fallback: ventana deslizante sobre mensajes entrantes (dirección en partes).
+    const incomingMessages = messages.filter(msg => msg.traffic === 'incoming');
     const sliceResult = this.extractAddressFromMessageSlices(incomingMessages);
     if (sliceResult?.address) {
-      return {
-        address: sliceResult.address,
-        messageId: null,
-        timestamp: null
-      };
-    }
-
-    const confirmPatterns = [
-      /(?:esta es|tu|su)\s+(?:direccion|dir|address)/i,
-      /(?:confirm|verific|correct|bien)\s+.*(?:direccion|dir|address)/i,
-      /(?:direccion|address)\s+(?:es|seria|correcta|confirmada)/i,
-      /(?:te|le)\s+(?:mando|envio|confirmo)\s+(?:la|tu|su)?\s*(?:direccion|dir|address)/i,
-      /(?:entrega|delivery|envio)\s+(?:a|en|para)\s*:?\s*/i
-    ];
-    // Mensajes del agente que hablan de la dirección DEL NEGOCIO, no del cliente.
-    // Estos deben ser ignorados aunque coincidan con un patrón de confirmación.
-    const businessAddressPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa|atendemos\s+de|nuestras?\s+instalaciones|direcci[oó]n\s+de\s+nuestro/i;
-    const outgoingMessages = messages.filter(msg => msg.traffic === 'outgoing');
-    for (let i = outgoingMessages.length - 1; i >= 0; i--) {
-      const msg = outgoingMessages[i];
-      const text = msg.message?.text;
-      if (!text || text.length < 10) continue;
-      if (businessAddressPattern.test(text)) continue;
-      const isConfirmation = confirmPatterns.some(p => p.test(text));
-      if (!isConfirmation) continue;
-      const mapsLink = this.extractGoogleMapsLink(text);
-      if (mapsLink) {
-        return {
-          address: null,
-          googleMapsLink: mapsLink,
-          messageId: msg.messageId,
-          timestamp: msg.createdAt || msg.timestamp
-        };
-      }
-      const address = this.extractAddressFromMessage(text);
-      if (address) {
-        return {
-          address,
-          messageId: msg.messageId,
-          timestamp: msg.createdAt || msg.timestamp,
-          source: 'agent_confirmation'
-        };
-      }
+      return { address: sliceResult.address, messageId: null, timestamp: null };
     }
 
     return null;

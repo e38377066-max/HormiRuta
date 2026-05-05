@@ -718,6 +718,9 @@ class ChatbotService {
       console.log(`[Bot] Conversacion de ${contact.id} fue cerrada el ${convState.conversation_closed_at} y reabierta, reiniciando flujo como CLIENTE EXISTENTE`);
       isReopened = true;
       reopenedCutoffTime = new Date(convState.conversation_closed_at).getTime();
+      // Preservar selected_product y validated_zip del ciclo anterior.
+      // Si el cliente ya había elegido un producto antes de que se cerrara
+      // la conversación, no debemos pedírselo de nuevo al reabrir.
       await this.updateConversationState(contact.id, { 
         state: 'initial',
         conversation_closed_at: null,
@@ -728,9 +731,8 @@ class ChatbotService {
         awaiting_response: null,
         has_prior_info: true,
         is_existing_customer: true,
-        is_reopened: true,
-        selected_product: null,
-        validated_zip: null
+        is_reopened: true
+        // selected_product y validated_zip se preservan intencionalmente
       });
       convState = await this.getOrCreateConversationState(contact.id);
     }
@@ -1170,6 +1172,14 @@ class ChatbotService {
       return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName);
     }
     // ─────────────────────────────────────────────────────────────────────────
+
+    // Si la conversación fue reabierta Y el cliente ya había elegido un
+    // producto en la sesión anterior, saltarse la selección de producto
+    // y pasar directo al flujo de cierre con ese producto.
+    if (convState.is_reopened && convState.selected_product) {
+      console.log(`[Bot] Conversacion reabierta con producto ya elegido: "${convState.selected_product}" para ${contact.id}. Retomando flujo de cierre.`);
+      return await this.startClosingFlow(contact, convState.selected_product);
+    }
 
     if (isExisting) {
       const welcomeMsg = await this.getAIMsg('welcome_existing', { customerName, lastMessage: messageText }, msgs.welcomeExisting);
