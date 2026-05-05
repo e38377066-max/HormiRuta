@@ -74,8 +74,11 @@ router.get('/orders', requireAuth, async (req, res) => {
       where.order_status = { [Op.in]: ['on_delivery', 'delivered'] };
     } else if (user.role === 'admin') {
       if (req.query.status === 'wholesale') {
-        // Filtro especial: solo mayoristas (source = wholesale_email), todos los estados activos
-        where.source = 'wholesale_email';
+        // Filtro especial: mayoristas (source = wholesale_email o nombre contiene MAY)
+        where[Op.or] = [
+          { source: 'wholesale_email' },
+          { customer_name: { [Op.iRegexp]: '\\bMAY\\b' } }
+        ];
         where.order_status = { [Op.notIn]: ['delivered'] };
       } else if (req.query.status) {
         where.order_status = req.query.status;

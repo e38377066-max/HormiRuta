@@ -1692,8 +1692,8 @@ export default function DispatchMap() {
               const filteredFavs = searchQuery
                 ? favorites.filter(f => (f.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (f.address || '').toLowerCase().includes(searchQuery.toLowerCase()))
                 : favorites
-              // Separar mayoristas del resto
-              const isWholesaleOrder = o => o.source === 'wholesale_email'
+              // Separar mayoristas del resto (por source o por nombre con MAY)
+              const isWholesaleOrder = o => o.source === 'wholesale_email' || /\bMAY\b/i.test(o.customer_name || '')
               const regularOrders = filtered.filter(o => !isWholesaleOrder(o))
               const wholesaleOrders = filtered.filter(o => isWholesaleOrder(o))
               // Agrupar mayoristas por nombre de cliente
