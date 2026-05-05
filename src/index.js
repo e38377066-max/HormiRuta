@@ -33,6 +33,7 @@ import wholesaleRoutes from './routes/wholesale.js';
 import botMemoryRoutes from './routes/botMemory.js';
 import aiLearningRoutes from './routes/aiLearning.js';
 import StyleLearningService from './services/styleLearningService.js';
+import { startGmailSyncScheduler } from './services/gmailSyncService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -140,6 +141,11 @@ async function startServer() {
     // Inicia el aprendizaje periódico del estilo de los agentes (cada hora, primera vez a los 5 min)
     StyleLearningService.startScheduler();
     console.log('[StyleLearning] Scheduler iniciado.');
+
+    // Sincronización automática de Gmail (correos Pickup Ready de 4over)
+    // Primera ejecución a los 2 min, luego cada 15 min.
+    startGmailSyncScheduler();
+
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Area 862 System API running on port ${PORT}`);
