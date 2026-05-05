@@ -1856,6 +1856,15 @@ class PollingService {
               const extracted = extractor.extractAddressFromMessage(text);
               if (extracted) { customerAddress = extracted; customerTs = tsOf(msg); break; }
             }
+            // Fallback: ventana deslizante para direcciones enviadas en partes
+            if (!customerAddress) {
+              const sliceRes = extractor.extractAddressFromMessageSlices(incomingMessages);
+              if (sliceRes?.address) {
+                customerAddress = sliceRes.address;
+                // Usar timestamp del mensaje más reciente del grupo como referencia
+                customerTs = tsOf(incomingMessages[0]);
+              }
+            }
 
             const agentMessages = outgoingMessages.filter(m => m.sender?.source === 'user');
             let agentAddress = null;
@@ -1966,6 +1975,17 @@ class PollingService {
             if (addr) {
               latestExtracted = addr;
               break;
+            }
+          }
+
+          // Si el extractor individual no encontró nada, intentar ventana deslizante
+          // para capturar direcciones enviadas en múltiples mensajes separados
+          // (ej. "818 w centerville" / "Apt 140" / "Garland" → tres mensajes distintos).
+          if (!scanLocationCoords && !scanMapsLink && !latestExtracted) {
+            const sliceResult = extractor.extractAddressFromMessageSlices(incomingMessages);
+            if (sliceResult?.address) {
+              latestExtracted = sliceResult.address;
+              console.log(`[AddressScan] Dirección detectada combinando mensajes (ventana deslizante) para ${contactName} (${contact.id}): "${sliceResult.address}"`);
             }
           }
 

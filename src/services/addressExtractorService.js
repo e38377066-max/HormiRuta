@@ -154,6 +154,32 @@ class AddressExtractorService {
     return null;
   }
 
+  // Intenta extraer una dirección combinando mensajes consecutivos del mismo
+  // remitente en una ventana deslizante. Útil cuando el cliente envía la
+  // dirección en partes separadas (ej. "818 w centerville" / "Apt 140" / "Garland").
+  // Los mensajes se esperan en cualquier orden; se procesan en orden cronológico.
+  extractAddressFromMessageSlices(incomingMessages, windowSize = 4) {
+    // Respond.io devuelve mensajes más recientes primero — invertir para orden cronológico
+    const chronological = [...incomingMessages].reverse();
+    const texts = chronological
+      .map(m => (m.message?.text || '').trim())
+      .filter(t => t.length >= 2);
+
+    for (let i = 0; i < texts.length; i++) {
+      // El primer fragmento debe tener un número de calle para ser candidato
+      const firstHasNumber = /^\d+\s+\w/.test(texts[i]) || /\b\d+\s+[A-Za-z]/.test(texts[i]);
+      if (!firstHasNumber) continue;
+
+      for (let size = 2; size <= Math.min(windowSize, texts.length - i); size++) {
+        const combined = texts.slice(i, i + size).join(' ');
+        if (combined.length > 300) break;
+        const addr = this.extractAddressFromMessage(combined);
+        if (addr) return { address: addr, sliceStart: i, sliceEnd: i + size - 1 };
+      }
+    }
+    return null;
+  }
+
   extractAddressFromConversation(messages) {
     const incomingMessages = messages.filter(msg => msg.traffic === 'incoming');
 
@@ -192,6 +218,16 @@ class AddressExtractorService {
           timestamp: msg.createdAt || msg.timestamp
         };
       }
+    }
+
+    // Fallback: ventana deslizante sobre mensajes entrantes
+    const sliceResult = this.extractAddressFromMessageSlices(incomingMessages);
+    if (sliceResult?.address) {
+      return {
+        address: sliceResult.address,
+        messageId: null,
+        timestamp: null
+      };
     }
 
     const confirmPatterns = [
