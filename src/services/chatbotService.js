@@ -912,9 +912,12 @@ class ChatbotService {
         await this.updateConversationState(contact.id, { out_of_hours_notified: true });
         convState.out_of_hours_notified = true;
         await this.addTrackingTag(contact.id, 'FueraDeHorario');
-        console.log(`[Bot] Fuera de horario — aviso enviado a ${contact.id}, continuando flujo normal`);
+        console.log(`[Bot] Fuera de horario — aviso enviado a ${contact.id}, retornando para evitar doble mensaje`);
+        // Retornar: ya enviamos el aviso OOH. En el próximo mensaje del cliente
+        // (cuando out_of_hours_notified ya sea true) seguirá el flujo normal.
+        return { handled: true, action: 'out_of_hours_notified' };
       }
-      // Continúa el flujo normal aunque sea fuera de horario
+      // Cliente ya fue notificado antes — continúa procesando su respuesta
     } else {
       // Reset out of hours flag si volvimos a horario hábil
       if (convState.out_of_hours_notified) {
@@ -1729,6 +1732,22 @@ class ChatbotService {
   // ====================================================================
   async handleConversational(contact, messageText, convState) {
     try {
+      // ── HANDOFF INMEDIATO: si ya tenemos ZIP + producto, asignar sin más preguntas ──
+      if (convState.validated_zip && convState.selected_product) {
+        console.log(`[Bot] Ya tiene ZIP (${convState.validated_zip}) y producto (${convState.selected_product}) — asignando directamente sin llamar IA`);
+        const customerName = `${contact.firstName || ''}`.trim() || null;
+        const msgs = this.getMessages();
+        const readyMsg = await this.getAIMsg('ready_to_assign', { customerName, product: convState.selected_product },
+          `¡Perfecto${customerName ? ' ' + customerName : ''}! Te voy a conectar con nuestro especialista en ${convState.selected_product} para darte precios y ayudarte con el diseño. ¡En breve te atendemos! 😊`
+        );
+        await this.sendMessage(contact.id, readyMsg);
+        await this.updateConversationState(contact.id, { state: 'assigned' });
+        await this.assignToDefaultAgent(contact.id);
+        await this.addComment(contact.id, `[Bot] Datos completos al reinicio. Producto: ${convState.selected_product}, ZIP: ${convState.validated_zip}.`);
+        CustomerProfileService.refreshFromConversation(this.userId, contact).catch(() => {});
+        return { handled: true, action: 'conversational_handoff_precheck', message: readyMsg };
+      }
+
       // Trae historial de la conversación (Respond.io)
       let recentMessages = [];
       try {
@@ -1789,15 +1808,15 @@ class ChatbotService {
       // Envía la respuesta
       await this.sendMessage(contact.id, ai.reply);
 
-      // Decide handoff
+      // Decide handoff — verifica ZIP y producto tanto del mensaje actual como de mensajes previos
+      const finalZip = stateUpdate.validated_zip || convState.validated_zip;
+      const finalProduct = stateUpdate.selected_product || convState.selected_product;
       const needsHandoff = ai.next_action === 'handoff_to_agent'
         || ai.needs_human === true
         || ai.intent === 'frustracion'
-        || (stateUpdate.validated_zip && (stateUpdate.selected_product || convState.selected_product));
+        || (finalZip && finalProduct);  // ← antes solo miraba stateUpdate.validated_zip
 
       if (needsHandoff) {
-        const finalProduct = stateUpdate.selected_product || convState.selected_product;
-        const finalZip = stateUpdate.validated_zip || convState.validated_zip;
         if (finalProduct && finalZip) {
           stateUpdate.state = 'assigned';
           await this.updateConversationState(contact.id, stateUpdate);
