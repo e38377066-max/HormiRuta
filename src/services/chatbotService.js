@@ -433,7 +433,9 @@ class ChatbotService {
       if (Array.isArray(rawList) && rawList.length > 0) {
         productsList = rawList.map((p, i) => ({ id: i + 1, name: p.name, message: p.message }));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('[Bot] parseProductSelection: error parseando products_list:', e.message);
+    }
     if (productsList.length === 0) {
       productsList = [
         { id: 1, name: 'Tarjetas' },
@@ -850,33 +852,18 @@ class ChatbotService {
       }
     }
 
-    // VERIFICACIÓN CON IA: Si hay agente activo, preguntar a la IA si puede intervenir
-    if (convState.agent_active && this.ai.isAvailable) {
-      let recentMessages = [];
-      try {
-        const histResult = await this.api.listMessages(`id:${contact.id}`, 10);
-        if (histResult.success && histResult.items) {
-          recentMessages = histResult.items.map(m => ({
-            text: m.body?.text || m.text || '',
-            isFromBot: m.sender?.source === 'bot' || m.sender?.source === 'automation',
-            isFromAgent: m.sender?.source === 'user' && m.traffic === 'outgoing',
-            isFromCustomer: m.traffic === 'incoming'
-          })).filter(m => m.text);
-        }
-      } catch (e) {
-        console.error('[Bot-IA] Error obteniendo historial para intervención:', e.message);
-      }
+    // REGLA ESTRICTA: Si hay agente activo, NUNCA interferir.
+    // (Antes: la IA podía intervenir con "FAQs" — esto generaba mensajes del bot
+    // en medio de la atención humana, confundiendo al cliente y al agente.)
+    if (convState.agent_active) {
+      console.log(`[Bot] Agente activo en ${contact.id}, bot no interfiere`);
+      return { handled: false, reason: 'agent_active' };
+    }
 
-      const intervention = await this.ai.evaluateAgentIntervention(messageText, recentMessages, convState);
-      if (intervention.shouldIntervene && intervention.response) {
-        console.log(`[Bot-IA] Interviniendo durante agente: ${intervention.reason}`);
-        await this.sendMessage(contact.id, intervention.response);
-        await this.addComment(contact.id, `[Bot-IA] Respondió FAQ durante atención de agente: "${messageText}"`);
-        return { handled: true, action: 'ai_faq_during_agent', reason: intervention.reason };
-      } else {
-        console.log(`[Bot-IA] No intervenir durante agente: ${intervention.reason}`);
-        return { handled: false, reason: 'agent_active_ai_decided_no_intervene' };
-      }
+    // Igual: si la conversación ya fue asignada, el bot no debe responder
+    if (convState.state === 'assigned') {
+      console.log(`[Bot] Conversación ${contact.id} ya asignada (state=assigned), bot no interfiere`);
+      return { handled: false, reason: 'state_assigned' };
     }
 
     // Verificar si el bot debe responder
@@ -1141,19 +1128,33 @@ class ChatbotService {
     const source = contact.source?.toLowerCase() || '';
     const channel = contact.channel?.toLowerCase() || '';
     const lastChannel = contact.lastChannel?.toLowerCase() || '';
-    
+
     if (source.includes('facebook') || source.includes('fb') ||
         channel.includes('facebook') || channel.includes('fb') ||
         lastChannel.includes('facebook') || lastChannel.includes('fb')) {
       return true;
     }
-    
-    // También detectar por tags
+
+    // Tags
     const tags = contact.tags || [];
-    if (tags.some(t => t.toLowerCase().includes('facebook') || t.toLowerCase().includes('fb'))) {
+    if (tags.some(t => (t.name || t).toLowerCase().includes('facebook') || (t.name || t).toLowerCase().includes('fb'))) {
       return true;
     }
-    
+
+    // Metadata/referral del primer mensaje (click-to-WhatsApp/Messenger ad payload)
+    const meta = contact.referral || contact.metadata || contact.context || null;
+    if (meta && (meta.source || meta.ad_id || meta.adId || meta.ref || meta.fbclid)) {
+      const metaSource = String(meta.source || '').toLowerCase();
+      if (metaSource.includes('ad') || meta.ad_id || meta.adId || meta.fbclid) return true;
+    }
+
+    // Custom fields de Respond.io
+    const cf = contact.customFields || contact.custom_fields || {};
+    for (const k of Object.keys(cf)) {
+      const v = String(cf[k] || '').toLowerCase();
+      if (v.includes('facebook') || v.includes('fb_ad') || v.includes('instagram')) return true;
+    }
+
     return false;
   }
 
