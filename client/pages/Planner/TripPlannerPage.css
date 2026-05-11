@@ -1946,3 +1946,42 @@
   border-color: #f59e0b;
   background: #fff;
 }
+
+/* Tabs Por entregar / Entregas (solo en modo navegación) */
+.route-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  border-bottom: 1px solid #eef0f3;
+}
+.route-tab {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+  font-family: inherit;
+}
+.route-tab:hover {
+  background: #f3f4f6;
+}
+.route-tab.active {
+  background: #5b8def;
+  color: #fff;
+  border-color: #5b8def;
+}
+.route-tab-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+}

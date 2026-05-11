@@ -54,6 +54,7 @@ export default function TripPlannerPage() {
   const [showRouteNameDialog, setShowRouteNameDialog] = useState(false)
   const [mapType, setMapType] = useState('roadmap')
   const [currentRouteId, setCurrentRouteId] = useState(null)
+  const [activeTab, setActiveTab] = useState('pending') // 'pending' | 'delivered' (solo en navegación)
   const [routeCommission, setRouteCommission] = useState(0)
   const [panelHeight, setPanelHeight] = useState(45)
   const [panelSnap, setPanelSnap] = useState('mid')
@@ -1747,14 +1748,39 @@ export default function TripPlannerPage() {
           
           {stops.length > 0 && (
             <>
-              <div className="stops-section-header">Parada</div>
+              {navigationMode ? (
+                <div className="route-tabs">
+                  <button
+                    className={`route-tab ${activeTab === 'pending' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('pending')}
+                    type="button"
+                  >
+                    Por entregar ({stops.filter(s => !s.completed && !s.skipped).length})
+                  </button>
+                  <button
+                    className={`route-tab ${activeTab === 'delivered' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('delivered')}
+                    type="button"
+                  >
+                    Entregas ({stops.filter(s => s.completed || s.skipped).length})
+                  </button>
+                </div>
+              ) : (
+                <div className="stops-section-header">Parada</div>
+              )}
               {(() => {
                 let listCounter = 0
-                return stops.map((stop, index) => {
+                const enriched = stops.map((stop, index) => {
                   const isActive = !stop.completed && !stop.skipped
                   const displayNumber = isActive ? ++listCounter : null
                   return { stop, index, displayNumber }
                 })
+                if (!navigationMode) return enriched
+                return enriched.filter(({ stop }) =>
+                  activeTab === 'pending'
+                    ? (!stop.completed && !stop.skipped)
+                    : (stop.completed || stop.skipped)
+                )
               })().map(({ stop, index, displayNumber }) => (
                 <div
                   key={stop.id}
@@ -1840,6 +1866,12 @@ export default function TripPlannerPage() {
                   <div className={`stop-indicator ${stop.completed ? 'completed' : stop.skipped ? 'skipped' : ''}`}></div>
                 </div>
               ))}
+              {navigationMode && activeTab === 'pending' && stops.filter(s => !s.completed && !s.skipped).length === 0 && (
+                <div className="route-tab-empty">¡Todas las paradas atendidas! 🎉</div>
+              )}
+              {navigationMode && activeTab === 'delivered' && stops.filter(s => s.completed || s.skipped).length === 0 && (
+                <div className="route-tab-empty">Aún no has registrado entregas.</div>
+              )}
             </>
           )}
         </div>
