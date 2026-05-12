@@ -1952,27 +1952,23 @@
   display: flex;
   gap: 8px;
   padding: 10px 12px;
-  background: #fff;
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  border-bottom: 1px solid #eef0f3;
+  background: transparent;
 }
 .route-tab {
   flex: 1;
   padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  background: #f9fafb;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   font-weight: 600;
   font-size: 14px;
-  color: #6b7280;
+  color: #cbd5e1;
   cursor: pointer;
   transition: background .15s, color .15s, border-color .15s;
   font-family: inherit;
 }
 .route-tab:hover {
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.1);
 }
 .route-tab.active {
   background: #5b8def;
