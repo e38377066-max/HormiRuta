@@ -141,8 +141,9 @@ export const requestCameraPermission = async () => {
   if (!isNative) return true
   try {
     const permission = await Camera.checkPermissions()
-    if (permission.camera === 'granted' && permission.photos === 'granted') return true
-    const result = await Camera.requestPermissions({ permissions: ['camera', 'photos'] })
+    if (permission.camera === 'granted') return true
+    if (permission.camera === 'denied') return false
+    const result = await Camera.requestPermissions({ permissions: ['camera'] })
     return result.camera === 'granted'
   } catch (e) {
     console.error('Camera permission error:', e)
@@ -154,7 +155,10 @@ export const takePhoto = async () => {
   if (isNative) {
     const granted = await requestCameraPermission()
     if (!granted) {
-      throw new Error('Permiso de cámara denegado. Actívalo en Configuración > Aplicaciones > Area 862 > Permisos')
+      const msg = platform === 'ios'
+        ? 'Permiso de cámara denegado. Ve a Configuración > Privacidad y Seguridad > Cámara > Area 862 y actívalo'
+        : 'Permiso de cámara denegado. Actívalo en Configuración > Aplicaciones > Area 862 > Permisos'
+      throw new Error(msg)
     }
     const photo = await Camera.getPhoto({
       resultType: CameraResultType.DataUrl,

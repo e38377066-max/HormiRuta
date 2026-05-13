@@ -164,29 +164,44 @@ export default function TripPlannerPage() {
   }
 
   const loadDispatchRoute = (route) => {
-    const routeStops = (route.stops || [])
-      .sort((a, b) => a.order - b.order)
-      .map((s, i) => ({
-        id: i + 1,
-        dbId: s.id,
-        address: s.address,
-        latitude: s.lat,
-        longitude: s.lng,
-        name: s.customer_name || '',
-        phone: s.phone || '',
-        note: s.note || '',
-        completed: s.status === 'completed',
-        skipped: s.status === 'skipped',
-        photo_url: s.photo_url || null,
-        color: '#EA4335',
-        order_cost: s.order_cost,
-        deposit_amount: s.deposit_amount,
-        total_to_collect: s.total_to_collect,
-        payment_method: s.payment_method,
-        amount_collected: s.amount_collected,
-        payment_status: s.payment_status,
-        apartment_number: s.apartment_number || ''
-      }))
+    const skippedOnceKey = `skippedOnce_${route.id}`
+    const skippedOnceIds = new Set(
+      JSON.parse(localStorage.getItem(skippedOnceKey) || '[]')
+    )
+
+    const sorted = (route.stops || []).sort((a, b) => a.order - b.order)
+
+    const mapStop = (s, skippedOnce = false) => ({
+      dbId: s.id,
+      address: s.address,
+      latitude: s.lat,
+      longitude: s.lng,
+      name: s.customer_name || '',
+      phone: s.phone || '',
+      note: s.note || '',
+      completed: s.status === 'completed',
+      skipped: s.status === 'skipped',
+      skippedOnce,
+      photo_url: s.photo_url || null,
+      color: '#EA4335',
+      order_cost: s.order_cost,
+      deposit_amount: s.deposit_amount,
+      total_to_collect: s.total_to_collect,
+      payment_method: s.payment_method,
+      amount_collected: s.amount_collected,
+      payment_status: s.payment_status,
+      apartment_number: s.apartment_number || ''
+    })
+
+    const normal = sorted
+      .filter(s => !skippedOnceIds.has(s.id))
+      .map(s => mapStop(s, false))
+
+    const deferred = sorted
+      .filter(s => skippedOnceIds.has(s.id))
+      .map(s => mapStop(s, true))
+
+    const routeStops = [...normal, ...deferred].map((s, i) => ({ ...s, id: i + 1 }))
 
     setStops(routeStops)
     setRouteName(route.name || 'Ruta Asignada')
@@ -949,6 +964,13 @@ export default function TripPlannerPage() {
       const newStops = [...rest, deferred].map((s, i) => ({ ...s, id: i + 1 }))
       setStops(newStops)
       updateMapMarkers(newStops)
+      if (currentRouteId && stop.dbId) {
+        const key = `skippedOnce_${currentRouteId}`
+        const existing = JSON.parse(localStorage.getItem(key) || '[]')
+        if (!existing.includes(stop.dbId)) {
+          localStorage.setItem(key, JSON.stringify([...existing, stop.dbId]))
+        }
+      }
       closeModal()
       return
     }
@@ -968,6 +990,9 @@ export default function TripPlannerPage() {
           disposition,
           reason: skipReason || null
         })
+        const key = `skippedOnce_${currentRouteId}`
+        const existing = JSON.parse(localStorage.getItem(key) || '[]')
+        localStorage.setItem(key, JSON.stringify(existing.filter(id => id !== stopDbId)))
       }
       const updatedStops = stops.map((s, i) =>
         i === index ? { ...s, skipped: true, skippedOnce: false, completed: false, package_disposition: disposition } : s
@@ -1456,7 +1481,10 @@ export default function TripPlannerPage() {
     setStops([])
     setIsOptimized(false)
     setNavigationMode(false)
-    setCurrentRouteId(null)
+    setCurrentRouteId(prev => {
+      if (prev) localStorage.removeItem(`skippedOnce_${prev}`)
+      return null
+    })
     localStorage.removeItem('activeRouteId')
     localStorage.removeItem('navMode')
     localStorage.removeItem('selectedStop')
