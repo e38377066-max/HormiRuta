@@ -123,7 +123,11 @@ export function AuthProvider({ children }) {
     if (!Capacitor.isNativePlatform()) return
 
     let listener = null
-    const setup = async () => {
+    let cancelled = false
+    let retryTimer = null
+
+    const setup = async (attempt = 0) => {
+      if (cancelled) return
       try {
         const { App } = await import('@capacitor/app')
         listener = await App.addListener('appStateChange', async ({ isActive }) => {
@@ -149,13 +153,23 @@ export function AuthProvider({ children }) {
             isValidatingRef.current = false
           }
         })
-      } catch (err) {
-        console.error('[Auth] Error configurando listener:', err)
+      } catch {
+        // El bridge de Capacitor puede no estar listo al primer render.
+        // Reintentamos hasta 3 veces con backoff antes de desistir.
+        if (attempt < 3 && !cancelled) {
+          retryTimer = setTimeout(() => setup(attempt + 1), 1000 * (attempt + 1))
+        }
       }
     }
 
-    setup()
-    return () => { if (listener) listener.remove().catch(() => {}) }
+    // Pequeña demora inicial para dejar que el bridge de Capacitor termine de inicializarse
+    retryTimer = setTimeout(() => setup(0), 500)
+
+    return () => {
+      cancelled = true
+      clearTimeout(retryTimer)
+      if (listener) listener.remove().catch(() => {})
+    }
   }, [])
 
   // No hay interceptor de 401 global.
