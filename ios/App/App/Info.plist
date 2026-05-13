@@ -43,6 +43,16 @@
                 <string>UIInterfaceOrientationLandscapeLeft</string>
                 <string>UIInterfaceOrientationLandscapeRight</string>
         </array>
+        <key>NSCameraUsageDescription</key>
+        <string>Area 862 necesita acceso a la cámara para capturar fotos de evidencia de entrega y comprobantes de pago.</string>
+        <key>NSPhotoLibraryUsageDescription</key>
+        <string>Area 862 necesita acceso a tus fotos para adjuntar evidencia de entrega y comprobantes de pago.</string>
+        <key>NSPhotoLibraryAddUsageDescription</key>
+        <string>Area 862 necesita permiso para guardar fotos de evidencia de entrega en tu galería.</string>
+        <key>NSLocationWhenInUseUsageDescription</key>
+        <string>Area 862 necesita tu ubicación para mostrar tu posición en el mapa y calcular rutas de entrega.</string>
+        <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+        <string>Area 862 necesita tu ubicación para el seguimiento de rutas de entrega incluso cuando la app está en segundo plano.</string>
         <key>UIViewControllerBasedStatusBarAppearance</key>
         <true/>
         <key>UIApplicationSceneManifest</key>
