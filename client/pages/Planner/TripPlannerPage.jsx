@@ -108,6 +108,15 @@ export default function TripPlannerPage() {
       if (savedStop !== null && savedStop !== 'null') {
         setSelectedStopIndex(parseInt(savedStop))
       }
+      if (mapInstanceRef.current) {
+        setUserLocation(prev => {
+          if (prev) {
+            mapInstanceRef.current.setCenter(prev)
+            mapInstanceRef.current.setZoom(16)
+          }
+          return prev
+        })
+      }
     }
   }, [isOptimized])
 
@@ -360,7 +369,11 @@ export default function TripPlannerPage() {
 
   useEffect(() => {
     if (navigationMode && autoFollow && userLocation && mapInstanceRef.current) {
+      const currentZoom = mapInstanceRef.current.getZoom()
       mapInstanceRef.current.panTo(userLocation)
+      if (currentZoom < 15) {
+        mapInstanceRef.current.setZoom(16)
+      }
     }
     if (navigationMode && userLocation && navSteps.length > 0) {
       const idx = findCurrentStep(userLocation, navSteps)
@@ -1428,20 +1441,15 @@ export default function TripPlannerPage() {
     keepScreenAwake()
 
     if (mapInstanceRef.current) {
-      const bounds = new window.google.maps.LatLngBounds()
-      let hasPoint = false
       if (userLocation) {
-        bounds.extend(userLocation)
-        hasPoint = true
-      }
-      stops.forEach(s => {
-        if (!s.completed && !s.skipped && s.latitude && s.longitude) {
-          bounds.extend({ lat: s.latitude, lng: s.longitude })
-          hasPoint = true
+        mapInstanceRef.current.setCenter(userLocation)
+        mapInstanceRef.current.setZoom(16)
+      } else {
+        const firstPending = stops.find(s => !s.completed && !s.skipped && s.latitude && s.longitude)
+        if (firstPending) {
+          mapInstanceRef.current.setCenter({ lat: firstPending.latitude, lng: firstPending.longitude })
+          mapInstanceRef.current.setZoom(15)
         }
-      })
-      if (hasPoint) {
-        mapInstanceRef.current.fitBounds(bounds, 80)
       }
     }
 
