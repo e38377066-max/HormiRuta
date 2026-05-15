@@ -298,8 +298,17 @@ export const speakInstruction = (text, lang = 'es-MX') => {
 
   const cleanText = text
     .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, 'y')
     .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '')
+    .replace(/&gt;/g, '')
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '')
+    .replace(/&#\d+;/g, '')
+    .replace(/[<>]/g, '')
+    .replace(/&/g, 'y')
     .replace(/\//g, ' ')
+    .trim()
 
   currentUtterance = new SpeechSynthesisUtterance(cleanText)
   currentUtterance.lang = lang

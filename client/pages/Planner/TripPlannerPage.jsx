@@ -21,6 +21,8 @@ export default function TripPlannerPage() {
   const pendingNavRestoreRef = useRef(false)
   const userToStopLineRef = useRef(null)
   const fullRouteFallbackRef = useRef(null)
+  const lastEtaCalcRef = useRef(0)
+  const lastEtaStopIdRef = useRef(null)
   const [userLocation, setUserLocation] = useState(null)
   const [gpsError, setGpsError] = useState(false)
   const [selectedPoint, setSelectedPoint] = useState(null)
@@ -394,7 +396,14 @@ export default function TripPlannerPage() {
       const pending = stops.find(s => !s.completed)
       if (pending && pending.latitude && pending.longitude) {
         updateNavLine(userLocation, { lat: pending.latitude, lng: pending.longitude })
-        calculateNavEta(userLocation, { lat: pending.latitude, lng: pending.longitude })
+        const now = Date.now()
+        const stopChanged = pending.id !== lastEtaStopIdRef.current
+        const timeElapsed = now - lastEtaCalcRef.current > 30000
+        if (stopChanged || timeElapsed) {
+          lastEtaCalcRef.current = now
+          lastEtaStopIdRef.current = pending.id
+          calculateNavEta(userLocation, { lat: pending.latitude, lng: pending.longitude })
+        }
       } else {
         if (navLineRef.current) {
           navLineRef.current.setMap(null)
