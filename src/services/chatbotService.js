@@ -1466,17 +1466,44 @@ class ChatbotService {
         .replace('{{zip_code}}', validation.value)
         .replace('{{city}}', validation.zone?.city || '')
         .replace('{{zone}}', validation.zone?.zone_name || '');
+
+      // Si el cliente ya había indicado su producto antes de dar la zona,
+      // no volver a preguntar el producto — saltar directamente a la info del producto.
+      const alreadySelectedProduct = convState.selected_product;
+
       const coverageMsg = await this.getAIMsg('zip_covered', {
         customerName: name,
         zipCode: validation.value,
         city: validation.zone?.city || null,
-        zone: validation.zone?.zone_name || null
+        zone: validation.zone?.zone_name || null,
+        product: alreadySelectedProduct || null
       }, fallbackCoverage);
       
       await this.sendMessage(contact.id, coverageMsg);
-      await this.sendMessage(contact.id, this.generateProductMenu());
-      
       await this.createOrUpdateOrder(contact, validation.value, customerName, 'covered', validation.zone);
+      await this.addTrackingTag(contact.id, 'ConCobertura');
+
+      if (alreadySelectedProduct) {
+        // Producto ya conocido: enviar info del producto directamente
+        const productInfo = this.getProductInfoMessage(alreadySelectedProduct);
+        if (productInfo) {
+          await this.sendMessage(contact.id, productInfo);
+        }
+
+        await this.updateConversationState(contact.id, {
+          state: 'awaiting_product_response',
+          validated_zip: validation.value,
+          has_prior_info: false,
+          selected_product: alreadySelectedProduct,
+          awaiting_response: 'product_response'
+        });
+
+        await this.addComment(contact.id, `[Bot] Zona validada (${validation.value}) y producto ya conocido (${alreadySelectedProduct}). Saltando menú de productos.`);
+        return { handled: true, action: 'zip_validated_product_already_known' };
+      }
+
+      // Producto aún no seleccionado: mostrar menú
+      await this.sendMessage(contact.id, this.generateProductMenu());
       
       await this.updateConversationState(contact.id, {
         state: 'awaiting_product_no_info',
@@ -1484,8 +1511,6 @@ class ChatbotService {
         has_prior_info: false,
         awaiting_response: 'product_selection'
       });
-      
-      await this.addTrackingTag(contact.id, 'ConCobertura');
       
       return { handled: true, action: 'zip_validated_show_menu' };
       
