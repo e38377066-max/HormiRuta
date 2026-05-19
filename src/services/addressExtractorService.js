@@ -50,7 +50,8 @@ class AddressExtractorService {
       'atlanta', 'chicago', 'los angeles', 'new york', 'phoenix'
     ];
 
-    this.nonAddressPatterns = [
+    // Patrones que SIEMPRE descartan el mensaje (anclados — nunca contienen direcciones)
+    this.hardRejectPatterns = [
       /^(ok|si|no|yes|gracias|listo|perfecto|bueno|bien|hola|claro|que|como|cuando|donde|por|para|dale|va|genial|excelente|entendido)$/i,
       /^(quiero|necesito|tengo|puedo|puede|cuanto|cuesta|precio|pago|cobro|deposito|transferencia|zelle|venmo|cash|tarjeta)$/i,
       /^\d{1,4}$/,
@@ -62,12 +63,21 @@ class AddressExtractorService {
       /instagram/i,
       /^(buenos dias|buenas tardes|buenas noches)/i,
       /^(me puede|me pueden|me interesa|estoy interesad)/i,
+      /^gracias por/i,
+    ];
+
+    // Patrones "suaves" — solo se aplican cuando NO hay señal clara de dirección
+    // (número de calle + sufijo/ciudad). Un mensaje con "pedido" Y "219 curtiss st"
+    // es una dirección válida y no debe descartarse.
+    this.softRejectPatterns = [
       /orden|pedido|servicio|producto|cotizacion/i,
       /descuento|promocion|oferta|especial/i,
-      /^gracias por/i,
       /recordatorio/i,
-      /presupuesto/i
+      /presupuesto/i,
     ];
+
+    // Mantener nonAddressPatterns como alias para compatibilidad interna
+    this.nonAddressPatterns = this.hardRejectPatterns;
 
     this.conversationalPatterns = [
       /\bpero\b/i, /\baunque\b/i, /\bsin embargo\b/i,
@@ -147,11 +157,10 @@ class AddressExtractorService {
 
     const cleanText = messageText.trim();
 
-    for (const pattern of this.nonAddressPatterns) {
+    // Rechazo duro: patrones que nunca contienen direcciones
+    for (const pattern of this.hardRejectPatterns) {
       if (pattern.test(cleanText)) return null;
     }
-
-    if (this.isConversationalMessage(cleanText)) return null;
 
     // Intentar también con el prefijo de unidad normalizado (Apt X 4608 St → 4608 St, Apt X)
     const normalizedText = this._normalizeUnitPrefix(cleanText);
@@ -164,11 +173,24 @@ class AddressExtractorService {
     const streetRegex = new RegExp(`\\b(${suffixPattern})\\b\\.?`, 'i');
     const hasStreetSuffix = streetRegex.test(textToCheck);
 
-    if (!hasStreetSuffix && !this.hasAddressWithCity(textToCheck) && !this.hasAddressWithCity(cleanText)) return null;
+    const hasCity = this.hasAddressWithCity(textToCheck) || this.hasAddressWithCity(cleanText);
+
+    // Señal de dirección fuerte (número + sufijo O número + ciudad conocida):
+    // ignorar filtros suaves — el mensaje contiene una dirección real aunque hable de otras cosas.
+    const strongAddressSignal = hasStreetNumber && (hasStreetSuffix || hasCity);
+
+    if (!strongAddressSignal) {
+      // Señal débil: aplicar filtros suaves y conversacional
+      for (const pattern of this.softRejectPatterns) {
+        if (pattern.test(cleanText)) return null;
+      }
+      if (this.isConversationalMessage(cleanText)) return null;
+      if (!hasStreetSuffix && !hasCity) return null;
+    }
 
     const address = this.cleanAddress(textToCheck);
 
-    if (this.validateAddressFormat(address) || this.hasAddressWithCity(textToCheck) || this.hasAddressWithCity(cleanText)) {
+    if (this.validateAddressFormat(address) || hasCity) {
       return address;
     }
 

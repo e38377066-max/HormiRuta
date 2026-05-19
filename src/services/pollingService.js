@@ -1677,7 +1677,9 @@ class PollingService {
                   fn === 'delivery address' || fn === 'delivery' ||
                   fn === 'address line 1' || fn === 'direccion de entrega';
               });
-              if (cfAddress?.value && cfAddress.value.trim().length >= 5) {
+              // Solo aceptar si parece una dirección real (debe tener número de calle).
+              // Filtra valores genéricos como "United States", nombres de estado/país, etc.
+              if (cfAddress?.value && cfAddress.value.trim().length >= 5 && /\b\d{2,5}\s+[A-Za-z]/.test(cfAddress.value.trim())) {
                 contactFieldAddress = cfAddress.value.trim();
               }
               cfApartment = cData.custom_fields?.find(f => 
@@ -1956,6 +1958,42 @@ class PollingService {
               }
             }
 
+            // Fallback IA para contactos con dirección existente cuando mensajes mixtos
+            // impiden que el regex detecte una nueva dirección del cliente.
+            if (!customerAddress && !agentAddress) {
+              try {
+                const aiKey = settings?.openai_api_key;
+                if (aiKey) {
+                  const aiSvc = new AIService(aiKey, settings, userId);
+                  const recentTexts = incomingMessages
+                    .slice(0, 10)
+                    .map(m => m.message?.text)
+                    .filter(t => typeof t === 'string' && t.trim().length > 0);
+                  if (recentTexts.length > 0) {
+                    const aiExtracted = await aiSvc.extractAddressFromMessages(recentTexts);
+                    if (aiExtracted?.fullAddress) {
+                      const aiNorm = aiExtracted.fullAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+                      const existValidNormAI = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                      const existOrigNormAI = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                      if (aiNorm !== existValidNormAI && aiNorm !== existOrigNormAI) {
+                        const aiGeocoded = await geocodingService.geocodeAddress(aiExtracted.fullAddress);
+                        const aiFinal = aiGeocoded.success ? aiGeocoded.fullAddress : aiExtracted.fullAddress;
+                        console.log(`[AddressScan] IA detectó nueva dirección para ${contactName} (${contact.id}): "${aiFinal}" (anterior: "${existing.validated}")`);
+                        await this.saveValidatedAddress(userId, contact, aiFinal, aiExtracted.fullAddress, aiGeocoded.zip || null, aiGeocoded, 'chat_message');
+                        try {
+                          await respondio.updateContactCustomFields(contact.id, { Address: aiFinal });
+                        } catch (_) {}
+                        this.addressScannedContacts.delete(contactIdStr);
+                        return;
+                      }
+                    }
+                  }
+                }
+              } catch (aiErr) {
+                // IA no disponible — continuar
+              }
+            }
+
             this.addressScannedContacts.add(contactIdStr);
             return;
           }
@@ -1969,7 +2007,7 @@ class PollingService {
               break;
             }
             const text = msg.message?.text || '';
-            if (!text || text.length < 5) return;
+            if (!text || text.length < 5) continue;
             const gLink = extractor.extractGoogleMapsLink(text);
             if (gLink) {
               scanMapsLink = gLink;
@@ -2005,7 +2043,7 @@ class PollingService {
             ];
             for (const msg of outgoingMessages) {
               const text = msg.message?.text || '';
-              if (!text || text.length < 5) return;
+              if (!text || text.length < 5) continue;
 
               const gLink = extractor.extractGoogleMapsLink(text);
               if (gLink) {
@@ -2048,6 +2086,31 @@ class PollingService {
             result = { address: latestExtracted };
           } else {
             result = extractor.extractAddressFromConversation(messagesResult.items);
+          }
+
+          // Fallback IA: cuando todos los métodos regex/heurísticos fallaron,
+          // enviar los últimos mensajes del cliente a GPT para extraer la dirección.
+          // Captura casos difíciles: typos graves, frases mixtas, formato inusual.
+          if (!result || (!result.address && !result.googleMapsLink && !result.googleMapsCoords)) {
+            try {
+              const aiKey = settings?.openai_api_key;
+              if (aiKey) {
+                const aiSvc = new AIService(aiKey, settings, userId);
+                const recentTexts = incomingMessages
+                  .slice(0, 10)
+                  .map(m => m.message?.text)
+                  .filter(t => typeof t === 'string' && t.trim().length > 0);
+                if (recentTexts.length > 0) {
+                  const aiExtracted = await aiSvc.extractAddressFromMessages(recentTexts);
+                  if (aiExtracted?.fullAddress) {
+                    console.log(`[AddressScan] IA detectó dirección para ${contactName} (${contact.id}): "${aiExtracted.fullAddress}" (confianza: ${aiExtracted.confidence})`);
+                    result = { address: aiExtracted.fullAddress };
+                  }
+                }
+              }
+            } catch (aiErr) {
+              // IA no disponible — continuar sin fallback
+            }
           }
 
           if (!result) return;
