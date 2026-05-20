@@ -13,7 +13,7 @@ router.get('/', requireAdmin, async (req, res) => {
     });
 
     const clientsWithStatus = await Promise.all(clients.map(async (wc) => {
-      const activeOrder = await ValidatedAddress.findOne({
+      const activeOrders = await ValidatedAddress.findAll({
         where: {
           customer_name: wc.customer_name,
           order_status: { [Op.in]: ['pickup_ready', 'on_delivery', 'ordered'] },
@@ -38,8 +38,10 @@ router.get('/', requireAdmin, async (req, res) => {
         is_active: wc.is_active,
         last_pickup_at: wc.last_pickup_at,
         pickup_count: wc.pickup_count,
-        active_order_status: activeOrder?.order_status || null,
-        active_order_id: activeOrder?.id || null,
+        active_orders_count: activeOrders.length,
+        active_orders: activeOrders.map(o => ({ id: o.id, order_status: o.order_status, created_at: o.created_at })),
+        active_order_status: activeOrders[0]?.order_status || null,
+        active_order_id: activeOrders[0]?.id || null,
         created_at: wc.created_at,
         updated_at: wc.updated_at
       };
@@ -171,21 +173,6 @@ router.post('/:id/dispatch-now', requireAdmin, async (req, res) => {
 
     if (!client.validated_address) {
       return res.status(400).json({ error: 'El mayorista no tiene dirección registrada' });
-    }
-
-    const activeOrder = await ValidatedAddress.findOne({
-      where: {
-        customer_name: client.customer_name,
-        order_status: { [Op.in]: ['pickup_ready', 'on_delivery', 'ordered'] },
-        dispatch_status: { [Op.ne]: 'archived' }
-      }
-    });
-
-    if (activeOrder) {
-      return res.status(409).json({
-        error: `Ya tiene una orden activa en estado "${activeOrder.order_status}"`,
-        active_order_id: activeOrder.id
-      });
     }
 
     const settings = await (await import('../models/MessagingSettings.js')).default.findOne({

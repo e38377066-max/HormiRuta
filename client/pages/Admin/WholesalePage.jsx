@@ -17,6 +17,55 @@ const STATUS_COLORS = {
   null: '#6b7280'
 }
 
+function ActiveOrdersBadge({ client }) {
+  const count = client.active_orders_count || 0
+  if (count === 0) {
+    return (
+      <span style={{
+        fontSize: 11,
+        background: '#f1f5f9',
+        color: '#6b7280',
+        padding: '2px 10px',
+        borderRadius: 99,
+        fontWeight: 600
+      }}>
+        Sin órdenes activas
+      </span>
+    )
+  }
+  if (count === 1) {
+    const s = client.active_orders[0]?.order_status
+    return (
+      <span style={{
+        fontSize: 11,
+        background: (STATUS_COLORS[s] || '#6b7280') + '22',
+        color: STATUS_COLORS[s] || '#6b7280',
+        padding: '2px 10px',
+        borderRadius: 99,
+        fontWeight: 600
+      }}>
+        {STATUS_LABELS[s] || s}
+      </span>
+    )
+  }
+  return (
+    <span style={{
+      fontSize: 11,
+      background: '#7c3aed22',
+      color: '#7c3aed',
+      padding: '2px 10px',
+      borderRadius: 99,
+      fontWeight: 700,
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4
+    }}>
+      <span className="material-icons" style={{ fontSize: 12 }}>layers</span>
+      {count} órdenes activas
+    </span>
+  )
+}
+
 export default function WholesalePage() {
   const navigate = useNavigate()
   const [clients, setClients] = useState([])
@@ -116,7 +165,11 @@ export default function WholesalePage() {
       showMsg('Este mayorista no tiene dirección registrada', 'error')
       return
     }
-    if (!window.confirm(`¿Agregar a "${client.customer_name}" al despachador ahora como "Listo para Recoger"?`)) return
+    const count = client.active_orders_count || 0
+    const confirmMsg = count > 0
+      ? `"${client.customer_name}" ya tiene ${count} orden(es) activa(s).\n¿Agregar otra orden al despachador?`
+      : `¿Agregar a "${client.customer_name}" al despachador como "Listo para Recoger"?`
+    if (!window.confirm(confirmMsg)) return
     setDispatchingId(client.id)
     try {
       await api.post(`/api/wholesale/${client.id}/dispatch-now`)
@@ -228,16 +281,7 @@ export default function WholesalePage() {
                       {!client.is_active && (
                         <span style={{ fontSize: 11, background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: 99 }}>Inactivo</span>
                       )}
-                      <span style={{
-                        fontSize: 11,
-                        background: STATUS_COLORS[client.active_order_status] + '22',
-                        color: STATUS_COLORS[client.active_order_status],
-                        padding: '2px 10px',
-                        borderRadius: 99,
-                        fontWeight: 600
-                      }}>
-                        {STATUS_LABELS[client.active_order_status] || 'Sin orden activa'}
-                      </span>
+                      <ActiveOrdersBadge client={client} />
                     </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 6 }}>
@@ -274,26 +318,28 @@ export default function WholesalePage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    {client.is_active && !client.active_order_status && (
+                    {client.is_active && (
                       <button
                         onClick={() => handleDispatchNow(client)}
-                        disabled={dispatchingId === client.id}
+                        disabled={dispatchingId === client.id || !client.validated_address}
+                        title={!client.validated_address ? 'Sin dirección registrada' : 'Agregar orden al despachador'}
                         style={{
                           padding: '6px 14px',
                           borderRadius: 8,
                           border: 'none',
-                          background: '#22c55e',
+                          background: (client.active_orders_count || 0) > 0 ? '#7c3aed' : '#22c55e',
                           color: '#fff',
                           fontSize: 12,
                           fontWeight: 600,
-                          cursor: 'pointer',
+                          cursor: client.validated_address ? 'pointer' : 'not-allowed',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 4
+                          gap: 4,
+                          opacity: client.validated_address ? 1 : 0.5
                         }}
                       >
-                        <span className="material-icons" style={{ fontSize: 14 }}>local_shipping</span>
-                        {dispatchingId === client.id ? 'Enviando...' : 'Despachar'}
+                        <span className="material-icons" style={{ fontSize: 14 }}>add_box</span>
+                        {dispatchingId === client.id ? 'Enviando...' : 'Nueva orden'}
                       </button>
                     )}
                     <button
