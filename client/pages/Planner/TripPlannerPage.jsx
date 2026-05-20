@@ -16,6 +16,7 @@ export default function TripPlannerPage() {
   const userLocationMarkerRef = useRef(null)
   const watchIdRef = useRef(null)
   const selectedMarkerRef = useRef(null)
+  const navigationModeRef = useRef(false)
   const navLineRef = useRef(null)
   const navRendererRef = useRef(null)
   const pendingNavRestoreRef = useRef(false)
@@ -63,7 +64,7 @@ export default function TripPlannerPage() {
   const [dispatchRoutes, setDispatchRoutes] = useState([])
   const [loadingDispatch, setLoadingDispatch] = useState(false)
   const [showDispatchRoutes, setShowDispatchRoutes] = useState(true)
-  const [autoFollow, setAutoFollow] = useState(true)
+  const [autoFollow, setAutoFollow] = useState(false)
   const [navEta, setNavEta] = useState('')
   const [navDistance, setNavDistance] = useState('')
   const [navSteps, setNavSteps] = useState([])
@@ -101,10 +102,13 @@ export default function TripPlannerPage() {
   }, [])
 
   useEffect(() => {
+    navigationModeRef.current = navigationMode
+  }, [navigationMode])
+
+  useEffect(() => {
     if (isOptimized && pendingNavRestoreRef.current) {
       pendingNavRestoreRef.current = false
       setNavigationMode(true)
-      setAutoFollow(true)
       keepScreenAwake()
       const savedStop = localStorage.getItem('selectedStop')
       if (savedStop !== null && savedStop !== 'null') {
@@ -323,7 +327,7 @@ export default function TripPlannerPage() {
     })
 
     mapInstanceRef.current.addListener('dragstart', () => {
-      if (navigationMode) {
+      if (navigationModeRef.current) {
         setAutoFollow(false)
       }
     })
@@ -371,11 +375,7 @@ export default function TripPlannerPage() {
 
   useEffect(() => {
     if (navigationMode && autoFollow && userLocation && mapInstanceRef.current) {
-      const currentZoom = mapInstanceRef.current.getZoom()
       mapInstanceRef.current.panTo(userLocation)
-      if (currentZoom < 15) {
-        mapInstanceRef.current.setZoom(16)
-      }
     }
     if (navigationMode && userLocation && navSteps.length > 0) {
       const idx = findCurrentStep(userLocation, navSteps)
@@ -393,7 +393,8 @@ export default function TripPlannerPage() {
 
   useEffect(() => {
     if (navigationMode && userLocation) {
-      const pending = stops.find(s => !s.completed)
+      const selectedValid = (selectedStopIndex !== null && stops[selectedStopIndex] && !stops[selectedStopIndex].completed && !stops[selectedStopIndex].skipped)
+      const pending = selectedValid ? stops[selectedStopIndex] : stops.find(s => !s.completed && !s.skipped)
       if (pending && pending.latitude && pending.longitude) {
         updateNavLine(userLocation, { lat: pending.latitude, lng: pending.longitude })
         const now = Date.now()
@@ -428,7 +429,7 @@ export default function TripPlannerPage() {
       setNavEta('')
       setNavDistance('')
     }
-  }, [userLocation, navigationMode, stops])
+  }, [userLocation, navigationMode, stops, selectedStopIndex])
 
   useEffect(() => {
     if (!mapInstanceRef.current || !window.google) return
@@ -1444,7 +1445,7 @@ export default function TripPlannerPage() {
   const startRoute = () => {
     setNavigationMode(true)
     setSelectedStopIndex(null)
-    setAutoFollow(true)
+    setAutoFollow(false)
     localStorage.setItem('navMode', 'true')
     localStorage.removeItem('selectedStop')
     keepScreenAwake()
@@ -1601,6 +1602,10 @@ export default function TripPlannerPage() {
   const deferredPendingStops = stops.filter(s => !s.completed && !s.skipped && s.skippedOnce)
   const nextPendingStop = activePendingStops.length > 0 ? activePendingStops[0] : deferredPendingStops[0]
   const nextPendingIndex = nextPendingStop ? stops.indexOf(nextPendingStop) : -1
+  const navTarget = (selectedStopIndex !== null && stops[selectedStopIndex] && !stops[selectedStopIndex].completed && !stops[selectedStopIndex].skipped)
+    ? stops[selectedStopIndex]
+    : nextPendingStop
+  const navTargetIndex = navTarget ? stops.indexOf(navTarget) : -1
 
   return (
     <div className="trip-planner-page">
@@ -1623,7 +1628,7 @@ export default function TripPlannerPage() {
           <span className="material-icons">menu</span>
         </button>
 
-        {navigationMode && nextPendingStop && (
+        {navigationMode && navTarget && (
           <div className="nav-bar">
             {navSteps.length > 0 && navSteps[currentStepIndex] && (
               <div className="nav-step-banner">
@@ -1635,9 +1640,9 @@ export default function TripPlannerPage() {
               </div>
             )}
             <div className="nav-bar-stop">
-              <span className="nav-bar-number">{nextPendingIndex + 1}</span>
+              <span className="nav-bar-number">{navTargetIndex + 1}</span>
               <div className="nav-bar-info">
-                <div className="nav-bar-address">{nextPendingStop.name || nextPendingStop.address?.split(',')[0] || 'Siguiente parada'}</div>
+                <div className="nav-bar-address">{navTarget.name || navTarget.address?.split(',')[0] || 'Siguiente parada'}</div>
                 <div className="nav-bar-eta">
                   {navDistance && <span>{navDistance}</span>}
                   {navEta && <span> · {navEta}</span>}
@@ -1662,8 +1667,8 @@ export default function TripPlannerPage() {
           </div>
         )}
 
-        {navigationMode && !autoFollow && (
-          <button className="auto-follow-btn" onClick={() => { setAutoFollow(true); if (userLocation) mapInstanceRef.current?.panTo(userLocation); }}>
+        {navigationMode && (
+          <button className="auto-follow-btn" onClick={() => { if (userLocation) mapInstanceRef.current?.panTo(userLocation); }}>
             <span className="material-icons">my_location</span>
             <span>Centrar</span>
           </button>
