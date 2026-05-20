@@ -1838,11 +1838,77 @@ class PollingService {
           const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
           const outgoingMessages = messagesResult.items.filter(m => m.traffic === 'outgoing');
 
+          const isWholesaleContact = contactIsWholesale(contactName);
+
           // Si ya tiene dirección validada, revisar dos cosas:
           // 1. Si el CLIENTE envió una dirección nueva en el chat (incoming) que
           //    difiere de la guardada — actualizarla y pushear a Respond.
           // 2. Si el AGENTE escribió/confirmo una dirección distinta — corrección.
           if (existing && existing.validated) {
+            // MAYORISTAS: detección especial para cambio/confirmación de dirección
+            if (isWholesaleContact) {
+              const wholesaleResult = extractor.extractAddressFromWholesaleConversation(
+                messagesResult.items,
+                existing.validated
+              );
+
+              if (wholesaleResult?.isSameReference) {
+                // Cliente confirma "la misma dirección" — no hay nada que cambiar
+                console.log(`[AddressScan-W] ${contactName}: confirma "misma dirección" - manteniendo "${existing.validated}"`);
+                this.addressScannedContacts.add(contactIdStr);
+                return;
+              }
+
+              if (wholesaleResult?.address) {
+                const wNorm = wholesaleResult.address.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                if (wNorm !== existValidNorm && wNorm !== existOrigNorm) {
+                  // Intentar también con IA con contexto de dirección existente
+                  let finalWAddr = wholesaleResult.address;
+                  try {
+                    const aiKey = settings?.openai_api_key;
+                    if (aiKey) {
+                      const aiSvc = new AIService(aiKey, settings, userId);
+                      const incomingTexts = incomingMessages
+                        .slice(0, 12)
+                        .map(m => m.message?.text)
+                        .filter(t => typeof t === 'string' && t.trim().length > 0)
+                        .reverse();
+                      const aiResult = await aiSvc.extractAddressFromWholesaleMessages(incomingTexts, existing.validated);
+                      if (aiResult?.isSameReference && existing.validated) {
+                        console.log(`[AddressScan-W] ${contactName}: IA confirma "misma dirección" - manteniendo "${existing.validated}"`);
+                        this.addressScannedContacts.add(contactIdStr);
+                        return;
+                      }
+                      if (aiResult?.fullAddress && (aiResult.confidence === 'high' || aiResult.confidence === 'medium')) {
+                        finalWAddr = aiResult.fullAddress;
+                      }
+                    }
+                  } catch (_) {}
+
+                  const wGeocoded = await geocodingService.geocodeAddress(finalWAddr);
+                  const wFinal = wGeocoded.success ? wGeocoded.fullAddress : finalWAddr;
+                  console.log(`[AddressScan-W] ${contactName}: dirección mayorista actualizada "${wFinal}" (anterior: "${existing.validated}")`);
+                  await this.saveValidatedAddress(userId, contact, wFinal, wholesaleResult.address, wGeocoded.zip || null, wGeocoded, 'chat_message');
+                  try {
+                    const cfNorm = (contactFieldAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const wFinalNorm = wFinal.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (cfNorm !== wFinalNorm) {
+                      await respondio.updateContactCustomFields(contact.id, { Address: wFinal });
+                    }
+                  } catch (_) {}
+                  this.addressScannedContacts.delete(contactIdStr);
+                  return;
+                }
+              }
+
+              // Mayorista sin cambio de dirección — marcar escaneado
+              this.addressScannedContacts.add(contactIdStr);
+              return;
+            }
+
             // Buscamos la mejor candidata en mensajes entrantes (cliente) y en
             // mensajes salientes del agente, comparando timestamps. La MÁS
             // RECIENTE gana (Felipe-fix preservado: si el agente corrige
@@ -2001,6 +2067,44 @@ class PollingService {
           let scanMapsLink = null;
           let scanLocationCoords = null;
 
+          // MAYORISTAS: extractor especializado que maneja pedidos multi-producto,
+          // ignora filtros de orden/producto, y prioriza la dirección más reciente.
+          if (isWholesaleContact) {
+            const wholesaleResult = extractor.extractAddressFromWholesaleConversation(
+              messagesResult.items,
+              null
+            );
+            if (wholesaleResult?.googleMapsCoords) {
+              scanLocationCoords = wholesaleResult.googleMapsCoords;
+            } else if (wholesaleResult?.googleMapsLink) {
+              scanMapsLink = wholesaleResult.googleMapsLink;
+            } else if (wholesaleResult?.address) {
+              latestExtracted = wholesaleResult.address;
+              console.log(`[AddressScan-W] ${contactName} (${contact.id}): dirección mayorista detectada "${latestExtracted}"`);
+            }
+
+            // Fallback IA wholesale si regex no encontró nada
+            if (!scanLocationCoords && !scanMapsLink && !latestExtracted) {
+              try {
+                const aiKey = settings?.openai_api_key;
+                if (aiKey) {
+                  const aiSvc = new AIService(aiKey, settings, userId);
+                  const incomingTexts = incomingMessages
+                    .slice(0, 12)
+                    .map(m => m.message?.text)
+                    .filter(t => typeof t === 'string' && t.trim().length > 0)
+                    .reverse();
+                  if (incomingTexts.length > 0) {
+                    const aiResult = await aiSvc.extractAddressFromWholesaleMessages(incomingTexts, null);
+                    if (aiResult?.fullAddress && (aiResult.confidence === 'high' || aiResult.confidence === 'medium')) {
+                      latestExtracted = aiResult.fullAddress;
+                      console.log(`[AddressScan-W] ${contactName} (${contact.id}): IA detectó dirección mayorista "${latestExtracted}" (conf=${aiResult.confidence})`);
+                    }
+                  }
+                }
+              } catch (_) {}
+            }
+          } else {
           for (const msg of incomingMessages) {
             if (msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
               scanLocationCoords = { lat: msg.message.latitude, lng: msg.message.longitude };
@@ -2030,6 +2134,7 @@ class PollingService {
               console.log(`[AddressScan] Dirección detectada combinando mensajes (ventana deslizante) para ${contactName} (${contact.id}): "${sliceResult.address}"`);
             }
           }
+          } // end !isWholesaleContact
 
           if (!scanLocationCoords && !scanMapsLink && !latestExtracted) {
             const confirmPatterns = [

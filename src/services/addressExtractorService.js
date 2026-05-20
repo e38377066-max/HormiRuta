@@ -223,6 +223,128 @@ class AddressExtractorService {
     return null;
   }
 
+  // Detecta frases como "la misma dirección", "misma dir", "same address as", etc.
+  isSameAddressReference(text) {
+    if (!text) return false;
+    return /\b(la misma|misma dir(?:eccion)?|same address|igual direcci[oó]n|la misma de|la misma que|same as|misma de las|misma que las|misma que antes|la de siempre|usa la misma|use the same)\b/i.test(text);
+  }
+
+  // Como extractAddressFromMessage pero sin softRejectPatterns y con longitud mayor.
+  // Usado para clientes mayoristas cuyos mensajes mezclan listas de productos y dirección.
+  extractAddressFromWholesaleMessage(text) {
+    if (!text || text.length < 8 || text.length > 600) return null;
+
+    const cleanText = text.trim();
+
+    // Solo rechazo duro (nunca contienen direcciones)
+    for (const pattern of this.hardRejectPatterns) {
+      if (pattern.test(cleanText)) return null;
+    }
+
+    const normalizedText = this._normalizeUnitPrefix(cleanText);
+    const textToCheck = normalizedText !== cleanText ? normalizedText : cleanText;
+
+    const hasStreetNumber = /^\d+\s+\w/.test(textToCheck) || /\b\d{3,5}\s+[A-Za-z]/.test(cleanText);
+    if (!hasStreetNumber) return null;
+
+    const suffixPattern = this.streetSuffixes.map(s => s.replace('.', '\\.')).join('|');
+    const streetRegex = new RegExp(`\\b(${suffixPattern})\\b\\.?`, 'i');
+    const hasStreetSuffix = streetRegex.test(textToCheck);
+    const hasCity = this.hasAddressWithCity(textToCheck) || this.hasAddressWithCity(cleanText);
+
+    // Para mayoristas no se aplican softRejectPatterns — el pedido puede decir
+    // "quiero 50 tarjetas, la dirección es 2918 S Jupiter Rd Suite A-28 Garland TX"
+    if (!hasStreetSuffix && !hasCity) return null;
+
+    // Intentar extraer solo la parte que parece dirección (después de "dirección:", "address:", etc.)
+    const addressPrefixMatch = cleanText.match(/(?:direcci[oó]n(?:\s+de\s+entrega)?|address|dir)[:\s]+(.{10,200})/i);
+    const candidate = addressPrefixMatch ? addressPrefixMatch[1].trim() : textToCheck;
+
+    const address = this.cleanAddress(candidate);
+    if (this.validateAddressFormat(address) || hasCity) {
+      return address;
+    }
+
+    return null;
+  }
+
+  // Variante para mayoristas: escanea TODOS los mensajes en orden cronológico,
+  // devuelve la dirección MÁS RECIENTE (el último mensaje puede cambiarla),
+  // detecta referencias "la misma dirección" y las resuelve con existingAddress.
+  extractAddressFromWholesaleConversation(messages, existingAddress = null) {
+    const businessAddressPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa/i;
+
+    const tsOf = (msg) => {
+      const raw = msg.createdAt || msg.timestamp || 0;
+      return typeof raw === 'number' ? raw : new Date(raw).getTime();
+    };
+
+    // Primero: revisar los mensajes más recientes del cliente por referencia "la misma dirección"
+    const sortedIncoming = messages
+      .filter(m => m.traffic === 'incoming' || !m.traffic)
+      .sort((a, b) => tsOf(b) - tsOf(a));
+
+    for (const msg of sortedIncoming.slice(0, 6)) {
+      const text = msg.message?.text || '';
+      if (this.isSameAddressReference(text)) {
+        if (existingAddress) {
+          return { address: existingAddress, isSameReference: true };
+        }
+      }
+    }
+
+    const candidates = [];
+
+    for (const msg of messages) {
+      const isOutgoing = msg.traffic === 'outgoing';
+      if (isOutgoing && businessAddressPattern.test(msg.message?.text || '')) continue;
+
+      const ts = tsOf(msg);
+
+      // Ubicación GPS (solo entrantes)
+      if (!isOutgoing && msg.message?.type === 'location' && msg.message?.latitude && msg.message?.longitude) {
+        candidates.push({ ts, result: { address: null, googleMapsCoords: { lat: msg.message.latitude, lng: msg.message.longitude } } });
+        continue;
+      }
+
+      const text = msg.message?.text;
+      if (!text || msg.message?.type === 'image') continue;
+
+      const mapsLink = this.extractGoogleMapsLink(text);
+      if (mapsLink) {
+        candidates.push({ ts, result: { address: null, googleMapsLink: mapsLink } });
+        continue;
+      }
+
+      if (msg.message?.type && msg.message.type !== 'text') continue;
+
+      // Mensajes del cliente: extractor mayorista (sin softRejectPatterns)
+      // Mensajes del agente: extractor estricto normal
+      const address = isOutgoing
+        ? this.extractAddressFromMessage(text)
+        : this.extractAddressFromWholesaleMessage(text);
+
+      if (address) {
+        candidates.push({ ts, result: { address } });
+      }
+    }
+
+    if (candidates.length > 0) {
+      // La más reciente gana (el cliente puede cambiar dirección en el último mensaje)
+      candidates.sort((a, b) => b.ts - a.ts);
+      return candidates[0].result;
+    }
+
+    // Fallback: ventana deslizante sobre mensajes entrantes
+    const incomingMessages = messages.filter(m => m.traffic === 'incoming' || !m.traffic);
+    const sliceResult = this.extractAddressFromMessageSlices(incomingMessages);
+    if (sliceResult?.address) {
+      return { address: sliceResult.address };
+    }
+
+    return null;
+  }
+
   extractAddressFromConversation(messages) {
     // Mensajes del negocio (salientes) que hablan de SU PROPIA ubicación — ignorar.
     const businessAddressPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa|atendemos\s+de|nuestras?\s+instalaciones|direcci[oó]n\s+de\s+nuestro/i;

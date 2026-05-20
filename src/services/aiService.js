@@ -478,6 +478,86 @@ o {"fullAddress":null,"confidence":"none"} si no hay dirección.`
     }
   }
 
+  // Extractor de dirección especializado para clientes mayoristas.
+  // Maneja pedidos multi-producto, referencias a "la misma dirección" y cambios de dirección
+  // en el mensaje más reciente.
+  async extractAddressFromWholesaleMessages(recentTexts, existingAddress = null) {
+    if (!this.isAvailable) return null;
+    if (!Array.isArray(recentTexts)) recentTexts = [recentTexts];
+    const cleaned = recentTexts
+      .filter(t => typeof t === 'string' && t.trim().length > 0)
+      .slice(-12);
+    if (cleaned.length === 0) return null;
+
+    try {
+      const numbered = cleaned.map((t, i) => `(${i + 1}) ${t.trim()}`).join('\n');
+      const existingNote = existingAddress
+        ? `\nDirección guardada previamente: "${existingAddress}"`
+        : '';
+
+      const messages = [
+        {
+          role: 'system',
+          content: `Eres un extractor de DIRECCIONES DE ENTREGA para pedidos mayoristas en Estados Unidos (Texas/DFW principalmente).
+Los clientes mayoristas envían pedidos largos con múltiples productos (tarjetas, flyers, folletos, etc.) y la dirección puede aparecer:
+- Al inicio del pedido: "Quiero 50 tarjetas... la dirección es 2918 S Jupiter Rd..."
+- Al final: "...y me los entregan en 2918 S Jupiter Rd Suite A-28 Garland TX"
+- Como referencia: "la misma dirección", "misma que las tarjetas", "la misma de siempre"
+- Como cambio en el ÚLTIMO mensaje: "para este pedido la dirección es [NUEVA DIRECCIÓN]"${existingNote}
+
+REGLAS CRÍTICAS:
+1. Si el cliente dice "la misma dirección", "misma dir", "same address", "la de siempre" o similar → devuelve la dirección guardada previamente tal cual (si existe).
+2. Si el ÚLTIMO mensaje contiene una dirección DIFERENTE → esa nueva dirección tiene prioridad absoluta.
+3. Ignora listas de productos, precios, cantidades — busca solo la dirección física.
+4. NO inventes números de calle. Si no hay número real, devuelve null.
+5. confidence: "high" si clara y completa; "medium" si falta zip/estado; "low" si dudas.
+6. Si el mensaje dice "Suite A-28", "Ste A-28", "#28", etc., inclúyelo en la dirección.
+
+Responde SOLO con JSON válido (sin markdown):
+{"fullAddress":"2918 S Jupiter Rd, Suite A-28, Garland, TX 75042","streetNumber":"2918","street":"S Jupiter Rd","unit":"Suite A-28","city":"Garland","state":"TX","zip":"75042","confidence":"high","isSameReference":false}
+o {"fullAddress":null,"confidence":"none"} si no hay dirección.
+o {"fullAddress":"${existingAddress || ''}","isSameReference":true,"confidence":"high"} si el cliente confirma la misma.`
+        },
+        {
+          role: 'user',
+          content: `Mensajes del cliente mayorista (más antiguo primero, más reciente al final):\n${numbered}`
+        }
+      ];
+
+      const response = await this.callOpenAI(messages, 300);
+      if (!response.success) return null;
+
+      let raw = response.content.trim();
+      raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (!m) return null;
+        try { parsed = JSON.parse(m[0]); } catch { return null; }
+      }
+
+      if (!parsed || !parsed.fullAddress || parsed.confidence === 'none') return null;
+
+      return {
+        fullAddress: String(parsed.fullAddress).trim(),
+        streetNumber: parsed.streetNumber ? String(parsed.streetNumber).trim() : null,
+        street: parsed.street ? String(parsed.street).trim() : null,
+        unit: parsed.unit ? String(parsed.unit).trim() : null,
+        city: parsed.city ? String(parsed.city).trim() : null,
+        state: parsed.state ? String(parsed.state).trim().toUpperCase() : null,
+        zip: parsed.zip ? String(parsed.zip).trim().slice(0, 5) : null,
+        confidence: parsed.confidence || 'medium',
+        isSameReference: parsed.isSameReference === true
+      };
+    } catch (e) {
+      console.error('[AI] extractAddressFromWholesaleMessages error:', e.message);
+      return null;
+    }
+  }
+
   // Detect frustration in a message
   async detectFrustration(messageText) {
     if (!this.isAvailable) return false;
