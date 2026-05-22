@@ -2296,6 +2296,14 @@ class PollingService {
 
             geocoded = await geocodingService.geocodeAddress(result.address);
 
+            // Rechazar resultados de geocoding que sean solo país/estado/ciudad (sin número de calle)
+            // Las direcciones válidas en EE.UU. comienzan con el número de calle: "1234 Main St, ..."
+            const isVagueGeoResult = (addr) => {
+              if (!addr) return true;
+              if (!/^\d{1,5}\s+[A-Za-z]/.test(addr.trim())) return true;
+              return false;
+            };
+
             if (geocoded.success && geocoded.confidence === 'high') {
               finalAddress = geocoded.fullAddress;
               finalZip = geocoded.zip;
@@ -2303,6 +2311,10 @@ class PollingService {
                 console.log(`[AddressScan] Geocoding corrigió: "${result.address}" -> "${finalAddress}"`);
               }
             } else if (geocoded.success && geocoded.confidence === 'low') {
+              if (isVagueGeoResult(geocoded.fullAddress)) {
+                console.log(`[AddressScan] Geocoding baja confianza descartado (resultado vago): "${result.address}" -> "${geocoded.fullAddress}"`);
+                return;
+              }
               finalAddress = geocoded.fullAddress;
               finalZip = geocoded.zip;
               console.log(`[AddressScan] Geocoding (baja confianza): "${result.address}" -> "${finalAddress}"`);
@@ -2326,6 +2338,11 @@ class PollingService {
               return;
             }
           }
+
+          // Eliminar emojis del address antes de enviarlo a Respond.io (rechaza emojis en campos de contacto)
+          const stripEmojis = (str) => str ? str.replace(/\p{Emoji_Presentation}/gu, '').replace(/\s{2,}/g, ' ').trim() : str;
+          finalAddress = stripEmojis(finalAddress);
+          if (!finalAddress) return;
 
           const customFieldsUpdate = {};
           customFieldsUpdate.address = finalAddress;

@@ -64,6 +64,18 @@ class AddressExtractorService {
       /^(buenos dias|buenas tardes|buenas noches)/i,
       /^(me puede|me pueden|me interesa|estoy interesad)/i,
       /^gracias por/i,
+      // Nombres de país/lugar genérico — nunca son direcciones
+      /^(estados\s+unidos|united\s+states|m[eé]xico|mexico|canada|usa|u\.s\.a\.?)$/i,
+      /^(casa|home|trabajo|work|oficina|office|aqui|ahi|alla|here|there)$/i,
+      // Listas de precios: números separados por "y" con palabras de servicio
+      /\d+\s+y\s+(full|clean|detail|wash|super|basico|completo|estandar)/i,
+      /\b(super\s+clean|full\s+detail|bofeado?|bofear)\b/i,
+      // Mensajes de marketing con emojis y listas de productos/precios
+      /(paquetes\s+disponibles|incluye\s+dise[ñn]o|proceso\s+de\s+\d+\s+d[ií]as|disponible\s+en\s+el\s+[aá]rea)/i,
+      // Precio con cantidad: "500 por $60", "1000 por $70"
+      /\b\d{3,}\s+por\s+\$?\d+/i,
+      // Múltiples precios: "50 y 160 y 250" o "150, 250, 350"
+      /\b\d+\s*[y,]\s*\d+\s*[y,]\s*\d+/,
     ];
 
     // Patrones "suaves" — solo se aplican cuando NO hay señal clara de dirección
@@ -161,6 +173,10 @@ class AddressExtractorService {
     for (const pattern of this.hardRejectPatterns) {
       if (pattern.test(cleanText)) return null;
     }
+
+    // Rechazar mensajes con muchos emojis (mensajes de marketing/publicidad)
+    const emojiCount = (cleanText.match(/\p{Emoji_Presentation}/gu) || []).length;
+    if (emojiCount >= 3) return null;
 
     // Intentar también con el prefijo de unidad normalizado (Apt X 4608 St → 4608 St, Apt X)
     const normalizedText = this._normalizeUnitPrefix(cleanText);

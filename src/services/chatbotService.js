@@ -1514,6 +1514,17 @@ class ChatbotService {
       
       return { handled: true, action: 'zip_validated_show_menu' };
       
+    } else if (validation.type === 'city_needs_zip') {
+      // Ciudad conocida en DFW pero sin ZIP registrado — pedir ZIP para confirmar cobertura
+      const customerName2 = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const cityNeedsZipMsg = await this.getAIMsg(
+        'remind_zip',
+        { customerName: customerName2, lastMessage: messageText, city: validation.value },
+        `¡Gracias! Para confirmar si tenemos cobertura en ${validation.value}, ¿me puedes enviar tu código postal (ZIP)? 📍\n\nPor ejemplo: 75042`
+      );
+      await this.sendMessage(contact.id, cityNeedsZipMsg);
+      return { handled: true, action: 'city_needs_zip_requested' };
+
     } else {
       const fallbackNoCoverage = msgs.noCoverage
         .replace('{{zip_code}}', validation.value)

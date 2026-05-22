@@ -180,12 +180,14 @@ class AddressValidationService {
             message: `Ciudad ${zone.city} validada - ZIP ${zone.zip_code}`
           };
         } else {
+          // Ciudad conocida en DFW pero no en la base de datos de cobertura:
+          // No decir "no llegamos" — pedir ZIP para confirmar
           return {
             valid: false,
-            type: 'city',
+            type: 'city_needs_zip',
             value: cityName,
             zone: null,
-            message: `No hay cobertura en ${cityName}`
+            message: `Ciudad conocida pero sin ZIP registrado: ${cityName}`
           };
         }
       }
