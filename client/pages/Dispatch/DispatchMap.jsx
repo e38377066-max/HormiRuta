@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { Loader } from '@googlemaps/js-api-loader'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../api'
@@ -111,6 +111,8 @@ export default function DispatchMap() {
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [messageSuccess, setMessageSuccess] = useState('')
+  const [visibleDrivers, setVisibleDrivers] = useState(null)
+  const [showDriverFilter, setShowDriverFilter] = useState(false)
   const [showManualOrder, setShowManualOrder] = useState(false)
   const [manualOrderForm, setManualOrderForm] = useState({ customer_name: '', customer_phone: '', validated_address: '', order_cost: '', deposit_amount: '', notes: '', apartment_number: '' })
   const [manualOrderGeo, setManualOrderGeo] = useState(null)
@@ -148,6 +150,35 @@ export default function DispatchMap() {
 
   const selectedOrders = selectionList.filter(x => x.type === 'order').map(x => x.id)
   const selectedFavorites = selectionList.filter(x => x.type === 'favorite').map(x => x.id)
+
+  const activeDriversList = useMemo(() => {
+    const seen = new Set()
+    const entries = []
+    routes.filter(r => r.status !== 'completed').forEach(route => {
+      const name = route.status === 'assigned' && route.orders?.[0]?.driver_name
+        ? route.orders[0].driver_name
+        : (route.driver_name || null)
+      if (!name || seen.has(name)) return
+      seen.add(name)
+      const colorIdx = Math.abs([...name].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0))
+      entries.push({ name, color: getDriverColor(colorIdx) })
+    })
+    return entries
+  }, [routes])
+
+  const toggleDriverVisibility = useCallback((driverName) => {
+    setVisibleDrivers(prev => {
+      const allNames = activeDriversList.map(d => d.name)
+      const currentSet = prev === null ? new Set(allNames) : new Set(prev)
+      if (currentSet.has(driverName)) {
+        currentSet.delete(driverName)
+      } else {
+        currentSet.add(driverName)
+      }
+      if (currentSet.size === allNames.length) return null
+      return currentSet
+    })
+  }, [activeDriversList])
 
   const fetchData = useCallback(async () => {
     try {
@@ -346,7 +377,14 @@ export default function DispatchMap() {
       markersRef.current.push(marker)
     })
 
-    routes.filter(route => route.status !== 'completed').forEach(route => {
+    routes.filter(route => {
+      if (route.status === 'completed') return false
+      if (visibleDrivers === null) return true
+      const dn = route.status === 'assigned' && route.orders?.[0]?.driver_name
+        ? route.orders[0].driver_name
+        : (route.driver_name || null)
+      return visibleDrivers.has(dn || '__none__')
+    }).forEach(route => {
       const stopsToRender = route.route_stops || []
       if (!stopsToRender.length) return
       const driverName = route.status === 'assigned' && route.orders?.[0]?.driver_name
@@ -504,7 +542,7 @@ export default function DispatchMap() {
 
       markersRef.current.push(marker)
     })
-  }, [orders, selectionList, routes, favorites, showAddStopsPanel, editSelectedOrders, editSelectedFavorites])
+  }, [orders, selectionList, routes, favorites, showAddStopsPanel, editSelectedOrders, editSelectedFavorites, visibleDrivers])
 
   useEffect(() => {
     if (directionsRendererRef.current) {
@@ -2649,6 +2687,50 @@ export default function DispatchMap() {
 
       <div className="dispatch-map-area">
         <div ref={mapRef} className="dispatch-google-map"></div>
+
+        {/* Filtro de choferes */}
+        {activeDriversList.length > 1 && (
+          <div className="map-driver-filter">
+            <button
+              className={`map-driver-filter-btn${showDriverFilter ? ' active' : ''}${visibleDrivers !== null ? ' filtered' : ''}`}
+              onClick={() => setShowDriverFilter(p => !p)}
+              title="Filtrar rutas por chofer"
+            >
+              <span className="material-icons" style={{ fontSize: 16 }}>tune</span>
+              Choferes
+              {visibleDrivers !== null && (
+                <span className="map-filter-badge">{visibleDrivers.size}/{activeDriversList.length}</span>
+              )}
+            </button>
+            {showDriverFilter && (
+              <div className="map-driver-filter-panel">
+                <div className="map-driver-filter-title">Mostrar rutas de:</div>
+                <label className="map-driver-filter-row" onClick={() => {
+                  setVisibleDrivers(null)
+                }}>
+                  <input
+                    type="checkbox"
+                    readOnly
+                    checked={visibleDrivers === null}
+                  />
+                  <span style={{ fontWeight: 600 }}>Todos los choferes</span>
+                </label>
+                <div className="map-driver-filter-divider" />
+                {activeDriversList.map(({ name, color }) => {
+                  const isVisible = visibleDrivers === null || visibleDrivers.has(name)
+                  return (
+                    <label key={name} className="map-driver-filter-row" onClick={() => toggleDriverVisibility(name)}>
+                      <input type="checkbox" readOnly checked={isVisible} />
+                      <span className="map-driver-filter-dot" style={{ backgroundColor: color }} />
+                      <span>{name}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="map-legend">
           {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
             <div key={key} className="legend-item">
