@@ -366,14 +366,8 @@ export default function DispatchMap() {
         const isSkipped = stop.status === 'skipped' || stop.status === 'failed'
         const num = stopIdx + 1
 
-        let iconUrl
-        if (isCompleted) {
-          iconUrl = createCompletedIcon(num)
-        } else if (isSkipped) {
-          iconUrl = createSkippedIcon(num)
-        } else {
-          iconUrl = createNumberedIcon(num, color)
-        }
+        const iconColor = isCompleted ? '#22c55e' : isSkipped ? '#9e9e9e' : color
+        const iconUrl = createNumberedIcon(num, iconColor)
 
         const marker = new window.google.maps.Marker({
           position: { lat: stop.lat, lng: stop.lng },
