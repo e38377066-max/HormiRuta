@@ -20,6 +20,8 @@ const DRIVER_COLORS = [
   '#4527a0', '#ad1457', '#00695c', '#d84315', '#283593'
 ]
 
+const getDriverColor = (driverIdx) => DRIVER_COLORS[driverIdx % DRIVER_COLORS.length]
+
 function createNumberedIcon(number, color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44">
     <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26s18-12.5 18-26C36 8.06 27.94 0 18 0z" fill="${color}" stroke="#fff" stroke-width="2"/>
@@ -674,7 +676,6 @@ export default function DispatchMap() {
     setDragIdx(null)
   }
 
-  const getDriverColor = (driverIdx) => DRIVER_COLORS[driverIdx % DRIVER_COLORS.length]
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
