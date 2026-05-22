@@ -1333,6 +1333,17 @@
   flex-shrink: 0;
 }
 
+.map-route-legends {
+  position: absolute;
+  bottom: 16px;
+  left: 170px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  z-index: 10;
+}
+
 .map-driver-legend {
   position: absolute;
   bottom: 16px;
@@ -1345,6 +1356,11 @@
   flex-direction: column;
   gap: 4px;
   z-index: 10;
+}
+
+.map-driver-legend--inline {
+  position: static;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
 .map-driver-legend-title {

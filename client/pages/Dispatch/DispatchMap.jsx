@@ -2657,9 +2657,10 @@ export default function DispatchMap() {
             </div>
           ))}
         </div>
-        {/* Leyenda de estado de paradas en ruta */}
+        {/* Leyendas de rutas: Paradas + Choferes lado a lado */}
+        <div className="map-route-legends">
         {routes.some(r => r.status !== 'completed' && r.route_stops?.length > 0) && (
-          <div className="map-driver-legend">
+          <div className="map-driver-legend map-driver-legend--inline">
             <div className="map-driver-legend-title">
               <span className="material-icons" style={{ fontSize: 14 }}>pin_drop</span>
               Paradas
@@ -2694,7 +2695,7 @@ export default function DispatchMap() {
           })
           if (driverEntries.length === 0) return null
           return (
-            <div className="map-driver-legend">
+            <div className="map-driver-legend map-driver-legend--inline">
               <div className="map-driver-legend-title">
                 <span className="material-icons" style={{ fontSize: 14 }}>directions_car</span>
                 Choferes
@@ -2708,6 +2709,7 @@ export default function DispatchMap() {
             </div>
           )
         })()}
+        </div>
       </div>
 
       {showAssignDriver && (
