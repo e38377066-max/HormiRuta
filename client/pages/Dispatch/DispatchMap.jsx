@@ -28,6 +28,24 @@ function createNumberedIcon(number, color) {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
 
+function createCompletedIcon(number) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44">
+    <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26s18-12.5 18-26C36 8.06 27.94 0 18 0z" fill="#22c55e" stroke="#fff" stroke-width="2"/>
+    <text x="18" y="14" text-anchor="middle" fill="white" font-size="9" font-family="Arial">${number}</text>
+    <text x="18" y="25" text-anchor="middle" fill="white" font-size="14" font-weight="bold" font-family="Arial">✓</text>
+  </svg>`
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
+}
+
+function createSkippedIcon(number) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44">
+    <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26s18-12.5 18-26C36 8.06 27.94 0 18 0z" fill="#9e9e9e" stroke="#fff" stroke-width="2"/>
+    <text x="18" y="14" text-anchor="middle" fill="white" font-size="9" font-family="Arial">${number}</text>
+    <text x="18" y="25" text-anchor="middle" fill="white" font-size="13" font-weight="bold" font-family="Arial">✕</text>
+  </svg>`
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
+}
+
 function createTriangleIcon(color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34">
     <polygon points="17,2 32,32 2,32" fill="${color}" stroke="#fff" stroke-width="2.5"/>
@@ -344,25 +362,46 @@ export default function DispatchMap() {
       stopsToRender.forEach((stop, stopIdx) => {
         if (!stop.lat || !stop.lng) return
 
+        const isCompleted = stop.status === 'completed'
+        const isSkipped = stop.status === 'skipped' || stop.status === 'failed'
+        const num = stopIdx + 1
+
+        let iconUrl
+        if (isCompleted) {
+          iconUrl = createCompletedIcon(num)
+        } else if (isSkipped) {
+          iconUrl = createSkippedIcon(num)
+        } else {
+          iconUrl = createNumberedIcon(num, color)
+        }
+
         const marker = new window.google.maps.Marker({
           position: { lat: stop.lat, lng: stop.lng },
           map: mapInstance.current,
           icon: {
-            url: createNumberedIcon(stopIdx + 1, color),
+            url: iconUrl,
             scaledSize: new window.google.maps.Size(36, 44),
             anchor: new window.google.maps.Point(18, 44)
           },
           title: `${stop.customer_name || 'Sin nombre'} - ${stop.address || ''}`,
-          zIndex: 50
+          zIndex: isCompleted ? 20 : isSkipped ? 15 : 50
         })
+
+        const statusBadge = isCompleted
+          ? `<span style="background:#22c55e;color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:bold">✓ Entregada</span>`
+          : isSkipped
+            ? `<span style="background:#9e9e9e;color:white;padding:2px 8px;border-radius:4px;font-size:12px">✕ Saltada</span>`
+            : `<span style="background:${color};color:white;padding:2px 8px;border-radius:4px;font-size:12px">${driverName ? driverName + ' — ' : ''}Parada ${num}</span>`
+
+        const completedTime = isCompleted && stop.completed_at
+          ? `<br/><span style="color:#22c55e;font-size:11px">✓ ${new Date(stop.completed_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>`
+          : ''
 
         const infoContent = `
           <div style="font-family:sans-serif;min-width:200px">
             <strong>${stop.customer_name || 'Sin nombre'}</strong><br/>
             <span style="color:#666">${stop.address || ''}</span><br/>
-            <span style="background:${color};color:white;padding:2px 8px;border-radius:4px;font-size:12px">
-              ${driverName ? driverName + ' — ' : ''}Parada ${stopIdx + 1}
-            </span>
+            ${statusBadge}${completedTime}
             <br/><span style="color:#888;font-size:11px">${route.name || ''}</span>
           </div>
         `
@@ -2624,6 +2663,27 @@ export default function DispatchMap() {
             </div>
           ))}
         </div>
+        {/* Leyenda de estado de paradas en ruta */}
+        {routes.some(r => r.status !== 'completed' && r.route_stops?.length > 0) && (
+          <div className="map-driver-legend">
+            <div className="map-driver-legend-title">
+              <span className="material-icons" style={{ fontSize: 14 }}>pin_drop</span>
+              Paradas
+            </div>
+            <div className="legend-item">
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#6a1b9a', color: 'white', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>1</span>
+              <span>Por entregar</span>
+            </div>
+            <div className="legend-item">
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#22c55e', color: 'white', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>✓</span>
+              <span>Entregada</span>
+            </div>
+            <div className="legend-item">
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#9e9e9e', color: 'white', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>✕</span>
+              <span>Saltada</span>
+            </div>
+          </div>
+        )}
         {/* Leyenda de choferes por color */}
         {(() => {
           const activeRoutes = routes.filter(r => r.status !== 'completed' && (r.route_stops?.length >= 2 || []))
