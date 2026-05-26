@@ -66,14 +66,15 @@ class AddressValidationService {
   async findZoneByCity(cityName) {
     if (!cityName || cityName.length < 3) return null;
     
-    const zone = await CoverageZone.findOne({
-      where: {
-        city: {
-          [Op.iLike]: `%${cityName}%`
-        },
-        is_active: true
-      }
-    });
+    const where = {
+      city: {
+        [Op.iLike]: `%${cityName}%`
+      },
+      is_active: true
+    };
+    if (this.userId) where.user_id = this.userId;
+
+    const zone = await CoverageZone.findOne({ where });
     
     return zone;
   }
@@ -140,12 +141,9 @@ class AddressValidationService {
     const zipCode = this.extractZipCode(text);
     
     if (zipCode) {
-      const zone = await CoverageZone.findOne({
-        where: {
-          zip_code: zipCode,
-          is_active: true
-        }
-      });
+      const zipWhere = { zip_code: zipCode, is_active: true };
+      if (this.userId) zipWhere.user_id = this.userId;
+      const zone = await CoverageZone.findOne({ where: zipWhere });
       
       if (zone) {
         return {
@@ -245,12 +243,9 @@ class AddressValidationService {
       };
     }
 
-    const zone = await CoverageZone.findOne({
-      where: {
-        zip_code: zipCode,
-        is_active: true
-      }
-    });
+    const coverageWhere = { zip_code: zipCode, is_active: true };
+    if (this.userId) coverageWhere.user_id = this.userId;
+    const zone = await CoverageZone.findOne({ where: coverageWhere });
 
     if (zone) {
       return {

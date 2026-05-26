@@ -205,7 +205,7 @@ class AIService {
 ## INFORMACIÓN DEL NEGOCIO
 - Empresa: Area 862 Graphics LLC
 - Slogan: "Design, Print and Ship"
-- Dirección: 2121 Sylvan Ave #B, Dallas, TX 75208
+- Dirección: 744 Creekstone Ct, Cedar Hill, TX 75104
 - Teléfono: (469) 684-3174
 - Horario: Lunes-Viernes 9AM-6PM, Sábados 9AM-4PM, Domingos cerrado
 - Zona de entrega: Área metropolitana de Dallas-Fort Worth (DFW), Texas
