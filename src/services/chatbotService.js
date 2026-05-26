@@ -132,7 +132,7 @@ class ChatbotService {
   getHandoffText() {
     if (!this.isWithinBusinessHours()) {
       const hoursText = this.getBusinessHoursText();
-      return `en nuestro horario de atención (${hoursText}), un agente o diseñador te atenderá 🕐`;
+      return `en horario laboral (${hoursText}) un diseñador se comunicará contigo para coordinar todos los detalles 🕐`;
     }
     return 'un agente te atenderá en breve';
   }
@@ -823,33 +823,11 @@ class ChatbotService {
     // Recargar el estado actualizado
     convState = await this.getOrCreateConversationState(contact.id);
 
-    // REANUDACION POST FUERA-DE-HORARIO
-    if (convState.out_of_hours_notified && this.isWithinBusinessHours()) {
-      const agentCheck = await this.hasAgentAlreadyResponded(contact.id, false);
-      if (!agentCheck.hasResponded) {
-        // Si el cliente ya completó el flujo OOH (estado 'assigned' u otro terminal),
-        // no reiniciamos — solo limpiamos el flag
-        if (convState.state === 'assigned' || convState.state === 'closed_no_coverage') {
-          await this.updateConversationState(contact.id, { out_of_hours_notified: false });
-          convState = await this.getOrCreateConversationState(contact.id);
-          console.log(`[Bot] Contacto ${contact.id} vuelve en horario con flujo completado OOH (estado: ${convState.state}), limpiando flag`);
-        } else {
-          const botInteracted = await this.hasBotAlreadyInteracted(contact.id);
-          const isExisting = botInteracted || convState.is_existing_customer;
-          console.log(`[Bot] Contacto ${contact.id} vuelve en horario de atencion, ningun agente respondio, reiniciando flujo como ${isExisting ? 'CLIENTE EXISTENTE' : 'CLIENTE NUEVO'}`);
-          await this.updateConversationState(contact.id, { 
-            out_of_hours_notified: false,
-            agent_active: false,
-            state: 'initial',
-            is_existing_customer: isExisting,
-            has_prior_info: isExisting
-          });
-          convState = await this.getOrCreateConversationState(contact.id);
-        }
-      } else {
-        console.log(`[Bot] Contacto ${contact.id} vuelve en horario pero agente ${agentCheck.agentName} ya respondio, bot no interferira`);
-        return { handled: false, reason: 'agent_already_responded' };
-      }
+    // El bot atiende en todo horario; si la conversación ya fue asignada y el agente
+    // aún no respondió, se limpia el flag legacy para no interferir con flujos nuevos.
+    if (convState.out_of_hours_notified) {
+      await this.updateConversationState(contact.id, { out_of_hours_notified: false });
+      convState = await this.getOrCreateConversationState(contact.id);
     }
 
     // REGLA ESTRICTA: Si hay agente activo, NUNCA interferir.
@@ -882,35 +860,6 @@ class ChatbotService {
       await this.addTrackingTag(contact.id, 'ClienteFrustrado');
       await this.updateConversationState(contact.id, { state: 'assigned' });
       return { handled: true, action: 'frustrated_customer' };
-    }
-
-    // Verificar horario de atención
-    if (!this.isWithinBusinessHours()) {
-      if (!convState.out_of_hours_notified) {
-        const customerNameOOH = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
-        const isExistingOOH = convState.is_existing_customer || convState.is_reopened || false;
-        const outMsg = await this.getAIMsg('out_of_hours', {
-          customerName: customerNameOOH,
-          lastMessage: messageText,
-          isExisting: isExistingOOH,
-          businessHours: this.getBusinessHoursText()
-        }, msgs.outOfHours);
-        await this.sendMessage(contact.id, outMsg);
-        await this.updateConversationState(contact.id, { out_of_hours_notified: true });
-        convState.out_of_hours_notified = true;
-        await this.addTrackingTag(contact.id, 'FueraDeHorario');
-        console.log(`[Bot] Fuera de horario — aviso enviado a ${contact.id}, retornando para evitar doble mensaje`);
-        // Retornar: ya enviamos el aviso OOH. En el próximo mensaje del cliente
-        // (cuando out_of_hours_notified ya sea true) seguirá el flujo normal.
-        return { handled: true, action: 'out_of_hours_notified' };
-      }
-      // Cliente ya fue notificado antes — continúa procesando su respuesta
-    } else {
-      // Reset out of hours flag si volvimos a horario hábil
-      if (convState.out_of_hours_notified) {
-        await this.updateConversationState(contact.id, { out_of_hours_notified: false });
-        convState.out_of_hours_notified = false;
-      }
     }
 
     // Verificar si conversación fue abandonada
@@ -1598,7 +1547,7 @@ class ChatbotService {
         const genericMsg = await this.getAIMsg(
           'product_info_sent',
           { customerName, product: product.name },
-          `Excelente eleccion! 👍 Has seleccionado: ${product.name}\n\nUn agente te atendera en breve para darte mas informacion.`
+          `Excelente elección! 👍 Has seleccionado: ${product.name}\n\n${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} para darte más información.`
         );
         await this.sendMessage(contact.id, genericMsg);
       }
@@ -1699,7 +1648,7 @@ class ChatbotService {
         await this.sendMessage(contact.id, productInfoMsg);
       } else {
         // Fallback si no hay mensaje configurado
-        const fallbackMsg = `Has seleccionado: ${product.name || product}\n\nUn agente te contactará en breve para darte más información.`;
+        const fallbackMsg = `Has seleccionado: ${product.name || product}\n\n${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} para darte más información.`;
         await this.sendMessage(contact.id, fallbackMsg);
       }
       

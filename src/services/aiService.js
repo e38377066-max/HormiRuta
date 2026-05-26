@@ -794,7 +794,7 @@ Genera la respuesta más apropiada:`
     const { customerName, zipCode, city, product, zone, lastMessage, outOfHours, businessHours, isExisting } = params;
     const name = customerName && customerName !== 'Sin nombre' ? customerName.split(' ')[0] : null;
     const handoffNote = outOfHours && businessHours
-      ? `IMPORTANTE: El cliente escribió fuera de horario. En lugar de decir "un agente te atenderá en breve", di que en el horario de atención (${businessHours}) un agente o diseñador lo atenderá.`
+      ? `IMPORTANTE: El cliente escribió fuera de horario. NO digas "un agente te atenderá en breve". En cambio, dile que ya tomaste su información y que en horario laboral (${businessHours}) un diseñador se comunicará con él para coordinar todos los detalles de su pedido.`
       : '';
 
     const intentPrompts = {
