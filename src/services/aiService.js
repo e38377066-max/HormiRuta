@@ -791,10 +791,13 @@ Genera la respuesta más apropiada:`
   async generateFlowMessage(intent, params = {}) {
     if (!this.isAvailable) return null;
 
-    const { customerName, zipCode, city, product, zone, lastMessage, outOfHours, businessHours, isExisting } = params;
+    const { customerName, zipCode, city, product, zone, lastMessage, outOfHours, businessHours, isExisting, adPrice, adCampaign } = params;
     const name = customerName && customerName !== 'Sin nombre' ? customerName.split(' ')[0] : null;
     const handoffNote = outOfHours && businessHours
       ? `IMPORTANTE: El cliente escribió fuera de horario. NO digas "un agente te atenderá en breve". En cambio, dile que ya tomaste su información y que en horario laboral (${businessHours}) un diseñador se comunicará con él para coordinar todos los detalles de su pedido.`
+      : '';
+    const campaignNote = adPrice
+      ? `PRECIO DE CAMPAÑA OBLIGATORIO: Este cliente llegó por el anuncio de "1,000 tarjetas por ${adPrice}". Cuando menciones el precio, SIEMPRE usa ${adPrice} para 1,000 tarjetas. No uses ningún otro precio.`
       : '';
 
     const intentPrompts = {
@@ -822,6 +825,7 @@ Pídelo de forma natural y breve. Menciona el ejemplo 75208.`,
 ZIP/Ciudad: ${zipCode || city || 'su zona'}
 Zona: ${zone || 'Dallas-Fort Worth'}
 ${name ? `Nombre: ${name}` : ''}
+${campaignNote ? campaignNote + '\nSi mencionas el producto, incluye el precio de la campaña.' : ''}
 Dales la buena noticia de forma entusiasta. Luego diles que van a ver los productos disponibles. Sé breve (2 líneas máx).`,
 
       zip_no_coverage: `Informa al cliente de forma amable que por el momento no tienen cobertura en su zona (${zipCode || city || 'su área'}).
@@ -831,15 +835,18 @@ Sé empático pero breve.`,
 
       product_selected_ask_design: `El cliente seleccionó el producto: ${product}. 
 ${name ? `Nombre: ${name}` : ''}
-Confirma su elección de forma entusiasta y pregúntale si ya tiene un diseño listo o si necesita que le ayuden a crear uno desde cero.`,
+${campaignNote || ''}
+Confirma su elección de forma entusiasta${campaignNote ? ' mencionando el precio de campaña' : ''} y pregúntale si ya tiene un diseño listo o si necesita que le ayuden a crear uno desde cero.`,
 
       has_design: `El cliente dice que ya tiene un diseño. 
 ${name ? `Nombre: ${name}` : ''}
+${campaignNote || ''}
 Responde de forma positiva. Diles que envíen su diseño o la información que necesitan incluir.
 ${handoffNote || 'Menciona que un agente les atenderá en breve para continuar con su pedido.'}`,
 
       needs_design: `El cliente necesita que le hagan un diseño desde cero.
 ${name ? `Nombre: ${name}` : ''}
+${campaignNote || ''}
 Responde con entusiasmo. Diles que cuenten qué información quieren en el diseño (nombre, teléfono, logo, etc.).
 ${handoffNote || 'Menciona que un agente les ayudará a crear algo profesional en breve.'}`,
 
@@ -889,7 +896,8 @@ Retoma la conversación de forma cálida. Pregunta si quiere continuar o necesit
       facebook_ad_welcome: `El cliente viene de un anuncio de Facebook/Instagram. Es su primer contacto.
 ${name ? `Nombre: ${name}` : ''}
 Mensaje del cliente: "${lastMessage || ''}"
-${product ? `Producto del anuncio: ${product} — MENCIÓNALO en el saludo para confirmar que ya sabes por qué te escribió ("vi que vienes por nuestras ${product}…" o similar). NO ofrezcas un producto distinto.` : ''}
+${campaignNote ? campaignNote : ''}
+${product ? `Producto del anuncio: ${product}${adPrice ? ` a ${adPrice}` : ''} — MENCIÓNALO en el saludo para confirmar que ya sabes por qué te escribió ("vi que vienes por nuestras ${product} a ${adPrice || 'precio especial'}…" o similar). NO ofrezcas un producto distinto.` : ''}
 Salúdalo calurosamente, agradece su interés. Dile que para verificar si tienen cobertura en su zona necesitas su código postal (ZIP). Ejemplo: 75208.`,
 
       product_info_sent: `Se le envió información sobre el producto ${product} al cliente.
@@ -900,8 +908,9 @@ Ahora pregúntale brevemente si tiene alguna pregunta o si quiere continuar con 
 Producto solicitado: ${product || 'el servicio mencionado'}
 Mensaje del cliente: "${lastMessage || ''}"
 ${name ? `Nombre: ${name}` : ''}
-Confirma que lo puedes ayudar con eso.
-${handoffNote || 'Dile que vas a conectarlo con uno de los especialistas del equipo que le dará todos los detalles (precio, tiempo de entrega, diseño, etc.).'}
+${campaignNote || ''}
+Confirma que lo puedes ayudar con eso${campaignNote ? ` y menciona el precio de campaña (${adPrice})` : ''}.
+${handoffNote || 'Dile que vas a conectarlo con uno de los especialistas del equipo que le dará todos los detalles (diseño, tiempo de entrega, etc.).'}
 No hagas preguntas de validación ni pidas ZIP. Sé cálido, directo y breve (2-3 líneas máximo).`
     };
 
@@ -923,7 +932,7 @@ No hagas preguntas de validación ni pidas ZIP. Sé cálido, directo y breve (2-
 - Usa emojis con moderación (1-3 máximo por mensaje)
 - NO uses asteriscos ni formato markdown
 - Siempre en español
-- NO menciones precios exactos
+${campaignNote ? `- ${campaignNote}` : '- NO menciones precios exactos'}
 - NO inventes información del negocio que no conozcas`
         },
         {

@@ -1072,6 +1072,95 @@ class ChatbotService {
     return null;
   }
 
+  _parseCampaignFromText(text) {
+    if (!text || typeof text !== 'string') return null;
+    const t = text.toLowerCase();
+    if (/\$80\b/.test(t) || /\b80\s*usd\b/i.test(t) || /por\s*\$?80\b/.test(t) || /1000\s*x\s*\$?\s*80\b/.test(t)) {
+      return { campaign: 'bc80', price: '$80' };
+    }
+    if (/\$65\b/.test(t) || /\b65\s*usd\b/i.test(t) || /por\s*\$?65\b/.test(t) || /1000\s*x\s*\$?\s*65\b/.test(t)) {
+      return { campaign: 'bc65', price: '$65' };
+    }
+    return null;
+  }
+
+  // Detecta el producto del anuncio Y la campaña de precio en un solo llamado a la API.
+  // Reemplaza extractAdProductHint y además retorna campaign/price.
+  async extractAdInfo(contact) {
+    try {
+      let histResult = null;
+      try { histResult = await this.api.listMessages(`id:${contact.id}`, 50); } catch {}
+      if (!histResult?.success || !histResult.items) return { product: null, campaign: null, price: null };
+
+      const items = [...histResult.items].reverse();
+      const adTexts = [];
+      let campaignResult = null;
+
+      for (const m of items) {
+        const isIncoming = m.traffic === 'incoming' || m.direction === 'incoming';
+        const isOutgoing = m.traffic === 'outgoing' || m.direction === 'outgoing';
+
+        if (isIncoming) {
+          const refSources = [
+            m.referral, m.referer, m.referrer,
+            m.body?.referral, m.body?.referer, m.body?.referrer,
+            m.context?.referral, m.message?.referral,
+            m.metadata?.referral, m.metadata?.ad,
+            m.ad, m.body?.ad
+          ];
+
+          let foundReferral = false;
+          for (const ref of refSources) {
+            if (!ref || typeof ref !== 'object') continue;
+            foundReferral = true;
+            const fields = ['headline', 'body', 'source_url', 'sourceUrl', 'ad_text',
+                           'adText', 'name', 'title', 'description', 'caption', 'text'];
+            for (const f of fields) {
+              const v = ref[f];
+              if (typeof v === 'string' && v.length >= 4) adTexts.push(v);
+            }
+            if (!campaignResult) {
+              const refText = fields.map(f => ref[f]).filter(v => typeof v === 'string').join(' ');
+              campaignResult = this._parseCampaignFromText(refText);
+            }
+          }
+          if (foundReferral) break;
+        }
+
+        // Escanear también el primer mensaje saliente (snippet de Respond.io)
+        if (isOutgoing && !campaignResult) {
+          const msgText = String(m.body?.text || m.text || m.body || '');
+          campaignResult = this._parseCampaignFromText(msgText);
+        }
+      }
+
+      let productResult = null;
+      for (const text of adTexts) {
+        const product = await this.parseProductSelection(text, true);
+        if (product && !product.isOther) { productResult = product; break; }
+      }
+
+      if (campaignResult) {
+        console.log(`[Bot] Campaña publicitaria detectada: ${campaignResult.campaign} (${campaignResult.price})`);
+      }
+
+      return {
+        product: productResult,
+        campaign: campaignResult?.campaign || null,
+        price: campaignResult?.price || null
+      };
+    } catch (e) {
+      console.error('[Bot] extractAdInfo error:', e.message);
+      return { product: null, campaign: null, price: null };
+    }
+  }
+
+  getAdCampaignParams(convState) {
+    const ctx = convState?.context_data || {};
+    if (!ctx.ad_campaign && !ctx.ad_price) return {};
+    return { adCampaign: ctx.ad_campaign, adPrice: ctx.ad_price };
+  }
+
   detectFacebookAdOrigin(contact) {
     // Detectar si viene de Facebook Ad por el canal o fuente
     const source = contact.source?.toLowerCase() || '';
@@ -1114,6 +1203,23 @@ class ChatbotService {
     const isFromFacebookAd = this.detectFacebookAdOrigin(contact);
     const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
 
+    // ─── DETECCIÓN TEMPRANA DE CAMPAÑA (anuncios FB) ─────────────────────────
+    // Se extrae producto Y precio de campaña ANTES de cualquier routing para que
+    // todos los handlers descendientes (handleDirectOrderRequest, etc.) accedan.
+    let adInfo = { product: null, campaign: null, price: null };
+    if (isFromFacebookAd) {
+      if (convState.context_data?.ad_campaign) {
+        adInfo = { product: null, campaign: convState.context_data.ad_campaign, price: convState.context_data.ad_price };
+      } else {
+        adInfo = await this.extractAdInfo(contact);
+        if (adInfo.campaign || adInfo.product) {
+          const updatedCtx = { ...(convState.context_data || {}), ad_campaign: adInfo.campaign, ad_price: adInfo.price };
+          await this.updateConversationState(contact.id, { context_data: updatedCtx });
+          convState = { ...convState, context_data: updatedCtx };
+        }
+      }
+    }
+
     // ─── DETECCIÓN DE PEDIDO DIRECTO ─────────────────────────────────────────
     // Si el cliente ya menciona un producto específico desde el primer mensaje,
     // no hay que hacerle el flujo completo — ya sabe lo que quiere.
@@ -1122,7 +1228,7 @@ class ChatbotService {
     // en realidad son datos de contacto, saludos o información general.
     const directProduct = await this.parseProductSelection(messageText, true);
     if (directProduct && !directProduct.isOther) {
-      return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName);
+      return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName, convState);
     }
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -1159,11 +1265,13 @@ class ChatbotService {
     // del primer mensaje). Si el anuncio no menciona un producto del catálogo,
     // dejamos selected_product en null y esperamos que el cliente lo diga.
     if (isFromFacebookAd) {
-      const adProduct = await this.extractAdProductHint(contact);
+      const adProduct = adInfo.product;
+      const adCampaign = adInfo.campaign;
+      const adPrice = adInfo.price;
 
       const greeting = await this.getAIMsg(
         'facebook_ad_welcome',
-        { customerName, lastMessage: messageText, product: adProduct?.name || null },
+        { customerName, lastMessage: messageText, product: adProduct?.name || null, adPrice, adCampaign },
         this.settings.welcome_from_ads || 'Hola! 👋 Gracias por tu interes.\n\nPara verificar si tenemos cobertura en tu zona, por favor enviame tu codigo postal (ZIP) 📍\n\nPor ejemplo: 75208'
       );
       await this.sendMessage(contact.id, greeting);
@@ -1174,14 +1282,20 @@ class ChatbotService {
         from_ads: true,
         awaiting_response: 'zip_code',
         greeting_sent: true,
-        selected_product: adProduct?.name || null
+        selected_product: adProduct?.name || null,
+        context_data: {
+          ...(convState.context_data || {}),
+          ad_campaign: adCampaign || null,
+          ad_price: adPrice || null
+        }
       });
       await this.addTrackingTag(contact.id, 'FacebookAd');
+      if (adCampaign) await this.addTrackingTag(contact.id, `Campaña_${adCampaign}`);
       if (adProduct) {
         await this.addTrackingTag(contact.id, `Producto_${adProduct.name}`);
-        await this.addComment(contact.id, `[Bot] Cliente vino del anuncio de Facebook con producto detectado: ${adProduct.name}.`);
+        await this.addComment(contact.id, `[Bot] Cliente de anuncio Facebook${adCampaign ? ` (${adCampaign}, ${adPrice})` : ''}. Producto: ${adProduct.name}.`);
       } else {
-        await this.addComment(contact.id, '[Bot] Cliente vino de Facebook Ad pero el anuncio no especifica un producto del catálogo.');
+        await this.addComment(contact.id, `[Bot] Cliente de Facebook Ad${adCampaign ? ` (${adCampaign}, ${adPrice})` : ''}. Sin producto específico en el anuncio.`);
       }
 
       return { handled: true, action: 'facebook_ad_direct_zip', product: adProduct?.name || null };
@@ -1200,12 +1314,13 @@ class ChatbotService {
   }
 
   // Maneja el caso donde el cliente llega ya sabiendo lo que quiere
-  async handleDirectOrderRequest(contact, messageText, product, customerName) {
+  async handleDirectOrderRequest(contact, messageText, product, customerName, convState = null) {
     const ooh = !this.isWithinBusinessHours();
     const oohParams = ooh ? { outOfHours: true, businessHours: this.getBusinessHoursText() } : {};
+    const adParams = this.getAdCampaignParams(convState);
     const directMsg = await this.getAIMsg(
       'direct_order',
-      { customerName, product: product.name, lastMessage: messageText, ...oohParams },
+      { customerName, product: product.name, lastMessage: messageText, ...oohParams, ...adParams },
       `¡Hola! Claro que te ayudamos con ${product.name} 😊\n\n${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} que te dará todos los detalles sobre precio, tiempo de entrega y diseño 📋✨`
     );
     await this.sendMessage(contact.id, directMsg);
@@ -1245,7 +1360,7 @@ class ChatbotService {
     // Si el cliente menciona un producto directamente, cortocircuitar el flujo
     const directProduct = await this.parseProductSelection(messageText);
     if (directProduct && !directProduct.isOther) {
-      return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName);
+      return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName, convState);
     }
 
     const response = await this.parseYesNoResponse(messageText);
@@ -1306,9 +1421,10 @@ class ChatbotService {
       
       // Cliente YA tiene información - preguntar sobre diseño
       const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const adParams = this.getAdCampaignParams(convState);
       const designQuestion = await this.getAIMsg(
         'product_selected_ask_design',
-        { customerName, product: product.name || product },
+        { customerName, product: product.name || product, ...adParams },
         msgs.productSelectedAskDesign?.replace('{{product}}', product.name || product) ||
           `Perfecto, ${product.name || product} 👍\n\n¿Ya tienes un diseño en mente o te gustaría que te ayudemos a crear uno desde cero?`
       );
@@ -1340,13 +1456,14 @@ class ChatbotService {
 
     const ooh = !this.isWithinBusinessHours();
     const oohParams = ooh ? { outOfHours: true, businessHours: this.getBusinessHoursText() } : {};
+    const adDesignParams = this.getAdCampaignParams(convState);
 
     if (hasDesign === 'no') {
-      const needsMsg = await this.getAIMsg('needs_design', { customerName, ...oohParams }, msgs.needsDesignResponse);
+      const needsMsg = await this.getAIMsg('needs_design', { customerName, ...oohParams, ...adDesignParams }, msgs.needsDesignResponse);
       await this.sendMessage(contact.id, needsMsg);
     } else {
       // Tiene diseño o respuesta ambigua (asumir que sí tiene)
-      const hasMsg = await this.getAIMsg('has_design', { customerName, ...oohParams }, msgs.hasDesignResponse);
+      const hasMsg = await this.getAIMsg('has_design', { customerName, ...oohParams, ...adDesignParams }, msgs.hasDesignResponse);
       await this.sendMessage(contact.id, hasMsg);
     }
     
@@ -1420,12 +1537,14 @@ class ChatbotService {
       // no volver a preguntar el producto — saltar directamente a la info del producto.
       const alreadySelectedProduct = convState.selected_product;
 
+      const adZipParams = this.getAdCampaignParams(convState);
       const coverageMsg = await this.getAIMsg('zip_covered', {
         customerName: name,
         zipCode: validation.value,
         city: validation.zone?.city || null,
         zone: validation.zone?.zone_name || null,
-        product: alreadySelectedProduct || null
+        product: alreadySelectedProduct || null,
+        ...adZipParams
       }, fallbackCoverage);
       
       await this.sendMessage(contact.id, coverageMsg);
@@ -1433,7 +1552,27 @@ class ChatbotService {
       await this.addTrackingTag(contact.id, 'ConCobertura');
 
       if (alreadySelectedProduct) {
-        // Producto ya conocido: enviar info del producto directamente
+        // Si hay campaña específica, usar AI para respetar el precio de campaña en lugar del mensaje estático.
+        const hasCampaign = !!(adZipParams.adCampaign && adZipParams.adPrice);
+        if (hasCampaign) {
+          const campaignProductMsg = await this.getAIMsg(
+            'product_selected_ask_design',
+            { customerName: name, product: alreadySelectedProduct, ...adZipParams },
+            `¡Perfecto! 🎉 Ya verificamos tu zona.\n\n1,000 ${alreadySelectedProduct} por ${adZipParams.adPrice} ✅ Diseño incluido, papel grueso con brillo, entrega a domicilio.\n\n¿Ya tienes un diseño listo o te ayudamos a crear uno desde cero?`
+          );
+          await this.sendMessage(contact.id, campaignProductMsg);
+          await this.updateConversationState(contact.id, {
+            state: 'awaiting_design_info',
+            validated_zip: validation.value,
+            has_prior_info: false,
+            selected_product: alreadySelectedProduct,
+            awaiting_response: 'design_info'
+          });
+          await this.addComment(contact.id, `[Bot] Zona validada. Campaña ${adZipParams.adCampaign} (${adZipParams.adPrice}). Preguntando por diseño.`);
+          return { handled: true, action: 'zip_validated_campaign_ask_design' };
+        }
+
+        // Sin campaña: enviar info del producto configurada estáticamente
         const productInfo = this.getProductInfoMessage(alreadySelectedProduct);
         if (productInfo) {
           await this.sendMessage(contact.id, productInfo);
