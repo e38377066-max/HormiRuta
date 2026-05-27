@@ -233,6 +233,7 @@ export const openNativeNavigation = (stops, userLocation = null) => {
   const waypoints = stops.map(s => ({
     lat: parseFloat(s.lat || s.latitude),
     lng: parseFloat(s.lng || s.longitude),
+    address: [s.address, s.apartment_number ? `Apt ${s.apartment_number}` : null].filter(Boolean).join(' '),
     label: s.customer_name || s.address || ''
   })).filter(w => !isNaN(w.lat) && !isNaN(w.lng))
 
@@ -244,10 +245,19 @@ export const openNativeNavigation = (stops, userLocation = null) => {
   const plt = Capacitor.getPlatform()
 
   if (plt === 'ios') {
-    let url = `maps://?daddr=${destination.lat},${destination.lng}&dirflg=d`
+    // Apple Maps / CarPlay: usar la dirección en texto para evitar "address not found" en CarPlay.
+    // Las coordenadas solas a veces no se resuelven en el mapa del coche.
+    const encAddr = (w) => {
+      const addr = w.address || w.label || ''
+      return addr.trim() ? encodeURIComponent(addr.trim()) : `${w.lat},${w.lng}`
+    }
+
+    let url
     if (intermediates.length > 0) {
-      const waypointStr = intermediates.map(w => `${w.lat},${w.lng}`).join('+to:')
-      url = `maps://?daddr=${waypointStr}+to:${destination.lat},${destination.lng}&dirflg=d`
+      const waypointStr = intermediates.map(encAddr).join('+to:')
+      url = `maps://?daddr=${waypointStr}+to:${encAddr(destination)}&dirflg=d`
+    } else {
+      url = `maps://?daddr=${encAddr(destination)}&dirflg=d`
     }
     if (userLocation) {
       url += `&saddr=${userLocation.lat},${userLocation.lng}`

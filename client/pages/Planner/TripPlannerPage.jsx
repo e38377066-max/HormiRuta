@@ -1290,25 +1290,20 @@ export default function TripPlannerPage() {
         visibleCounter += 1
         const color = '#EA4335'
         
+        const num = String(visibleCounter)
+        const fontSize = num.length > 1 ? '10' : '11'
         const marker = new window.google.maps.Marker({
           position: { lat: stop.latitude, lng: stop.longitude },
           map: mapInstanceRef.current,
-          label: {
-            text: String(visibleCounter),
-            color: 'white',
-            fontSize: '12px',
-            fontWeight: 'bold'
-          },
           icon: {
             url: 'data:image/svg+xml,' + encodeURIComponent(`
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
-                <path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24c0-8.837-7.163-16-16-16z" fill="${color}"/>
-                <circle cx="16" cy="14" r="6" fill="white" opacity="0.3"/>
+              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
+                <circle cx="13" cy="13" r="12" fill="${color}" stroke="white" stroke-width="2.5"/>
+                <text x="13" y="17" text-anchor="middle" fill="white" font-size="${fontSize}" font-weight="bold" font-family="Arial,sans-serif">${num}</text>
               </svg>
             `),
-            anchor: new window.google.maps.Point(16, 40),
-            scaledSize: new window.google.maps.Size(32, 40),
-            labelOrigin: new window.google.maps.Point(16, 14)
+            anchor: new window.google.maps.Point(13, 13),
+            scaledSize: new window.google.maps.Size(26, 26)
           }
         })
         markersRef.current.push(marker)
@@ -1592,7 +1587,12 @@ export default function TripPlannerPage() {
       const url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes${loc ? `&from=${loc.lat},${loc.lng}` : ''}`
       window.open(url, '_system')
     } else if (app === 'apple') {
-      let url = `maps://?daddr=${lat},${lng}&dirflg=d`
+      // Apple Maps / CarPlay funciona mejor con la dirección en texto que con coordenadas.
+      // Con solo coordenadas, CarPlay a veces reporta "dirección no encontrada".
+      const aptSuffix = stop.apartment_number ? ` Apt ${stop.apartment_number}` : ''
+      const rawAddr = (stop.address || '') + aptSuffix
+      const daddr = rawAddr.trim() ? encodeURIComponent(rawAddr.trim()) : `${lat},${lng}`
+      let url = `maps://?daddr=${daddr}&dirflg=d`
       if (loc) url += `&saddr=${loc.lat},${loc.lng}`
       window.open(url, '_system')
     }
