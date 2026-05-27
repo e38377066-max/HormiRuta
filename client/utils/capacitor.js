@@ -230,12 +230,16 @@ export const allowScreenSleep = async () => {
 export const openNativeNavigation = (stops, userLocation = null) => {
   if (!stops || stops.length === 0) return
 
-  const waypoints = stops.map(s => ({
-    lat: parseFloat(s.lat || s.latitude),
-    lng: parseFloat(s.lng || s.longitude),
-    address: [s.address, s.apartment_number ? `Apt ${s.apartment_number}` : null].filter(Boolean).join(' '),
-    label: s.customer_name || s.address || ''
-  })).filter(w => !isNaN(w.lat) && !isNaN(w.lng))
+  const waypoints = stops.map(s => {
+    const baseAddr = (s.address || '').trim()
+    const apt = baseAddr && s.apartment_number ? ` Apt ${s.apartment_number}` : ''
+    return {
+      lat: parseFloat(s.lat || s.latitude),
+      lng: parseFloat(s.lng || s.longitude),
+      address: baseAddr ? baseAddr + apt : '',
+      label: s.customer_name || baseAddr || ''
+    }
+  }).filter(w => !isNaN(w.lat) && !isNaN(w.lng))
 
   if (waypoints.length === 0) return
 
@@ -248,9 +252,10 @@ export const openNativeNavigation = (stops, userLocation = null) => {
     // Apple Maps / CarPlay: usar la dirección en texto para evitar "address not found" en CarPlay.
     // Las coordenadas solas a veces no se resuelven en el mapa del coche.
     const encAddr = (w) => {
-      const addr = w.address || w.label || ''
-      return addr.trim() ? encodeURIComponent(addr.trim()) : `${w.lat},${w.lng}`
+      const addr = (w.address || '').trim()
+      return addr ? encodeURIComponent(addr) : `${w.lat},${w.lng}`
     }
+    const destHasAddr = !!(destination.address && destination.address.trim())
 
     let url
     if (intermediates.length > 0) {
@@ -258,6 +263,10 @@ export const openNativeNavigation = (stops, userLocation = null) => {
       url = `maps://?daddr=${waypointStr}+to:${encAddr(destination)}&dirflg=d`
     } else {
       url = `maps://?daddr=${encAddr(destination)}&dirflg=d`
+    }
+    // Si el destino cae a coordenadas, añadimos q= con el nombre para que CarPlay muestre etiqueta legible
+    if (!destHasAddr) {
+      url += `&q=${encodeURIComponent(destination.label || 'Destino')}`
     }
     if (userLocation) {
       url += `&saddr=${userLocation.lat},${userLocation.lng}`

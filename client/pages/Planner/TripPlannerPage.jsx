@@ -1589,10 +1589,17 @@ export default function TripPlannerPage() {
     } else if (app === 'apple') {
       // Apple Maps / CarPlay funciona mejor con la dirección en texto que con coordenadas.
       // Con solo coordenadas, CarPlay a veces reporta "dirección no encontrada".
-      const aptSuffix = stop.apartment_number ? ` Apt ${stop.apartment_number}` : ''
-      const rawAddr = (stop.address || '') + aptSuffix
-      const daddr = rawAddr.trim() ? encodeURIComponent(rawAddr.trim()) : `${lat},${lng}`
+      const baseAddr = (stop.address || '').trim()
+      const hasAddr = baseAddr.length > 0
+      const aptSuffix = (hasAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
+      const rawAddr = baseAddr + aptSuffix
+      const daddr = hasAddr ? encodeURIComponent(rawAddr) : `${lat},${lng}`
       let url = `maps://?daddr=${daddr}&dirflg=d`
+      // Si caemos a coordenadas, agregamos q= con el nombre para que CarPlay muestre una etiqueta legible
+      if (!hasAddr) {
+        const label = stop.name || stop.customer_name || 'Parada'
+        url += `&q=${encodeURIComponent(label)}`
+      }
       if (loc) url += `&saddr=${loc.lat},${loc.lng}`
       window.open(url, '_system')
     }
