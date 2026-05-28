@@ -96,6 +96,11 @@ export default function DashboardLayout() {
 
           <div className="q-separator"></div>
 
+          <NavLink to="/account" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
+            <span className="material-icons q-item-icon" style={{color: '#607d8b'}}>person</span>
+            <span>Mi cuenta</span>
+          </NavLink>
+
           <button className="q-item logout" onClick={handleLogout}>
             <span className="material-icons q-item-icon" style={{color: '#f44336'}}>logout</span>
             <span>Cerrar Sesion</span>

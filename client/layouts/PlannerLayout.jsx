@@ -26,6 +26,7 @@ export default function PlannerLayout() {
   const menuItems = [
     { icon: 'map', label: 'Mi Ruta', path: '/planner' },
     { icon: 'account_balance_wallet', label: 'Mi Contabilidad', path: '/planner/accounting' },
+    { icon: 'person', label: 'Mi cuenta', path: '/planner/account' },
     { icon: 'admin_panel_settings', label: 'Panel Admin', path: '/messaging', adminOnly: true }
   ]
 

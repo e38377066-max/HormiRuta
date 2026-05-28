@@ -127,15 +127,6 @@ export default function RegisterPage() {
             {loading ? 'Registrando...' : 'Crear cuenta'}
           </button>
 
-          <div className="divider">
-            <span>O continúa con</span>
-          </div>
-
-          <button type="button" className="google-btn">
-            <img src="/google.png" alt="Google" className="google-icon-img" />
-            Continuar con Google
-          </button>
-
           <p className="register-link">
             ¿Ya tienes cuenta?{' '}
             <Link to="/login">Inicia sesión</Link>

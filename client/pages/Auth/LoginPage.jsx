@@ -103,15 +103,6 @@ export default function LoginPage() {
             {loading ? 'Cargando...' : 'Iniciar sesión'}
           </button>
 
-          <div className="divider">
-            <span>O continúa con</span>
-          </div>
-
-          <button type="button" className="google-btn">
-            <img src="/google.png" alt="Google" className="google-icon-img" />
-            Continuar con Google
-          </button>
-
           <p className="register-link">
             ¿No tienes cuenta?{' '}
             <Link to="/register">Regístrate aquí</Link>

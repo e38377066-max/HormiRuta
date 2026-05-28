@@ -88,6 +88,12 @@ export function AuthProvider({ children }) {
     clearSession()
   }
 
+  // ─── Eliminar cuenta (Apple App Store guideline 5.1.1(v)) ─────────────
+  const deleteAccount = async () => {
+    await api.delete('/api/auth/account')
+    clearSession()
+  }
+
   // ─── Validación silenciosa al montar ──────────────────────────────────
   // Si hay token → valida con servidor en segundo plano sin bloquear la UI.
   // Si el usuario ya está en caché, la app ya está visible mientras esto corre.
@@ -180,7 +186,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, loading, error, initializing,
       isAuthenticated, isAdmin, isDriver,
-      login, register, logout,
+      login, register, logout, deleteAccount,
     }}>
       {children}
     </AuthContext.Provider>
