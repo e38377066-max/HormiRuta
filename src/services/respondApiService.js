@@ -397,7 +397,8 @@ class RespondApiService {
    * @param {string|null} assignee - User ID or email, or null to unassign
    */
   async assignConversation(identifier, assignee) {
-    return this.request('POST', `/contact/${identifier}/conversation/assignee`, {
+    const formattedId = String(identifier).includes(':') ? identifier : `id:${identifier}`;
+    return this.request('POST', `/contact/${formattedId}/conversation/assignee`, {
       assignee: assignee
     });
   }
@@ -599,11 +600,22 @@ class RespondApiService {
   }
 
   /**
-   * Find user by email
+   * Find user by email (paginando hasta encontrarlo o agotar la lista,
+   * para no dar falsos negativos en workspaces grandes).
    */
   async findUserByEmail(email) {
-    const result = await this.listUsers(100);
-    return result.items?.find(user => user.email === email);
+    if (!email) return undefined;
+    const target = email.toLowerCase();
+    let cursorId = null;
+    for (let page = 0; page < 50; page++) {
+      const result = await this.listUsers(100, cursorId);
+      const items = result?.items || [];
+      const match = items.find(user => user.email?.toLowerCase() === target);
+      if (match) return match;
+      cursorId = result?.pagination?.next || result?.cursorId || null;
+      if (!cursorId || items.length === 0) break;
+    }
+    return undefined;
   }
 
   /**

@@ -1337,6 +1337,33 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
     });
 
     const settingsCache = new Map();
+    // Cache del "assignee" de Respond.io resuelto por tenant (user_id).
+    // undefined = aun no resuelto, null = resuelto pero el chofer no existe en Respond.io.
+    const assigneeCache = new Map();
+
+    // Resuelve (con cache) el ID de usuario de Respond.io del chofer para un tenant dado.
+    // Requiere que el contexto de respondApiService ya este configurado para ese tenant.
+    const resolveDriverAssignee = async (tenantUserId) => {
+      if (assigneeCache.has(tenantUserId)) return assigneeCache.get(tenantUserId);
+      let assignee = null;
+      if (!driver.email) {
+        console.warn(`[Dispatch] Chofer ${driver.username} no tiene email; no se puede asignar en Respond.io.`);
+      } else {
+        try {
+          const respondUser = await respondApiService.findUserByEmail(driver.email);
+          if (respondUser) {
+            assignee = respondUser.id || driver.email;
+          } else {
+            console.warn(`[Dispatch] Chofer ${driver.username} (${driver.email}) no existe como usuario en Respond.io (tenant ${tenantUserId}); no se asignara.`);
+          }
+        } catch (findErr) {
+          console.error(`[Dispatch] Error buscando usuario Respond.io para chofer ${driver.username}:`, findErr.message);
+        }
+      }
+      assigneeCache.set(tenantUserId, assignee);
+      return assignee;
+    };
+
     for (const order of orders) {
       order.assigned_driver_id = driver_id;
       order.driver_name = driver.username;
@@ -1347,10 +1374,8 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
       }
       await order.save();
 
-      // Sincronizar lifecycle en Respond.io solo cuando realmente hubo
-      // transicion a on_delivery (evita llamadas redundantes y desyncs como
-      // dispatch="En Entrega" / Respond="Pending").
-      if (willChangeToOnDelivery && order.respond_contact_id) {
+      // Sincronizacion con Respond.io para los contactos de esta ruta.
+      if (order.respond_contact_id) {
         try {
           let settings = settingsCache.get(order.user_id);
           if (settings === undefined) {
@@ -1359,11 +1384,33 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
           }
           if (settings?.respond_api_token) {
             respondApiService.setContext(order.user_id, settings.respond_api_token);
-            await respondApiService.updateLifecycle(order.respond_contact_id, 'On Delivery');
-            console.log(`[Dispatch] Ruta asignada - Lifecycle: ${order.customer_name} -> On Delivery`);
+
+            // 1) Lifecycle: solo cuando realmente hubo transicion a on_delivery
+            //    (evita llamadas redundantes y desyncs dispatch/Respond).
+            if (willChangeToOnDelivery) {
+              try {
+                await respondApiService.updateLifecycle(order.respond_contact_id, 'On Delivery');
+                console.log(`[Dispatch] Ruta asignada - Lifecycle: ${order.customer_name} -> On Delivery`);
+              } catch (lcErr) {
+                console.error(`[Dispatch] Error lifecycle asignacion ${order.customer_name}:`, lcErr.message);
+              }
+            }
+
+            // 2) Asignar la conversacion del contacto al chofer en Respond.io.
+            //    Se hace para todos los contactos de la ruta (no solo en transicion),
+            //    para que el chofer sea el responsable en Respond cuando recibe la ruta.
+            const assignee = await resolveDriverAssignee(order.user_id);
+            if (assignee) {
+              try {
+                await respondApiService.assignConversation(order.respond_contact_id, assignee);
+                console.log(`[Dispatch] Contacto ${order.customer_name} asignado a chofer ${driver.username} en Respond.io`);
+              } catch (asgErr) {
+                console.error(`[Dispatch] Error asignando contacto ${order.customer_name} a chofer ${driver.username} en Respond.io:`, asgErr.message);
+              }
+            }
           }
-        } catch (lcErr) {
-          console.error(`[Dispatch] Error lifecycle asignacion ${order.customer_name}:`, lcErr.message);
+        } catch (rErr) {
+          console.error(`[Dispatch] Error Respond.io asignacion ${order.customer_name}:`, rErr.message);
         }
       }
     }
