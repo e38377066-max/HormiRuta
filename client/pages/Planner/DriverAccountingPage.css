@@ -96,6 +96,33 @@
   color: #64748b;
 }
 
+.dac-hero-note {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.1);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.dac-elec-note {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #7c3aed;
+  background: rgba(167, 139, 250, 0.12);
+  padding: 6px 10px;
+  border-radius: 10px;
+  line-height: 1.3;
+}
+
 /* ─── 3-stat row ──────────────────────────────────────────────── */
 .dac-stats-row {
   display: flex;

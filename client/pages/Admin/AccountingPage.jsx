@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api'
 import './AdminPages.css'
@@ -45,6 +45,8 @@ export default function AccountingPage() {
   const [confirmAmount, setConfirmAmount] = useState('')
   const [confirmMethod, setConfirmMethod] = useState('cash')
   const [confirmLoading, setConfirmLoading] = useState(false)
+  const [expandedPayRoute, setExpandedPayRoute] = useState(null)
+  const [viewingPhoto, setViewingPhoto] = useState(null)
 
   useEffect(() => {
     fetchDrivers()
@@ -549,7 +551,8 @@ export default function AccountingPage() {
                     <tr>
                       <th>Ruta</th>
                       <th>Chofer</th>
-                      <th style={{ textAlign: 'right' }}>Total Cobrado</th>
+                      <th style={{ textAlign: 'right' }}>Efectivo a Entregar</th>
+                      <th style={{ textAlign: 'right' }}>Zelle / Transf.</th>
                       <th style={{ textAlign: 'right' }}>Comisión</th>
                       <th>Estado del pago</th>
                       <th>Método chofer</th>
@@ -558,8 +561,13 @@ export default function AccountingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map(r => (
-                      <tr key={r.id}>
+                    {filtered.map(r => {
+                      const elecStops = Array.isArray(r.electronic_stops) ? r.electronic_stops : []
+                      const hasElectronic = elecStops.length > 0 || Number(r.electronic_collected || 0) > 0
+                      const isExpanded = expandedPayRoute === r.id
+                      return (
+                      <Fragment key={r.id}>
+                      <tr>
                         <td>
                           <strong>{r.name || `Ruta #${r.id}`}</strong>
                           {r.stops_count > 0 && (
@@ -580,9 +588,22 @@ export default function AccountingPage() {
                           {fmt(r.route_total_collected)}
                           {Number(r.route_gross_collected || 0) !== Number(r.route_total_collected || 0) && (
                             <div style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>
-                              Bruto: {fmt(r.route_gross_collected)}
+                              Efectivo: {fmt(r.route_gross_collected)}
                             </div>
                           )}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 600, color: hasElectronic ? '#6200ea' : '#bbb' }}>
+                          {hasElectronic ? (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedPayRoute(isExpanded ? null : r.id)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6200ea', fontWeight: 600, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 2, padding: 0 }}
+                              title="Ver comprobantes"
+                            >
+                              {fmt(r.electronic_collected)}
+                              <span className="material-icons" style={{ fontSize: 16 }}>{isExpanded ? 'expand_less' : 'receipt_long'}</span>
+                            </button>
+                          ) : '—'}
                         </td>
                         <td style={{ textAlign: 'right', color: '#ef6c00', fontWeight: 600 }}>
                           {Number(r.route_total_commission || 0) > 0 ? fmt(r.route_total_commission) : <span style={{ color: '#bbb', fontWeight: 400 }}>—</span>}
@@ -613,13 +634,62 @@ export default function AccountingPage() {
                           )}
                         </td>
                       </tr>
-                    ))}
+                      {isExpanded && hasElectronic && (
+                        <tr>
+                          <td colSpan={9} style={{ background: '#faf7ff', padding: 0 }}>
+                            <div style={{ padding: '12px 16px' }}>
+                              <div style={{ fontWeight: 700, color: '#4527a0', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span className="material-icons" style={{ fontSize: 18 }}>receipt_long</span>
+                                Pagos por Zelle / Transferencia — {fmt(r.electronic_collected)} (van directo a la empresa, revisar comprobantes)
+                              </div>
+                              {elecStops.length === 0 ? (
+                                <div style={{ fontSize: 13, color: '#888' }}>No hay paradas con comprobante registrado.</div>
+                              ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                                  {elecStops.map(s => (
+                                    <div key={s.id} style={{ background: '#fff', border: '1px solid #e6def7', borderRadius: 10, padding: 10, width: 220 }}>
+                                      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{s.customer_name || 'Sin nombre'}</div>
+                                      {s.address && (
+                                        <div style={{ fontSize: 11, color: '#888', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                          {s.address}{s.apartment_number ? `, Apt ${s.apartment_number}` : ''}
+                                        </div>
+                                      )}
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                        <span style={{ fontWeight: 700, color: '#2e7d32' }}>{fmt(s.amount_collected)}</span>
+                                        <span className={`payment-method-tag ${s.payment_method}`}>{s.payment_method}</span>
+                                      </div>
+                                      {s.photo_url ? (
+                                        <img
+                                          src={s.photo_url}
+                                          alt={`Comprobante ${s.customer_name || ''}`}
+                                          onClick={() => setViewingPhoto(s.photo_url)}
+                                          style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: '1px solid #eee' }}
+                                        />
+                                      ) : (
+                                        <div style={{ width: '100%', height: 120, borderRadius: 8, background: '#f3f0fa', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#b39ddb', fontSize: 12, textAlign: 'center', padding: 8 }}>
+                                          <span>Sin comprobante adjunto</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
+                      )
+                    })}
                   </tbody>
                   <tfoot>
                     <tr className="accounting-totals">
                       <td colSpan={2}><strong>TOTAL ({filtered.length} rutas)</strong></td>
                       <td style={{ textAlign: 'right', color: '#2e7d32' }}>
                         <strong>{fmt(filtered.reduce((s, r) => s + Number(r.route_total_collected || 0), 0))}</strong>
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#6200ea' }}>
+                        <strong>{fmt(filtered.reduce((s, r) => s + Number(r.electronic_collected || 0), 0))}</strong>
                       </td>
                       <td style={{ textAlign: 'right', color: '#ef6c00' }}>
                         <strong>{fmt(filtered.reduce((s, r) => s + Number(r.route_total_commission || 0), 0))}</strong>
@@ -915,6 +985,17 @@ export default function AccountingPage() {
                 {confirmLoading ? 'Guardando...' : 'Confirmar recepción'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {viewingPhoto && (
+        <div className="photo-viewer-overlay" onClick={() => setViewingPhoto(null)}>
+          <div className="photo-viewer-container" onClick={e => e.stopPropagation()}>
+            <button className="photo-viewer-close" onClick={() => setViewingPhoto(null)}>
+              <span className="material-icons">close</span>
+            </button>
+            <img src={viewingPhoto} alt="Comprobante" className="photo-viewer-img" />
           </div>
         </div>
       )}

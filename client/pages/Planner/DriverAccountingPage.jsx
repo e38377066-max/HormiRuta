@@ -96,9 +96,15 @@ export default function DriverAccountingPage() {
 
       <div className="dac-body">
         <div className="dac-hero">
-          <div className="dac-hero-label">Pendiente de Entregar</div>
+          <div className="dac-hero-label">Efectivo Pendiente de Entregar</div>
           <div className="dac-hero-amount">{fmt(totals.to_deliver)}</div>
           <div className="dac-hero-sub">{totals.stops_pending || 0} parada{(totals.stops_pending || 0) !== 1 ? 's' : ''} pendiente{(totals.stops_pending || 0) !== 1 ? 's' : ''} de entrega</div>
+          {Number(totals.electronic_collected) > 0 && (
+            <div className="dac-hero-note">
+              <span className="material-icons" style={{ fontSize: 14 }}>account_balance</span>
+              {fmt(totals.electronic_collected)} por Zelle/Transferencia ya fue a la empresa
+            </div>
+          )}
         </div>
 
         <div className="dac-stats-row">
@@ -279,9 +285,15 @@ function CompletedRouteCard({ r, onRefresh }) {
 
       <div className="dac-del-grid">
         <div className="dac-del-cell">
-          <div className="dac-del-cell-lbl">Cobrado</div>
-          <div className="dac-del-cell-val c-green">{fmt(r.total_collected)}</div>
+          <div className="dac-del-cell-lbl">Efectivo</div>
+          <div className="dac-del-cell-val c-green">{fmt(r.cash_collected != null ? r.cash_collected : r.total_collected)}</div>
         </div>
+        {Number(r.electronic_collected) > 0 && (
+          <div className="dac-del-cell">
+            <div className="dac-del-cell-lbl">Zelle/Transf.</div>
+            <div className="dac-del-cell-val" style={{ color: '#a78bfa' }}>{fmt(r.electronic_collected)}</div>
+          </div>
+        )}
         <div className="dac-del-cell">
           <div className="dac-del-cell-lbl">Mi Comisión</div>
           <div className="dac-del-cell-val c-blue">{fmt(r.commission)}</div>
@@ -297,6 +309,12 @@ function CompletedRouteCard({ r, onRefresh }) {
           </div>
         )}
       </div>
+      {Number(r.electronic_collected) > 0 && (
+        <div className="dac-elec-note">
+          <span className="material-icons" style={{ fontSize: 14 }}>account_balance</span>
+          {fmt(r.electronic_collected)} por Zelle/Transferencia va directo a la empresa (no lo entregas tú)
+        </div>
+      )}
 
       {r.payment_delivered && r.payment_delivery_method && (
         <div className="dac-del-badges" style={{ marginTop: 8 }}>
@@ -437,15 +455,21 @@ function MonthCard({ m, expanded, onToggle, getPmt }) {
         <div className="dac-month-body">
           <div className="dac-month-totals">
             <div className="dac-tot-row">
-              <span>Total cobrado</span>
-              <strong className="c-green">{fmt(m.total_collected)}</strong>
+              <span>Efectivo cobrado</span>
+              <strong className="c-green">{fmt(m.total_cash_collected != null ? m.total_cash_collected : m.total_collected)}</strong>
             </div>
+            {Number(m.total_electronic_collected) > 0 && (
+              <div className="dac-tot-row">
+                <span>Zelle/Transferencia (a la empresa)</span>
+                <strong style={{ color: '#a78bfa' }}>{fmt(m.total_electronic_collected)}</strong>
+              </div>
+            )}
             <div className="dac-tot-row">
               <span>Mi comisión</span>
               <strong className="c-blue">{fmt(m.total_commission)}</strong>
             </div>
             <div className="dac-tot-row dac-tot-highlight">
-              <span>A entregar a oficina</span>
+              <span>Efectivo a entregar a oficina</span>
               <strong className="c-orange">{fmt(m.to_deliver)}</strong>
             </div>
           </div>
@@ -484,7 +508,9 @@ function MonthCard({ m, expanded, onToggle, getPmt }) {
 
 function DeliveryCard({ d, getPmt }) {
   const pmt = d.payment_method ? getPmt(d.payment_method) : null
-  const toDeliver = (Number(d.amount_collected) - Number(d.commission_per_stop)).toFixed(2)
+  const isCash = !d.payment_method || d.payment_method === 'cash'
+  // Solo el efectivo se entrega; Zelle/transferencia ya fue a la empresa.
+  const toDeliver = (isCash ? Number(d.amount_collected) - Number(d.commission_per_stop) : 0).toFixed(2)
 
   return (
     <div className="dac-del-card">
