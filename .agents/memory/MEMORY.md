@@ -1,2 +1,3 @@
 - [Respond.io bot excluded tags](respondio-bot-excluded-tags.md) — bot keeps replying to "Personales" contacts: union baseline tags with config + normalize (accent/case), don't trust stored list or singular-only defaults.
 - [Address scan business vs customer](address-scan-business-vs-customer.md) — scanner can save our OWN local address as customer delivery; gate all outgoing-msg extraction through shared isBusinessOwnAddress(), never re-inline the regex.
+- [Address-scan AI token runaway](address-scan-ai-token-cost.md) — continuous ~3s scan loop re-ran OpenAI address extraction on the SAME unchanged messages of address-less contacts forever; gate AI fallbacks with a per-contact signature + cooldown.

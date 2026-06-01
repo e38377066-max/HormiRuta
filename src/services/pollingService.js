@@ -50,6 +50,39 @@ class PollingService {
     // Se reinician periódicamente (cada hora) para que, si el local cambia de
     // dirección, las direcciones viejas dejen de marcarse como del negocio.
     this.lastBusinessCacheReset = null;
+    // Firma de los últimos mensajes entrantes que se enviaron a la IA para
+    // extraer dirección, por contacto. Evita re-llamar a la IA cada ~3s sobre
+    // los MISMOS mensajes (un contacto sin dirección que nunca la envía generaba
+    // una llamada a OpenAI en cada ciclo del escáner). La IA solo se vuelve a
+    // llamar cuando los mensajes del cliente cambiaron (llegó algo nuevo).
+    this.aiAddressScanSig = new Map();
+  }
+
+  // Decide si vale la pena llamar a la IA para extraer dirección de este
+  // contacto. Devuelve true cuando:
+  //   - los mensajes entrantes cambiaron desde el último intento, o
+  //   - pasó la ventana de enfriamiento (cooldown) desde el último intento
+  //     con los MISMOS mensajes (así un fallo transitorio de OpenAI se
+  //     reintenta más tarde en vez de bloquear al contacto para siempre).
+  // Devuelve false cuando los mensajes son idénticos y el intento es reciente,
+  // evitando re-llamar a la IA cada ~3s sobre el mismo contenido (el origen del
+  // consumo masivo de tokens).
+  _shouldRunAddressAI(contactId, texts) {
+    if (!Array.isArray(texts) || texts.length === 0) return false;
+    const key = String(contactId);
+    const sig = JSON.stringify(texts);
+    const now = Date.now();
+    const COOLDOWN_MS = 30 * 60 * 1000;
+    const prev = this.aiAddressScanSig.get(key);
+    if (prev && prev.sig === sig && (now - prev.ts) < COOLDOWN_MS) return false;
+    // Limpieza ligera para que el Map no crezca sin límite en uptime largo.
+    if (this.aiAddressScanSig.size > 5000) {
+      for (const [k, v] of this.aiAddressScanSig) {
+        if ((now - v.ts) > 2 * COOLDOWN_MS) this.aiAddressScanSig.delete(k);
+      }
+    }
+    this.aiAddressScanSig.set(key, { sig, ts: now });
+    return true;
   }
 
   getRespondioInstance(apiToken) {
@@ -1990,7 +2023,7 @@ class PollingService {
                       .map(m => m.message?.text)
                       .filter(t => typeof t === 'string' && t.trim().length > 0)
                       .reverse();
-                    if (incomingTexts.length > 0) {
+                    if (incomingTexts.length > 0 && this._shouldRunAddressAI(contact.id, incomingTexts)) {
                       const aiResult = await aiSvc.extractAddressFromWholesaleMessages(incomingTexts, null);
                       if (aiResult?.fullAddress && (aiResult.confidence === 'high' || aiResult.confidence === 'medium')) {
                         firstAddr = aiResult.fullAddress;
@@ -2155,7 +2188,7 @@ class PollingService {
                     .slice(0, 10)
                     .map(m => m.message?.text)
                     .filter(t => typeof t === 'string' && t.trim().length > 0);
-                  if (recentTexts.length > 0) {
+                  if (recentTexts.length > 0 && this._shouldRunAddressAI(contact.id, recentTexts)) {
                     const aiExtracted = await aiSvc.extractAddressFromMessages(recentTexts);
                     if (aiExtracted?.fullAddress) {
                       const aiNorm = aiExtracted.fullAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2260,7 +2293,7 @@ class PollingService {
                     .map(m => m.message?.text)
                     .filter(t => typeof t === 'string' && t.trim().length > 0)
                     .reverse();
-                  if (incomingTexts.length > 0) {
+                  if (incomingTexts.length > 0 && this._shouldRunAddressAI(contact.id, incomingTexts)) {
                     const aiResult = await aiSvc.extractAddressFromWholesaleMessages(incomingTexts, null);
                     if (aiResult?.fullAddress && (aiResult.confidence === 'high' || aiResult.confidence === 'medium')) {
                       latestExtracted = aiResult.fullAddress;
@@ -2375,7 +2408,7 @@ class PollingService {
                   .slice(0, 10)
                   .map(m => m.message?.text)
                   .filter(t => typeof t === 'string' && t.trim().length > 0);
-                if (recentTexts.length > 0) {
+                if (recentTexts.length > 0 && this._shouldRunAddressAI(contact.id, recentTexts)) {
                   const aiExtracted = await aiSvc.extractAddressFromMessages(recentTexts);
                   if (aiExtracted?.fullAddress) {
                     console.log(`[AddressScan] IA detectó dirección para ${contactName} (${contact.id}): "${aiExtracted.fullAddress}" (confianza: ${aiExtracted.confidence})`);
