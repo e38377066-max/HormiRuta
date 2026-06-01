@@ -174,7 +174,7 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
   // Tags para filtrar contactos
   excluded_tags: {
     type: DataTypes.JSON,
-    defaultValue: ['Personal', 'IprintPOS', 'ClientesArea', 'Area862Designers']
+    defaultValue: ['Personal', 'Personales', 'IprintPOS', 'ClientesArea', 'Area862Designers']
   },
   // Lista de productos
   products: {

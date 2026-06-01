@@ -186,12 +186,22 @@ class ChatbotService {
   }
 
   hasExcludedTag(contact) {
-    const excludedTags = this.settings.excluded_tags || ['Personal', 'Personales', 'IprintPOS', 'ClientesArea', 'Area862Designers'];
+    // Etiquetas que SIEMPRE excluyen al contacto del bot, aunque la configuracion
+    // guardada este desactualizada. Incluye variantes singular/plural (Personal /
+    // Personales) para evitar que un contacto personal reciba respuestas del bot.
+    const BASELINE_EXCLUDED = ['Personal', 'Personales', 'IprintPOS', 'ClientesArea', 'Area862Designers'];
+    const configured = Array.isArray(this.settings.excluded_tags) ? this.settings.excluded_tags : [];
+
+    // Normaliza: minusculas, sin acentos, sin espacios extremos.
+    const normalize = (s) => (s || '').toString().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+    const excludedSet = new Set([...BASELINE_EXCLUDED, ...configured].map(normalize));
     const contactTags = contact.tags || [];
-    
+
     for (const tag of contactTags) {
-      const tagName = typeof tag === 'string' ? tag : tag.name;
-      if (excludedTags.some(ex => ex.toLowerCase() === (tagName || '').toLowerCase())) {
+      const tagName = normalize(typeof tag === 'string' ? tag : tag?.name);
+      if (excludedSet.has(tagName)) {
         return true;
       }
     }

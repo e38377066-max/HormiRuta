@@ -1,0 +1,1 @@
+- [Respond.io bot excluded tags](respondio-bot-excluded-tags.md) — bot keeps replying to "Personales" contacts: union baseline tags with config + normalize (accent/case), don't trust stored list or singular-only defaults.
