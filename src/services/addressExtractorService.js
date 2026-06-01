@@ -288,8 +288,6 @@ class AddressExtractorService {
   // devuelve la dirección MÁS RECIENTE (el último mensaje puede cambiarla),
   // detecta referencias "la misma dirección" y las resuelve con existingAddress.
   extractAddressFromWholesaleConversation(messages, existingAddress = null) {
-    const businessAddressPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa/i;
-
     const tsOf = (msg) => {
       const raw = msg.createdAt || msg.timestamp || 0;
       return typeof raw === 'number' ? raw : new Date(raw).getTime();
@@ -313,7 +311,7 @@ class AddressExtractorService {
 
     for (const msg of messages) {
       const isOutgoing = msg.traffic === 'outgoing';
-      if (isOutgoing && businessAddressPattern.test(msg.message?.text || '')) continue;
+      if (isOutgoing && this.isBusinessOwnAddress(msg.message?.text || '')) continue;
 
       const ts = tsOf(msg);
 
@@ -361,10 +359,17 @@ class AddressExtractorService {
     return null;
   }
 
-  extractAddressFromConversation(messages) {
-    // Mensajes del negocio (salientes) que hablan de SU PROPIA ubicación — ignorar.
+  // Detecta si un texto describe la dirección PROPIA del negocio (ej. "La
+  // direccion de nuestro Negocio es: ...", "atendemos de 8am a 1pm"). Se usa
+  // para NO confundir la ubicación del local con la dirección de entrega del
+  // cliente cuando el agente la envía en un mensaje saliente.
+  isBusinessOwnAddress(text) {
+    if (!text) return false;
     const businessAddressPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa|atendemos\s+de|nuestras?\s+instalaciones|direcci[oó]n\s+de\s+nuestro/i;
+    return businessAddressPattern.test(text);
+  }
 
+  extractAddressFromConversation(messages) {
     // Recoger todos los candidatos con su timestamp para que gane el más reciente.
     // Se analizan mensajes entrantes (cliente) Y salientes (agente confirmando
     // dirección del cliente) — sin bloquear una dirección por ser saliente.
@@ -378,7 +383,7 @@ class AddressExtractorService {
       const isOutgoing = msg.traffic === 'outgoing';
 
       // Excluir mensajes salientes que hablen de la dirección del negocio.
-      if (isOutgoing && businessAddressPattern.test(msg.message?.text || '')) continue;
+      if (isOutgoing && this.isBusinessOwnAddress(msg.message?.text || '')) continue;
 
       const ts = tsOf(msg);
 

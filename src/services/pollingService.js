@@ -1121,6 +1121,11 @@ class PollingService {
         const text = msg.message?.text || '';
         if (!text || text.length < 5) continue;
 
+        // NO confundir la dirección del local (que el agente envía en mensajes
+        // salientes) con la dirección de entrega del cliente.
+        const isOutgoing = msg.traffic === 'outgoing';
+        if (isOutgoing && extractor.isBusinessOwnAddress(text)) continue;
+
         const gLink = extractor.extractGoogleMapsLink(text);
         if (gLink) {
           mapsLink = gLink;
@@ -1953,9 +1958,8 @@ class PollingService {
               }
             }
 
-            const businessMsgPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa|atendemos\s+de|direcci[oó]n\s+de\s+nuestro/i;
             const agentMessages = outgoingMessages.filter(m =>
-              m.sender?.source === 'user' && !businessMsgPattern.test(m.message?.text || '')
+              m.sender?.source === 'user' && !extractor.isBusinessOwnAddress(m.message?.text || '')
             );
             let agentAddress = null;
             let agentTs = 0;
@@ -2167,6 +2171,10 @@ class PollingService {
             for (const msg of outgoingMessages) {
               const text = msg.message?.text || '';
               if (!text || text.length < 5) continue;
+
+              // NO confundir la dirección del local con la del cliente: si el
+              // agente está describiendo la ubicación del negocio, ignorar.
+              if (extractor.isBusinessOwnAddress(text)) continue;
 
               const gLink = extractor.extractGoogleMapsLink(text);
               if (gLink) {
