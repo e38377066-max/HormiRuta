@@ -38,6 +38,18 @@ class PollingService {
     this.addressScannedContacts = new Set();
     this.lastFullAddressScan = null;
     this.respondioInstances = new Map();
+    // Direcciones (normalizadas) que el NEGOCIO envía describiendo su propia
+    // ubicación. Se memorizan al leer mensajes para detectar de forma barata
+    // contactos cuyo campo Address/dirección guardada quedó contaminado con la
+    // dirección del local, sin volver a leer mensajes en cada ciclo.
+    this.businessAddressNorms = new Set();
+    // Contactos a los que ya se les revisó (una vez) sus mensajes buscando la
+    // dirección del local. Evita releer mensajes en cada ciclo para contactos
+    // ya resueltos por campo Address.
+    this.businessCheckedContacts = new Set();
+    // Se reinician periódicamente (cada hora) para que, si el local cambia de
+    // dirección, las direcciones viejas dejen de marcarse como del negocio.
+    this.lastBusinessCacheReset = null;
   }
 
   getRespondioInstance(apiToken) {
@@ -1595,6 +1607,18 @@ class PollingService {
         this.lastFullAddressScan = Date.now();
       }
 
+      // Reinicio horario del caché de direcciones del negocio: si el local
+      // cambia de dirección, las direcciones viejas dejan de marcarse como
+      // del negocio (y se vuelven a aprender de los mensajes actuales).
+      const BUSINESS_CACHE_RESET_MS = 60 * 60 * 1000;
+      if (!this.lastBusinessCacheReset) {
+        this.lastBusinessCacheReset = Date.now();
+      } else if ((Date.now() - this.lastBusinessCacheReset) > BUSINESS_CACHE_RESET_MS) {
+        this.businessAddressNorms.clear();
+        this.businessCheckedContacts.clear();
+        this.lastBusinessCacheReset = Date.now();
+      }
+
       contactsToScan = contactsToScan.filter(c => {
         if (needsAddressSet.has(c.id.toString())) return true;
         return !this.addressScannedContacts.has(c.id.toString());
@@ -1792,6 +1816,67 @@ class PollingService {
           // el cliente envio una direccion nueva en el chat — caso Roble Tree
           // donde el agente dejo el campo vacio pero el cliente respondio con
           // la direccion en mensaje.
+          // AUTO-CORRECCIÓN: si el campo Address en Respond.io quedó con la
+          // dirección del NEGOCIO (memorizada de mensajes salientes del local),
+          // limpiarla en Respond y en la BD para no despachar hacia nuestro local.
+          // Va ANTES de los returns tempranos por campo Address para no quedar
+          // atrapado en ellos.
+          if (contactFieldAddress) {
+            const cfNormCheck = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+            // Caché frío: si aún no sabemos si esta dirección es la del local y
+            // este contacto no ha sido revisado, leer sus mensajes UNA vez para
+            // aprender direcciones del negocio (garantiza detección sin depender
+            // de que otro contacto caliente el caché).
+            if (!this.businessAddressNorms.has(cfNormCheck) && !this.businessCheckedContacts.has(contactIdStr)) {
+              this.businessCheckedContacts.add(contactIdStr);
+              try {
+                const probe = await respondio.listMessages(contact.id, { limit: messageLimit });
+                if (probe.success && probe.items) {
+                  for (const msg of probe.items) {
+                    if (msg.traffic !== 'outgoing') continue;
+                    const t = msg.message?.text || '';
+                    if (!extractor.isBusinessOwnAddress(t)) continue;
+                    const bAddr = extractor.extractAddressFromMessage(t);
+                    if (bAddr) {
+                      const bNorm = bAddr.toLowerCase().replace(/[^a-z0-9]/g, '');
+                      if (bNorm) this.businessAddressNorms.add(bNorm);
+                    }
+                  }
+                }
+              } catch (_) {}
+            }
+            if (this.businessAddressNorms.has(cfNormCheck)) {
+              console.log(`[AddressScan] Campo Address en Respond era la del NEGOCIO para ${contactName} (${contact.id}): "${contactFieldAddress}" — limpiando (dirección incorrecta del local).`);
+              try {
+                await respondio.updateContactCustomFields(contact.id, { Address: null });
+              } catch (_) {}
+              if (existing) {
+                const existValidNormB = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const existOrigNormB = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (this.businessAddressNorms.has(existValidNormB) || this.businessAddressNorms.has(existOrigNormB) || existValidNormB === cfNormCheck || existOrigNormB === cfNormCheck) {
+                  try {
+                    await ValidatedAddress.update(
+                      {
+                        validated_address: null,
+                        original_address: null,
+                        address_lat: null,
+                        address_lng: null,
+                        zip_code: null,
+                        city: null,
+                        state: null
+                      },
+                      { where: { id: existing.id } }
+                    );
+                  } catch (clrErr) {
+                    console.error(`[AddressScan] Error limpiando dirección del local ${contact.id}:`, clrErr.message);
+                  }
+                }
+              }
+              this.addressScannedContacts.delete(contactIdStr);
+              return;
+            }
+          }
+
           if (existing && existing.source === 'contact_corrected' && contactFieldAddress) {
             const cfNorm = contactFieldAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
             const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1842,6 +1927,19 @@ class PollingService {
 
           const incomingMessages = messagesResult.items.filter(m => m.traffic === 'incoming');
           const outgoingMessages = messagesResult.items.filter(m => m.traffic === 'outgoing');
+
+          // Memorizar las direcciones que el NEGOCIO envía describiendo su propia
+          // ubicación, para detectar luego (sin releer mensajes) contactos cuyo
+          // campo Address quedó contaminado con la dirección del local.
+          for (const msg of outgoingMessages) {
+            const t = msg.message?.text || '';
+            if (!extractor.isBusinessOwnAddress(t)) continue;
+            const bAddr = extractor.extractAddressFromMessage(t);
+            if (bAddr) {
+              const bNorm = bAddr.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (bNorm) this.businessAddressNorms.add(bNorm);
+            }
+          }
 
           const isWholesaleContact = contactIsWholesale(contactName);
 
@@ -2080,6 +2178,52 @@ class PollingService {
               } catch (aiErr) {
                 // IA no disponible — continuar
               }
+            }
+
+            // AUTO-CORRECCIÓN: si la dirección guardada es en realidad la del
+            // NEGOCIO (un agente la envió en un mensaje saliente describiendo
+            // nuestra ubicación) y ningún cliente/agente envió una dirección real
+            // que la reemplace, borrarla para no despachar hacia nuestro propio local.
+            const businessAddrNorms = [];
+            for (const msg of outgoingMessages) {
+              const text = msg.message?.text || '';
+              if (!extractor.isBusinessOwnAddress(text)) continue;
+              const bAddr = extractor.extractAddressFromMessage(text);
+              if (bAddr) {
+                const bNorm = bAddr.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (bNorm) businessAddrNorms.push(bNorm);
+              }
+            }
+            const existingIsBusinessAddr = businessAddrNorms.length > 0 &&
+              businessAddrNorms.some(n => n === existValidNorm || n === existOrigNorm);
+
+            if (existingIsBusinessAddr) {
+              console.log(`[AddressScan] Dirección guardada era la del NEGOCIO para ${contactName} (${contact.id}): "${existing.validated}" — borrando (dirección incorrecta del local).`);
+              try {
+                await ValidatedAddress.update(
+                  {
+                    validated_address: null,
+                    original_address: null,
+                    address_lat: null,
+                    address_lng: null,
+                    zip_code: null,
+                    city: null,
+                    state: null
+                  },
+                  { where: { id: existing.id } }
+                );
+              } catch (clrErr) {
+                console.error(`[AddressScan] Error limpiando dirección del local ${contact.id}:`, clrErr.message);
+              }
+              // Limpiar también el campo Address en Respond.io si quedó con la del local.
+              if (cfNorm && businessAddrNorms.some(n => n === cfNorm)) {
+                try {
+                  await respondio.updateContactCustomFields(contact.id, { Address: null });
+                  console.log(`[AddressScan] Campo Address en Respond limpiado (era la del local) para ${contactName} (${contact.id}).`);
+                } catch (_) {}
+              }
+              this.addressScannedContacts.delete(contactIdStr);
+              return;
             }
 
             this.addressScannedContacts.add(contactIdStr);
