@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Política de Privacidad — Area 862</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      line-height: 1.7;
+    }
+    header {
+      background: #0f172a;
+      color: #fff;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    header h1 { font-size: 1.6rem; font-weight: 700; }
+    header p { font-size: 0.9rem; color: #94a3b8; margin-top: 4px; }
+    main {
+      max-width: 780px;
+      margin: 40px auto;
+      padding: 0 24px 60px;
+    }
+    h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 32px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    p, li { font-size: 0.95rem; color: #334155; margin-bottom: 10px; }
+    ul { padding-left: 20px; margin-bottom: 10px; }
+    a { color: #3b82f6; }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 28px;
+      margin-top: 24px;
+    }
+    .last-updated {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Area 862 — Política de Privacidad</h1>
+    <p>Aplicación móvil de logística y despacho</p>
+  </header>
+
+  <main>
+    <div class="card">
+
+      <h2>1. Quiénes somos</h2>
+      <p>
+        Area 862 ("nosotros", "la empresa") opera una plataforma de gestión de rutas y entregas
+        para el área metropolitana de Dallas, Texas. Esta política describe cómo recopilamos,
+        usamos y protegemos la información dentro de nuestra aplicación móvil y sistema web.
+      </p>
+
+      <h2>2. Información que recopilamos</h2>
+      <ul>
+        <li><strong>Datos de cuenta:</strong> nombre de usuario, correo electrónico y contraseña (almacenada con hash bcrypt).</li>
+        <li><strong>Datos de clientes:</strong> nombre, número de teléfono y dirección de entrega, necesarios para procesar y completar órdenes.</li>
+        <li><strong>Ubicación precisa:</strong> cuando el chofer habilita la navegación, la app accede a su ubicación GPS para calcular rutas y abrir la aplicación de navegación elegida. No almacenamos el historial de ubicación del dispositivo.</li>
+        <li><strong>Fotos de evidencia:</strong> imágenes capturadas con la cámara del dispositivo para documentar entregas completadas. Se almacenan de forma segura en nuestros servidores.</li>
+        <li><strong>Registros de actividad:</strong> acciones dentro de la app (cambios de estado de órdenes, asignaciones de rutas) para auditoría interna.</li>
+      </ul>
+
+      <h2>3. Cómo usamos la información</h2>
+      <ul>
+        <li>Procesar, asignar y completar órdenes de entrega.</li>
+        <li>Calcular y optimizar rutas de entrega.</li>
+        <li>Documentar evidencia de entrega para clientes y administración.</li>
+        <li>Enviar notificaciones de estado de orden a través de Respond.io.</li>
+        <li>Generar reportes de contabilidad internos.</li>
+      </ul>
+
+      <h2>4. Compartición de datos</h2>
+      <p>No vendemos ni compartimos datos personales con terceros con fines publicitarios. Trabajamos con los siguientes proveedores de servicios:</p>
+      <ul>
+        <li><strong>Respond.io</strong> — automatización de mensajes a clientes (WhatsApp/SMS).</li>
+        <li><strong>Google Maps Platform</strong> — geocodificación de direcciones y cálculo de rutas.</li>
+        <li><strong>OpenAI</strong> — procesamiento de texto para asistencia en despacho.</li>
+        <li><strong>Gmail (OAuth2)</strong> — lectura de correos de confirmación de órdenes.</li>
+      </ul>
+      <p>Cada proveedor opera bajo sus propias políticas de privacidad y contratos de procesamiento de datos.</p>
+
+      <h2>5. Almacenamiento y seguridad</h2>
+      <ul>
+        <li>Los datos se almacenan en servidores PostgreSQL bajo conexión cifrada (TLS).</li>
+        <li>Las contraseñas se almacenan exclusivamente como hashes bcrypt, nunca en texto plano.</li>
+        <li>El acceso a la aplicación requiere autenticación. Las fotos de evidencia están protegidas y no son accesibles públicamente.</li>
+        <li>Solo el personal autorizado de Area 862 puede acceder a los datos operativos.</li>
+      </ul>
+
+      <h2>6. Retención de datos</h2>
+      <p>
+        Los registros de órdenes y evidencia de entrega se conservan por el tiempo necesario para
+        cumplir con requerimientos contables y operativos. Los usuarios pueden solicitar la
+        eliminación de su cuenta y datos asociados directamente desde la sección de Configuración
+        dentro de la aplicación.
+      </p>
+
+      <h2>7. Derechos del usuario</h2>
+      <p>Tienes derecho a:</p>
+      <ul>
+        <li>Acceder a los datos que tenemos sobre ti.</li>
+        <li>Solicitar la corrección de datos incorrectos.</li>
+        <li>Eliminar tu cuenta y datos personales desde la app (Configuración → Eliminar cuenta).</li>
+        <li>Solicitar una copia de tus datos contactándonos directamente.</li>
+      </ul>
+
+      <h2>8. Permisos del dispositivo</h2>
+      <ul>
+        <li><strong>Cámara:</strong> para capturar fotos de evidencia de entrega. Solo se activa con acción explícita del usuario.</li>
+        <li><strong>Galería de fotos:</strong> para adjuntar evidencia de pagos desde el álbum del dispositivo.</li>
+        <li><strong>Ubicación (cuando se usa la app):</strong> para posicionar al chofer en el mapa y abrir navegación. No se rastrea en segundo plano.</li>
+      </ul>
+
+      <h2>9. Uso por menores</h2>
+      <p>
+        Esta aplicación es una herramienta de uso exclusivo para empleados y colaboradores de
+        Area 862. No está dirigida a menores de 18 años ni recopila intencionalmente datos de menores.
+      </p>
+
+      <h2>10. Cambios a esta política</h2>
+      <p>
+        Podemos actualizar esta política ocasionalmente. Te notificaremos de cambios significativos
+        a través de la aplicación. El uso continuado de la app después de los cambios implica
+        aceptación de la nueva política.
+      </p>
+
+      <h2>11. Contacto</h2>
+      <p>
+        Para preguntas o solicitudes relacionadas con privacidad, contáctanos en:<br />
+        <a href="mailto:admin@area862system.com">admin@area862system.com</a><br />
+        <a href="https://area862system.com">area862system.com</a>
+      </p>
+
+    </div>
+
+    <p class="last-updated">Última actualización: junio 2025</p>
+  </main>
+</body>
+</html>

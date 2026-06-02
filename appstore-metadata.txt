@@ -1,0 +1,109 @@
+============================================================
+AREA 862 — APP STORE CONNECT METADATA
+Todo listo para copiar y pegar en App Store Connect
+============================================================
+
+--- INFORMACIÓN DE LA APP (permanente) ---
+
+Nombre:           Area 862
+Bundle ID:        com.area862.app
+SKU:              area862-ios-v1
+Categoría:        Business
+Subcategoría:     Productivity
+Idioma primario:  Spanish (Mexico)
+URL Privacidad:   https://area862system.com/privacidad
+URL Soporte:      https://area862system.com
+URL Marketing:    https://area862system.com
+
+
+--- METADATA DE LA VERSIÓN 1.0 ---
+
+DESCRIPCIÓN (máx 4,000 caracteres):
+----------------------------------------
+Area 862 es la plataforma de gestión de rutas y entregas para el equipo de Area 862 en el área metropolitana de Dallas.
+
+Diseñada para despachadores y choferes, la app permite:
+
+• Visualizar todas las órdenes activas en un mapa en tiempo real
+• Planificar y optimizar rutas de entrega con reordenamiento inteligente
+• Navegar a cada parada con Google Maps, Waze o Apple Maps
+• Capturar foto de evidencia de entrega directamente desde la app
+• Actualizar el estado de cada orden (Aprobada → Ordenada → En Entrega → Entregada)
+• Ver historial de entregas y reportes de contabilidad
+• Recibir notificaciones automáticas del estado de las órdenes
+
+Acceso exclusivo para empleados y colaboradores autorizados de Area 862.
+----------------------------------------
+
+NOTAS DE VERSIÓN (para v1.0):
+----------------------------------------
+Primera versión oficial de Area 862 en el App Store.
+----------------------------------------
+
+PALABRAS CLAVE (máx 100 caracteres):
+----------------------------------------
+rutas,entregas,despacho,logística,choferes,mapa,Dallas,reparto,conductores
+----------------------------------------
+(son 87 caracteres — dentro del límite)
+
+
+--- CLASIFICACIÓN DE EDAD ---
+
+Responde NO a todas las preguntas del cuestionario.
+Resultado esperado: 4+ (sin contenido para adultos)
+
+
+--- INFORMACIÓN PARA EL REVISOR DE APPLE ---
+(Sección "App Review Information" en App Store Connect)
+
+Nombre de contacto:    [Tu nombre]
+Teléfono:              [Tu teléfono con código de país, ej: +1 214 555 0000]
+Email:                 admin@area862system.com
+
+Usuario demo:          revisor@area862system.com   ← CREA ESTE USUARIO EN TU SISTEMA
+Contraseña demo:       [una contraseña temporal]
+
+Notas para el revisor:
+----------------------------------------
+Area 862 is an internal business logistics tool for dispatchers and delivery drivers operating in the Dallas, TX metro area.
+
+The app requires login because it contains sensitive business data — delivery addresses, customer information, and payment records. Access is restricted to authorized company employees.
+
+Key native features used:
+- Device GPS: used to display driver's real-time position on the map and to open turn-by-turn navigation in Apple Maps, Google Maps, or Waze
+- Camera: used to photograph delivery evidence at each stop (required proof of delivery)
+- Photo library: to attach payment receipts from the device gallery
+
+Please use the demo credentials above to access all features. The demo account has full dispatcher privileges so you can see all order management, map view, route planning, and delivery evidence capture.
+
+This is not a public-facing consumer app — it is an internal tool for a logistics company.
+----------------------------------------
+
+
+--- ÍCONOS Y CAPTURAS ---
+
+Ícono 1024x1024:     attached_assets/area862-icon-1024.png  ← YA GENERADO
+                     También copiado a ios/App/App/Assets.xcassets/AppIcon.appiconset/
+
+Screenshots:         Tomar en Xcode Simulator → iPhone 16 Pro Max
+                     Resolucion requerida: 1320 x 2868 px
+                     Mínimo 1, máximo 10 por dispositivo
+                     Pantallas sugeridas:
+                       1. Mapa con órdenes activas
+                       2. Lista de despacho con estados
+                       3. Planeador de rutas
+                       4. Detalle de una orden / evidencia
+
+
+--- PASOS FINALES EN XCODE ---
+
+1. Abrir: ios/App/App.xcworkspace  (NO el .xcodeproj)
+2. Signing & Capabilities → Team → selecciona tu Apple Developer account
+3. Automatic signing → activado
+4. Product → Archive
+5. Distribute App → App Store Connect → Upload
+6. Ir a App Store Connect → llenar con los datos de arriba
+7. Agregar screenshots
+8. Submit for Review
+
+============================================================

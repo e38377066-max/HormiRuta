@@ -106,6 +106,10 @@ app.use(express.static(distPath, {
   }
 }));
 
+app.get('/privacidad', (req, res) => {
+  res.sendFile(path.join(__dirname, 'pages', 'privacidad.html'));
+});
+
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
