@@ -300,7 +300,7 @@ export default function DispatchMap() {
     routePolylinesRef.current.forEach(p => p.setMap(null))
     routePolylinesRef.current = []
 
-    const ordersToShow = orders.filter(o => o.address_lat && o.address_lng && o.order_status !== 'delivered')
+    const ordersToShow = orders.filter(o => o.address_lat && o.address_lng)
 
     ordersToShow.forEach(order => {
       const config = STATUS_CONFIG[order.order_status] || STATUS_CONFIG.approved
