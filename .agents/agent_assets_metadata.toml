@@ -11,3 +11,27 @@ id = "skKcyWDmLpJW6Qu3Ll7zf"
 uri = "file://attached_assets/area862-icon-1024.png"
 type = "image"
 title = "Ícono Area 862 — 1024×1024"
+
+[[outputs]]
+id = "7rI63AS3GNIV2QlQs5TuZ"
+uri = "file://screenshots/appstore/01-login.png"
+type = "image"
+title = "1. Login — 1320×2868"
+
+[[outputs]]
+id = "3bmWDj8okJq9sLrU__rwk"
+uri = "file://screenshots/appstore/02-dispatch-map.png"
+type = "image"
+title = "2. Mapa de Despacho — 1320×2868"
+
+[[outputs]]
+id = "fzgFNUwiVS3GzBO7puq7b"
+uri = "file://screenshots/appstore/03-route-planner.png"
+type = "image"
+title = "3. Planificador de Rutas — 1320×2868"
+
+[[outputs]]
+id = "n6eygLXo0r2h01yQi_5Pt"
+uri = "file://screenshots/appstore/04-delivery-detail.png"
+type = "image"
+title = "4. Detalle de Entrega — 1320×2868"
