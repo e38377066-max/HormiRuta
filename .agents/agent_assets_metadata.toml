@@ -53,3 +53,27 @@ id = "zUgrqOe8BLm08s6YlUtsF"
 uri = "file://screenshots/appstore/04-dispatch.png"
 type = "image"
 title = "4. Despacho — 1242×2688px ✓"
+
+[[outputs]]
+id = "EjxAxro0smz3P8zbpQtpO"
+uri = "file://screenshots/appstore/ipad/01-login.png"
+type = "image"
+title = "iPad 1. Login — 2048×2732px ✓"
+
+[[outputs]]
+id = "uwF0wl6wn4Df_x0NTbftQ"
+uri = "file://screenshots/appstore/ipad/02-messaging.png"
+type = "image"
+title = "iPad 2. Mensajería — 2048×2732px ✓"
+
+[[outputs]]
+id = "7pvYEuZmY_AcIBaUpeH7v"
+uri = "file://screenshots/appstore/ipad/03-planner.png"
+type = "image"
+title = "iPad 3. Planeador — 2048×2732px ✓"
+
+[[outputs]]
+id = "8ZsH0aMMMoZEzhc3mIVUx"
+uri = "file://screenshots/appstore/ipad/04-dispatch.png"
+type = "image"
+title = "iPad 4. Despacho — 2048×2732px ✓"
