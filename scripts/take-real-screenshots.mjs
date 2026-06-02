@@ -4,7 +4,8 @@ import { mkdir } from 'fs/promises';
 const TOKEN = '7c288375ff4c5829879553cdf67aaf8234f3a54d373f6350365c7532e659b8c6';
 const BASE  = 'http://localhost:5000';
 const OUT   = 'screenshots/appstore';
-const W = 390, H = 844;
+// 414×896 @ 3x = 1242×2688 — tamaño exacto iPhone 6.5" para App Store
+const W = 414, H = 896;
 
 await mkdir(OUT, { recursive: true });
 

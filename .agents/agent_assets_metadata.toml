@@ -16,7 +16,7 @@ title = "Ícono Area 862 — 1024×1024"
 id = "7rI63AS3GNIV2QlQs5TuZ"
 uri = "file://screenshots/appstore/01-login.png"
 type = "image"
-title = "1. Login"
+title = "1. Login — 1242×2688px ✓"
 
 [[outputs]]
 id = "3bmWDj8okJq9sLrU__rwk"
@@ -40,16 +40,16 @@ title = "4. Detalle de Entrega — 1320×2868"
 id = "L21apkZebAlh121wtGQnE"
 uri = "file://screenshots/appstore/02-messaging.png"
 type = "image"
-title = "2. Mensajería"
+title = "2. Mensajería — 1242×2688px ✓"
 
 [[outputs]]
 id = "wCxCByHNyDcT86qivJXtD"
 uri = "file://screenshots/appstore/03-planner.png"
 type = "image"
-title = "3. Planeador de Rutas"
+title = "3. Planeador — 1242×2688px ✓"
 
 [[outputs]]
 id = "zUgrqOe8BLm08s6YlUtsF"
 uri = "file://screenshots/appstore/04-dispatch.png"
 type = "image"
-title = "4. Despacho"
+title = "4. Despacho — 1242×2688px ✓"
