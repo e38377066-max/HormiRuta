@@ -110,14 +110,24 @@ app.get('/privacidad', (req, res) => {
   res.sendFile(path.join(__dirname, 'pages', 'privacidad.html'));
 });
 
-app.get('/dev-login', (req, res) => {
+app.get('/dev-login', async (req, res) => {
   if (process.env.NODE_ENV === 'production') return res.status(404).send('Not found');
   const { token, redirect = '/messaging' } = req.query;
   if (!token) return res.status(400).send('token required');
-  res.send(`<!DOCTYPE html><html><body><script>
-    localStorage.setItem('token','${token}');
-    window.location.href='${redirect}';
-  </script></body></html>`);
+  try {
+    const { User } = await import('./models/index.js');
+    const { getUserIdFromToken } = await import('./middleware/auth.js');
+    const userId = await getUserIdFromToken(token);
+    const user = await User.findByPk(userId);
+    const userData = JSON.stringify(user ? user.toDict() : {});
+    res.send(`<!DOCTYPE html><html><body><script>
+      localStorage.setItem('authToken',${JSON.stringify(token)});
+      localStorage.setItem('user',${JSON.stringify(userData)});
+      window.location.href=${JSON.stringify(redirect)};
+    </script></body></html>`);
+  } catch(e) {
+    res.status(500).send('Error: ' + e.message);
+  }
 });
 
 app.get('*', (req, res, next) => {
