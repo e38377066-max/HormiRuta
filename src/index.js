@@ -110,6 +110,16 @@ app.get('/privacidad', (req, res) => {
   res.sendFile(path.join(__dirname, 'pages', 'privacidad.html'));
 });
 
+app.get('/dev-login', (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).send('Not found');
+  const { token, redirect = '/messaging' } = req.query;
+  if (!token) return res.status(400).send('token required');
+  res.send(`<!DOCTYPE html><html><body><script>
+    localStorage.setItem('token','${token}');
+    window.location.href='${redirect}';
+  </script></body></html>`);
+});
+
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
