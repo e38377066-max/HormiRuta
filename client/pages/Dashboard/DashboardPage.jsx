@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useMessaging } from '../../contexts/MessagingContext'
+import { useTranslation } from 'react-i18next'
 import './DashboardPage.css'
 
 export default function DashboardPage() {
   const { stats, pollingStatus, fetchStats, getPollingStatus, startPolling, stopPolling, syncContacts } = useMessaging()
   const [syncing, setSyncing] = useState(false)
+  const { t } = useTranslation()
 
   useEffect(() => {
     fetchStats()
@@ -38,20 +40,20 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-page">
       <div className="page-header">
-        <h1>Dashboard</h1>
+        <h1>{t('dashboard.title')}</h1>
         <div className="header-actions">
           <button 
             className={`btn ${pollingStatus.active ? 'btn-negative' : 'btn-positive'}`}
             onClick={handleTogglePolling}
           >
-            {pollingStatus.active ? '⏹ Detener Polling' : '▶ Iniciar Polling'}
+            {pollingStatus.active ? t('dashboard.stopPolling') : t('dashboard.startPolling')}
           </button>
           <button 
             className="btn btn-primary"
             onClick={handleSync}
             disabled={syncing}
           >
-            {syncing ? '🔄 Sincronizando...' : '🔄 Sincronizar'}
+            {syncing ? t('dashboard.syncing') : t('dashboard.sync')}
           </button>
         </div>
       </div>
@@ -59,50 +61,50 @@ export default function DashboardPage() {
       <div className="stats-grid">
         <div className="stat-card primary">
           <h2>{stats?.total_orders || 0}</h2>
-          <p>Total Ordenes</p>
+          <p>{t('dashboard.totalOrders')}</p>
         </div>
         <div className="stat-card warning">
           <h2>{stats?.pending || 0}</h2>
-          <p>Pendientes</p>
+          <p>{t('dashboard.pending')}</p>
         </div>
         <div className="stat-card info">
           <h2>{stats?.confirmed || 0}</h2>
-          <p>Confirmadas</p>
+          <p>{t('dashboard.confirmed')}</p>
         </div>
         <div className="stat-card positive">
           <h2>{stats?.completed || 0}</h2>
-          <p>Completadas</p>
+          <p>{t('dashboard.completed')}</p>
         </div>
       </div>
 
       <div className="card mt-3 p-3">
-        <h3>Estado del Servicio</h3>
+        <h3>{t('dashboard.serviceStatus')}</h3>
         <div className="service-status mt-2">
           <div className="status-item">
             <span className={`status-dot ${pollingStatus.active ? 'active' : ''}`}></span>
-            <span>Polling Respond.io: {pollingStatus.active ? 'Activo' : 'Inactivo'}</span>
+            <span>{t('dashboard.pollingStatus')} {pollingStatus.active ? t('dashboard.pollingActive') : t('dashboard.pollingInactive')}</span>
           </div>
           {pollingStatus.interval && (
             <div className="status-item">
-              <span>Intervalo: {pollingStatus.interval} segundos</span>
+              <span>{t('dashboard.interval')} {pollingStatus.interval} {t('dashboard.seconds')}</span>
             </div>
           )}
         </div>
       </div>
 
       <div className="card mt-3 p-3">
-        <h3>Resumen de Cobertura</h3>
+        <h3>{t('dashboard.coverageSummary')}</h3>
         <div className="coverage-summary mt-2">
           <div className="coverage-item">
-            <span className="coverage-label">Zonas activas:</span>
+            <span className="coverage-label">{t('dashboard.activeZones')}</span>
             <span className="coverage-value">{stats?.coverage_zones || 0}</span>
           </div>
           <div className="coverage-item">
-            <span className="coverage-label">Con cobertura:</span>
+            <span className="coverage-label">{t('dashboard.withCoverage')}</span>
             <span className="coverage-value positive">{stats?.with_coverage || 0}</span>
           </div>
           <div className="coverage-item">
-            <span className="coverage-label">Sin cobertura:</span>
+            <span className="coverage-label">{t('dashboard.withoutCoverage')}</span>
             <span className="coverage-value negative">{stats?.without_coverage || 0}</span>
           </div>
         </div>

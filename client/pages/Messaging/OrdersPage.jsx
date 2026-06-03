@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMessaging } from '../../contexts/MessagingContext'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './MessagingPages.css'
 
 export default function OrdersPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { orders, stats, settings, fetchOrders, fetchStats, fetchSettings, confirmOrder, cancelOrder, completeOrder, loading } = useMessaging()
   const [filter, setFilter] = useState('')
   const [showValidateZip, setShowValidateZip] = useState(false)
@@ -27,7 +29,7 @@ export default function OrdersPage() {
     { id: 'respond', label: 'Respond.io', icon: 'support_agent', color: '#6366f1' },
     { id: 'sms', label: 'SMS', icon: 'sms', color: '#607d8b' },
     { id: 'email', label: 'Email', icon: 'email', color: '#ea4335' },
-    { id: 'phone', label: 'Telefono', icon: 'phone', color: '#34a853' }
+    { id: 'phone', label: t('common.phone'), icon: 'phone', color: '#34a853' }
   ]
 
   const getPlatformInfo = (platformId) => {
@@ -44,12 +46,12 @@ export default function OrdersPage() {
   const processedOrders = orders.filter(o => ['confirmed', 'cancelled', 'completed'].includes(o.status))
 
   const statusOptions = [
-    { label: 'Todos', value: '' },
-    { label: 'Pendientes', value: 'pending' },
-    { label: 'Confirmadas', value: 'confirmed' },
-    { label: 'En camino', value: 'in_transit' },
-    { label: 'Completadas', value: 'completed' },
-    { label: 'Canceladas', value: 'cancelled' }
+    { label: t('orders.filters.all'), value: '' },
+    { label: t('orders.filters.pending'), value: 'pending' },
+    { label: t('orders.filters.confirmed'), value: 'confirmed' },
+    { label: t('orders.filters.inTransit'), value: 'in_transit' },
+    { label: t('orders.filters.completed'), value: 'completed' },
+    { label: t('orders.filters.cancelled'), value: 'cancelled' }
   ]
 
   const getStatusColor = (status) => {
@@ -63,13 +65,19 @@ export default function OrdersPage() {
   }
 
   const getStatusLabel = (status) => {
-    const labels = { pending: 'Pendiente', confirmed: 'Confirmada', in_transit: 'En camino', completed: 'Completada', cancelled: 'Cancelada' }
-    return labels[status] || status
+    const map = {
+      pending: t('orders.status.pending'),
+      confirmed: t('orders.status.confirmed'),
+      in_transit: t('orders.status.inTransit'),
+      completed: t('orders.status.completed'),
+      cancelled: t('orders.status.cancelled')
+    }
+    return map[status] || status
   }
 
   const formatDate = (dateStr) => {
     if (!dateStr) return ''
-    return new Date(dateStr).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+    return new Date(dateStr).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
 
   const handleValidateZip = async () => {
@@ -93,13 +101,13 @@ export default function OrdersPage() {
       const historyItem = {
         id: Date.now(),
         zipCode: zipForm.zip_code,
-        contactName: zipForm.contact_name || 'Sin nombre',
+        contactName: zipForm.contact_name || t('orders.placeholders.noName'),
         platform: zipForm.platform,
         hasCoverage: result.valid,
         message: result.message,
         copyMessage: result.copyMessage,
         zone: result.zone,
-        timestamp: new Date().toLocaleString('es', { 
+        timestamp: new Date().toLocaleString(undefined, { 
           day: '2-digit', 
           month: 'short', 
           hour: '2-digit', 
@@ -112,7 +120,7 @@ export default function OrdersPage() {
       setValidationResult({ 
         success: false, 
         hasCoverage: false, 
-        message: 'Error al validar el codigo postal' 
+        message: t('common.error')
       })
     } finally {
       setValidating(false)
@@ -124,10 +132,10 @@ export default function OrdersPage() {
     try {
       const res = await api.post('/api/messaging/orders/revalidate')
       const { revalidated, total } = res.data
-      alert(`Re-validacion completada: ${revalidated} de ${total} ordenes actualizadas`)
+      alert(t('orders.revalidateComplete', { revalidated, total }))
       fetchOrders(filter || null)
     } catch (err) {
-      alert('Error al re-validar')
+      alert(t('orders.revalidateError'))
     } finally {
       setRevalidating(false)
     }
@@ -141,7 +149,7 @@ export default function OrdersPage() {
       setTimeout(() => setCopySuccess(false), 2000)
       return true
     } catch (err) {
-      alert('Error al copiar')
+      alert(t('orders.copyError'))
       return false
     }
   }
@@ -161,25 +169,25 @@ export default function OrdersPage() {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1>Centro de Mensajeria</h1>
+        <h1>{t('orders.title')}</h1>
       </div>
 
       <div className="stats-grid">
         <div className="stat-card blue">
           <div className="stat-value">{stats?.todayOrders || 0}</div>
-          <div className="stat-label">Ordenes Hoy</div>
+          <div className="stat-label">{t('orders.stats.today')}</div>
         </div>
         <div className="stat-card orange">
           <div className="stat-value">{stats?.pending || 0}</div>
-          <div className="stat-label">Pendientes</div>
+          <div className="stat-label">{t('orders.stats.pending')}</div>
         </div>
         <div className="stat-card cyan">
           <div className="stat-value">{stats?.confirmed || 0}</div>
-          <div className="stat-label">Confirmadas</div>
+          <div className="stat-label">{t('orders.stats.confirmed')}</div>
         </div>
         <div className="stat-card green">
           <div className="stat-value">{stats?.completed || 0}</div>
-          <div className="stat-label">Completadas</div>
+          <div className="stat-label">{t('orders.stats.completed')}</div>
         </div>
       </div>
 
@@ -187,36 +195,36 @@ export default function OrdersPage() {
         <div className="alert-card warning">
           <span className="material-icons">warning</span>
           <div className="alert-content">
-            <strong>Configuracion Requerida</strong>
-            <p>Necesitas configurar tu API token de Respond.io para empezar a recibir ordenes.</p>
+            <strong>{t('orders.alerts.setupRequired')}</strong>
+            <p>{t('orders.alerts.setupMessage')}</p>
           </div>
-          <button className="btn-primary" onClick={() => navigate('/messaging/settings')}>Configurar</button>
+          <button className="btn-primary" onClick={() => navigate('/messaging/settings')}>{t('orders.actions.configure')}</button>
         </div>
       )}
 
       <div className="action-bar">
         <button className="btn-primary" onClick={() => setShowValidateZip(true)}>
           <span className="material-icons">pin_drop</span>
-          Validar ZIP
+          {t('orders.actions.validateZip')}
         </button>
         <button className="btn-secondary" onClick={() => navigate('/messaging/coverage')}>
           <span className="material-icons">map</span>
-          Zonas de Cobertura
+          {t('orders.actions.coverageZones')}
         </button>
         <button className="btn-accent" onClick={() => navigate('/messaging/settings')}>
           <span className="material-icons">settings</span>
-          Configuracion
+          {t('orders.actions.settings')}
         </button>
         <button className="btn-outline" onClick={handleRevalidate} disabled={revalidating}>
           <span className="material-icons">{revalidating ? 'sync' : 'refresh'}</span>
-          {revalidating ? 'Validando...' : 'Re-validar'}
+          {revalidating ? t('orders.actions.validating') : t('orders.actions.revalidate')}
         </button>
       </div>
 
       <div className="two-column-layout">
         <div className="content-card">
           <div className="card-toolbar">
-            <h3>Ordenes Recientes</h3>
+            <h3>{t('orders.recentOrders')}</h3>
             <select value={filter} onChange={(e) => setFilter(e.target.value)}>
               {statusOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -231,8 +239,8 @@ export default function OrdersPage() {
           ) : pendingOrders.length === 0 ? (
             <div className="empty-state">
               <span className="material-icons">inbox</span>
-              <p>No hay ordenes pendientes</p>
-              <span className="empty-hint">Las ordenes apareceran aqui cuando lleguen desde Respond.io</span>
+              <p>{t('orders.empty.pending')}</p>
+              <span className="empty-hint">{t('orders.empty.hint')}</span>
             </div>
           ) : (
             <div className="orders-list">
@@ -242,11 +250,11 @@ export default function OrdersPage() {
                     <span className="material-icons">{getStatusIcon(order.status)}</span>
                   </div>
                   <div className="order-info">
-                    <div className="order-name">{order.customerName || order.customer_name || 'Sin nombre'}</div>
-                    <div className="order-address">{order.address || 'Sin direccion'}</div>
+                    <div className="order-name">{order.customerName || order.customer_name || t('orders.placeholders.noName')}</div>
+                    <div className="order-address">{order.address || t('orders.placeholders.noAddress')}</div>
                     <div className="order-tags">
                       <span className={`tag ${order.validation_status === 'covered' || order.validation_status === 'valid' ? 'success' : 'danger'}`}>
-                        {order.validation_status === 'covered' || order.validation_status === 'valid' ? 'Cobertura OK' : 'Sin cobertura'}
+                        {order.validation_status === 'covered' || order.validation_status === 'valid' ? t('orders.validation.covered') : t('orders.validation.noCoverage')}
                       </span>
                       {order.channel_type && <span className="tag outline">{order.channel_type}</span>}
                       {order.lifecycle && <span className="tag lifecycle">{order.lifecycle}</span>}
@@ -260,16 +268,16 @@ export default function OrdersPage() {
                     <div className="order-actions">
                       {order.status === 'pending' && (
                         <>
-                          <button className="icon-btn success" onClick={() => confirmOrder(order.id)} title="Confirmar">
+                          <button className="icon-btn success" onClick={() => confirmOrder(order.id)} title={t('orders.actions.confirm')}>
                             <span className="material-icons">check</span>
                           </button>
-                          <button className="icon-btn danger" onClick={() => cancelOrder(order.id)} title="Cancelar">
+                          <button className="icon-btn danger" onClick={() => cancelOrder(order.id)} title={t('orders.actions.cancel')}>
                             <span className="material-icons">close</span>
                           </button>
                         </>
                       )}
                       {order.status === 'confirmed' && (
-                        <button className="icon-btn primary" onClick={() => completeOrder(order.id)} title="Completar">
+                        <button className="icon-btn primary" onClick={() => completeOrder(order.id)} title={t('orders.actions.complete')}>
                           <span className="material-icons">done_all</span>
                         </button>
                       )}
@@ -285,15 +293,15 @@ export default function OrdersPage() {
           <div className="card-toolbar">
             <h3>
               <span className="material-icons" style={{ marginRight: '8px', fontSize: '20px' }}>history</span>
-              Historial de Validaciones
+              {t('orders.validation.historyTitle')}
             </h3>
           </div>
 
           {processedOrders.length === 0 && validationHistory.length === 0 ? (
             <div className="empty-state small">
               <span className="material-icons">fact_check</span>
-              <p>Sin validaciones</p>
-              <span className="empty-hint">El historial aparecera aqui despues de confirmar o cancelar ordenes</span>
+              <p>{t('orders.validation.emptyHistory')}</p>
+              <span className="empty-hint">{t('orders.validation.historyHint')}</span>
             </div>
           ) : (
             <div className="validation-history-list">
@@ -313,7 +321,7 @@ export default function OrdersPage() {
                           {getStatusLabel(order.status)}
                         </span>
                       </div>
-                      <div className="history-name">{order.customerName || order.customer_name || 'Sin nombre'}</div>
+                      <div className="history-name">{order.customerName || order.customer_name || t('orders.placeholders.noName')}</div>
                       <div className="history-time">{formatDate(order.createdAt || order.created_at)}</div>
                     </div>
                   </div>
@@ -355,36 +363,36 @@ export default function OrdersPage() {
         <div className="modal-backdrop" onClick={handleCloseValidation}>
           <div className="modal modal-compact" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Validar Codigo Postal</h3>
+              <h3>{t('orders.modal.validateTitle')}</h3>
               <button className="modal-close" onClick={handleCloseValidation}>
                 <span className="material-icons">close</span>
               </button>
             </div>
             <div className="modal-body">
               <div className="field-group">
-                <label>ZIP, Ciudad o Direccion</label>
+                <label>{t('orders.modal.zipLabel')}</label>
                 <input
                   type="text"
                   value={zipForm.zip_code}
                   onChange={(e) => setZipForm({ ...zipForm, zip_code: e.target.value })}
-                  placeholder="Ej: 75228, Dallas, Arlington..."
+                  placeholder={t('orders.modal.zipPlaceholder')}
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && handleValidateZip()}
                 />
               </div>
 
               <div className="field-group">
-                <label>Nombre del contacto</label>
+                <label>{t('orders.modal.contactLabel')}</label>
                 <input
                   type="text"
                   value={zipForm.contact_name}
                   onChange={(e) => setZipForm({ ...zipForm, contact_name: e.target.value })}
-                  placeholder="Nombre del cliente"
+                  placeholder={t('orders.modal.contactPlaceholder')}
                 />
               </div>
 
               <div className="field-group">
-                <label>Plataforma de origen</label>
+                <label>{t('orders.modal.platformLabel')}</label>
                 <div className="platform-select compact">
                   {platforms.map(p => (
                     <button
@@ -409,7 +417,7 @@ export default function OrdersPage() {
                     </span>
                     <div>
                       <h4 style={{ margin: 0 }}>
-                        {validationResult.hasCoverage ? 'Cobertura Disponible' : 'Sin Cobertura'}
+                        {validationResult.hasCoverage ? t('orders.modal.result.available') : t('orders.modal.result.notAvailable')}
                       </h4>
                       {validationResult.zone && (
                         <p style={{ margin: '4px 0 0', fontSize: '14px' }}>
@@ -426,21 +434,21 @@ export default function OrdersPage() {
                       <span className="material-icons">
                         {copySuccess ? 'check' : 'content_copy'}
                       </span>
-                      {copySuccess ? 'Mensaje copiado!' : 'Copiar mensaje para cliente'}
+                      {copySuccess ? t('orders.modal.result.copied') : t('orders.modal.result.copyAction')}
                     </button>
                   )}
                 </div>
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn-cancel" onClick={handleCloseValidation}>Cerrar</button>
+              <button className="btn-cancel" onClick={handleCloseValidation}>{t('orders.actions.close')}</button>
               <button 
                 className="btn-primary" 
                 onClick={handleValidateZip} 
                 disabled={validating || !zipForm.zip_code}
               >
                 <span className="material-icons">search</span>
-                {validating ? 'Validando...' : 'Validar'}
+                {validating ? t('orders.actions.validating') : t('orders.actions.validateSubmit')}
               </button>
             </div>
           </div>

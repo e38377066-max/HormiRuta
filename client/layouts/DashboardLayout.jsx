@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
 import './DashboardLayout.css'
 
 export default function DashboardLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { user, isAdmin, logout } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const handleLogout = async () => {
     await logout()
@@ -25,7 +27,7 @@ export default function DashboardLayout() {
           </div>
           <h1 className="q-toolbar-title">Area 862</h1>
           <span className="q-user-email">{user?.email}</span>
-          <button className="q-btn-icon" onClick={handleLogout} title="Cerrar sesión">
+          <button className="q-btn-icon" onClick={handleLogout} title={t('nav.logout')}>
             <span className="material-icons">logout</span>
           </button>
         </div>
@@ -34,62 +36,62 @@ export default function DashboardLayout() {
       <aside className={`q-drawer ${drawerOpen ? 'open' : ''}`}>
         <div className="q-drawer-backdrop" onClick={() => setDrawerOpen(false)}></div>
         <nav className="q-drawer-content">
-          <div className="q-item-label">Menu Principal</div>
+          <div className="q-item-label">{t('nav.mainMenu')}</div>
           
           <NavLink to="/dispatch" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
             <span className="material-icons q-item-icon" style={{color: '#6200ea'}}>local_shipping</span>
-            <span>Despacho</span>
+            <span>{t('nav.dispatch')}</span>
           </NavLink>
 
           <NavLink to="/planner" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
             <span className="material-icons q-item-icon" style={{color: '#1976d2'}}>map</span>
-            <span>Planificar Ruta</span>
+            <span>{t('nav.planRoute')}</span>
           </NavLink>
 
           <div className="q-separator"></div>
-          <div className="q-item-label">Centro de Mensajeria</div>
+          <div className="q-item-label">{t('nav.messagingCenter')}</div>
 
           <NavLink to="/messaging" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
             <span className="material-icons q-item-icon" style={{color: '#4caf50'}}>inbox</span>
-            <span>Ordenes</span>
+            <span>{t('nav.orders')}</span>
           </NavLink>
 
           <NavLink to="/messaging/coverage" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
             <span className="material-icons q-item-icon" style={{color: '#2196f3'}}>location_on</span>
-            <span>Zonas de Cobertura</span>
+            <span>{t('nav.coverageZones')}</span>
           </NavLink>
 
           <NavLink to="/messaging/settings" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
             <span className="material-icons q-item-icon" style={{color: '#757575'}}>settings</span>
-            <span>Configuracion Respond.io</span>
+            <span>{t('nav.respondSettings')}</span>
           </NavLink>
 
           {isAdmin && (
             <>
               <div className="q-separator"></div>
-              <div className="q-item-label">Administracion</div>
+              <div className="q-item-label">{t('nav.administration')}</div>
 
               <NavLink to="/admin" end className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
                 <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>dashboard</span>
-                <span>Panel de Admin</span>
+                <span>{t('nav.adminPanel')}</span>
               </NavLink>
 
               <NavLink to="/admin/users" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
                 <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>people</span>
-                <span>Usuarios</span>
+                <span>{t('nav.users')}</span>
               </NavLink>
 
               <NavLink to="/admin/logs" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
                 <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>terminal</span>
-                <span>Logs del Sistema</span>
+                <span>{t('nav.systemLogs')}</span>
               </NavLink>
               <NavLink to="/admin/accounting" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
                 <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>receipt_long</span>
-                <span>Contabilidad</span>
+                <span>{t('nav.accounting')}</span>
               </NavLink>
               <NavLink to="/admin/returns" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
                 <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>assignment_return</span>
-                <span>Recepcion de Paquetes</span>
+                <span>{t('nav.packageReception')}</span>
               </NavLink>
             </>
           )}
@@ -98,12 +100,12 @@ export default function DashboardLayout() {
 
           <NavLink to="/account" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
             <span className="material-icons q-item-icon" style={{color: '#607d8b'}}>person</span>
-            <span>Mi cuenta</span>
+            <span>{t('nav.myAccount')}</span>
           </NavLink>
 
           <button className="q-item logout" onClick={handleLogout}>
             <span className="material-icons q-item-icon" style={{color: '#f44336'}}>logout</span>
-            <span>Cerrar Sesion</span>
+            <span>{t('nav.logout')}</span>
           </button>
         </nav>
       </aside>

@@ -7,6 +7,7 @@ import { MessagingProvider } from './contexts/MessagingContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import { Capacitor } from '@capacitor/core'
 import { initStatusBar } from './utils/capacitor'
+import './i18n/index.js'
 import './index.css'
 
 // Suppress Google Maps JS deprecation warnings (APIs still functional)
@@ -32,13 +33,11 @@ if (Capacitor.isNativePlatform()) {
       SplashScreen.hide().catch(() => {})
     } catch {}
 
-    // Usar initStatusBar desde capacitor.js (usa el import estático, sin conflicto)
     await initStatusBar()
   }
 
   initNative()
 } else {
-  // En web, solo ocultar splash si existe
   import('@capacitor/splash-screen').then(({ SplashScreen }) => {
     SplashScreen.hide().catch(() => {})
   }).catch(() => {})

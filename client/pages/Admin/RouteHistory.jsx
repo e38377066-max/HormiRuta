@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
 export default function RouteHistory() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [routes, setRoutes] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedRoute, setSelectedRoute] = useState(null)
@@ -42,7 +44,13 @@ export default function RouteHistory() {
 
   const formatDate = (d) => {
     if (!d) return '-'
-    return new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+
+  const getStatusLabel = (status) => {
+    if (status === 'completed') return t('admin.routeHistory.completed')
+    if (status === 'assigned') return t('admin.routeHistory.inProgress')
+    return status
   }
 
   if (loading) {
@@ -61,7 +69,7 @@ export default function RouteHistory() {
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <h1>Historial de Rutas</h1>
+        <h1>{t('admin.routeHistory.title')}</h1>
       </div>
 
       {!selectedRoute ? (
@@ -69,25 +77,25 @@ export default function RouteHistory() {
           {routes.length === 0 ? (
             <div className="empty-state">
               <span className="material-icons" style={{ fontSize: 48, color: '#555' }}>route</span>
-              <p>No hay rutas completadas aun</p>
+              <p>{t('admin.routeHistory.noRoutes')}</p>
             </div>
           ) : (
             routes.map(route => (
               <div key={route.id} className="history-route-card" onClick={() => viewRouteDetail(route)}>
                 <div className="history-route-top">
-                  <div className="history-route-name">{route.name || 'Ruta sin nombre'}</div>
+                  <div className="history-route-name">{route.name || t('admin.routeHistory.noName')}</div>
                   <span className={`history-status-badge ${route.status}`}>
-                    {route.status === 'completed' ? 'Completada' : route.status === 'assigned' ? 'En curso' : route.status}
+                    {getStatusLabel(route.status)}
                   </span>
                 </div>
                 <div className="history-route-meta">
                   <span>
                     <span className="material-icons" style={{ fontSize: 16 }}>person</span>
-                    {route.driver_name || 'Sin chofer'}
+                    {route.driver_name || t('admin.routeHistory.noDriver')}
                   </span>
                   <span>
                     <span className="material-icons" style={{ fontSize: 16 }}>place</span>
-                    {route.stops_count} paradas ({route.completed_stops}/{route.stops_count})
+                    {route.stops_count} {t('admin.routeHistory.stops')} ({route.completed_stops}/{route.stops_count})
                   </span>
                   {route.total_amount > 0 && (
                     <span>
@@ -97,7 +105,9 @@ export default function RouteHistory() {
                   )}
                 </div>
                 <div className="history-route-date">
-                  {route.completed_at ? `Completada: ${formatDate(route.completed_at)}` : `Creada: ${formatDate(route.created_at)}`}
+                  {route.completed_at
+                    ? `${t('admin.routeHistory.completedAt')} ${formatDate(route.completed_at)}`
+                    : `${t('admin.routeHistory.createdAt')} ${formatDate(route.created_at)}`}
                 </div>
               </div>
             ))
@@ -107,7 +117,7 @@ export default function RouteHistory() {
         <div className="route-detail-view">
           <button className="back-link" onClick={() => { setSelectedRoute(null); setRouteDetail(null); }}>
             <span className="material-icons">arrow_back</span>
-            Volver al historial
+            {t('admin.routeHistory.backToHistory')}
           </button>
 
           {loadingDetail ? (
@@ -118,19 +128,19 @@ export default function RouteHistory() {
                 <h2>{routeDetail.name}</h2>
                 <div className="detail-meta-row">
                   <span className={`history-status-badge ${routeDetail.status}`}>
-                    {routeDetail.status === 'completed' ? 'Completada' : routeDetail.status === 'assigned' ? 'En curso' : routeDetail.status}
+                    {getStatusLabel(routeDetail.status)}
                   </span>
-                  <span>{routeDetail.driver_name || 'Sin chofer'}</span>
+                  <span>{routeDetail.driver_name || t('admin.routeHistory.noDriver')}</span>
                   {routeDetail.total_distance > 0 && <span>{routeDetail.total_distance.toFixed(1)} km</span>}
                 </div>
                 {routeDetail.completed_at && (
-                  <div className="detail-date">Finalizada: {formatDate(routeDetail.completed_at)}</div>
+                  <div className="detail-date">{t('admin.routeHistory.finishedAt')} {formatDate(routeDetail.completed_at)}</div>
                 )}
               </div>
 
               <div className="detail-stops-title">
                 <span className="material-icons">checklist</span>
-                Paradas y evidencias ({routeDetail.completed_stops}/{routeDetail.stops_count})
+                {t('admin.routeHistory.stopsAndEvidence')} ({routeDetail.completed_stops}/{routeDetail.stops_count})
               </div>
 
               <div className="detail-stops-list">
@@ -139,9 +149,13 @@ export default function RouteHistory() {
                     <div className="detail-stop-header">
                       <span className="detail-stop-number">{i + 1}</span>
                       <div className="detail-stop-info">
-                        <div className="detail-stop-name">{stop.customer_name || stop.address?.split(',')[0] || 'Parada'}</div>
+                        <div className="detail-stop-name">{stop.customer_name || stop.address?.split(',')[0] || 'Stop'}</div>
                         <div className="detail-stop-address">{stop.address}</div>
-                        {stop.completed_at && <div className="detail-stop-time">{stop.status === 'skipped' ? 'Saltada' : 'Completada'}: {formatDate(stop.completed_at)}</div>}
+                        {stop.completed_at && (
+                          <div className="detail-stop-time">
+                            {stop.status === 'skipped' ? t('admin.routeHistory.skipped') : t('admin.routeHistory.completed')}: {formatDate(stop.completed_at)}
+                          </div>
+                        )}
                       </div>
                       <span className="material-icons" style={{ color: stop.status === 'completed' ? '#22c55e' : stop.status === 'skipped' ? '#ff5050' : '#f59e0b', fontSize: 24 }}>
                         {stop.status === 'completed' ? 'check_circle' : stop.status === 'skipped' ? 'cancel' : 'pending'}
@@ -149,16 +163,16 @@ export default function RouteHistory() {
                     </div>
                     {stop.photo_url ? (
                       <div className="detail-stop-evidence" onClick={() => setViewingPhoto(stop.photo_url)}>
-                        <img src={stop.photo_url} alt={`Evidencia parada ${i + 1}`} className="evidence-thumb" />
+                        <img src={stop.photo_url} alt={`Evidence stop ${i + 1}`} className="evidence-thumb" />
                         <span className="evidence-label">
                           <span className="material-icons" style={{ fontSize: 16 }}>photo_camera</span>
-                          Ver evidencia
+                          {t('admin.routeHistory.viewEvidence')}
                         </span>
                       </div>
                     ) : (
                       <div className="no-evidence">
                         <span className="material-icons" style={{ fontSize: 16, color: '#666' }}>no_photography</span>
-                        Sin evidencia
+                        {t('admin.routeHistory.noEvidence')}
                       </div>
                     )}
                   </div>
@@ -166,7 +180,7 @@ export default function RouteHistory() {
               </div>
             </>
           ) : (
-            <p style={{ color: '#999', textAlign: 'center' }}>Error al cargar detalle</p>
+            <p style={{ color: '#999', textAlign: 'center' }}>{t('admin.routeHistory.loadError')}</p>
           )}
         </div>
       )}
@@ -177,7 +191,7 @@ export default function RouteHistory() {
             <button className="photo-viewer-close" onClick={() => setViewingPhoto(null)}>
               <span className="material-icons">close</span>
             </button>
-            <img src={viewingPhoto} alt="Evidencia" className="photo-viewer-img" />
+            <img src={viewingPhoto} alt={t('admin.routeHistory.evidence')} className="photo-viewer-img" />
           </div>
         </div>
       )}

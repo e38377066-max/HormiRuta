@@ -124,3 +124,35 @@
   gap: 12px;
   justify-content: flex-end;
 }
+
+.language-selector {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.lang-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fff;
+  color: #555;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.lang-btn:hover {
+  border-color: #5b8def;
+  color: #5b8def;
+}
+
+.lang-btn.active {
+  border-color: #5b8def;
+  background: #5b8def;
+  color: #fff;
+  font-weight: 600;
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
@@ -7,11 +8,12 @@ const fmt = (val) => val != null ? `$${Number(val).toFixed(2)}` : '-'
 
 const fmtDate = (d) => {
   if (!d) return '-'
-  return new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function AccountingPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState('summary')
 
   const [report, setReport] = useState([])
@@ -115,7 +117,7 @@ export default function AccountingPage() {
 
   const handleArchiveMonth = async () => {
     const target = selectedMonth || currentMonthYear()
-    if (!window.confirm(`¿Cerrar y exportar a Excel el mes ${target}? Las entregas quedarán marcadas como archivadas.`)) return
+    if (!window.confirm(t('admin.accounting.closeAndExport', { month: target }))) return
     setArchivingMonth(true)
     try {
       const res = await api.post('/api/dispatch/deliveries-report/archive-month', { month_year: target }, { responseType: 'blob' })
@@ -127,7 +129,7 @@ export default function AccountingPage() {
       URL.revokeObjectURL(url)
       await fetchDeliveries()
     } catch (e) {
-      const msg = e.response?.data ? await e.response.data.text() : 'Error al archivar mes'
+      const msg = e.response?.data ? await e.response.data.text() : t('admin.accounting.archiveError')
       alert(JSON.parse(msg)?.error || msg)
     } finally {
       setArchivingMonth(false)
@@ -163,7 +165,7 @@ export default function AccountingPage() {
   const handleAdminConfirm = async () => {
     if (!confirmModal) return
     if (confirmType === 'partial' && (!confirmAmount || isNaN(Number(confirmAmount)) || Number(confirmAmount) <= 0)) {
-      alert('Ingresa un monto válido mayor a 0')
+      alert(t('admin.accounting.invalidAmount'))
       return
     }
     setConfirmLoading(true)
@@ -176,7 +178,7 @@ export default function AccountingPage() {
       setConfirmModal(null)
       await fetchRoutePayments()
     } catch (e) {
-      alert(e.response?.data?.error || 'Error al confirmar pago')
+      alert(e.response?.data?.error || t('admin.accounting.paymentError'))
     } finally {
       setConfirmLoading(false)
     }
@@ -227,7 +229,16 @@ export default function AccountingPage() {
   }), { count: 0, cost: 0, deposit: 0, to_collect: 0, collected: 0, commission: 0 })
 
   const exportSummaryCSV = () => {
-    const headers = ['Chofer', 'Paradas', 'Costo Total', 'Deposito Total', 'Total Cobrado', 'Comision/Parada', 'Total Comision', 'Saldo']
+    const headers = [
+      t('admin.accounting.driver'),
+      t('admin.accounting.stops'),
+      t('admin.accounting.orderCost'),
+      t('admin.accounting.deposit'),
+      t('admin.accounting.collected'),
+      t('admin.accounting.commissionPerStop'),
+      t('admin.accounting.totalCommission'),
+      t('admin.accounting.driverBalance')
+    ]
     const rows = report.map(r => [
       r.driver_name, r.stops_count,
       r.total_order_cost.toFixed(2), r.total_deposit.toFixed(2),
@@ -238,7 +249,22 @@ export default function AccountingPage() {
   }
 
   const exportDeliveriesCSV = () => {
-    const headers = ['#Orden', 'Cliente', 'Telefono', 'Direccion', 'Ciudad', 'Estado', 'Chofer', 'Costo', 'Deposito', 'A Cobrar', 'Cobrado', 'Metodo', 'Comision/Parada', 'Fecha Entrega']
+    const headers = [
+      '#Orden',
+      t('admin.accounting.client'),
+      t('admin.accounting.phone'),
+      t('admin.accounting.address'),
+      'Ciudad',
+      'Estado',
+      t('admin.accounting.driver'),
+      t('admin.accounting.cost'),
+      t('admin.accounting.deposit'),
+      t('admin.accounting.toCollect'),
+      t('admin.accounting.collected'),
+      t('admin.accounting.method'),
+      t('admin.accounting.commissionPerStop'),
+      t('admin.accounting.deliveryDate')
+    ]
     const rows = deliveries.map(d => [
       d.id, d.customer_name || '', d.customer_phone || '',
       d.address || '', d.city || '', d.state || '',
@@ -246,7 +272,7 @@ export default function AccountingPage() {
       d.deposit_amount.toFixed(2), d.total_to_collect.toFixed(2),
       d.amount_collected.toFixed(2), d.payment_method || '',
       d.commission_per_stop.toFixed(2),
-      d.delivered_at ? new Date(d.delivered_at).toLocaleDateString('es') : ''
+      d.delivered_at ? new Date(d.delivered_at).toLocaleDateString(undefined) : ''
     ])
     downloadCSV([headers, ...rows], `entregas_${today()}`)
   }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
 import './AuthPages.css'
 
 export default function RegisterPage() {
@@ -14,6 +15,7 @@ export default function RegisterPage() {
   const [formError, setFormError] = useState('')
   const { register, loading, error } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -24,12 +26,12 @@ export default function RegisterPage() {
     e.preventDefault()
     
     if (formData.password !== formData.confirmPassword) {
-      setFormError('Las contraseñas no coinciden')
+      setFormError(t('auth.passwordsNoMatch'))
       return
     }
 
     if (formData.password.length < 6) {
-      setFormError('La contraseña debe tener al menos 6 caracteres')
+      setFormError(t('auth.passwordTooShort'))
       return
     }
 
@@ -56,7 +58,7 @@ export default function RegisterPage() {
             <img src="/Area862.png" alt="Area 862" />
           </div>
           <h1 className="brand-title">Area 862</h1>
-          <p className="brand-subtitle">Crea tu cuenta para empezar</p>
+          <p className="brand-subtitle">{t('auth.registerSubtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -71,7 +73,7 @@ export default function RegisterPage() {
               name="name"
               value={formData.name}
               onChange={handleChange}
-              placeholder="Nombre completo"
+              placeholder={t('auth.fullNamePlaceholder')}
               required
               className="input-pro"
             />
@@ -84,7 +86,7 @@ export default function RegisterPage() {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              placeholder="Correo electrónico"
+              placeholder={t('auth.emailPlaceholder')}
               required
               className="input-pro"
             />
@@ -97,7 +99,7 @@ export default function RegisterPage() {
               name="password"
               value={formData.password}
               onChange={handleChange}
-              placeholder="Contraseña (mínimo 6 caracteres)"
+              placeholder={t('auth.passwordMinLength')}
               required
               className="input-pro"
             />
@@ -117,19 +119,19 @@ export default function RegisterPage() {
               name="confirmPassword"
               value={formData.confirmPassword}
               onChange={handleChange}
-              placeholder="Confirmar contraseña"
+              placeholder={t('auth.confirmPasswordPlaceholder')}
               required
               className="input-pro"
             />
           </div>
 
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? 'Registrando...' : 'Crear cuenta'}
+            {loading ? t('auth.registering') : t('auth.createAccount')}
           </button>
 
           <p className="register-link">
-            ¿Ya tienes cuenta?{' '}
-            <Link to="/login">Inicia sesión</Link>
+            {t('auth.alreadyHaveAccount')}{' '}
+            <Link to="/login">{t('auth.signInLink')}</Link>
           </p>
         </form>
       </div>

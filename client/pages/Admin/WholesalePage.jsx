@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
-const STATUS_LABELS = {
-  pickup_ready: 'Listo p/Recoger',
-  on_delivery: 'En Entrega',
-  ordered: 'Ordenado',
-  null: 'Sin orden activa'
+const STATUS_LABELS_KEY = {
+  pickup_ready: 'wholesale.status.pickupReady',
+  on_delivery: 'wholesale.status.onDelivery',
+  ordered: 'wholesale.status.ordered',
+  null: 'wholesale.status.noOrder'
 }
 
 const STATUS_COLORS = {
@@ -18,56 +19,34 @@ const STATUS_COLORS = {
 }
 
 function ActiveOrdersBadge({ client }) {
+  const { t } = useTranslation()
   const count = client.active_orders_count || 0
   if (count === 0) {
     return (
-      <span style={{
-        fontSize: 11,
-        background: '#f1f5f9',
-        color: '#6b7280',
-        padding: '2px 10px',
-        borderRadius: 99,
-        fontWeight: 600
-      }}>
-        Sin órdenes activas
+      <span style={{ fontSize: 11, background: '#f1f5f9', color: '#6b7280', padding: '2px 10px', borderRadius: 99, fontWeight: 600 }}>
+        {t('wholesale.noActiveOrders')}
       </span>
     )
   }
   if (count === 1) {
     const s = client.active_orders[0]?.order_status
     return (
-      <span style={{
-        fontSize: 11,
-        background: (STATUS_COLORS[s] || '#6b7280') + '22',
-        color: STATUS_COLORS[s] || '#6b7280',
-        padding: '2px 10px',
-        borderRadius: 99,
-        fontWeight: 600
-      }}>
-        {STATUS_LABELS[s] || s}
+      <span style={{ fontSize: 11, background: (STATUS_COLORS[s] || '#6b7280') + '22', color: STATUS_COLORS[s] || '#6b7280', padding: '2px 10px', borderRadius: 99, fontWeight: 600 }}>
+        {t(STATUS_LABELS_KEY[s] || 'wholesale.status.unknown')}
       </span>
     )
   }
   return (
-    <span style={{
-      fontSize: 11,
-      background: '#7c3aed22',
-      color: '#7c3aed',
-      padding: '2px 10px',
-      borderRadius: 99,
-      fontWeight: 700,
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 4
-    }}>
+    <span style={{ fontSize: 11, background: '#7c3aed22', color: '#7c3aed', padding: '2px 10px', borderRadius: 99, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       <span className="material-icons" style={{ fontSize: 12 }}>layers</span>
-      {count} órdenes activas
+      {count} {t('wholesale.activeOrders')}
     </span>
   )
 }
 
 export default function WholesalePage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -76,19 +55,10 @@ export default function WholesalePage() {
   const [dispatchingId, setDispatchingId] = useState(null)
   const [msg, setMsg] = useState(null)
 
-  const emptyForm = {
-    customer_name: '',
-    customer_phone: '',
-    validated_address: '',
-    respond_contact_id: '',
-    notes: '',
-    is_active: true
-  }
+  const emptyForm = { customer_name: '', customer_phone: '', validated_address: '', respond_contact_id: '', notes: '', is_active: true }
   const [form, setForm] = useState(emptyForm)
 
-  useEffect(() => {
-    fetchClients()
-  }, [])
+  useEffect(() => { fetchClients() }, [])
 
   const fetchClients = async () => {
     setLoading(true)
@@ -96,7 +66,7 @@ export default function WholesalePage() {
       const res = await api.get('/api/wholesale')
       setClients(res.data.clients || [])
     } catch (err) {
-      console.error('Error cargando mayoristas:', err)
+      console.error('Error loading wholesale clients:', err)
     } finally {
       setLoading(false)
     }
@@ -107,11 +77,7 @@ export default function WholesalePage() {
     setTimeout(() => setMsg(null), 4000)
   }
 
-  const openAdd = () => {
-    setEditingClient(null)
-    setForm(emptyForm)
-    setShowForm(true)
-  }
+  const openAdd = () => { setEditingClient(null); setForm(emptyForm); setShowForm(true) }
 
   const openEdit = (client) => {
     setEditingClient(client)
@@ -127,56 +93,50 @@ export default function WholesalePage() {
   }
 
   const handleSave = async () => {
-    if (!form.customer_name.trim()) {
-      showMsg('El nombre es obligatorio', 'error')
-      return
-    }
+    if (!form.customer_name.trim()) { showMsg(t('wholesale.nameRequired'), 'error'); return }
     setSaving(true)
     try {
       if (editingClient) {
         await api.put(`/api/wholesale/${editingClient.id}`, form)
-        showMsg(`Mayorista "${form.customer_name}" actualizado`)
+        showMsg(`${t('wholesale.clientUpdated')}: "${form.customer_name}"`)
       } else {
         await api.post('/api/wholesale', form)
-        showMsg(`Mayorista "${form.customer_name}" creado`)
+        showMsg(`${t('wholesale.clientCreated')}: "${form.customer_name}"`)
       }
       setShowForm(false)
       fetchClients()
     } catch (err) {
-      showMsg(err.response?.data?.error || 'Error al guardar', 'error')
+      showMsg(err.response?.data?.error || t('common.error'), 'error')
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (client) => {
-    if (!window.confirm(`¿Eliminar a "${client.customer_name}"? Esta acción no se puede deshacer.`)) return
+    if (!window.confirm(`${t('wholesale.confirmDelete')} "${client.customer_name}"?`)) return
     try {
       await api.delete(`/api/wholesale/${client.id}`)
-      showMsg(`Mayorista "${client.customer_name}" eliminado`)
+      showMsg(`${t('wholesale.clientDeleted')}: "${client.customer_name}"`)
       fetchClients()
     } catch (err) {
-      showMsg(err.response?.data?.error || 'Error al eliminar', 'error')
+      showMsg(err.response?.data?.error || t('common.error'), 'error')
     }
   }
 
   const handleDispatchNow = async (client) => {
-    if (!client.validated_address) {
-      showMsg('Este mayorista no tiene dirección registrada', 'error')
-      return
-    }
+    if (!client.validated_address) { showMsg(t('wholesale.noAddress'), 'error'); return }
     const count = client.active_orders_count || 0
     const confirmMsg = count > 0
-      ? `"${client.customer_name}" ya tiene ${count} orden(es) activa(s).\n¿Agregar otra orden al despachador?`
-      : `¿Agregar a "${client.customer_name}" al despachador como "Listo para Recoger"?`
+      ? `"${client.customer_name}" ${t('wholesale.hasActiveOrders', { count })}. ${t('wholesale.addAnother')}`
+      : `${t('wholesale.confirmDispatch')} "${client.customer_name}"?`
     if (!window.confirm(confirmMsg)) return
     setDispatchingId(client.id)
     try {
       await api.post(`/api/wholesale/${client.id}/dispatch-now`)
-      showMsg(`"${client.customer_name}" agregado al despachador`)
+      showMsg(`"${client.customer_name}" ${t('wholesale.addedToDispatch')}`)
       fetchClients()
     } catch (err) {
-      showMsg(err.response?.data?.error || 'Error al despachar', 'error')
+      showMsg(err.response?.data?.error || t('common.error'), 'error')
     } finally {
       setDispatchingId(null)
     }
@@ -185,9 +145,7 @@ export default function WholesalePage() {
   if (loading) {
     return (
       <div className="page-container">
-        <div className="loading-container">
-          <div className="spinner"></div>
-        </div>
+        <div className="loading-container"><div className="spinner"></div></div>
       </div>
     )
   }
@@ -202,76 +160,42 @@ export default function WholesalePage() {
           <span className="material-icons">arrow_back</span>
         </button>
         <div style={{ flex: 1 }}>
-          <h1>Clientes Mayoristas (MAY)</h1>
-          <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>
-            Se detectan automáticamente desde Pecky — cualquier contacto con "MAY" en su nombre aparece aquí solo. Cuando llega un correo Pickup Ready, el sistema los pone directo en el despachador.
-          </p>
+          <h1>{t('wholesale.title')}</h1>
+          <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{t('wholesale.subtitle')}</p>
         </div>
-        <button className="action-btn primary" onClick={openAdd} title="Agregar manualmente si el contacto aún no aparece en Pecky">
+        <button className="action-btn primary" onClick={openAdd} title={t('wholesale.addManualTooltip')}>
           <span className="material-icons">add</span>
-          Agregar manual
+          {t('wholesale.addManual')}
         </button>
       </div>
 
       {msg && (
-        <div style={{
-          padding: '12px 16px',
-          borderRadius: 8,
-          marginBottom: 16,
-          background: msg.type === 'error' ? '#fee2e2' : '#dcfce7',
-          color: msg.type === 'error' ? '#991b1b' : '#166534',
-          fontSize: 14,
-          fontWeight: 500
-        }}>
+        <div style={{ padding: '12px 16px', borderRadius: 8, marginBottom: 16, background: msg.type === 'error' ? '#fee2e2' : '#dcfce7', color: msg.type === 'error' ? '#991b1b' : '#166534', fontSize: 14, fontWeight: 500 }}>
           {msg.text}
         </div>
       )}
 
       {clients.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '60px 20px',
-          background: '#f8fafc',
-          borderRadius: 12,
-          border: '2px dashed #e2e8f0'
-        }}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', background: '#f8fafc', borderRadius: 12, border: '2px dashed #e2e8f0' }}>
           <span className="material-icons" style={{ fontSize: 48, color: '#94a3b8', display: 'block', marginBottom: 12 }}>store</span>
-          <p style={{ margin: 0, color: '#64748b', fontSize: 15 }}>Aún no hay mayoristas detectados.</p>
-          <p style={{ margin: '8px 0 20px', color: '#94a3b8', fontSize: 13 }}>
-            El sistema detecta automáticamente los contactos con "MAY" en el nombre cuando el bot de Pecky está activo.
-            Si necesitas agregar uno manualmente antes de que aparezca en Pecky, usa el botón de abajo.
-          </p>
+          <p style={{ margin: 0, color: '#64748b', fontSize: 15 }}>{t('wholesale.noClients')}</p>
+          <p style={{ margin: '8px 0 20px', color: '#94a3b8', fontSize: 13 }}>{t('wholesale.noClientsHint')}</p>
           <button className="action-btn primary" onClick={openAdd}>
             <span className="material-icons">add</span>
-            Agregar manual
+            {t('wholesale.addManual')}
           </button>
         </div>
       ) : (
         <>
           <div style={{ marginBottom: 8, fontSize: 13, color: '#64748b' }}>
-            {activeClients.length} activos · {inactiveClients.length} inactivos
+            {activeClients.length} {t('wholesale.active')} · {inactiveClients.length} {t('wholesale.inactive')}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {clients.map(client => (
-              <div key={client.id} style={{
-                background: client.is_active ? '#fff' : '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 12,
-                padding: '16px',
-                opacity: client.is_active ? 1 : 0.6
-              }}>
+              <div key={client.id} style={{ background: client.is_active ? '#fff' : '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px', opacity: client.is_active ? 1 : 0.6 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #667eea, #764ba2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <span className="material-icons" style={{ color: '#fff', fontSize: 22 }}>store</span>
                   </div>
 
@@ -279,7 +203,7 @@ export default function WholesalePage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600, fontSize: 15, color: '#1e293b' }}>{client.customer_name}</span>
                       {!client.is_active && (
-                        <span style={{ fontSize: 11, background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: 99 }}>Inactivo</span>
+                        <span style={{ fontSize: 11, background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: 99 }}>{t('wholesale.inactiveLabel')}</span>
                       )}
                       <ActiveOrdersBadge client={client} />
                     </div>
@@ -287,14 +211,12 @@ export default function WholesalePage() {
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 6 }}>
                       {client.customer_phone && (
                         <span style={{ fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span className="material-icons" style={{ fontSize: 14 }}>phone</span>
-                          {client.customer_phone}
+                          <span className="material-icons" style={{ fontSize: 14 }}>phone</span>{client.customer_phone}
                         </span>
                       )}
                       {client.validated_address && (
                         <span style={{ fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span className="material-icons" style={{ fontSize: 14 }}>location_on</span>
-                          {client.validated_address}
+                          <span className="material-icons" style={{ fontSize: 14 }}>location_on</span>{client.validated_address}
                         </span>
                       )}
                       {client.respond_contact_id && (
@@ -306,14 +228,12 @@ export default function WholesalePage() {
                     </div>
 
                     {client.notes && (
-                      <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
-                        {client.notes}
-                      </div>
+                      <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>{client.notes}</div>
                     )}
 
                     <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
-                      {client.pickup_count > 0 && `${client.pickup_count} pick-up(s) totales`}
-                      {client.last_pickup_at && ` · Último: ${new Date(client.last_pickup_at).toLocaleDateString('es-MX')}`}
+                      {client.pickup_count > 0 && `${client.pickup_count} pick-up(s) ${t('wholesale.total')}`}
+                      {client.last_pickup_at && ` · ${t('wholesale.last')}: ${new Date(client.last_pickup_at).toLocaleDateString()}`}
                     </div>
                   </div>
 
@@ -322,58 +242,17 @@ export default function WholesalePage() {
                       <button
                         onClick={() => handleDispatchNow(client)}
                         disabled={dispatchingId === client.id || !client.validated_address}
-                        title={!client.validated_address ? 'Sin dirección registrada' : 'Agregar orden al despachador'}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: 8,
-                          border: 'none',
-                          background: (client.active_orders_count || 0) > 0 ? '#7c3aed' : '#22c55e',
-                          color: '#fff',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: client.validated_address ? 'pointer' : 'not-allowed',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          opacity: client.validated_address ? 1 : 0.5
-                        }}
+                        title={!client.validated_address ? t('wholesale.noAddressTooltip') : t('wholesale.addOrderTooltip')}
+                        style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: (client.active_orders_count || 0) > 0 ? '#7c3aed' : '#22c55e', color: '#fff', fontSize: 12, fontWeight: 600, cursor: client.validated_address ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 4, opacity: client.validated_address ? 1 : 0.5 }}
                       >
                         <span className="material-icons" style={{ fontSize: 14 }}>add_box</span>
-                        {dispatchingId === client.id ? 'Enviando...' : 'Nueva orden'}
+                        {dispatchingId === client.id ? t('wholesale.sending') : t('wholesale.newOrder')}
                       </button>
                     )}
-                    <button
-                      onClick={() => openEdit(client)}
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 8,
-                        border: '1px solid #e2e8f0',
-                        background: '#fff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#64748b'
-                      }}
-                    >
+                    <button onClick={() => openEdit(client)} style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
                       <span className="material-icons" style={{ fontSize: 16 }}>edit</span>
                     </button>
-                    <button
-                      onClick={() => handleDelete(client)}
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 8,
-                        border: '1px solid #fecaca',
-                        background: '#fff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#ef4444'
-                      }}
-                    >
+                    <button onClick={() => handleDelete(client)} style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid #fecaca', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
                       <span className="material-icons" style={{ fontSize: 16 }}>delete</span>
                     </button>
                   </div>
@@ -385,134 +264,61 @@ export default function WholesalePage() {
       )}
 
       {showForm && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: 16
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: 16, padding: 24,
-            width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto'
-          }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ margin: '0 0 20px', fontSize: 18 }}>
-              {editingClient ? 'Editar Mayorista' : 'Agregar Mayorista'}
+              {editingClient ? t('wholesale.form.editTitle') : t('wholesale.form.addTitle')}
             </h2>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>
-                  Nombre completo (tal como aparece en Pecky/Respond.io) *
+                  {t('wholesale.form.name')} *
                 </label>
-                <input
-                  type="text"
-                  value={form.customer_name}
-                  onChange={e => setForm({ ...form, customer_name: e.target.value })}
-                  placeholder="Ej: Arturo -MAY Arzola"
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box'
-                  }}
-                />
+                <input type="text" value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })}
+                  placeholder={t('wholesale.form.namePlaceholder')}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>
-                  Teléfono
-                </label>
-                <input
-                  type="tel"
-                  value={form.customer_phone}
-                  onChange={e => setForm({ ...form, customer_phone: e.target.value })}
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>{t('wholesale.form.phone')}</label>
+                <input type="tel" value={form.customer_phone} onChange={e => setForm({ ...form, customer_phone: e.target.value })}
                   placeholder="+1 214 000 0000"
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box'
-                  }}
-                />
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>
-                  Dirección de entrega
-                </label>
-                <input
-                  type="text"
-                  value={form.validated_address}
-                  onChange={e => setForm({ ...form, validated_address: e.target.value })}
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>{t('wholesale.form.address')}</label>
+                <input type="text" value={form.validated_address} onChange={e => setForm({ ...form, validated_address: e.target.value })}
                   placeholder="201 Hensley Dr, Grand Prairie, TX 75050"
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box'
-                  }}
-                />
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>
-                  ID de Contacto en Respond.io (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={form.respond_contact_id}
-                  onChange={e => setForm({ ...form, respond_contact_id: e.target.value })}
-                  placeholder="ID del contacto en Pecky/Respond.io"
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box'
-                  }}
-                />
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>{t('wholesale.form.respondId')}</label>
+                <input type="text" value={form.respond_contact_id} onChange={e => setForm({ ...form, respond_contact_id: e.target.value })}
+                  placeholder={t('wholesale.form.respondIdPlaceholder')}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
-
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>
-                  Notas
-                </label>
-                <textarea
-                  value={form.notes}
-                  onChange={e => setForm({ ...form, notes: e.target.value })}
-                  placeholder="Instrucciones especiales de entrega, etc."
-                  rows={3}
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box',
-                    resize: 'vertical'
-                  }}
-                />
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 4, color: '#374151' }}>{t('wholesale.form.notes')}</label>
+                <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+                  placeholder={t('wholesale.form.notesPlaceholder')} rows={3}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box', resize: 'vertical' }} />
               </div>
-
               {editingClient && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={form.is_active}
-                    onChange={e => setForm({ ...form, is_active: e.target.checked })}
-                    style={{ width: 18, height: 18 }}
-                  />
-                  <span style={{ fontSize: 14, color: '#374151' }}>Cliente activo</span>
+                  <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} style={{ width: 18, height: 18 }} />
+                  <span style={{ fontSize: 14, color: '#374151' }}>{t('wholesale.form.active')}</span>
                 </label>
               )}
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-              <button
-                onClick={() => setShowForm(false)}
-                style={{
-                  flex: 1, padding: '11px', borderRadius: 8, border: '1px solid #e2e8f0',
-                  background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 500
-                }}
-              >
-                Cancelar
+              <button onClick={() => setShowForm(false)}
+                style={{ flex: 1, padding: '11px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
+                {t('common.cancel')}
               </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                style={{
-                  flex: 2, padding: '11px', borderRadius: 8, border: 'none',
-                  background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                  color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600
-                }}
-              >
-                {saving ? 'Guardando...' : editingClient ? 'Guardar Cambios' : 'Agregar Mayorista'}
+              <button onClick={handleSave} disabled={saving}
+                style={{ flex: 2, padding: '11px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+                {saving ? t('common.saving') : editingClient ? t('common.saveChanges') : t('wholesale.form.addBtn')}
               </button>
             </div>
           </div>

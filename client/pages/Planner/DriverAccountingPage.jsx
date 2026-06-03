@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './DriverAccountingPage.css'
 
@@ -9,34 +10,31 @@ const fmt = (val) => {
   return `$${n.toFixed(2)}`
 }
 
-const monthLabel = (my) => {
-  if (!my) return 'Sin fecha'
+const monthNames = {
+  en: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+  es: ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+}
+
+const monthLabel = (my, lang = 'en') => {
+  if (!my) return '-'
   const [y, m] = my.split('-')
-  const names = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio',
-    'Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const names = monthNames[lang] || monthNames.en
   return `${names[parseInt(m) - 1]} ${y}`
 }
 
 const fmtDate = (d) => {
   if (!d) return '-'
-  return new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short' })
+  return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })
 }
 
 const fmtDateTime = (d) => {
   if (!d) return '-'
-  return new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-}
-
-const pmtConfig = {
-  cash:     { label: 'Efectivo',      color: '#22c55e', bg: 'rgba(34,197,94,0.12)'   },
-  card:     { label: 'Tarjeta',       color: '#5b8def', bg: 'rgba(91,141,239,0.12)'  },
-  transfer: { label: 'Transferencia', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
-  check:    { label: 'Cheque',        color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
-  zelle:    { label: 'Zelle',         color: '#fb923c', bg: 'rgba(251,146,60,0.12)'  },
+  return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function DriverAccountingPage() {
   const navigate = useNavigate()
+  const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState('routes')
   const [months, setMonths] = useState([])
   const [deliveries, setDeliveries] = useState([])
@@ -47,6 +45,14 @@ export default function DriverAccountingPage() {
   const [expandedMonth, setExpandedMonth] = useState(null)
   const [completedRoutes, setCompletedRoutes] = useState([])
   const [loadingRoutes, setLoadingRoutes] = useState(false)
+
+  const pmtConfig = {
+    cash:     { label: t('planner.cash'),     color: '#22c55e', bg: 'rgba(34,197,94,0.12)'   },
+    card:     { label: t('planner.card'),     color: '#5b8def', bg: 'rgba(91,141,239,0.12)'  },
+    transfer: { label: t('planner.transfer'), color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
+    check:    { label: t('planner.check'),    color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' },
+    zelle:    { label: t('planner.zelle'),    color: '#fb923c', bg: 'rgba(251,146,60,0.12)'  },
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -59,7 +65,7 @@ export default function DriverAccountingPage() {
       setTotals(res.data.totals || { stops: 0, collected: 0, commission: 0, to_deliver: 0 })
       setAvailableMonths(res.data.available_months || [])
     } catch (e) {
-      console.error('Error cargando contabilidad:', e)
+      console.error('Error loading accounting:', e)
     } finally {
       setLoading(false)
     }
@@ -71,7 +77,7 @@ export default function DriverAccountingPage() {
       const res = await api.get('/api/dispatch/my-completed-routes')
       setCompletedRoutes(res.data.routes || [])
     } catch (e) {
-      console.error('Error cargando rutas:', e)
+      console.error('Error loading routes:', e)
     } finally {
       setLoadingRoutes(false)
     }
@@ -81,6 +87,7 @@ export default function DriverAccountingPage() {
   useEffect(() => { fetchCompletedRoutes() }, [fetchCompletedRoutes])
 
   const getPmt = (method) => pmtConfig[method] || { label: method, color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' }
+  const lang = i18n.language?.startsWith('es') ? 'es' : 'en'
 
   return (
     <div className="dac-root">
@@ -88,7 +95,7 @@ export default function DriverAccountingPage() {
         <button className="dac-back-btn" onClick={() => navigate('/planner')}>
           <span className="material-icons">arrow_back_ios_new</span>
         </button>
-        <span className="dac-header-title">Mi Contabilidad</span>
+        <span className="dac-header-title">{t('accounting.title')}</span>
         <button className="dac-refresh-btn" onClick={fetchData}>
           <span className="material-icons">refresh</span>
         </button>
@@ -96,13 +103,13 @@ export default function DriverAccountingPage() {
 
       <div className="dac-body">
         <div className="dac-hero">
-          <div className="dac-hero-label">Efectivo Pendiente de Entregar</div>
+          <div className="dac-hero-label">{t('accounting.pendingCash')}</div>
           <div className="dac-hero-amount">{fmt(totals.to_deliver)}</div>
-          <div className="dac-hero-sub">{totals.stops_pending || 0} parada{(totals.stops_pending || 0) !== 1 ? 's' : ''} pendiente{(totals.stops_pending || 0) !== 1 ? 's' : ''} de entrega</div>
+          <div className="dac-hero-sub">{totals.stops_pending || 0} {t('accounting.pendingDelivery')}</div>
           {Number(totals.electronic_collected) > 0 && (
             <div className="dac-hero-note">
               <span className="material-icons" style={{ fontSize: 14 }}>account_balance</span>
-              {fmt(totals.electronic_collected)} por Zelle/Transferencia ya fue a la empresa
+              {fmt(totals.electronic_collected)} {t('accounting.electronicAlreadySent')}
             </div>
           )}
         </div>
@@ -111,25 +118,25 @@ export default function DriverAccountingPage() {
           <div className="dac-stat dac-stat-green">
             <span className="material-icons">payments</span>
             <div className="dac-stat-val">{fmt(totals.collected)}</div>
-            <div className="dac-stat-lbl">Bruto cobrado</div>
+            <div className="dac-stat-lbl">{t('accounting.grossCollected')}</div>
           </div>
           <div className="dac-stat-divider" />
           <div className="dac-stat dac-stat-orange">
             <span className="material-icons">account_balance_wallet</span>
             <div className="dac-stat-val">{fmt((Number(totals.collected) || 0) - (Number(totals.commission) || 0))}</div>
-            <div className="dac-stat-lbl">Neto (− comisión)</div>
+            <div className="dac-stat-lbl">{t('accounting.netAmount')}</div>
           </div>
           <div className="dac-stat-divider" />
           <div className="dac-stat dac-stat-blue">
             <span className="material-icons">star_rate</span>
             <div className="dac-stat-val">{fmt(totals.commission)}</div>
-            <div className="dac-stat-lbl">Mi Comisión</div>
+            <div className="dac-stat-lbl">{t('accounting.myCommission')}</div>
           </div>
           <div className="dac-stat-divider" />
           <div className="dac-stat dac-stat-gray">
             <span className="material-icons">local_shipping</span>
             <div className="dac-stat-val">{totals.stops}</div>
-            <div className="dac-stat-lbl">Entregas</div>
+            <div className="dac-stat-lbl">{t('accounting.deliveries')}</div>
           </div>
         </div>
 
@@ -141,9 +148,9 @@ export default function DriverAccountingPage() {
               value={selectedMonth}
               onChange={e => setSelectedMonth(e.target.value)}
             >
-              <option value="">Todos los meses</option>
+              <option value="">{t('accounting.allMonths')}</option>
               {availableMonths.map(m => (
-                <option key={m} value={m}>{monthLabel(m)}</option>
+                <option key={m} value={m}>{monthLabel(m, lang)}</option>
               ))}
             </select>
             <span className="material-icons dac-select-arrow">expand_more</span>
@@ -156,21 +163,21 @@ export default function DriverAccountingPage() {
             onClick={() => setActiveTab('routes')}
           >
             <span className="material-icons">route</span>
-            Mis Rutas
+            {t('accounting.tabs.myRoutes')}
           </button>
           <button
             className={`dac-tab ${activeTab === 'months' ? 'active' : ''}`}
             onClick={() => setActiveTab('months')}
           >
             <span className="material-icons">calendar_month</span>
-            Por Mes
+            {t('accounting.tabs.byMonth')}
           </button>
           <button
             className={`dac-tab ${activeTab === 'deliveries' ? 'active' : ''}`}
             onClick={() => setActiveTab('deliveries')}
           >
             <span className="material-icons">receipt_long</span>
-            Historial
+            {t('accounting.tabs.history')}
           </button>
         </div>
 
@@ -178,14 +185,14 @@ export default function DriverAccountingPage() {
           loadingRoutes ? (
             <div className="dac-loading">
               <div className="dac-spinner" />
-              <span>Cargando...</span>
+              <span>{t('common.loading')}</span>
             </div>
           ) : (
             <div className="dac-list">
               {completedRoutes.length === 0
-                ? <EmptyState text="No tienes rutas completadas" />
+                ? <EmptyState text={t('accounting.noCompletedRoutes')} />
                 : completedRoutes.map(r => (
-                  <CompletedRouteCard key={r.id} r={r} onRefresh={fetchCompletedRoutes} />
+                  <CompletedRouteCard key={r.id} r={r} onRefresh={fetchCompletedRoutes} t={t} getPmt={getPmt} lang={lang} />
                 ))
               }
             </div>
@@ -193,7 +200,7 @@ export default function DriverAccountingPage() {
         ) : loading ? (
           <div className="dac-loading">
             <div className="dac-spinner" />
-            <span>Cargando...</span>
+            <span>{t('common.loading')}</span>
           </div>
         ) : (
           <div className="dac-list">
@@ -207,6 +214,8 @@ export default function DriverAccountingPage() {
                     expanded={expandedMonth === m.month_year}
                     onToggle={() => setExpandedMonth(expandedMonth === m.month_year ? null : m.month_year)}
                     getPmt={getPmt}
+                    t={t}
+                    lang={lang}
                   />
                 ))
             )}
@@ -214,7 +223,7 @@ export default function DriverAccountingPage() {
               deliveries.length === 0
                 ? <EmptyState />
                 : deliveries.map(d => (
-                  <DeliveryCard key={d.id} d={d} getPmt={getPmt} />
+                  <DeliveryCard key={d.id} d={d} getPmt={getPmt} t={t} />
                 ))
             )}
           </div>
@@ -224,16 +233,17 @@ export default function DriverAccountingPage() {
   )
 }
 
-function EmptyState({ text = 'No hay entregas en este periodo' }) {
+function EmptyState({ text }) {
+  const { t } = useTranslation()
   return (
     <div className="dac-empty">
       <span className="material-icons">inbox</span>
-      <p>{text}</p>
+      <p>{text || t('common.none')}</p>
     </div>
   )
 }
 
-function CompletedRouteCard({ r, onRefresh }) {
+function CompletedRouteCard({ r, onRefresh, t, getPmt, lang }) {
   const [delivering, setDelivering] = useState(false)
   const [method, setMethod] = useState('')
   const [showPayForm, setShowPayForm] = useState(false)
@@ -248,16 +258,16 @@ function CompletedRouteCard({ r, onRefresh }) {
       setMethod('')
       if (onRefresh) onRefresh()
     } catch (e) {
-      alert(e.response?.data?.error || 'Error al registrar entrega')
+      alert(e.response?.data?.error || t('common.error'))
     } finally {
       setDelivering(false)
     }
   }
 
   const paymentStatus = () => {
-    if (r.admin_confirmed) return { label: 'Confirmado por admin', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', icon: 'verified' }
-    if (r.payment_delivered) return { label: 'Entregado a admin', color: '#5b8def', bg: 'rgba(91,141,239,0.12)', icon: 'check_circle' }
-    return { label: 'Pendiente de entrega', color: '#fb923c', bg: 'rgba(251,146,60,0.12)', icon: 'pending' }
+    if (r.admin_confirmed) return { label: t('accounting.adminConfirmed'), color: '#22c55e', bg: 'rgba(34,197,94,0.12)', icon: 'verified' }
+    if (r.payment_delivered) return { label: t('accounting.deliveredToAdmin'), color: '#5b8def', bg: 'rgba(91,141,239,0.12)', icon: 'check_circle' }
+    return { label: t('accounting.pendingDeliveryStatus'), color: '#fb923c', bg: 'rgba(251,146,60,0.12)', icon: 'pending' }
   }
 
   const status = paymentStatus()
@@ -266,13 +276,13 @@ function CompletedRouteCard({ r, onRefresh }) {
     <div className="dac-route-card">
       <div className="dac-route-top">
         <div className="dac-route-info">
-          <div className="dac-route-name">{r.name || `Ruta #${r.id}`}</div>
+          <div className="dac-route-name">{r.name || `Route #${r.id}`}</div>
           <div className="dac-route-meta">
             <span className="material-icons">local_shipping</span>
-            {r.stops_count} parada{r.stops_count !== 1 ? 's' : ''}
+            {r.stops_count} {r.stops_count !== 1 ? t('planner.stops') : t('planner.stop')}
             {r.completed_at && (
               <span style={{ marginLeft: 8, color: '#888' }}>
-                · {new Date(r.completed_at).toLocaleDateString('es', { day: '2-digit', month: 'short' })}
+                · {new Date(r.completed_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
               </span>
             )}
           </div>
@@ -285,7 +295,7 @@ function CompletedRouteCard({ r, onRefresh }) {
 
       <div className="dac-del-grid">
         <div className="dac-del-cell">
-          <div className="dac-del-cell-lbl">Efectivo</div>
+          <div className="dac-del-cell-lbl">{t('accounting.cashCollected')}</div>
           <div className="dac-del-cell-val c-green">{fmt(r.cash_collected != null ? r.cash_collected : r.total_collected)}</div>
         </div>
         {Number(r.electronic_collected) > 0 && (
@@ -295,16 +305,16 @@ function CompletedRouteCard({ r, onRefresh }) {
           </div>
         )}
         <div className="dac-del-cell">
-          <div className="dac-del-cell-lbl">Mi Comisión</div>
+          <div className="dac-del-cell-lbl">{t('accounting.myCommission')}</div>
           <div className="dac-del-cell-val c-blue">{fmt(r.commission)}</div>
         </div>
         <div className="dac-del-cell">
-          <div className="dac-del-cell-lbl">A Entregar</div>
+          <div className="dac-del-cell-lbl">{t('accounting.toDeliver')}</div>
           <div className="dac-del-cell-val c-orange">{fmt(r.to_deliver)}</div>
         </div>
         {r.admin_amount_received > 0 && (
           <div className="dac-del-cell">
-            <div className="dac-del-cell-lbl">Recibido</div>
+            <div className="dac-del-cell-lbl">{t('accounting.received')}</div>
             <div className="dac-del-cell-val" style={{ color: '#22c55e' }}>{fmt(r.admin_amount_received)}</div>
           </div>
         )}
@@ -312,18 +322,18 @@ function CompletedRouteCard({ r, onRefresh }) {
       {Number(r.electronic_collected) > 0 && (
         <div className="dac-elec-note">
           <span className="material-icons" style={{ fontSize: 14 }}>account_balance</span>
-          {fmt(r.electronic_collected)} por Zelle/Transferencia va directo a la empresa (no lo entregas tú)
+          {fmt(r.electronic_collected)} {t('accounting.directToCompany')}
         </div>
       )}
 
       {r.payment_delivered && r.payment_delivery_method && (
         <div className="dac-del-badges" style={{ marginTop: 8 }}>
           <span className="dac-badge" style={{ color: '#5b8def', background: 'rgba(91,141,239,0.12)' }}>
-            Método: {r.payment_delivery_method}
+            {t('accounting.methodPrefix')} {r.payment_delivery_method}
           </span>
           {r.payment_delivered_at && (
             <span className="dac-badge dac-badge-gray">
-              {new Date(r.payment_delivered_at).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              {new Date(r.payment_delivered_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
         </div>
@@ -336,7 +346,7 @@ function CompletedRouteCard({ r, onRefresh }) {
             onClick={() => setShowStops(v => !v)}
           >
             <span className="material-icons">{showStops ? 'expand_less' : 'expand_more'}</span>
-            {showStops ? 'Ocultar paradas' : `Ver ${r.stops.length} parada${r.stops.length !== 1 ? 's' : ''}`}
+            {showStops ? t('accounting.hideStops') : `${t('accounting.viewStops')} (${r.stops.length})`}
           </button>
           {showStops && (
             <div className="dac-stops-list">
@@ -354,9 +364,9 @@ function CompletedRouteCard({ r, onRefresh }) {
                     <div className="dac-stop-body">
                       <div className="dac-stop-name">
                         <span className="dac-stop-num">{idx + 1}.</span>
-                        <span className="dac-stop-text">{s.customer_name || 'Sin nombre'}</span>
-                        {isSkipped && <span className="dac-stop-badge dac-stop-badge-skipped">Saltada</span>}
-                        {isCompleted && <span className="dac-stop-badge dac-stop-badge-completed">Entregada</span>}
+                        <span className="dac-stop-text">{s.customer_name || t('common.noName')}</span>
+                        {isSkipped && <span className="dac-stop-badge dac-stop-badge-skipped">{t('accounting.skipped')}</span>}
+                        {isCompleted && <span className="dac-stop-badge dac-stop-badge-completed">{t('accounting.delivered')}</span>}
                       </div>
                       {s.address && (
                         <div className="dac-stop-addr">
@@ -394,7 +404,7 @@ function CompletedRouteCard({ r, onRefresh }) {
               onClick={() => setShowPayForm(true)}
             >
               <span className="material-icons">payments</span>
-              Marcar como entregado a admin
+              {t('accounting.markDeliveredAdmin')}
             </button>
           ) : (
             <div className="dac-pay-form">
@@ -404,12 +414,12 @@ function CompletedRouteCard({ r, onRefresh }) {
                 onChange={e => setMethod(e.target.value)}
                 style={{ flex: 1 }}
               >
-                <option value="">Método de pago...</option>
-                <option value="cash">Efectivo</option>
-                <option value="card">Tarjeta</option>
-                <option value="transfer">Transferencia</option>
-                <option value="check">Cheque</option>
-                <option value="zelle">Zelle</option>
+                <option value="">{t('accounting.selectPaymentPlaceholder')}</option>
+                <option value="cash">{t('planner.cash')}</option>
+                <option value="card">{t('planner.card')}</option>
+                <option value="transfer">{t('planner.transfer')}</option>
+                <option value="check">{t('planner.check')}</option>
+                <option value="zelle">{t('planner.zelle')}</option>
               </select>
               <button
                 className="dac-deliver-btn"
@@ -417,13 +427,13 @@ function CompletedRouteCard({ r, onRefresh }) {
                 disabled={!method || delivering}
                 style={{ minWidth: 90 }}
               >
-                {delivering ? '...' : 'Confirmar'}
+                {delivering ? '...' : t('common.confirm')}
               </button>
               <button
                 className="dac-cancel-btn"
                 onClick={() => { setShowPayForm(false); setMethod('') }}
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           )}
@@ -433,20 +443,20 @@ function CompletedRouteCard({ r, onRefresh }) {
   )
 }
 
-function MonthCard({ m, expanded, onToggle, getPmt }) {
+function MonthCard({ m, expanded, onToggle, getPmt, t, lang }) {
   return (
     <div className="dac-month-card">
       <button className="dac-month-header" onClick={onToggle}>
         <div className="dac-month-info">
-          <div className="dac-month-name">{monthLabel(m.month_year)}</div>
+          <div className="dac-month-name">{monthLabel(m.month_year, lang)}</div>
           <div className="dac-month-count">
             <span className="material-icons">local_shipping</span>
-            {m.stops_count} entrega{m.stops_count !== 1 ? 's' : ''}
+            {m.stops_count} {t('accounting.deliveries')}
           </div>
         </div>
         <div className="dac-month-amounts">
           <div className="dac-month-comm">+{fmt(m.total_commission)}</div>
-          <div className="dac-month-deliver">{fmt(m.to_deliver)} a entregar</div>
+          <div className="dac-month-deliver">{fmt(m.to_deliver)} {t('accounting.toDeliver')}</div>
         </div>
         <span className="material-icons dac-chevron">{expanded ? 'expand_less' : 'expand_more'}</span>
       </button>
@@ -455,21 +465,21 @@ function MonthCard({ m, expanded, onToggle, getPmt }) {
         <div className="dac-month-body">
           <div className="dac-month-totals">
             <div className="dac-tot-row">
-              <span>Efectivo cobrado</span>
+              <span>{t('accounting.cashCollected')}</span>
               <strong className="c-green">{fmt(m.total_cash_collected != null ? m.total_cash_collected : m.total_collected)}</strong>
             </div>
             {Number(m.total_electronic_collected) > 0 && (
               <div className="dac-tot-row">
-                <span>Zelle/Transferencia (a la empresa)</span>
+                <span>{t('accounting.electronicToCompany')}</span>
                 <strong style={{ color: '#a78bfa' }}>{fmt(m.total_electronic_collected)}</strong>
               </div>
             )}
             <div className="dac-tot-row">
-              <span>Mi comisión</span>
+              <span>{t('accounting.myCommission')}</span>
               <strong className="c-blue">{fmt(m.total_commission)}</strong>
             </div>
             <div className="dac-tot-row dac-tot-highlight">
-              <span>Efectivo a entregar a oficina</span>
+              <span>{t('accounting.cashToOffice')}</span>
               <strong className="c-orange">{fmt(m.to_deliver)}</strong>
             </div>
           </div>
@@ -479,7 +489,7 @@ function MonthCard({ m, expanded, onToggle, getPmt }) {
               {m.deliveries.map(d => (
                 <div key={d.id} className="dac-mini-item">
                   <div className="dac-mini-row">
-                    <span className="dac-mini-name">{d.customer_name || 'Sin nombre'}</span>
+                    <span className="dac-mini-name">{d.customer_name || t('common.noName')}</span>
                     <span className="dac-mini-date">{fmtDate(d.delivered_at)}</span>
                   </div>
                   {d.address && (
@@ -489,7 +499,7 @@ function MonthCard({ m, expanded, onToggle, getPmt }) {
                   )}
                   <div className="dac-mini-amounts">
                     <span className="dac-mini-chip c-green">+{fmt(d.amount_collected)}</span>
-                    <span className="dac-mini-chip c-blue">comisión {fmt(d.commission_per_stop)}</span>
+                    <span className="dac-mini-chip c-blue">{t('accounting.commission')} {fmt(d.commission_per_stop)}</span>
                     {d.payment_method && (
                       <span className="dac-mini-chip" style={{ color: getPmt(d.payment_method).color }}>
                         {getPmt(d.payment_method).label}
@@ -506,10 +516,9 @@ function MonthCard({ m, expanded, onToggle, getPmt }) {
   )
 }
 
-function DeliveryCard({ d, getPmt }) {
+function DeliveryCard({ d, getPmt, t }) {
   const pmt = d.payment_method ? getPmt(d.payment_method) : null
   const isCash = !d.payment_method || d.payment_method === 'cash'
-  // Solo el efectivo se entrega; Zelle/transferencia ya fue a la empresa.
   const toDeliver = (isCash ? Number(d.amount_collected) - Number(d.commission_per_stop) : 0).toFixed(2)
 
   return (
@@ -519,7 +528,7 @@ function DeliveryCard({ d, getPmt }) {
           {(d.customer_name || '?')[0].toUpperCase()}
         </div>
         <div className="dac-del-info">
-          <div className="dac-del-name">{d.customer_name || 'Sin nombre'}</div>
+          <div className="dac-del-name">{d.customer_name || t('common.noName')}</div>
           {d.customer_phone && <div className="dac-del-phone">{d.customer_phone}</div>}
         </div>
         <div className="dac-del-date">{fmtDateTime(d.delivered_at)}</div>
@@ -534,19 +543,19 @@ function DeliveryCard({ d, getPmt }) {
 
       <div className="dac-del-grid">
         <div className="dac-del-cell">
-          <div className="dac-del-cell-lbl">A Cobrar</div>
+          <div className="dac-del-cell-lbl">{t('accounting.toCollect')}</div>
           <div className="dac-del-cell-val">{fmt(d.total_to_collect)}</div>
         </div>
         <div className="dac-del-cell">
-          <div className="dac-del-cell-lbl">Cobrado</div>
+          <div className="dac-del-cell-lbl">{t('accounting.collected')}</div>
           <div className="dac-del-cell-val c-green">{fmt(d.amount_collected)}</div>
         </div>
         <div className="dac-del-cell">
-          <div className="dac-del-cell-lbl">Comisión</div>
+          <div className="dac-del-cell-lbl">{t('accounting.commission')}</div>
           <div className="dac-del-cell-val c-blue">{fmt(d.commission_per_stop)}</div>
         </div>
         <div className="dac-del-cell">
-          <div className="dac-del-cell-lbl">A Entregar</div>
+          <div className="dac-del-cell-lbl">{t('accounting.toDeliver')}</div>
           <div className="dac-del-cell-val c-orange">${toDeliver}</div>
         </div>
       </div>
@@ -556,7 +565,7 @@ function DeliveryCard({ d, getPmt }) {
           <span className="dac-badge" style={{ color: pmt.color, background: pmt.bg }}>
             {pmt.label}
           </span>
-          {d.archived && <span className="dac-badge dac-badge-gray">Archivado</span>}
+          {d.archived && <span className="dac-badge dac-badge-gray">{t('accounting.archived')}</span>}
         </div>
       )}
     </div>

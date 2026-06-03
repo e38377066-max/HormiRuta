@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { usePlanner } from '../../layouts/PlannerLayout'
@@ -6,6 +7,7 @@ import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, p
 import './TripPlannerPage.css'
 
 export default function TripPlannerPage() {
+  const { t } = useTranslation()
   const plannerContext = usePlanner()
   const onToggleDrawer = plannerContext?.toggleDrawer || (() => {})
   const mapRef = useRef(null)
@@ -37,7 +39,7 @@ export default function TripPlannerPage() {
   const [navigationMode, setNavigationMode] = useState(false)
   const [selectedStopIndex, setSelectedStopIndex] = useState(null)
   const [optimizing, setOptimizing] = useState(false)
-  const [routeName, setRouteName] = useState('Mi Ruta')
+  const [routeName, setRouteName] = useState(t('planner.defaultRouteName'))
   const [totalDistance, setTotalDistance] = useState(0)
   const [totalDuration, setTotalDuration] = useState(0)
   const [savedDistance, setSavedDistance] = useState(0)
@@ -141,7 +143,7 @@ export default function TripPlannerPage() {
       setPayDeliveryMethod('')
       loadDispatchRoutes()
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al registrar entrega de pago')
+      alert(err.response?.data?.error || t('planner.errorDeliveringPayment'))
     } finally {
       setDeliveringPay(false)
     }
@@ -219,7 +221,7 @@ export default function TripPlannerPage() {
     const routeStops = [...normal, ...deferred].map((s, i) => ({ ...s, id: i + 1 }))
 
     setStops(routeStops)
-    setRouteName(route.name || 'Ruta Asignada')
+    setRouteName(route.name || t('planner.assignedRoute'))
     const wasOptimized = route.is_optimized || localStorage.getItem(`isOptimized_${route.id}`) === 'true'
     setIsOptimized(!!wasOptimized)
     setTotalDistance(route.total_distance || 0)
@@ -384,7 +386,7 @@ export default function TripPlannerPage() {
         lastSpokenStepRef.current = idx
         const step = navSteps[idx]
         const voiceText = step.distance 
-          ? `En ${step.distance}, ${step.instruction}` 
+          ? t('planner.inDistance', { distance: step.distance, instruction: step.instruction }) 
           : step.instruction
         speakInstruction(voiceText)
       }
@@ -1028,7 +1030,7 @@ export default function TripPlannerPage() {
       localStorage.removeItem('selectedStop')
     } catch (err) {
       console.error('Error skipping stop:', err)
-      alert(err.response?.data?.error || 'Error al saltar parada')
+      alert(err.response?.data?.error || t('planner.errorSkippingStop'))
     }
   }
 
@@ -1062,10 +1064,10 @@ export default function TripPlannerPage() {
         languageCode: template.language || 'es',
         components: template.components || []
       })
-      setMessageSuccess(`Template "${template.name}" enviado`)
+      setMessageSuccess(t('planner.templateSent', { name: template.name }))
       setTimeout(() => setMessageSuccess(''), 3000)
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al enviar template')
+      alert(err.response?.data?.error || t('planner.errorSendingTemplate'))
     } finally {
       setSendingMessage(false)
     }
@@ -1083,7 +1085,7 @@ export default function TripPlannerPage() {
       loadDispatchRoutes()
     } catch (err) {
       console.error('Error completing route:', err)
-      alert(err.response?.data?.error || 'Error al finalizar ruta')
+      alert(err.response?.data?.error || t('planner.errorFinishingRoute'))
     }
   }
 
@@ -1562,7 +1564,7 @@ export default function TripPlannerPage() {
 
   const formatTime = (date) => {
     if (!date) return ''
-    return new Date(date).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+    return new Date(date).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
   }
 
   const openNavChooser = (stop) => {
@@ -1597,7 +1599,7 @@ export default function TripPlannerPage() {
       let url = `maps://?daddr=${daddr}&dirflg=d`
       // Si caemos a coordenadas, agregamos q= con el nombre para que CarPlay muestre una etiqueta legible
       if (!hasAddr) {
-        const label = stop.name || stop.customer_name || 'Parada'
+        const label = stop.name || stop.customer_name || t('planner.stop')
         url += `&q=${encodeURIComponent(label)}`
       }
       if (loc) url += `&saddr=${loc.lat},${loc.lng}`
@@ -1649,7 +1651,7 @@ export default function TripPlannerPage() {
             <div className="nav-bar-stop">
               <span className="nav-bar-number">{navTargetIndex + 1}</span>
               <div className="nav-bar-info">
-                <div className="nav-bar-address">{navTarget.name || navTarget.address?.split(',')[0] || 'Siguiente parada'}</div>
+                <div className="nav-bar-address">{navTarget.name || navTarget.address?.split(',')[0] || t('planner.nextStop')}</div>
                 <div className="nav-bar-eta">
                   {navDistance && <span>{navDistance}</span>}
                   {navEta && <span> · {navEta}</span>}
@@ -1712,7 +1714,7 @@ export default function TripPlannerPage() {
         
         <div className="panel-header">
           <div className="panel-header-left">
-            <span className="stops-count">{stops.length} parada{stops.length !== 1 ? 's' : ''}</span>
+            <span className="stops-count">{stops.length} {stops.length === 1 ? t('planner.stop') : t('planner.stops')}</span>
             {routeCommission > 0 && (
               <span className="route-commission-badge">
                 <span className="material-icons">paid</span> ${routeCommission.toFixed(2)}
@@ -1756,7 +1758,7 @@ export default function TripPlannerPage() {
                       }
                     </div>
                     <div className="dispatch-route-meta">
-                      <span>{dr.stops_count} parada{dr.stops_count !== 1 ? 's' : ''}</span>
+                      <span>{dr.stops_count} {dr.stops_count === 1 ? t('planner.stop') : t('planner.stops')}</span>
                       {dr.total_distance > 0 && <span> - {dr.total_distance} km</span>}
                     </div>
                     {isCompleted && dr.route_total_collected > 0 && (
@@ -1924,7 +1926,7 @@ export default function TripPlannerPage() {
                 </div>
               ))}
               {navigationMode && activeTab === 'pending' && stops.filter(s => !s.completed && !s.skipped).length === 0 && (
-                <div className="route-tab-empty">¡Todas las paradas atendidas! 🎉</div>
+                <div className="route-tab-empty">{t('planner.allStopsHandled')} 🎉</div>
               )}
               {navigationMode && activeTab === 'delivered' && stops.filter(s => s.completed || s.skipped).length === 0 && (
                 <div className="route-tab-empty">Aún no has registrado entregas.</div>
@@ -1972,13 +1974,13 @@ export default function TripPlannerPage() {
                       onClick={() => { skipStop(selectedStopIndex); setSelectedStopIndex(null); localStorage.removeItem('selectedStop') }}
                     >
                       <span className="material-icons">skip_next</span>
-                      {stops[selectedStopIndex]?.skippedOnce ? 'Saltar definitivo' : 'Saltar parada'}
+                      {stops[selectedStopIndex]?.skippedOnce ? t('planner.skipDefinitive') : t('planner.skipStop')}
                     </button>
                   </>
                 ) : (
                   <span className="nav-footer-hint">
                     <span className="material-icons" style={{ fontSize: 16, verticalAlign: 'middle', marginRight: 4 }}>touch_app</span>
-                    Selecciona una parada
+                    {t('planner.selectAStop')}
                   </span>
                 )}
               </div>
@@ -2000,7 +2002,7 @@ export default function TripPlannerPage() {
           ) : (
             <span className="nav-footer-hint">
               <span className="material-icons" style={{ fontSize: 16, verticalAlign: 'middle', marginRight: 4 }}>assignment</span>
-              Selecciona una ruta asignada
+              {t('planner.selectAssignedRoute')}
             </span>
           )}
         </div>
@@ -2018,7 +2020,7 @@ export default function TripPlannerPage() {
               className="search-input-full"
               value={searchQuery}
               onChange={(e) => searchAddress(e.target.value)}
-              placeholder="Pulsa para añadir más"
+              placeholder={t('planner.searchAddMore')}
               autoFocus
             />
           </div>
@@ -2038,26 +2040,26 @@ export default function TripPlannerPage() {
           <div className="modal-bottom" onClick={e => e.stopPropagation()}>
             <div className="menu-item" onClick={() => { setShowConfigModal('settings'); setShowRouteMenu(false) }}>
               <span className="material-icons">settings</span>
-              <span>Ajustes de ruta</span>
+              <span>{t('planner.routeSettings')}</span>
             </div>
             {isOptimized && !navigationMode && (
               <div className="menu-item" onClick={reOptimize}>
                 <span className="material-icons">autorenew</span>
-                <span>Re-optimizar ruta</span>
+                <span>{t('planner.reoptimize')}</span>
               </div>
             )}
             <div className="menu-item" onClick={() => { setRoundTrip(!roundTrip); setShowRouteMenu(false) }}>
               <span className="material-icons">replay</span>
-              <span>{roundTrip ? 'Solo ida' : 'Ida y vuelta'}</span>
+              <span>{roundTrip ? t('planner.oneWay') : t('planner.roundTrip')}</span>
             </div>
             <div className="menu-item" onClick={() => { setShowRouteNameDialog(true); setShowRouteMenu(false) }}>
               <span className="material-icons">edit</span>
-              <span>Editar nombre de ruta</span>
+              <span>{t('planner.editRouteName')}</span>
             </div>
             <div className="menu-divider"></div>
             <div className="menu-item text-negative" onClick={() => { clearRoute(); setShowRouteMenu(false) }}>
               <span className="material-icons">delete_sweep</span>
-              <span>Borrar todo</span>
+              <span>{t('planner.clearAll')}</span>
             </div>
           </div>
         </div>
@@ -2066,17 +2068,17 @@ export default function TripPlannerPage() {
       {showRouteNameDialog && (
         <div className="modal-overlay" onClick={() => setShowRouteNameDialog(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Nombre de la ruta</h3>
+            <h3>{t('planner.routeName')}</h3>
             <input
               type="text"
               className="q-input"
               value={routeName}
               onChange={(e) => setRouteName(e.target.value)}
-              placeholder="Mi Ruta"
+              placeholder={t('planner.defaultRouteName')}
             />
             <div className="modal-actions">
-              <button className="btn-flat" onClick={() => setShowRouteNameDialog(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={() => setShowRouteNameDialog(false)}>Guardar</button>
+              <button className="btn-flat" onClick={() => setShowRouteNameDialog(false)}>{t('common.cancel')}</button>
+              <button className="btn-primary" onClick={() => setShowRouteNameDialog(false)}>{t('common.save')}</button>
             </div>
           </div>
         </div>
@@ -2086,7 +2088,7 @@ export default function TripPlannerPage() {
         <div className="modal-overlay" onClick={() => setShowConfigModal(null)}>
           <div className="settings-modal" onClick={e => e.stopPropagation()}>
             <div className="settings-modal-header">
-              <h3>Ajustes de ruta</h3>
+              <h3>{t('planner.routeSettings')}</h3>
               <button className="header-btn" onClick={() => setShowConfigModal(null)}>
                 <span className="material-icons">close</span>
               </button>
@@ -2094,10 +2096,10 @@ export default function TripPlannerPage() {
             <div className="settings-modal-body">
               <div className="config-item" onClick={() => setUseCurrentLocation(!useCurrentLocation)}>
                 <div className="config-item-left">
-                  <span className="config-time">{startTime ? new Date(startTime).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : 'Ahora'}</span>
+                  <span className="config-time">{startTime ? new Date(startTime).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : t('common.now')}</span>
                   <div className="config-content">
-                    <div className="config-title">{useCurrentLocation ? 'Empezar desde la ubicación actual' : 'Empezar desde primera parada'}</div>
-                    <div className="config-subtitle">{useCurrentLocation ? 'Utiliza la posición del GPS al optimizar' : 'Inicia desde la primera parada de la lista'}</div>
+                    <div className="config-title">{useCurrentLocation ? t('planner.startFromCurrent') : t('planner.startFromFirst')}</div>
+                    <div className="config-subtitle">{useCurrentLocation ? t('planner.startFromCurrentDesc') : t('planner.startFromFirstDesc')}</div>
                   </div>
                 </div>
                 <span className="material-icons config-icon" style={{ color: useCurrentLocation ? '#5b8def' : '#666' }}>
@@ -2109,8 +2111,8 @@ export default function TripPlannerPage() {
                 <div className="config-item-left">
                   <span className="config-time">•</span>
                   <div className="config-content">
-                    <div className="config-title">Viaje de ida y vuelta</div>
-                    <div className="config-subtitle">{roundTrip ? 'Regresa al punto de inicio' : 'Termina en la última parada'}</div>
+                    <div className="config-title">{t('planner.roundTrip')}</div>
+                    <div className="config-subtitle">{roundTrip ? t('planner.roundTripDesc') : t('planner.oneWayDesc')}</div>
                   </div>
                 </div>
                 <span className="material-icons config-icon" style={{ color: roundTrip ? '#22c55e' : '#666' }}>
@@ -2122,8 +2124,8 @@ export default function TripPlannerPage() {
                 <div className="config-item-left">
                   <span className="config-time">•</span>
                   <div className="config-content">
-                    <div className="config-title">{breakTime ? `Descanso a las ${breakTime}` : 'Sin descanso'}</div>
-                    <div className="config-subtitle">{breakTime ? 'Pulsa para editar' : 'Pulsa para planificar un descanso'}</div>
+                    <div className="config-title">{breakTime ? t('planner.breakAt', { time: breakTime }) : t('planner.noBreak')}</div>
+                    <div className="config-subtitle">{breakTime ? t('common.tapToEdit') : t('planner.tapToPlanBreak')}</div>
                   </div>
                 </div>
                 <span className="material-icons config-icon" style={{ color: breakTime ? '#f59e0b' : '#666' }}>
@@ -2135,8 +2137,8 @@ export default function TripPlannerPage() {
                 <div className="config-item-left">
                   <span className="config-time">•</span>
                   <div className="config-content">
-                    <div className="config-title">{stopDuration} min por parada</div>
-                    <div className="config-subtitle">Tiempo estimado en cada entrega</div>
+                    <div className="config-title">{t('planner.minPerStop', { count: stopDuration })}</div>
+                    <div className="config-subtitle">{t('planner.estimatedTimePerDelivery')}</div>
                   </div>
                 </div>
                 <span className="material-icons config-icon" style={{ color: '#666' }}>timer</span>
@@ -2146,8 +2148,8 @@ export default function TripPlannerPage() {
                 <div className="config-item-left">
                   <span className="config-time">•</span>
                   <div className="config-content">
-                    <div className="config-title">{travelMode === 'DRIVING' ? 'Carro/Moto' : travelMode === 'BICYCLING' ? 'Bicicleta' : 'A pie'}</div>
-                    <div className="config-subtitle">Tipo de vehículo para la ruta</div>
+                    <div className="config-title">{travelMode === 'DRIVING' ? t('planner.vehicleCarMoto') : travelMode === 'BICYCLING' ? t('planner.vehicleBicycle') : t('planner.vehicleWalking')}</div>
+                    <div className="config-subtitle">{t('planner.vehicleTypeForRoute')}</div>
                   </div>
                 </div>
                 <span className="material-icons config-icon" style={{ color: '#666' }}>
@@ -2159,8 +2161,8 @@ export default function TripPlannerPage() {
                 <div className="config-item-left">
                   <span className="config-time">•</span>
                   <div className="config-content">
-                    <div className="config-title">Evitar peajes</div>
-                    <div className="config-subtitle">{avoidTolls ? 'Activado' : 'Desactivado'}</div>
+                    <div className="config-title">{t('planner.avoidTolls')}</div>
+                    <div className="config-subtitle">{avoidTolls ? t('common.active') : t('common.inactive')}</div>
                   </div>
                 </div>
                 <span className="material-icons config-icon" style={{ color: avoidTolls ? '#22c55e' : '#666' }}>
@@ -2172,8 +2174,8 @@ export default function TripPlannerPage() {
                 <div className="config-item-left">
                   <span className="config-time">•</span>
                   <div className="config-content">
-                    <div className="config-title">Evitar autopistas</div>
-                    <div className="config-subtitle">{avoidHighways ? 'Activado' : 'Desactivado'}</div>
+                    <div className="config-title">{t('planner.avoidHighways')}</div>
+                    <div className="config-subtitle">{avoidHighways ? t('common.active') : t('common.inactive')}</div>
                   </div>
                 </div>
                 <span className="material-icons config-icon" style={{ color: avoidHighways ? '#22c55e' : '#666' }}>
@@ -2188,8 +2190,8 @@ export default function TripPlannerPage() {
       {showConfigModal === 'break' && (
         <div className="modal-overlay" onClick={() => setShowConfigModal(null)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Programar descanso</h3>
-            <p style={{ color: '#999', marginBottom: 16 }}>Selecciona la hora para tu descanso</p>
+            <h3>{t('planner.scheduleBreak')}</h3>
+            <p style={{ color: '#999', marginBottom: 16 }}>{t('planner.selectBreakTime')}</p>
             <input
               type="time"
               className="q-input"
@@ -2199,7 +2201,7 @@ export default function TripPlannerPage() {
             <div className="modal-actions">
               {breakTime && (
                 <button className="btn-flat text-negative" onClick={() => { setBreakTime(null); setShowConfigModal(null); }}>
-                  Quitar descanso
+                  {t('planner.removeBreak')}
                 </button>
               )}
               <button className="btn-primary" onClick={() => setShowConfigModal(null)}>Guardar</button>
@@ -2211,8 +2213,8 @@ export default function TripPlannerPage() {
       {showConfigModal === 'duration' && (
         <div className="modal-overlay" onClick={() => setShowConfigModal(null)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Tiempo por parada</h3>
-            <p style={{ color: '#999', marginBottom: 16 }}>Minutos estimados en cada entrega</p>
+            <h3>{t('planner.timePerStop')}</h3>
+            <p style={{ color: '#999', marginBottom: 16 }}>{t('planner.estimatedMinPerDelivery')}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {[2, 3, 5, 10, 15, 20].map(min => (
                 <button 
@@ -2234,29 +2236,29 @@ export default function TripPlannerPage() {
       {showConfigModal === 'vehicle' && (
         <div className="modal-overlay" onClick={() => setShowConfigModal(null)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Tipo de vehículo</h3>
-            <p style={{ color: '#999', marginBottom: 16 }}>Selecciona cómo te desplazas</p>
+            <h3>{t('planner.vehicleType')}</h3>
+            <p style={{ color: '#999', marginBottom: 16 }}>{t('planner.selectTravelMode')}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button 
                 className={`vehicle-option ${travelMode === 'DRIVING' ? 'active' : ''}`}
                 onClick={() => setTravelMode('DRIVING')}
               >
                 <span className="material-icons">directions_car</span>
-                <span>Carro / Moto</span>
+                <span>{t('planner.vehicleCarMoto')}</span>
               </button>
               <button 
                 className={`vehicle-option ${travelMode === 'BICYCLING' ? 'active' : ''}`}
                 onClick={() => setTravelMode('BICYCLING')}
               >
                 <span className="material-icons">pedal_bike</span>
-                <span>Bicicleta</span>
+                <span>{t('planner.vehicleBicycle')}</span>
               </button>
               <button 
                 className={`vehicle-option ${travelMode === 'WALKING' ? 'active' : ''}`}
                 onClick={() => setTravelMode('WALKING')}
               >
                 <span className="material-icons">directions_walk</span>
-                <span>A pie</span>
+                <span>{t('planner.vehicleWalking')}</span>
               </button>
             </div>
             <div className="modal-actions">
@@ -2269,7 +2271,7 @@ export default function TripPlannerPage() {
         <div className="modal-overlay" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); }}>
           <div className="evidence-modal" onClick={e => e.stopPropagation()}>
             <div className="evidence-modal-header">
-              <h3>Confirmar parada {showEvidenceModal + 1}</h3>
+              <h3>{t('planner.confirmStopCount', { count: showEvidenceModal + 1 })}</h3>
               <button className="header-btn" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); }}>
                 <span className="material-icons">close</span>
               </button>
@@ -2288,7 +2290,7 @@ export default function TripPlannerPage() {
                   <span>{stops[showEvidenceModal].phone}</span>
                   <div className="evidence-contact-btns">
                     <a href={`tel:${stops[showEvidenceModal].phone.replace(/[^0-9+]/g, '')}`} className="evidence-contact-btn evidence-call-btn" onClick={e => e.stopPropagation()}>
-                      <span className="material-icons">call</span> Llamar
+                      <span className="material-icons">call</span> {t('planner.call')}
                     </a>
                   </div>
                 </div>
@@ -2308,24 +2310,24 @@ export default function TripPlannerPage() {
               <div className="evidence-billing-block">
                 <div className="evidence-billing-title">
                   <span className="material-icons" style={{ fontSize: 18, color: '#4CAF50' }}>payments</span>
-                  Cobranza
+                  {t('planner.collection')}
                 </div>
                 <div className="evidence-billing-details">
                   {stops[showEvidenceModal]?.order_cost != null && (
                     <div className="evidence-billing-line">
-                      <span>Costo:</span>
+                      <span>{t('planner.cost')}:</span>
                       <strong>${Number(stops[showEvidenceModal].order_cost).toFixed(2)}</strong>
                     </div>
                   )}
                   {stops[showEvidenceModal]?.deposit_amount > 0 && (
                     <div className="evidence-billing-line">
-                      <span>Deposito:</span>
+                      <span>{t('planner.deposit')}:</span>
                       <strong>-${Number(stops[showEvidenceModal].deposit_amount).toFixed(2)}</strong>
                     </div>
                   )}
                   {stops[showEvidenceModal]?.total_to_collect != null && (
                     <div className="evidence-billing-line total-line">
-                      <span>Total a cobrar:</span>
+                      <span>{t('planner.totalToCollect')}:</span>
                       <strong>${Number(stops[showEvidenceModal].total_to_collect).toFixed(2)}</strong>
                     </div>
                   )}
@@ -2334,13 +2336,13 @@ export default function TripPlannerPage() {
             )}
 
             <div className="evidence-payment-section">
-              <label className="evidence-section-label">Metodo de pago</label>
+              <label className="evidence-section-label">{t('planner.paymentMethod')}</label>
               <div className="payment-method-options">
                 {[
-                  { value: 'cash', label: 'Efectivo', icon: 'payments' },
-                  { value: 'zelle', label: 'Zelle', icon: 'account_balance' },
-                  { value: 'card', label: 'Tarjeta', icon: 'credit_card' },
-                  { value: 'other', label: 'Otro', icon: 'more_horiz' }
+                  { value: 'cash', label: t('planner.cash'), icon: 'payments' },
+                  { value: 'zelle', label: t('planner.zelle'), icon: 'account_balance' },
+                  { value: 'card', label: t('planner.card'), icon: 'credit_card' },
+                  { value: 'other', label: t('planner.other'), icon: 'more_horiz' }
                 ].map(pm => (
                   <button
                     key={pm.value}
@@ -2353,7 +2355,7 @@ export default function TripPlannerPage() {
                 ))}
               </div>
               <div className="payment-amount-row">
-                <label>Monto a cobrar $</label>
+                <label>{t('planner.amountToCollectLabel')}</label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -2378,25 +2380,25 @@ export default function TripPlannerPage() {
                     <img src={evidencePreview} alt="Evidencia" className="evidence-preview-img" />
                     <button className="evidence-retake-btn" onClick={retakeEvidence}>
                       <span className="material-icons">refresh</span>
-                      Tomar otra
+                      {t('planner.retake')}
                     </button>
                   </div>
                 ) : (
                   <div className="evidence-capture-area" onClick={openEvidenceCapture}>
                     <span className="material-icons" style={{ fontSize: 48, color: '#5b8def' }}>camera_alt</span>
-                    <p>Foto de constancia Zelle</p>
-                    <p className="evidence-hint">Toca para capturar foto del comprobante</p>
+                    <p>{t('planner.zelleEvidencePhoto')}</p>
+                    <p className="evidence-hint">{t('planner.tapToCapture')}</p>
                   </div>
                 )
               ) : selectedPaymentMethod ? (
                 <div className="evidence-no-photo-needed">
                   <span className="material-icons" style={{ fontSize: 32, color: '#4CAF50' }}>check_circle</span>
-                  <p>No se requiere foto para pago con {selectedPaymentMethod === 'cash' ? 'efectivo' : selectedPaymentMethod === 'card' ? 'tarjeta' : 'otro metodo'}</p>
+                  <p>{t('planner.noPhotoRequiredFor', { method: selectedPaymentMethod === 'cash' ? t('planner.cash') : selectedPaymentMethod === 'card' ? t('planner.card') : t('planner.other') })}</p>
                 </div>
               ) : (
                 <div className="evidence-no-photo-needed">
                   <span className="material-icons" style={{ fontSize: 32, color: '#999' }}>info</span>
-                  <p>Selecciona un metodo de pago (opcional)</p>
+                  <p>{t('planner.selectPaymentOptional')}</p>
                 </div>
               )}
             </div>
@@ -2404,7 +2406,7 @@ export default function TripPlannerPage() {
             <div className="evidence-modal-footer">
               <div className="evidence-footer-row">
                 <button className="btn-cancel" onClick={() => { setShowEvidenceModal(null); setEvidencePreview(null); setEvidenceFile(null); setSelectedPaymentMethod(''); setAmountCollected(''); }}>
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   className="btn-skip-stop"
@@ -2412,7 +2414,7 @@ export default function TripPlannerPage() {
                   disabled={uploadingEvidence}
                 >
                   <span className="material-icons">skip_next</span>
-                  {stops[showEvidenceModal]?.skippedOnce ? 'Saltar definitivo' : 'Mover al final'}
+                  {stops[showEvidenceModal]?.skippedOnce ? t('planner.skipDefinitive') : t('planner.moveToEnd')}
                 </button>
               </div>
               <button 
@@ -2422,7 +2424,7 @@ export default function TripPlannerPage() {
                 style={{ width: '100%' }}
               >
                 <span className="material-icons">{uploadingEvidence ? 'hourglass_empty' : 'check'}</span>
-                {uploadingEvidence ? 'Subiendo...' : evidenceFile ? 'Confirmar con foto' : 'Confirmar entrega'}
+                {uploadingEvidence ? t('planner.uploading') : evidenceFile ? t('planner.confirmWithPhoto') : t('planner.confirmDelivery')}
               </button>
             </div>
           </div>
@@ -2442,7 +2444,7 @@ export default function TripPlannerPage() {
         <div className="evidence-modal-overlay" onClick={() => setPayDeliveryModal(null)}>
           <div className="evidence-modal" onClick={e => e.stopPropagation()}>
             <div className="evidence-modal-header">
-              <h3 style={{ margin: 0, fontSize: 17 }}>Entregar Pago</h3>
+              <h3 style={{ margin: 0, fontSize: 17 }}>{t('planner.deliverPayment')}</h3>
               <button className="evidence-close-btn" onClick={() => setPayDeliveryModal(null)}>
                 <span className="material-icons">close</span>
               </button>
@@ -2450,22 +2452,22 @@ export default function TripPlannerPage() {
 
             <div className="evidence-modal-body" style={{ paddingTop: 12 }}>
               <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>Ruta: {payDeliveryModal.name}</div>
+                <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>{t('planner.route')}: {payDeliveryModal.name}</div>
                 <div style={{ fontSize: 26, fontWeight: 700, color: '#22c55e' }}>
                   ${Number(payDeliveryModal.route_total_collected || 0).toFixed(2)}
                 </div>
-                <div style={{ fontSize: 12, color: '#666' }}>Total cobrado a entregar a la empresa</div>
+                <div style={{ fontSize: 12, color: '#666' }}>{t('planner.totalCollectedDeliver')}</div>
               </div>
 
               <div className="evidence-payment-section">
-                <div className="payment-method-label">Método de entrega</div>
+                <div className="payment-method-label">{t('planner.deliveryMethod')}</div>
                 <div className="payment-methods-grid">
                   {[
-                    { key: 'cash', label: 'Efectivo', icon: 'payments' },
-                    { key: 'card', label: 'Tarjeta', icon: 'credit_card' },
-                    { key: 'transfer', label: 'Transferencia', icon: 'account_balance' },
-                    { key: 'check', label: 'Cheque', icon: 'description' },
-                    { key: 'zelle', label: 'Zelle', icon: 'send_to_mobile' }
+                    { key: 'cash', label: t('planner.cash'), icon: 'payments' },
+                    { key: 'card', label: t('planner.card'), icon: 'credit_card' },
+                    { key: 'transfer', label: t('planner.transfer'), icon: 'account_balance' },
+                    { key: 'check', label: t('planner.check'), icon: 'description' },
+                    { key: 'zelle', label: t('planner.zelle'), icon: 'send_to_mobile' }
                   ].map(m => (
                     <button
                       key={m.key}
@@ -2529,7 +2531,7 @@ export default function TripPlannerPage() {
             <div className="skip-disp-header">
               <span className="material-icons" style={{ color: '#f59e0b', fontSize: 32 }}>inventory_2</span>
               <div>
-                <div className="skip-disp-title">Saltar parada definitivamente</div>
+                <div className="skip-disp-title">{t('planner.skipDefinitive')}</div>
                 <div className="skip-disp-sub">{skipDispositionModal.stop?.name || skipDispositionModal.stop?.address}</div>
               </div>
             </div>

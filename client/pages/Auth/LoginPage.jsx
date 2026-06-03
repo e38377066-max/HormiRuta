@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
 import './AuthPages.css'
 
 const REMEMBER_EMAIL_KEY = 'rem_email'
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const [showPrivacy, setShowPrivacy] = useState(false)
   const { login, loading, error } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -48,7 +50,7 @@ export default function LoginPage() {
             <img src="/Area862.png" alt="Area 862" />
           </div>
           <h1 className="brand-title">Area 862</h1>
-          <p className="brand-subtitle">Accede a tu cuenta para continuar</p>
+          <p className="brand-subtitle">{t('auth.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -60,7 +62,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Correo electrónico"
+              placeholder={t('auth.emailPlaceholder')}
               required
               className="input-pro"
             />
@@ -72,7 +74,7 @@ export default function LoginPage() {
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Contraseña"
+              placeholder={t('auth.passwordPlaceholder')}
               required
               className="input-pro"
             />
@@ -92,40 +94,40 @@ export default function LoginPage() {
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
               />
-              <span>Recordarme</span>
+              <span>{t('auth.rememberMe')}</span>
             </label>
             <button type="button" className="forgot-btn">
-              ¿Olvidaste tu contraseña?
+              {t('auth.forgotPassword')}
             </button>
           </div>
 
           <button type="submit" className="login-btn" disabled={loading}>
-            {loading ? 'Cargando...' : 'Iniciar sesión'}
+            {loading ? t('auth.signingIn') : t('auth.signIn')}
           </button>
 
           <p className="register-link">
-            ¿No tienes cuenta?{' '}
-            <Link to="/register">Regístrate aquí</Link>
+            {t('auth.noAccount')}{' '}
+            <Link to="/register">{t('auth.registerHere')}</Link>
           </p>
         </form>
 
         <div className="legal-links">
-          <button onClick={() => setShowTerms(true)}>Términos & Condiciones</button>
-          <button onClick={() => setShowPrivacy(true)}>Política de Privacidad</button>
+          <button onClick={() => setShowTerms(true)}>{t('auth.terms')}</button>
+          <button onClick={() => setShowPrivacy(true)}>{t('auth.privacy')}</button>
         </div>
       </div>
 
       {showTerms && (
         <div className="modal-overlay" onClick={() => setShowTerms(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Términos & Condiciones de Area 862</h3>
+            <h3>{t('auth.termsTitle')}</h3>
             <div className="modal-content">
-              <p><strong>EMPRESA:</strong> Area 862 (Optimizador de Rutas)</p>
-              <p><strong>FECHA:</strong> Octubre 2025</p>
-              <h4>A. Disposiciones Generales</h4>
-              <p>El acceso y uso de la aplicación móvil "Area 862" constituye la aceptación total de estos Términos y Condiciones de Uso.</p>
+              <p><strong>{t('auth.termsCompany')}</strong></p>
+              <p><strong>{t('auth.termsDate')}</strong></p>
+              <h4>{t('auth.termsSection')}</h4>
+              <p>{t('auth.termsBody')}</p>
             </div>
-            <button className="modal-close" onClick={() => setShowTerms(false)}>Cerrar</button>
+            <button className="modal-close" onClick={() => setShowTerms(false)}>{t('common.close')}</button>
           </div>
         </div>
       )}
@@ -133,12 +135,12 @@ export default function LoginPage() {
       {showPrivacy && (
         <div className="modal-overlay" onClick={() => setShowPrivacy(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>Aviso de Privacidad de Area 862</h3>
+            <h3>{t('auth.privacyTitle')}</h3>
             <div className="modal-content">
-              <p><strong>EMPRESA:</strong> Area 862 (Optimizador de Rutas)</p>
-              <p>Area 862 es responsable del tratamiento de sus datos personales.</p>
+              <p><strong>{t('auth.privacyCompany')}</strong></p>
+              <p>{t('auth.privacyBody')}</p>
             </div>
-            <button className="modal-close" onClick={() => setShowPrivacy(false)}>Cerrar</button>
+            <button className="modal-close" onClick={() => setShowPrivacy(false)}>{t('common.close')}</button>
           </div>
         </div>
       )}

@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
 export default function AdminLogs() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
@@ -80,14 +82,11 @@ export default function AdminLogs() {
 
   const handleDownload = async (type) => {
     try {
-      const response = await api.get(`/api/admin/logs/download/${type}`, {
-        responseType: 'blob'
-      })
+      const response = await api.get(`/api/admin/logs/download/${type}`, { responseType: 'blob' })
       const disposition = response.headers['content-disposition'] || ''
       const filenameMatch = disposition.match(/filename="(.+)"/)
       const fallbackName = type === 'important' ? '24h.txt' : '3dias.txt'
       const filename = filenameMatch ? filenameMatch[1] : fallbackName
-
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
@@ -103,9 +102,7 @@ export default function AdminLogs() {
 
   const handleDownloadArchive = async (filename) => {
     try {
-      const response = await api.get(`/api/admin/logs/archives/${filename}`, {
-        responseType: 'blob'
-      })
+      const response = await api.get(`/api/admin/logs/archives/${filename}`, { responseType: 'blob' })
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
@@ -139,7 +136,7 @@ export default function AdminLogs() {
 
   const formatTime = (timestamp) => {
     const d = new Date(timestamp)
-    return d.toLocaleTimeString('es-MX', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0')
+    return d.toLocaleTimeString(undefined, { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0')
   }
 
   if (loading) {
@@ -158,7 +155,7 @@ export default function AdminLogs() {
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <h1>Logs del Sistema</h1>
+        <h1>{t('admin.logs.title')}</h1>
       </div>
 
       <div className="logs-toolbar">
@@ -168,16 +165,16 @@ export default function AdminLogs() {
             value={levelFilter}
             onChange={(e) => setLevelFilter(e.target.value)}
           >
-            <option value="all">Todos</option>
-            <option value="info">Info</option>
-            <option value="warn">Warn</option>
-            <option value="error">Error</option>
+            <option value="all">{t('admin.logs.all')}</option>
+            <option value="info">{t('admin.logs.info')}</option>
+            <option value="warn">{t('admin.logs.warn')}</option>
+            <option value="error">{t('admin.logs.error')}</option>
           </select>
           <div className="search-box">
             <span className="material-icons">search</span>
             <input
               type="text"
-              placeholder="Buscar en logs..."
+              placeholder={t('admin.logs.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -190,7 +187,7 @@ export default function AdminLogs() {
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
             />
-            <span>Auto-refresh</span>
+            <span>{t('admin.logs.autoRefresh')}</span>
             {autoRefresh && <span className="logs-pulse"></span>}
           </label>
           <button className="btn-primary" onClick={fetchLogs} style={{ padding: '8px 12px' }}>
@@ -198,7 +195,7 @@ export default function AdminLogs() {
           </button>
           <button className="btn-cancel" onClick={handleClearLogs} style={{ padding: '8px 12px', color: '#f44336', borderColor: '#f44336' }}>
             <span className="material-icons" style={{ fontSize: 18 }}>delete</span>
-            Limpiar
+            {t('admin.logs.clear')}
           </button>
         </div>
       </div>
@@ -207,22 +204,22 @@ export default function AdminLogs() {
         <div className="logs-download-section">
           <button className="logs-download-btn" onClick={() => handleDownload('important')}>
             <span className="material-icons">download</span>
-            24h Importantes
+            {t('admin.logs.last24h')}
             {fileStats?.important && (
-              <span className="logs-file-info">({fileStats.important.entries} entradas - {fileStats.important.sizeFormatted})</span>
+              <span className="logs-file-info">({fileStats.important.entries} {t('admin.logs.entries')} - {fileStats.important.sizeFormatted})</span>
             )}
           </button>
           <button className="logs-download-btn" onClick={() => handleDownload('full')}>
             <span className="material-icons">download</span>
-            3 Dias Completo
+            {t('admin.logs.last3days')}
             {fileStats?.full && (
-              <span className="logs-file-info">({fileStats.full.entries} entradas - {fileStats.full.sizeFormatted})</span>
+              <span className="logs-file-info">({fileStats.full.entries} {t('admin.logs.entries')} - {fileStats.full.sizeFormatted})</span>
             )}
           </button>
         </div>
         {archives.length > 0 && (
           <div className="logs-archive-section">
-            <span className="logs-archive-label">Historial:</span>
+            <span className="logs-archive-label">{t('admin.logs.history')}</span>
             {archives.map(file => (
               <button key={file.name} className="logs-archive-btn" onClick={() => handleDownloadArchive(file.name)}>
                 <span className="material-icons">folder</span>
@@ -236,7 +233,7 @@ export default function AdminLogs() {
 
       <div className="logs-terminal" ref={containerRef}>
         {logs.length === 0 ? (
-          <div className="logs-empty">No hay logs disponibles</div>
+          <div className="logs-empty">{t('admin.logs.noLogs')}</div>
         ) : (
           logs.map((log, idx) => (
             <div key={idx} className="log-entry" style={{ color: getLevelColor(log.level) }}>
@@ -253,7 +250,7 @@ export default function AdminLogs() {
       </div>
 
       <div className="logs-footer">
-        <span>{logs.length} entradas en memoria</span>
+        <span>{logs.length} {t('admin.logs.inMemory')}</span>
       </div>
     </div>
   )

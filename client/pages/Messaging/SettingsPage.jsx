@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useMessaging } from '../../contexts/MessagingContext'
 import './MessagingPages.css'
 
@@ -24,6 +25,7 @@ const parseProducts = (products) => {
 
 export default function SettingsPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { fetchSettings, updateSettings, testConnection, testOpenAI, resetTest, startPolling, stopPolling, getPollingStatus, syncContacts, validateZip, fetchAgents, createAgent, updateAgent, deleteAgent } = useMessaging()
   
   const [saving, setSaving] = useState(false)
@@ -58,11 +60,11 @@ export default function SettingsPage() {
   const [hasOpenAIKey, setHasOpenAIKey] = useState(false)
 
   const pollingIntervals = [
-    { label: '15 segundos', value: 15 },
-    { label: '30 segundos', value: 30 },
-    { label: '1 minuto', value: 60 },
-    { label: '2 minutos', value: 120 },
-    { label: '5 minutos', value: 300 }
+    { label: t('settings.intervals.15s'), value: 15 },
+    { label: t('settings.intervals.30s'), value: 30 },
+    { label: t('settings.intervals.1m'), value: 60 },
+    { label: `2 ${t('common.minutes', 'minutos')}`, value: 120 },
+    { label: `5 ${t('common.minutes', 'minutos')}`, value: 300 }
   ]
 
   const [form, setForm] = useState({
@@ -109,19 +111,19 @@ export default function SettingsPage() {
   const [hasExistingToken, setHasExistingToken] = useState(false)
 
   const attentionModes = [
-    { label: 'Automatico - Chatbot maneja conversaciones', value: 'automatic' },
-    { label: 'Asistido - El sistema valida y el agente confirma', value: 'assisted' },
-    { label: 'Manual - El agente controla todo', value: 'manual' }
+    { label: t('settings.attention.modes.automatic'), value: 'automatic' },
+    { label: t('settings.attention.modes.assisted'), value: 'assisted' },
+    { label: t('settings.attention.modes.manual'), value: 'manual' }
   ]
 
   const weekDays = [
-    { label: 'Lun', value: '1' },
-    { label: 'Mar', value: '2' },
-    { label: 'Mie', value: '3' },
-    { label: 'Jue', value: '4' },
-    { label: 'Vie', value: '5' },
-    { label: 'Sab', value: '6' },
-    { label: 'Dom', value: '0' }
+    { label: t('common.days.mon'), value: '1' },
+    { label: t('common.days.tue'), value: '2' },
+    { label: t('common.days.wed'), value: '3' },
+    { label: t('common.days.thu'), value: '4' },
+    { label: t('common.days.fri'), value: '5' },
+    { label: t('common.days.sat'), value: '6' },
+    { label: t('common.days.sun'), value: '0' }
   ]
 
   const timezones = [
@@ -186,7 +188,7 @@ export default function SettingsPage() {
       setAgentForm({ agent_id: '', agent_name: '', agent_email: '', service_name: '', products: [], is_default: false })
     } catch (err) {
       console.error('Error saving agent:', err)
-      alert('Error al guardar agente')
+      alert(t('settings.agents.saveError', 'Error al guardar agente'))
     }
   }
 
@@ -204,7 +206,7 @@ export default function SettingsPage() {
   }
 
   const handleDeleteAgent = async (id) => {
-    if (!window.confirm('¿Eliminar este agente?')) return
+    if (!window.confirm(t('settings.agents.confirmDelete', '¿Eliminar este agente?'))) return
     try {
       await deleteAgent(id)
       await loadAgents()
@@ -315,9 +317,9 @@ export default function SettingsPage() {
       }
       await updateSettings(dataToSave)
       setForm(prev => ({ ...prev, respond_api_token: '', openai_api_key: '' }))
-      alert('Configuracion guardada')
+      alert(t('settings.alerts.savedSuccess'))
     } catch (err) {
-      alert('Error al guardar')
+      alert(t('settings.alerts.saveError', 'Error al guardar'))
     } finally {
       setSaving(false)
     }
@@ -413,7 +415,7 @@ export default function SettingsPage() {
       setValidationHistory(prev => [historyItem, ...prev].slice(0, 20))
       setZipInput('')
     } catch (err) {
-      setValidationResult({ valid: false, message: 'Error al validar' })
+      setValidationResult({ valid: false, message: t('orders.revalidateError') })
     } finally {
       setValidating(false)
     }
@@ -425,16 +427,16 @@ export default function SettingsPage() {
       setCopySuccess(true)
       setTimeout(() => setCopySuccess(false), 2000)
     } catch (err) {
-      alert('Error al copiar')
+      alert(t('orders.copyError'))
     }
   }
 
   const tabs = [
-    { id: 'connection', label: 'Conexion', icon: 'link' },
-    { id: 'chatbot', label: 'Chatbot', icon: 'smart_toy' },
-    { id: 'messages', label: 'Mensajes', icon: 'chat' },
-    { id: 'automation', label: 'Automatizacion', icon: 'auto_fix_high' },
-    { id: 'ia', label: 'Cerebro IA', icon: 'psychology' }
+    { id: 'connection', label: t('settings.tabs.connection'), icon: 'link' },
+    { id: 'chatbot', label: t('settings.tabs.chatbot'), icon: 'smart_toy' },
+    { id: 'messages', label: t('settings.tabs.messages'), icon: 'chat' },
+    { id: 'automation', label: t('settings.tabs.automation'), icon: 'auto_fix_high' },
+    { id: 'ia', label: t('settings.tabs.ai'), icon: 'psychology' }
   ]
 
   return (
@@ -443,7 +445,7 @@ export default function SettingsPage() {
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <h1>Configuracion de Mensajeria</h1>
+        <h1>{t('settings.title')}</h1>
       </div>
 
       <div className="settings-tabs">
@@ -463,22 +465,22 @@ export default function SettingsPage() {
         {activeTab === 'connection' && (
           <>
             <div className="settings-card">
-              <h3>Conexion con Respond.io</h3>
+              <h3>{t('settings.connection.title')}</h3>
               
               <div className="field-group">
-                <label>API Token de Respond.io</label>
+                <label>{t('settings.connection.tokenLabel')}</label>
                 <div className="input-row">
                   <input
                     type={showToken ? 'text' : 'password'}
                     value={form.respond_api_token}
                     onChange={(e) => handleInputChange('respond_api_token', e.target.value)}
-                    placeholder={hasExistingToken ? '••••••••••••••••• (token guardado)' : 'Ingresa tu token'}
+                    placeholder={hasExistingToken ? `••••••••••••••••• ${t('settings.connection.tokenSavedHint')}` : t('settings.connection.tokenPlaceholder')}
                   />
                   <button className="icon-button" onClick={() => setShowToken(!showToken)}>
                     <span className="material-icons">{showToken ? 'visibility_off' : 'visibility'}</span>
                   </button>
                   {hasExistingToken && !form.respond_api_token && (
-                    <span className="token-saved-indicator">Token guardado</span>
+                    <span className="token-saved-indicator">{t('settings.connection.tokenSavedIndicator')}</span>
                   )}
                 </div>
               </div>
@@ -489,11 +491,11 @@ export default function SettingsPage() {
                   onClick={handleTestConnection}
                   disabled={testing || (!form.respond_api_token && !hasExistingToken)}
                 >
-                  {testing ? 'Probando...' : 'Probar Conexion'}
+                  {testing ? t('settings.connection.testing') : t('settings.connection.testAction')}
                 </button>
                 {connectionStatus !== null && (
                   <span className={`status-badge ${connectionStatus ? 'success' : 'error'}`}>
-                    {connectionStatus ? 'Conectado' : 'Error'}
+                    {connectionStatus ? t('settings.connection.statusOk') : t('settings.connection.statusError')}
                   </span>
                 )}
               </div>
@@ -505,14 +507,14 @@ export default function SettingsPage() {
                     checked={form.is_active}
                     onChange={(e) => handleInputChange('is_active', e.target.checked)}
                   />
-                  <span>Activar integracion con Respond.io</span>
+                  <span>{t('settings.connection.enableIntegration')}</span>
                 </label>
               </div>
             </div>
 
             <div className="settings-card">
-              <h3>Modo de Atencion</h3>
-              <p className="description">Selecciona como el sistema manejara los mensajes entrantes</p>
+              <h3>{t('settings.attention.title')}</h3>
+              <p className="description">{t('settings.attention.description')}</p>
               <div className="radio-list">
                 {attentionModes.map(mode => (
                   <label key={mode.value} className="radio-item">
@@ -530,22 +532,22 @@ export default function SettingsPage() {
               {form.attention_mode === 'automatic' && (
                 <div className="info-box">
                   <span className="material-icons">info</span>
-                  <span>En modo automatico, el chatbot maneja las conversaciones segun el flujo configurado</span>
+                  <span>{t('settings.attention.automaticInfo')}</span>
                 </div>
               )}
             </div>
 
             <div className="settings-card">
-              <h3>Sincronizacion de Mensajes</h3>
-              <p className="description">El sistema consulta Respond.io periodicamente para obtener mensajes nuevos.</p>
+              <h3>{t('settings.sync.title')}</h3>
+              <p className="description">{t('settings.sync.description')}</p>
               
               <div className="sync-status">
                 <span className={`status-indicator ${pollingStatus.active ? 'active' : ''}`}></span>
-                <span>{pollingStatus.active ? 'Sincronizando' : 'Detenido'}</span>
+                <span>{pollingStatus.active ? t('settings.sync.statusActive') : t('settings.sync.statusStopped')}</span>
               </div>
 
               <div className="field-group">
-                <label>Intervalo de sincronizacion</label>
+                <label>{t('settings.sync.intervalLabel')}</label>
                 <select
                   value={pollingInterval}
                   onChange={(e) => setPollingInterval(parseInt(e.target.value))}
@@ -558,7 +560,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="field-group">
-                <label>Historial de mensajes a revisar</label>
+                <label>{t('settings.sync.historyLimitLabel')}</label>
                 <input
                   type="number"
                   min="10"
@@ -566,22 +568,22 @@ export default function SettingsPage() {
                   value={form.message_history_limit}
                   onChange={(e) => handleInputChange('message_history_limit', parseInt(e.target.value) || 50)}
                 />
-                <p className="field-hint">Cuantos mensajes revisar por contacto para detectar ZIP codes (10-500)</p>
+                <p className="field-hint">{t('settings.sync.historyLimitHint')}</p>
               </div>
 
               <div className="button-row">
                 {!pollingStatus.active ? (
                   <button className="btn-success" onClick={handleStartPolling} disabled={pollingLoading || !form.is_active}>
-                    Iniciar Sincronizacion
+                    {t('settings.sync.startAction')}
                   </button>
                 ) : (
                   <button className="btn-danger" onClick={handleStopPolling} disabled={pollingLoading}>
-                    Detener
+                    {t('settings.sync.stopAction')}
                   </button>
                 )}
                 
                 <button className="btn-secondary" onClick={handleSyncNow} disabled={syncing || !form.is_active}>
-                  {syncing ? 'Sincronizando...' : 'Sincronizar Ahora'}
+                  {syncing ? t('common.searching') : t('settings.sync.syncNow')}
                 </button>
               </div>
             </div>
@@ -593,16 +595,16 @@ export default function SettingsPage() {
             <div className="settings-card flow-overview">
               <h3>
                 <span className="material-icons">account_tree</span>
-                Flujo de Conversacion del Chatbot
+                {t('settings.flow.title')}
               </h3>
-              <p className="description">El chatbot sigue este flujo automatico para cada conversacion entrante</p>
+              <p className="description">{t('settings.flow.description')}</p>
               
               <div className="flow-diagram">
                 <div className="flow-step">
                   <div className="flow-number">1</div>
                   <div className="flow-content">
-                    <strong>Verificacion de Horario</strong>
-                    <span>Si esta fuera de horario, envia mensaje automatico y finaliza</span>
+                    <strong>{t('settings.flow.steps.hoursCheck')}</strong>
+                    <span>{t('settings.flow.steps.hoursCheckDesc')}</span>
                   </div>
                 </div>
                 <div className="flow-arrow">
@@ -611,8 +613,8 @@ export default function SettingsPage() {
                 <div className="flow-step">
                   <div className="flow-number">2</div>
                   <div className="flow-content">
-                    <strong>Identificacion de Cliente</strong>
-                    <span>Verifica tags (Personal, IprintPOS, etc.) para excluir del flujo</span>
+                    <strong>{t('settings.flow.steps.clientIdentification', 'Identificacion de Cliente')}</strong>
+                    <span>{t('settings.flow.steps.clientIdentificationDesc', 'Verifica tags (Personal, IprintPOS, etc.) para excluir del flujo')}</span>
                   </div>
                 </div>
                 <div className="flow-arrow">
@@ -621,8 +623,8 @@ export default function SettingsPage() {
                 <div className="flow-step">
                   <div className="flow-number">3</div>
                   <div className="flow-content">
-                    <strong>Cliente Existente vs Nuevo</strong>
-                    <span>Si existe en BD, saluda y asigna agente. Si es nuevo, continua flujo</span>
+                    <strong>{t('settings.flow.steps.existingVsNew', 'Cliente Existente vs Nuevo')}</strong>
+                    <span>{t('settings.flow.steps.existingVsNewDesc', 'Si existe en BD, saluda y asigna agente. Si es nuevo, continua flujo')}</span>
                   </div>
                 </div>
                 <div className="flow-arrow">
@@ -631,8 +633,8 @@ export default function SettingsPage() {
                 <div className="flow-step">
                   <div className="flow-number">4</div>
                   <div className="flow-content">
-                    <strong>Verificar Informacion Previa</strong>
-                    <span>Pregunta si ya le dieron precios. Si = asigna agente, No = pide ZIP</span>
+                    <strong>{t('settings.flow.steps.previousInfo', 'Verificar Informacion Previa')}</strong>
+                    <span>{t('settings.flow.steps.previousInfoDesc', 'Pregunta si ya le dieron precios. Si = asigna agente, No = pide ZIP')}</span>
                   </div>
                 </div>
                 <div className="flow-arrow">
@@ -641,8 +643,8 @@ export default function SettingsPage() {
                 <div className="flow-step">
                   <div className="flow-number">5</div>
                   <div className="flow-content">
-                    <strong>Validacion de Cobertura</strong>
-                    <span>Valida ZIP/ciudad y responde con cobertura o sin cobertura</span>
+                    <strong>{t('settings.flow.steps.coverageValidation', 'Validacion de Cobertura')}</strong>
+                    <span>{t('settings.flow.steps.coverageValidationDesc', 'Valida ZIP/ciudad y responde con cobertura o sin cobertura')}</span>
                   </div>
                 </div>
                 <div className="flow-arrow">
@@ -651,8 +653,8 @@ export default function SettingsPage() {
                 <div className="flow-step">
                   <div className="flow-number">6</div>
                   <div className="flow-content">
-                    <strong>Menu de Productos</strong>
-                    <span>Si hay cobertura, muestra productos disponibles</span>
+                    <strong>{t('settings.flow.steps.productMenu', 'Menu de Productos')}</strong>
+                    <span>{t('settings.flow.steps.productMenuDesc', 'Si hay cobertura, muestra productos disponibles')}</span>
                   </div>
                 </div>
               </div>
@@ -661,9 +663,9 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">schedule</span>
-                Horario de Atencion
+                {t('settings.flow.businessHoursTitle', 'Horario de Atencion')}
               </h3>
-              <p className="description">Configura cuando el chatbot responde automaticamente</p>
+              <p className="description">{t('settings.flow.businessHoursDesc', 'Configura cuando el chatbot responde automaticamente')}</p>
               
               <div className="checkbox-row">
                 <label>
@@ -672,7 +674,7 @@ export default function SettingsPage() {
                     checked={form.business_hours_enabled}
                     onChange={(e) => handleInputChange('business_hours_enabled', e.target.checked)}
                   />
-                  <span>Activar verificacion de horario</span>
+                  <span>{t('settings.flow.enableBusinessHours', 'Activar verificacion de horario')}</span>
                 </label>
               </div>
 
@@ -680,7 +682,7 @@ export default function SettingsPage() {
                 <>
                   <div className="field-row">
                     <div className="field-group">
-                      <label>Hora inicio</label>
+                      <label>{t('settings.flow.startTime', 'Hora inicio')}</label>
                       <input
                         type="time"
                         value={form.business_hours_start}
@@ -688,7 +690,7 @@ export default function SettingsPage() {
                       />
                     </div>
                     <div className="field-group">
-                      <label>Hora fin</label>
+                      <label>{t('settings.flow.endTime', 'Hora fin')}</label>
                       <input
                         type="time"
                         value={form.business_hours_end}
@@ -696,7 +698,7 @@ export default function SettingsPage() {
                       />
                     </div>
                     <div className="field-group">
-                      <label>Zona horaria</label>
+                      <label>{t('account.languageLabel')}</label>
                       <select
                         value={form.timezone}
                         onChange={(e) => handleInputChange('timezone', e.target.value)}
@@ -709,7 +711,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="field-group">
-                    <label>Dias de atencion</label>
+                    <label>{t('settings.flow.businessDays', 'Dias de atencion')}</label>
                     <div className="day-selector">
                       {weekDays.map(day => (
                         <button
@@ -725,12 +727,12 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="field-group">
-                    <label>Mensaje fuera de horario</label>
+                    <label>{t('settings.flow.outOfHoursMessage', 'Mensaje fuera de horario')}</label>
                     <textarea
                       rows={3}
                       value={form.out_of_hours_message}
                       onChange={(e) => handleInputChange('out_of_hours_message', e.target.value)}
-                      placeholder="Gracias por contactarnos. Nuestro horario de atencion es de Lunes a Viernes de 9am a 6pm..."
+                      placeholder={t('settings.flow.outOfHoursPlaceholder', 'Gracias por contactarnos. Nuestro horario de atencion es de Lunes a Viernes de 9am a 6pm...')}
                     />
                   </div>
                 </>
@@ -740,9 +742,9 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">people</span>
-                Agentes por Servicio
+                {t('settings.agents.title', 'Agentes por Servicio')}
               </h3>
-              <p className="description">Configura agentes para diferentes servicios (Area 862, IprintPOS, etc.)</p>
+              <p className="description">{t('settings.agents.description', 'Configura agentes para diferentes servicios (Area 862, IprintPOS, etc.)')}</p>
               
               <button 
                 className="btn btn-secondary" 
@@ -754,35 +756,35 @@ export default function SettingsPage() {
                 style={{ marginBottom: '1rem' }}
               >
                 <span className="material-icons">add</span>
-                Agregar Agente
+                {t('settings.agents.addAction', 'Agregar Agente')}
               </button>
 
               {showAgentForm && (
                 <div className="agent-form-modal" style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                  <h4>{editingAgent ? 'Editar Agente' : 'Nuevo Agente'}</h4>
+                  <h4>{editingAgent ? t('settings.agents.editTitle', 'Editar Agente') : t('settings.agents.newTitle', 'Nuevo Agente')}</h4>
                   <div className="field-row">
                     <div className="field-group">
-                      <label>Nombre del Agente *</label>
+                      <label>{t('settings.agents.nameLabel', 'Nombre del Agente *')}</label>
                       <input
                         type="text"
                         value={agentForm.agent_name}
                         onChange={(e) => setAgentForm({...agentForm, agent_name: e.target.value})}
-                        placeholder="Ej: Felipe Delgado"
+                        placeholder={t('settings.agents.namePlaceholder', 'Ej: Felipe Delgado')}
                       />
                     </div>
                     <div className="field-group">
-                      <label>Servicio *</label>
+                      <label>{t('settings.agents.serviceLabel', 'Servicio *')}</label>
                       <input
                         type="text"
                         value={agentForm.service_name}
                         onChange={(e) => setAgentForm({...agentForm, service_name: e.target.value})}
-                        placeholder="Ej: Area 862, IprintPOS"
+                        placeholder={t('settings.agents.servicePlaceholder', 'Ej: Area 862, IprintPOS')}
                       />
                     </div>
                   </div>
                   <div className="field-row">
                     <div className="field-group">
-                      <label>ID en Respond.io</label>
+                      <label>{t('wholesale.form.respondId', 'ID de Contacto en Respond.io (opcional)')}</label>
                       <input
                         type="text"
                         value={agentForm.agent_id}
@@ -791,7 +793,7 @@ export default function SettingsPage() {
                       />
                     </div>
                     <div className="field-group">
-                      <label>Email</label>
+                      <label>{t('common.email')}</label>
                       <input
                         type="email"
                         value={agentForm.agent_email}
@@ -801,7 +803,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="field-group">
-                    <label>Productos que maneja (separados por coma)</label>
+                    <label>{t('settings.agents.productsLabel', 'Productos que maneja (separados por coma)')}</label>
                     <input
                       type="text"
                       value={agentForm.products.join(',')}
@@ -816,15 +818,15 @@ export default function SettingsPage() {
                         checked={agentForm.is_default}
                         onChange={(e) => setAgentForm({...agentForm, is_default: e.target.checked})}
                       />
-                      <span>Agente por defecto para este servicio</span>
+                      <span>{t('settings.agents.defaultAgentLabel', 'Agente por defecto para este servicio')}</span>
                     </label>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                     <button className="btn btn-primary" onClick={handleSaveAgent}>
-                      {editingAgent ? 'Guardar Cambios' : 'Agregar'}
+                      {editingAgent ? t('common.saveChanges') : t('common.add')}
                     </button>
                     <button className="btn btn-secondary" onClick={() => setShowAgentForm(false)}>
-                      Cancelar
+                      {t('common.cancel')}
                     </button>
                   </div>
                 </div>
@@ -852,10 +854,10 @@ export default function SettingsPage() {
                               </span>
                             )}
                           </div>
-                          <button className="btn-icon" onClick={() => handleEditAgent(agent)} title="Editar">
+                          <button className="btn-icon" onClick={() => handleEditAgent(agent)} title={t('common.edit')}>
                             <span className="material-icons">edit</span>
                           </button>
-                          <button className="btn-icon" onClick={() => handleDeleteAgent(agent.id)} title="Eliminar">
+                          <button className="btn-icon" onClick={() => handleDeleteAgent(agent.id)} title={t('common.delete')}>
                             <span className="material-icons">delete</span>
                           </button>
                         </div>
@@ -864,19 +866,19 @@ export default function SettingsPage() {
                   ))}
                 </div>
               ) : (
-                <p style={{ color: '#666', fontStyle: 'italic' }}>No hay agentes configurados. Agrega uno para asignar conversaciones automaticamente.</p>
+                <p style={{ color: '#666', fontStyle: 'italic' }}>{t('settings.agents.empty', 'No hay agentes configurados. Agrega uno para asignar conversaciones automaticamente.')}</p>
               )}
             </div>
 
             <div className="settings-card">
               <h3>
                 <span className="material-icons">label_off</span>
-                Tags Excluidos
+                {t('settings.flow.excludedTagsTitle', 'Tags Excluidos')}
               </h3>
-              <p className="description">Contactos con estos tags no seran atendidos por el chatbot</p>
+              <p className="description">{t('settings.flow.excludedTagsDesc', 'Contactos con estos tags no seran atendidos por el chatbot')}</p>
               
               <div className="field-group">
-                <label>Tags (separados por coma)</label>
+                <label>{t('settings.flow.tagsLabel', 'Tags (separados por coma)')}</label>
                 <input
                   type="text"
                   value={form.excluded_tags}
@@ -894,9 +896,9 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">science</span>
-                Modo de Prueba
+                {t('settings.flow.testModeTitle', 'Modo de Prueba')}
               </h3>
-              <p className="description">Prueba el chatbot con un solo contacto especifico</p>
+              <p className="description">{t('settings.flow.testModeDesc', 'Prueba el chatbot con un solo contacto especifico')}</p>
               
               <div className="toggle-row">
                 <label>
@@ -905,13 +907,13 @@ export default function SettingsPage() {
                     checked={form.test_mode}
                     onChange={(e) => handleInputChange('test_mode', e.target.checked)}
                   />
-                  Activar modo de prueba
+                  {t('settings.flow.enableTestMode', 'Activar modo de prueba')}
                 </label>
               </div>
 
               {form.test_mode && (
                 <div className="field-group">
-                  <label>ID del Contacto de Prueba</label>
+                  <label>{t('settings.flow.testContactId', 'ID del Contacto de Prueba')}</label>
                   <input
                     type="text"
                     value={form.test_contact_id}
@@ -919,7 +921,7 @@ export default function SettingsPage() {
                     placeholder="Ej: 12345678 o id:12345678"
                   />
                   <small className="hint">
-                    Solo este contacto sera procesado por el chatbot. Obten el ID desde Respond.io.
+                    {t('settings.flow.testContactHint', 'Solo este contacto sera procesado por el chatbot. Obten el ID desde Respond.io.')}
                   </small>
                 </div>
               )}
@@ -928,24 +930,24 @@ export default function SettingsPage() {
                 <div className="test-mode-section">
                   <div className="test-mode-active">
                     <span className="material-icons">warning</span>
-                    MODO PRUEBA ACTIVO - Solo contacto: {form.test_contact_id}
+                    {t('settings.flow.testModeActive', 'MODO PRUEBA ACTIVO - Solo contacto: {{id}}', { id: form.test_contact_id })}
                   </div>
                   <button
                     type="button"
                     className="btn-reset-test"
                     onClick={async () => {
-                      if (confirm('Esto reiniciara el historial de conversacion del contacto de prueba. El flujo iniciara cuando envies un nuevo mensaje. ¿Continuar?')) {
+                      if (confirm(t('settings.flow.resetTestConfirm', 'Esto reiniciara el historial de conversacion del contacto de prueba. El flujo iniciara cuando envies un nuevo mensaje. ¿Continuar?'))) {
                         try {
                           const result = await resetTest();
-                          alert(result.message || 'Historial reiniciado correctamente');
+                          alert(result.message || t('settings.flow.resetTestSuccess', 'Historial reiniciado correctamente'));
                         } catch (err) {
-                          alert('Error: ' + (err.response?.data?.error || err.message));
+                          alert(t('common.error') + ': ' + (err.response?.data?.error || err.message));
                         }
                       }
                     }}
                   >
                     <span className="material-icons">refresh</span>
-                    Reiniciar Prueba
+                    {t('settings.flow.resetTestAction', 'Reiniciar Prueba')}
                   </button>
                 </div>
               )}
@@ -954,17 +956,17 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">inventory_2</span>
-                Menu de Productos
+                {t('settings.flow.productMenuTitle', 'Menu de Productos')}
               </h3>
-              <p className="description">Productos que el chatbot ofrece a los clientes</p>
+              <p className="description">{t('settings.flow.productMenuDescription', 'Productos que el chatbot ofrece a los clientes')}</p>
 
               <div className="field-group">
-                <label>Agregar nuevo producto</label>
+                <label>{t('settings.flow.addProductLabel', 'Agregar nuevo producto')}</label>
                 <div className="add-product-row">
                   <input
                     type="text"
                     id="new-product-name"
-                    placeholder="Nombre del producto (ej: Tarjetas)"
+                    placeholder={t('settings.flow.productNamePlaceholder', 'Nombre del producto (ej: Tarjetas)')}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         const name = e.target.value.trim();

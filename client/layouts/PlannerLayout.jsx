@@ -1,6 +1,7 @@
 import { useState, createContext, useContext } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
 import './PlannerLayout.css'
 
 const PlannerContext = createContext(null)
@@ -14,6 +15,7 @@ export default function PlannerLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { t } = useTranslation()
 
   const handleLogout = async () => {
     await logout()
@@ -24,10 +26,10 @@ export default function PlannerLayout() {
   const closeDrawer = () => setDrawerOpen(false)
 
   const menuItems = [
-    { icon: 'map', label: 'Mi Ruta', path: '/planner' },
-    { icon: 'account_balance_wallet', label: 'Mi Contabilidad', path: '/planner/accounting' },
-    { icon: 'person', label: 'Mi cuenta', path: '/planner/account' },
-    { icon: 'admin_panel_settings', label: 'Panel Admin', path: '/messaging', adminOnly: true }
+    { icon: 'map', labelKey: 'nav.myRoute', path: '/planner' },
+    { icon: 'account_balance_wallet', labelKey: 'nav.myAccounting', path: '/planner/accounting' },
+    { icon: 'person', labelKey: 'nav.myAccount', path: '/planner/account' },
+    { icon: 'admin_panel_settings', labelKey: 'nav.adminPanel', path: '/messaging', adminOnly: true }
   ]
 
   const contextValue = {
@@ -52,7 +54,7 @@ export default function PlannerLayout() {
               <span className="material-icons">person</span>
             </div>
             <div className="user-info">
-              <div className="user-name">{user?.name || 'Usuario'}</div>
+              <div className="user-name">{user?.name || t('common.noName')}</div>
               <div className="user-email">{user?.email}</div>
             </div>
           </div>
@@ -62,12 +64,12 @@ export default function PlannerLayout() {
               .filter(item => !item.adminOnly || isAdmin)
               .map(item => (
               <button 
-                key={item.path + item.label} 
+                key={item.path + item.labelKey} 
                 className={`drawer-item${location.pathname === item.path ? ' active' : ''}`}
                 onClick={() => { navigate(item.path); closeDrawer() }}
               >
                 <span className="material-icons">{item.icon}</span>
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </button>
             ))}
           </nav>
@@ -75,7 +77,7 @@ export default function PlannerLayout() {
           <div className="drawer-footer">
             <button className="drawer-item text-negative" onClick={handleLogout}>
               <span className="material-icons">logout</span>
-              <span>Cerrar sesion</span>
+              <span>{t('nav.logout')}</span>
             </button>
           </div>
         </aside>

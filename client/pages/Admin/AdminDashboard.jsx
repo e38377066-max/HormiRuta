@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
@@ -8,6 +9,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
   const [resetting, setResetting] = useState(false)
+  const { t } = useTranslation()
 
   useEffect(() => {
     fetchStats()
@@ -25,19 +27,25 @@ export default function AdminDashboard() {
   }
 
   const handleResetDispatch = async () => {
-    const confirmed = window.confirm('ATENCION: Esto eliminara TODAS las direcciones, rutas, paradas, historial y fotos de evidencia del dispatch. Esta accion no se puede deshacer.\n\n¿Estas seguro?')
+    const confirmed = window.confirm(t('admin.resetConfirm1'))
     if (!confirmed) return
-    const doubleConfirm = window.confirm('ULTIMA CONFIRMACION: Se borraran todos los datos del dispatch permanentemente. ¿Continuar?')
+    const doubleConfirm = window.confirm(t('admin.resetConfirm2'))
     if (!doubleConfirm) return
 
     setResetting(true)
     try {
       const res = await api.delete('/api/admin/dispatch/reset')
       const d = res.data.deleted
-      alert(`Dispatch vaciado:\n- ${d.addresses} direcciones\n- ${d.routes} rutas\n- ${d.stops} paradas\n- ${d.routeHistory} historial\n- ${d.photos} fotos de evidencia`)
+      alert(t('admin.resetSuccess', {
+        addresses: d.addresses,
+        routes: d.routes,
+        stops: d.stops,
+        routeHistory: d.routeHistory,
+        photos: d.photos
+      }))
       fetchStats()
     } catch (err) {
-      alert('Error al vaciar dispatch')
+      alert(t('admin.resetError'))
     } finally {
       setResetting(false)
     }
@@ -59,7 +67,7 @@ export default function AdminDashboard() {
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <h1>Panel de Administracion</h1>
+        <h1>{t('admin.title')}</h1>
       </div>
 
       <div className="stats-grid">
@@ -68,38 +76,38 @@ export default function AdminDashboard() {
             <span className="material-icons">groups</span>
           </div>
           <div className="stat-value">{stats.users?.total || 0}</div>
-          <div className="stat-label">Usuarios Totales</div>
+          <div className="stat-label">{t('admin.stats.totalUsers')}</div>
         </div>
         <div className="stat-card green">
           <div className="stat-icon">
             <span className="material-icons">local_shipping</span>
           </div>
           <div className="stat-value">{stats.users?.drivers || 0}</div>
-          <div className="stat-label">Repartidores</div>
+          <div className="stat-label">{t('admin.stats.drivers')}</div>
         </div>
         <div className="stat-card blue">
           <div className="stat-icon">
             <span className="material-icons">person</span>
           </div>
           <div className="stat-value">{stats.users?.clients || 0}</div>
-          <div className="stat-label">Clientes</div>
+          <div className="stat-label">{t('admin.stats.clients')}</div>
         </div>
         <div className="stat-card orange">
           <div className="stat-icon">
             <span className="material-icons">inventory_2</span>
           </div>
           <div className="stat-value">{stats.orders || 0}</div>
-          <div className="stat-label">Ordenes</div>
+          <div className="stat-label">{t('admin.stats.orders')}</div>
         </div>
       </div>
 
       <div className="admin-sections">
 
-        {/* Cerebro AI */}
+        {/* AI Brain */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">psychology</span>
-            <h3>Cerebro AI del Bot</h3>
+            <h3>{t('admin.sections.aiBrain')}</h3>
           </div>
           <div className="section-items">
             <Link to="/admin/bot-memory?tab=lessons" className="section-item">
@@ -107,8 +115,8 @@ export default function AdminDashboard() {
                 <span className="material-icons" style={{ color: '#fff' }}>school</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Lecciones del Bot</div>
-                <div className="item-subtitle">Aprendizaje automatico y correcciones manuales</div>
+                <div className="item-title">{t('admin.items.botLessons')}</div>
+                <div className="item-subtitle">{t('admin.items.botLessonsDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -117,8 +125,8 @@ export default function AdminDashboard() {
                 <span className="material-icons" style={{ color: '#fff' }}>library_books</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Documentos y Prompts</div>
-                <div className="item-subtitle">Precios, FAQ, instrucciones y base de conocimiento</div>
+                <div className="item-title">{t('admin.items.docsPrompts')}</div>
+                <div className="item-subtitle">{t('admin.items.docsPromptsDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -127,19 +135,19 @@ export default function AdminDashboard() {
                 <span className="material-icons" style={{ color: '#fff' }}>perm_media</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Audio e Imagenes</div>
-                <div className="item-subtitle">Transcripcion de voz y analisis de imagenes con IA</div>
+                <div className="item-title">{t('admin.items.audioImages')}</div>
+                <div className="item-subtitle">{t('admin.items.audioImagesDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
           </div>
         </div>
 
-        {/* Configuracion */}
+        {/* Configuration */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">settings</span>
-            <h3>Configuracion</h3>
+            <h3>{t('admin.sections.config')}</h3>
           </div>
           <div className="section-items">
             <Link to="/messaging/settings" className="section-item">
@@ -147,8 +155,8 @@ export default function AdminDashboard() {
                 <span className="material-icons" style={{ color: '#fff' }}>smart_toy</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Configuracion del Bot y IA</div>
-                <div className="item-subtitle">API Keys, Respond.io, agentes y productos</div>
+                <div className="item-title">{t('admin.items.botConfig')}</div>
+                <div className="item-subtitle">{t('admin.items.botConfigDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -157,19 +165,19 @@ export default function AdminDashboard() {
                 <span className="material-icons">map</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Zonas de Cobertura</div>
-                <div className="item-subtitle">Administrar codigos postales de entrega</div>
+                <div className="item-title">{t('admin.items.coverageZones')}</div>
+                <div className="item-subtitle">{t('admin.items.coverageZonesDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
           </div>
         </div>
 
-        {/* Usuarios */}
+        {/* Users */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">people</span>
-            <h3>Gestion de Usuarios</h3>
+            <h3>{t('admin.sections.userManagement')}</h3>
           </div>
           <div className="section-items">
             <Link to="/admin/users" className="section-item">
@@ -177,8 +185,8 @@ export default function AdminDashboard() {
                 <span className="material-icons">manage_accounts</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Ver todos los usuarios</div>
-                <div className="item-subtitle">Administrar roles y permisos</div>
+                <div className="item-title">{t('admin.items.allUsers')}</div>
+                <div className="item-subtitle">{t('admin.items.allUsersDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -187,8 +195,8 @@ export default function AdminDashboard() {
                 <span className="material-icons">local_shipping</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Repartidores</div>
-                <div className="item-subtitle">{stats.users?.drivers || 0} activos</div>
+                <div className="item-title">{t('admin.items.drivers')}</div>
+                <div className="item-subtitle">{t('admin.items.driversActive', { count: stats.users?.drivers || 0 })}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -197,19 +205,19 @@ export default function AdminDashboard() {
                 <span className="material-icons">person</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Clientes</div>
-                <div className="item-subtitle">{stats.users?.clients || 0} registrados</div>
+                <div className="item-title">{t('admin.items.clients')}</div>
+                <div className="item-subtitle">{t('admin.items.clientsRegistered', { count: stats.users?.clients || 0 })}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
           </div>
         </div>
 
-        {/* Rutas y Entregas */}
+        {/* Routes & Deliveries */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">route</span>
-            <h3>Rutas y Entregas</h3>
+            <h3>{t('admin.sections.routesDeliveries')}</h3>
           </div>
           <div className="section-items">
             <Link to="/admin/wholesale" className="section-item">
@@ -217,8 +225,8 @@ export default function AdminDashboard() {
                 <span className="material-icons" style={{ color: '#fff' }}>store</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Clientes Mayoristas (MAY)</div>
-                <div className="item-subtitle">Gestionar clientes de alto volumen</div>
+                <div className="item-title">{t('admin.items.wholesaleClients')}</div>
+                <div className="item-subtitle">{t('admin.items.wholesaleClientsDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -227,8 +235,8 @@ export default function AdminDashboard() {
                 <span className="material-icons">history</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Historial de Rutas</div>
-                <div className="item-subtitle">Revisar entregas y evidencias</div>
+                <div className="item-title">{t('admin.items.routeHistory')}</div>
+                <div className="item-subtitle">{t('admin.items.routeHistoryDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -237,8 +245,8 @@ export default function AdminDashboard() {
                 <span className="material-icons">receipt_long</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Contabilidad de Choferes</div>
-                <div className="item-subtitle">Reporte de entregas y comisiones</div>
+                <div className="item-title">{t('admin.items.driverAccounting')}</div>
+                <div className="item-subtitle">{t('admin.items.driverAccountingDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -247,19 +255,19 @@ export default function AdminDashboard() {
                 <span className="material-icons">map</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Mapa de Despacho</div>
-                <div className="item-subtitle">Crear y asignar rutas</div>
+                <div className="item-title">{t('admin.items.dispatchMap')}</div>
+                <div className="item-subtitle">{t('admin.items.dispatchMapDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
           </div>
         </div>
 
-        {/* Sistema */}
+        {/* System */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">monitor_heart</span>
-            <h3>Sistema</h3>
+            <h3>{t('admin.sections.system')}</h3>
           </div>
           <div className="section-items">
             <Link to="/admin/logs" className="section-item">
@@ -267,8 +275,8 @@ export default function AdminDashboard() {
                 <span className="material-icons">terminal</span>
               </div>
               <div className="item-content">
-                <div className="item-title">Logs del Sistema</div>
-                <div className="item-subtitle">Ver logs del servidor en tiempo real</div>
+                <div className="item-title">{t('admin.items.systemLogs')}</div>
+                <div className="item-subtitle">{t('admin.items.systemLogsDesc')}</div>
               </div>
               <span className="material-icons item-arrow">chevron_right</span>
             </Link>
@@ -277,8 +285,8 @@ export default function AdminDashboard() {
                 <span className="material-icons">{resetting ? 'sync' : 'delete_forever'}</span>
               </div>
               <div className="item-content">
-                <div className="item-title">{resetting ? 'Vaciando...' : 'Vaciar Dispatch'}</div>
-                <div className="item-subtitle">Eliminar todas las direcciones, rutas, paradas y evidencias</div>
+                <div className="item-title">{resetting ? t('admin.items.clearing') : t('admin.items.clearDispatch')}</div>
+                <div className="item-subtitle">{t('admin.items.clearDispatchDesc')}</div>
               </div>
             </button>
           </div>

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
+import { useTranslation } from 'react-i18next'
 
 import DashboardLayout from './layouts/DashboardLayout'
 import PlannerLayout from './layouts/PlannerLayout'
@@ -26,6 +27,18 @@ import DriverAccountingPage from './pages/Planner/DriverAccountingPage'
 import DispatchMap from './pages/Dispatch/DispatchMap'
 import AccountPage from './pages/Account/AccountPage'
 
+function LoadingScreen() {
+  const { t } = useTranslation()
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a' }}>
+      <div style={{ textAlign: 'center', color: '#fff' }}>
+        <div style={{ width: 40, height: 40, border: '3px solid #5b8def', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+        <p style={{ color: '#94a3b8', fontSize: 14 }}>{t('common.loading')}</p>
+      </div>
+    </div>
+  )
+}
+
 function getDefaultRoute(user) {
   if (!user) return '/login'
   if (user.role === 'admin') return '/messaging'
@@ -35,16 +48,7 @@ function getDefaultRoute(user) {
 function ProtectedRoute({ children, adminOnly = false, allowedRoles = null }) {
   const { isAuthenticated, isAdmin, user, initializing } = useAuth()
 
-  if (initializing) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a' }}>
-        <div style={{ textAlign: 'center', color: '#fff' }}>
-          <div style={{ width: 40, height: 40, border: '3px solid #5b8def', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ color: '#94a3b8', fontSize: 14 }}>Cargando...</p>
-        </div>
-      </div>
-    )
-  }
+  if (initializing) return <LoadingScreen />
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
@@ -64,16 +68,7 @@ function ProtectedRoute({ children, adminOnly = false, allowedRoles = null }) {
 function PublicRoute({ children }) {
   const { isAuthenticated, user, initializing } = useAuth()
 
-  if (initializing) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a' }}>
-        <div style={{ textAlign: 'center', color: '#fff' }}>
-          <div style={{ width: 40, height: 40, border: '3px solid #5b8def', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ color: '#94a3b8', fontSize: 14 }}>Cargando...</p>
-        </div>
-      </div>
-    )
-  }
+  if (initializing) return <LoadingScreen />
   
   if (isAuthenticated) {
     return <Navigate to={getDefaultRoute(user)} replace />

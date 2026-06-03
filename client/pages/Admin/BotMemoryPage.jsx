@@ -1,20 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
-const CONTEXT_TYPES = [
-  { value: 'general', label: 'General' },
-  { value: 'greeting', label: 'Saludo' },
-  { value: 'product', label: 'Producto' },
-  { value: 'zip', label: 'Código Postal' },
-  { value: 'design', label: 'Diseño' },
-  { value: 'frustration', label: 'Frustración' },
-  { value: 'correction', label: 'Corrección' },
-  { value: 'pattern', label: 'Patrón' },
-]
-
 function ContextBadge({ type }) {
+  const { t } = useTranslation()
   const colors = {
     general: '#64748b',
     greeting: '#22c55e',
@@ -26,9 +17,14 @@ function ContextBadge({ type }) {
     pattern: '#06b6d4',
   }
   const labels = {
-    general: 'General', greeting: 'Saludo', product: 'Producto',
-    zip: 'ZIP', design: 'Diseño', frustration: 'Frustración',
-    correction: 'Corrección', pattern: 'Patrón'
+    general: t('admin.botMemory.docs.types.general'),
+    greeting: t('admin.botMemory.docs.types.greeting'),
+    product: t('admin.botMemory.docs.types.product'),
+    zip: t('admin.botMemory.docs.types.zipCode'),
+    design: t('admin.botMemory.docs.types.design'),
+    frustration: t('admin.botMemory.docs.types.frustration'),
+    correction: t('admin.botMemory.docs.types.correction'),
+    pattern: t('admin.botMemory.docs.types.pattern')
   }
   return (
     <span style={{
@@ -43,20 +39,32 @@ function ContextBadge({ type }) {
   )
 }
 
-const KNOWLEDGE_TYPES = [
-  { value: 'document', label: 'Documento', icon: 'description', color: '#5b8def' },
-  { value: 'prompt', label: 'Prompt / Instrucción', icon: 'psychology', color: '#a855f7' },
-  { value: 'instruction', label: 'Regla de Comportamiento', icon: 'rule', color: '#f59e0b' },
-  { value: 'product_info', label: 'Info de Producto', icon: 'inventory_2', color: '#22c55e' },
-  { value: 'faq', label: 'Preguntas Frecuentes', icon: 'quiz', color: '#06b6d4' },
-]
-
 export default function BotMemoryPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [memories, setMemories] = useState([])
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
+
+  const CONTEXT_TYPES = [
+    { value: 'general', label: t('admin.botMemory.docs.types.general') },
+    { value: 'greeting', label: t('admin.botMemory.docs.types.greeting') },
+    { value: 'product', label: t('admin.botMemory.docs.types.product') },
+    { value: 'zip', label: t('admin.botMemory.docs.types.zipCode') },
+    { value: 'design', label: t('admin.botMemory.docs.types.design') },
+    { value: 'frustration', label: t('admin.botMemory.docs.types.frustration') },
+    { value: 'correction', label: t('admin.botMemory.docs.types.correction') },
+    { value: 'pattern', label: t('admin.botMemory.docs.types.pattern') },
+  ]
+
+  const KNOWLEDGE_TYPES = [
+    { value: 'document', label: t('admin.botMemory.docs.types.document'), icon: 'description', color: '#5b8def' },
+    { value: 'prompt', label: t('admin.botMemory.docs.types.prompt'), icon: 'psychology', color: '#a855f7' },
+    { value: 'instruction', label: t('admin.botMemory.docs.types.instruction'), icon: 'rule', color: '#f59e0b' },
+    { value: 'product_info', label: t('admin.botMemory.docs.types.product_info'), icon: 'inventory_2', color: '#22c55e' },
+    { value: 'faq', label: t('admin.botMemory.docs.types.faq'), icon: 'quiz', color: '#06b6d4' },
+  ]
   const [mainSection, setMainSection] = useState(() => {
     const tab = searchParams.get('tab')
     return ['lessons', 'docs', 'media'].includes(tab) ? tab : 'lessons'
@@ -97,8 +105,8 @@ export default function BotMemoryPage() {
   }
 
   const handleKSave = async () => {
-    if (!kForm.title.trim()) return alert('El título es obligatorio')
-    if (!kForm.content.trim()) return alert('El contenido es obligatorio')
+    if (!kForm.title.trim()) return alert(t('admin.botMemory.lessons.titleLabel') + ' ' + t('common.required'))
+    if (!kForm.content.trim()) return alert(t('admin.botMemory.docs.contentLabel') + ' ' + t('common.required'))
     setKSaving(true)
     try {
       if (editingKId) {
@@ -111,7 +119,7 @@ export default function BotMemoryPage() {
       setKForm({ title: '', content: '', knowledge_type: 'document' })
       await loadKnowledge()
     } catch (e) {
-      alert(e.response?.data?.error || 'Error guardando')
+      alert(e.response?.data?.error || t('common.error'))
     } finally {
       setKSaving(false)
     }
@@ -124,18 +132,18 @@ export default function BotMemoryPage() {
   }
 
   const handleKDelete = async (id) => {
-    if (!confirm('¿Eliminar este documento?')) return
+    if (!confirm(t('admin.botMemory.docs.confirmDelete'))) return
     try {
       await api.delete(`/api/bot-memory/knowledge/${id}`)
       await loadKnowledge()
-    } catch (e) { alert('Error eliminando') }
+    } catch (e) { alert(t('common.error')) }
   }
 
   const handleKToggle = async (doc) => {
     try {
       await api.put(`/api/bot-memory/knowledge/${doc.id}`, { is_active: !doc.is_active })
       await loadKnowledge()
-    } catch (e) { alert('Error actualizando') }
+    } catch (e) { alert(t('common.error')) }
   }
 
   const handleKUpload = async (e) => {
@@ -150,9 +158,9 @@ export default function BotMemoryPage() {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       await loadKnowledge()
-      alert(`✅ Archivo "${res.data.title}" importado correctamente`)
+      alert(t('admin.botMemory.docs.imported', { title: res.data.title }))
     } catch (e) {
-      alert(e.response?.data?.error || 'Error subiendo archivo')
+      alert(e.response?.data?.error || t('common.error'))
     } finally {
       setKUploading(false)
       e.target.value = ''
@@ -179,22 +187,22 @@ export default function BotMemoryPage() {
     try {
       await api.put(`/api/bot-memory/${id}`, { is_approved: true })
       await loadData()
-    } catch (e) { alert('Error aprobando lección') }
+    } catch (e) { alert(t('admin.botMemory.lessons.approveError')) }
   }
 
   const handleToggleActive = async (mem) => {
     try {
       await api.put(`/api/bot-memory/${mem.id}`, { is_active: !mem.is_active })
       await loadData()
-    } catch (e) { alert('Error actualizando') }
+    } catch (e) { alert(t('common.error')) }
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar esta lección?')) return
+    if (!confirm(t('admin.botMemory.lessons.confirmDelete'))) return
     try {
       await api.delete(`/api/bot-memory/${id}`)
       await loadData()
-    } catch (e) { alert('Error eliminando') }
+    } catch (e) { alert(t('common.error')) }
   }
 
   const handleEdit = (mem) => {
@@ -204,7 +212,7 @@ export default function BotMemoryPage() {
   }
 
   const handleSave = async () => {
-    if (!form.lesson.trim()) return alert('La lección no puede estar vacía')
+    if (!form.lesson.trim()) return alert(t('admin.botMemory.lessons.emptyError'))
     setSaving(true)
     try {
       if (editingId) {
@@ -217,14 +225,14 @@ export default function BotMemoryPage() {
       setForm({ lesson: '', context_type: 'general', trigger_example: '' })
       await loadData()
     } catch (e) {
-      alert('Error guardando')
+      alert(t('common.error'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleAnalyzeHistory = async () => {
-    if (!confirm('¿Analizar el historial completo de Respond.io? Esto puede tardar varios minutos dependiendo de la cantidad de contactos.')) return
+    if (!confirm(t('admin.botMemory.lessons.analyzeConfirm'))) return
     setAnalyzing(true)
     setAnalyzeResult(null)
     setAnalyzeError(null)
@@ -233,7 +241,7 @@ export default function BotMemoryPage() {
       setAnalyzeResult(res.data)
       await loadData()
     } catch (e) {
-      setAnalyzeError(e.response?.data?.error || 'Error al analizar historial')
+      setAnalyzeError(e.response?.data?.error || t('common.error'))
     } finally {
       setAnalyzing(false)
     }

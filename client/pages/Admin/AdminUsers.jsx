@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
@@ -7,6 +8,7 @@ export default function AdminUsers() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const roleFilter = searchParams.get('role')
+  const { t } = useTranslation()
   
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -78,8 +80,8 @@ export default function AdminUsers() {
   }
 
   const getRoleLabel = (role) => {
-    const labels = { admin: 'Admin', driver: 'Repartidor', client: 'Cliente' }
-    return labels[role] || role
+    const map = { admin: t('admin.users.roles.admin'), driver: t('admin.users.roles.driver'), client: t('admin.users.roles.client') }
+    return map[role] || role
   }
 
   const getInitials = (name, email) => {
@@ -94,7 +96,7 @@ export default function AdminUsers() {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })
+    return new Date(dateStr).toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' })
   }
 
   if (loading) {
@@ -113,7 +115,7 @@ export default function AdminUsers() {
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <h1>{roleFilter ? `Usuarios (${getRoleLabel(roleFilter)})` : 'Todos los Usuarios'}</h1>
+        <h1>{roleFilter ? t('admin.users.titleFiltered', { role: getRoleLabel(roleFilter) }) : t('admin.users.title')}</h1>
       </div>
 
       <div className="action-bar">
@@ -123,10 +125,10 @@ export default function AdminUsers() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por nombre o email..."
+            placeholder={t('admin.users.searchPlaceholder')}
           />
         </div>
-        <span className="counter">{filteredUsers.length} usuarios</span>
+        <span className="counter">{t('admin.users.counter', { count: filteredUsers.length })}</span>
       </div>
 
       <div className="content-card">
@@ -134,12 +136,12 @@ export default function AdminUsers() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Usuario</th>
-                <th>Email</th>
-                <th>Rol</th>
-                <th>Estado</th>
-                <th>Registro</th>
-                <th>Acciones</th>
+                <th>{t('admin.users.columns.user')}</th>
+                <th>{t('admin.users.columns.email')}</th>
+                <th>{t('admin.users.columns.role')}</th>
+                <th>{t('admin.users.columns.status')}</th>
+                <th>{t('admin.users.columns.registered')}</th>
+                <th>{t('admin.users.columns.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -148,7 +150,7 @@ export default function AdminUsers() {
                   <td>
                     <div className="user-cell">
                       <div className="avatar">{getInitials(user.name, user.email)}</div>
-                      <span>{user.name || 'Sin nombre'}</span>
+                      <span>{user.name || t('admin.users.noName')}</span>
                     </div>
                   </td>
                   <td>{user.email}</td>
@@ -160,18 +162,18 @@ export default function AdminUsers() {
                   <td>
                     <span className={`status-tag ${user.isActive !== false ? 'active' : 'inactive'}`}>
                       <span className="status-dot"></span>
-                      {user.isActive !== false ? 'Activo' : 'Inactivo'}
+                      {user.isActive !== false ? t('admin.users.active') : t('admin.users.inactive')}
                     </span>
                   </td>
                   <td>{formatDate(user.createdAt)}</td>
                   <td>
-                    <button className="icon-btn" onClick={() => openEditDialog(user)} title="Editar">
+                    <button className="icon-btn" onClick={() => openEditDialog(user)} title={t('common.edit')}>
                       <span className="material-icons">edit</span>
                     </button>
                     <button 
                       className={`icon-btn ${user.isActive !== false ? 'danger' : 'success'}`}
                       onClick={() => handleToggleActive(user)}
-                      title={user.isActive !== false ? 'Desactivar' : 'Activar'}
+                      title={user.isActive !== false ? t('admin.users.deactivate') : t('admin.users.activate')}
                     >
                       <span className="material-icons">{user.isActive !== false ? 'block' : 'check_circle'}</span>
                     </button>
@@ -183,7 +185,7 @@ export default function AdminUsers() {
                   <td colSpan="6">
                     <div className="empty-state small">
                       <span className="material-icons">people_outline</span>
-                      <p>No hay usuarios</p>
+                      <p>{t('admin.users.noUsers')}</p>
                     </div>
                   </td>
                 </tr>
@@ -197,14 +199,14 @@ export default function AdminUsers() {
         <div className="modal-backdrop" onClick={() => setShowEditDialog(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Editar Usuario</h3>
+              <h3>{t('admin.users.editUser')}</h3>
               <button className="modal-close" onClick={() => setShowEditDialog(false)}>
                 <span className="material-icons">close</span>
               </button>
             </div>
             <div className="modal-body">
               <div className="field-group">
-                <label>Nombre</label>
+                <label>{t('admin.users.fieldName')}</label>
                 <input
                   type="text"
                   value={editingUser.name || ''}
@@ -212,7 +214,7 @@ export default function AdminUsers() {
                 />
               </div>
               <div className="field-group">
-                <label>Email</label>
+                <label>{t('admin.users.fieldEmail')}</label>
                 <input
                   type="text"
                   value={editingUser.email || ''}
@@ -220,14 +222,14 @@ export default function AdminUsers() {
                 />
               </div>
               <div className="field-group">
-                <label>Rol</label>
+                <label>{t('admin.users.fieldRole')}</label>
                 <select
                   value={editingUser.role}
                   onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
                 >
-                  <option value="client">Cliente</option>
-                  <option value="driver">Repartidor</option>
-                  <option value="admin">Admin</option>
+                  <option value="client">{t('admin.users.roles.client')}</option>
+                  <option value="driver">{t('admin.users.roles.driver')}</option>
+                  <option value="admin">{t('admin.users.roles.admin')}</option>
                 </select>
               </div>
               <div className="field-group">
@@ -237,12 +239,12 @@ export default function AdminUsers() {
                     checked={(editingUser.active ?? editingUser.isActive) !== false}
                     onChange={(e) => setEditingUser({ ...editingUser, active: e.target.checked, isActive: e.target.checked })}
                   />
-                  <span>Usuario activo</span>
+                  <span>{t('admin.users.fieldActive')}</span>
                 </label>
               </div>
               {editingUser.role === 'driver' && (
                 <div className="field-group">
-                  <label>Comisión por parada ($)</label>
+                  <label>{t('admin.users.fieldCommission')}</label>
                   <input
                     type="number"
                     step="0.01"
@@ -255,9 +257,9 @@ export default function AdminUsers() {
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn-cancel" onClick={() => setShowEditDialog(false)}>Cancelar</button>
+              <button className="btn-cancel" onClick={() => setShowEditDialog(false)}>{t('common.cancel')}</button>
               <button className="btn-primary" onClick={handleSaveUser} disabled={saving}>
-                {saving ? 'Guardando...' : 'Guardar'}
+                {saving ? t('admin.users.saving') : t('admin.users.save')}
               </button>
             </div>
           </div>

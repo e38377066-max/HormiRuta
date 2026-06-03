@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMessaging } from '../../contexts/MessagingContext'
+import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './MessagingPages.css'
 
 export default function CoveragePage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { coverageZones, fetchCoverageZones, createCoverageZone, createCoverageZonesBulk, deleteCoverageZone, updateCoverageZone } = useMessaging()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -24,21 +26,14 @@ export default function CoveragePage() {
   const [bulkAddressResults, setBulkAddressResults] = useState([])
   const [bulkAddressError, setBulkAddressError] = useState('')
   const [zoneForm, setZoneForm] = useState({
-    zip_code: '',
-    zone_name: '',
-    city: '',
-    state: '',
-    delivery_fee: '',
-    estimated_delivery_time: '',
-    notes: ''
+    zip_code: '', zone_name: '', city: '', state: '',
+    delivery_fee: '', estimated_delivery_time: '', notes: ''
   })
   const [loadingZipInfo, setLoadingZipInfo] = useState(false)
   const [sortField, setSortField] = useState('zip_code')
   const [sortDir, setSortDir] = useState('asc')
 
-  useEffect(() => {
-    loadZones()
-  }, [])
+  useEffect(() => { loadZones() }, [])
 
   const geocodeAddress = async (address) => {
     const response = await api.post('/api/messaging/geocode-address', { address })
@@ -54,7 +49,7 @@ export default function CoveragePage() {
       const result = await geocodeAddress(addressSearch)
       setAddressResult(result)
     } catch (err) {
-      setAddressError(err.response?.data?.error || 'Direccion no encontrada')
+      setAddressError(err.response?.data?.error || t('coverage.addressNotFound'))
     } finally {
       setAddressSearching(false)
     }
@@ -88,14 +83,14 @@ export default function CoveragePage() {
             setBulkZipCodes(prev => prev ? prev + '\n' + result.zip : result.zip)
           }
         } else {
-          setBulkAddressError('Este ZIP ya fue agregado')
+          setBulkAddressError(t('coverage.zipAlreadyAdded'))
         }
       } else {
-        setBulkAddressError('No se encontro ZIP code para esta direccion')
+        setBulkAddressError(t('coverage.noZipForAddress'))
       }
       setBulkAddressSearch('')
     } catch (err) {
-      setBulkAddressError(err.response?.data?.error || 'Direccion no encontrada')
+      setBulkAddressError(err.response?.data?.error || t('coverage.addressNotFound'))
     } finally {
       setBulkAddressSearching(false)
     }
@@ -109,7 +104,6 @@ export default function CoveragePage() {
 
   const fetchZipInfo = async (zipCode) => {
     if (!zipCode || zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) return
-    
     setLoadingZipInfo(true)
     try {
       const response = await fetch(`https://api.zippopotam.us/us/${zipCode}`)
@@ -135,27 +129,18 @@ export default function CoveragePage() {
   const handleZipChange = (e) => {
     const value = e.target.value
     setZoneForm({ ...zoneForm, zip_code: value })
-    if (value.length === 5 && /^\d{5}$/.test(value)) {
-      fetchZipInfo(value)
-    }
+    if (value.length === 5 && /^\d{5}$/.test(value)) fetchZipInfo(value)
   }
 
   const loadZones = async () => {
     setLoading(true)
-    try {
-      await fetchCoverageZones()
-    } finally {
-      setLoading(false)
-    }
+    try { await fetchCoverageZones() }
+    finally { setLoading(false) }
   }
 
   const toggleSort = (field) => {
-    if (sortField === field) {
-      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDir('asc')
-    }
+    if (sortField === field) setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
   }
 
   const filteredZones = coverageZones.filter(z => {
@@ -167,21 +152,12 @@ export default function CoveragePage() {
            (z.state || '').toLowerCase().includes(query)
   }).sort((a, b) => {
     let valA = '', valB = ''
-    if (sortField === 'zip_code') {
-      valA = a.zip_code || a.zipCode || ''
-      valB = b.zip_code || b.zipCode || ''
-    } else if (sortField === 'zone_name') {
-      valA = a.zone_name || ''
-      valB = b.zone_name || ''
-    } else if (sortField === 'city') {
-      valA = a.city || ''
-      valB = b.city || ''
-    } else if (sortField === 'state') {
-      valA = a.state || ''
-      valB = b.state || ''
-    } else if (sortField === 'delivery_fee') {
-      valA = parseFloat(a.delivery_fee) || 0
-      valB = parseFloat(b.delivery_fee) || 0
+    if (sortField === 'zip_code') { valA = a.zip_code || a.zipCode || ''; valB = b.zip_code || b.zipCode || '' }
+    else if (sortField === 'zone_name') { valA = a.zone_name || ''; valB = b.zone_name || '' }
+    else if (sortField === 'city') { valA = a.city || ''; valB = b.city || '' }
+    else if (sortField === 'state') { valA = a.state || ''; valB = b.state || '' }
+    else if (sortField === 'delivery_fee') {
+      valA = parseFloat(a.delivery_fee) || 0; valB = parseFloat(b.delivery_fee) || 0
       return sortDir === 'asc' ? valA - valB : valB - valA
     }
     const cmp = valA.toString().localeCompare(valB.toString())
@@ -190,18 +166,8 @@ export default function CoveragePage() {
 
   const resetForm = () => {
     setEditingZone(null)
-    setZoneForm({
-      zip_code: '',
-      zone_name: '',
-      city: '',
-      state: '',
-      delivery_fee: '',
-      estimated_delivery_time: '',
-      notes: ''
-    })
-    setAddressSearch('')
-    setAddressResult(null)
-    setAddressError('')
+    setZoneForm({ zip_code: '', zone_name: '', city: '', state: '', delivery_fee: '', estimated_delivery_time: '', notes: '' })
+    setAddressSearch(''); setAddressResult(null); setAddressError('')
   }
 
   const editZone = (zone) => {
@@ -209,8 +175,7 @@ export default function CoveragePage() {
     setZoneForm({
       zip_code: zone.zip_code || zone.zipCode || '',
       zone_name: zone.zone_name || '',
-      city: zone.city || '',
-      state: zone.state || '',
+      city: zone.city || '', state: zone.state || '',
       delivery_fee: zone.delivery_fee || '',
       estimated_delivery_time: zone.estimated_delivery_time || '',
       notes: zone.notes || ''
@@ -219,70 +184,46 @@ export default function CoveragePage() {
   }
 
   const saveZone = async () => {
-    if (!zoneForm.zip_code && !editingZone) {
-      alert('El ZIP code es requerido')
-      return
-    }
-
+    if (!zoneForm.zip_code && !editingZone) { alert(t('coverage.zipRequired')); return }
     setSaving(true)
     try {
-      if (editingZone) {
-        await updateCoverageZone(editingZone.id, zoneForm)
-      } else {
-        await createCoverageZone(zoneForm)
-      }
+      if (editingZone) await updateCoverageZone(editingZone.id, zoneForm)
+      else await createCoverageZone(zoneForm)
       setShowAddDialog(false)
       resetForm()
     } catch (err) {
-      alert(err.response?.data?.error || 'Error al guardar')
+      alert(err.response?.data?.error || t('common.error'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (zone) => {
-    if (!confirm(`Eliminar el ZIP code ${zone.zip_code || zone.zipCode}?`)) return
-    try {
-      await deleteCoverageZone(zone.id)
-    } catch (err) {
-      alert('Error al eliminar')
-    }
+    if (!confirm(`${t('coverage.confirmDelete')} ${zone.zip_code || zone.zipCode}?`)) return
+    try { await deleteCoverageZone(zone.id) }
+    catch (err) { alert(t('coverage.deleteError')) }
   }
 
   const addBulkZones = async () => {
-    if (!bulkZipCodes.trim()) {
-      alert('Ingresa al menos un ZIP code')
-      return
-    }
-
-    const zipCodes = bulkZipCodes
-      .split(/[,\n]/)
-      .map(z => z.trim())
-      .filter(z => z.length > 0)
-
-    if (zipCodes.length === 0) {
-      alert('No se encontraron ZIP codes validos')
-      return
-    }
-
+    if (!bulkZipCodes.trim()) { alert(t('coverage.enterZip')); return }
+    const zipCodes = bulkZipCodes.split(/[,\n]/).map(z => z.trim()).filter(z => z.length > 0)
+    if (zipCodes.length === 0) { alert(t('coverage.noValidZips')); return }
     setSaving(true)
     try {
-      const result = await createCoverageZonesBulk({
-        zip_codes: zipCodes,
-        zone_name: bulkZoneName || null
-      })
-      alert(`${result?.created || zipCodes.length} zonas creadas`)
+      const result = await createCoverageZonesBulk({ zip_codes: zipCodes, zone_name: bulkZoneName || null })
+      alert(`${result?.created || zipCodes.length} ${t('coverage.zonesCreated')}`)
       setShowBulkDialog(false)
-      setBulkZipCodes('')
-      setBulkZoneName('')
-      setBulkAddressResults([])
-      setBulkAddressSearch('')
-      setBulkAddressError('')
+      setBulkZipCodes(''); setBulkZoneName(''); setBulkAddressResults([]); setBulkAddressSearch(''); setBulkAddressError('')
     } catch (err) {
-      alert('Error al crear zonas')
+      alert(t('coverage.createError'))
     } finally {
       setSaving(false)
     }
+  }
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return null
+    return <span className="material-icons" style={{ fontSize: '14px', verticalAlign: 'middle' }}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>
   }
 
   return (
@@ -291,17 +232,17 @@ export default function CoveragePage() {
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <h1>Zonas de Cobertura</h1>
+        <h1>{t('coverage.title')}</h1>
       </div>
 
       <div className="action-bar">
         <button className="btn-primary" onClick={() => { resetForm(); setShowAddDialog(true) }}>
           <span className="material-icons">add</span>
-          Agregar ZIP Code
+          {t('coverage.addZip')}
         </button>
         <button className="btn-secondary" onClick={() => setShowBulkDialog(true)}>
           <span className="material-icons">playlist_add</span>
-          Agregar Multiples
+          {t('coverage.addMultiple')}
         </button>
         <div className="search-box">
           <span className="material-icons">search</span>
@@ -309,38 +250,36 @@ export default function CoveragePage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por ZIP code..."
+            placeholder={t('coverage.searchPlaceholder')}
           />
         </div>
       </div>
 
       <div className="content-card">
         {loading ? (
-          <div className="loading-container">
-            <div className="spinner"></div>
-          </div>
+          <div className="loading-container"><div className="spinner"></div></div>
         ) : (
           <div className="table-container">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th onClick={() => toggleSort('zip_code')} style={{cursor: 'pointer', userSelect: 'none'}}>
-                    ZIP Code {sortField === 'zip_code' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  <th onClick={() => toggleSort('zip_code')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                    {t('coverage.cols.zip')} <SortIcon field="zip_code" />
                   </th>
-                  <th onClick={() => toggleSort('zone_name')} style={{cursor: 'pointer', userSelect: 'none'}}>
-                    Zona {sortField === 'zone_name' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  <th onClick={() => toggleSort('zone_name')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                    {t('coverage.cols.zone')} <SortIcon field="zone_name" />
                   </th>
-                  <th onClick={() => toggleSort('city')} style={{cursor: 'pointer', userSelect: 'none'}}>
-                    Ciudad {sortField === 'city' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  <th onClick={() => toggleSort('city')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                    {t('coverage.cols.city')} <SortIcon field="city" />
                   </th>
-                  <th onClick={() => toggleSort('state')} style={{cursor: 'pointer', userSelect: 'none'}}>
-                    Estado {sortField === 'state' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  <th onClick={() => toggleSort('state')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                    {t('coverage.cols.state')} <SortIcon field="state" />
                   </th>
-                  <th onClick={() => toggleSort('delivery_fee')} style={{cursor: 'pointer', userSelect: 'none'}}>
-                    Costo {sortField === 'delivery_fee' && <span className="material-icons" style={{fontSize: '14px', verticalAlign: 'middle'}}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>}
+                  <th onClick={() => toggleSort('delivery_fee')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                    {t('coverage.cols.cost')} <SortIcon field="delivery_fee" />
                   </th>
-                  <th>Activo</th>
-                  <th>Acciones</th>
+                  <th>{t('coverage.cols.active')}</th>
+                  <th>{t('coverage.cols.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -353,14 +292,14 @@ export default function CoveragePage() {
                     <td>{zone.delivery_fee ? `$${zone.delivery_fee}` : '-'}</td>
                     <td>
                       <span className={`tag ${zone.is_active !== false ? 'success' : 'danger'}`}>
-                        {zone.is_active !== false ? 'Si' : 'No'}
+                        {zone.is_active !== false ? t('common.yes') : t('common.no')}
                       </span>
                     </td>
                     <td>
-                      <button className="icon-btn" onClick={() => editZone(zone)} title="Editar">
+                      <button className="icon-btn" onClick={() => editZone(zone)} title={t('common.edit')}>
                         <span className="material-icons">edit</span>
                       </button>
-                      <button className="icon-btn danger" onClick={() => handleDelete(zone)} title="Eliminar">
+                      <button className="icon-btn danger" onClick={() => handleDelete(zone)} title={t('common.delete')}>
                         <span className="material-icons">delete</span>
                       </button>
                     </td>
@@ -371,7 +310,7 @@ export default function CoveragePage() {
                     <td colSpan="7">
                       <div className="empty-state small">
                         <span className="material-icons">location_off</span>
-                        <p>No hay zonas de cobertura</p>
+                        <p>{t('coverage.noZones')}</p>
                       </div>
                     </td>
                   </tr>
@@ -386,119 +325,87 @@ export default function CoveragePage() {
         <div className="modal-backdrop" onClick={() => setShowAddDialog(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{editingZone ? 'Editar Zona' : 'Nueva Zona de Cobertura'}</h3>
+              <h3>{editingZone ? t('coverage.modal.edit') : t('coverage.modal.new')}</h3>
               <button className="modal-close" onClick={() => { setShowAddDialog(false); resetForm() }}>
                 <span className="material-icons">close</span>
               </button>
             </div>
             <div className="modal-body">
               {!editingZone && (
-                <div className="field-group" style={{background: '#f0f4ff', padding: '12px', borderRadius: '8px', marginBottom: '16px'}}>
-                  <label style={{fontWeight: 600}}>
-                    <span className="material-icons" style={{fontSize: '16px', verticalAlign: 'middle', marginRight: '4px'}}>search</span>
-                    Buscar por direccion
+                <div className="field-group" style={{ background: '#f0f4ff', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                  <label style={{ fontWeight: 600 }}>
+                    <span className="material-icons" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>search</span>
+                    {t('coverage.modal.searchByAddress')}
                   </label>
-                  <div style={{display: 'flex', gap: '8px', marginTop: '6px'}}>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                     <input
                       type="text"
                       value={addressSearch}
                       onChange={(e) => setAddressSearch(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
-                      placeholder="Ej: 1234 Main St, Miami FL"
-                      style={{flex: 1}}
+                      placeholder={t('coverage.modal.addressPlaceholder')}
+                      style={{ flex: 1 }}
                     />
-                    <button className="btn-primary" onClick={handleAddressSearch} disabled={addressSearching} style={{whiteSpace: 'nowrap'}}>
-                      {addressSearching ? 'Buscando...' : 'Buscar'}
+                    <button className="btn-primary" onClick={handleAddressSearch} disabled={addressSearching} style={{ whiteSpace: 'nowrap' }}>
+                      {addressSearching ? t('coverage.searching') : t('common.search')}
                     </button>
                   </div>
-                  {addressError && (
-                    <p style={{color: '#f44336', fontSize: '12px', marginTop: '6px', marginBottom: 0}}>{addressError}</p>
-                  )}
+                  {addressError && <p style={{ color: '#f44336', fontSize: '12px', marginTop: '6px', marginBottom: 0 }}>{addressError}</p>}
                   {addressResult && (
-                    <div style={{marginTop: '8px', padding: '10px', background: '#fff', borderRadius: '6px', border: '1px solid #c8d6e5'}}>
-                      <div style={{fontSize: '13px', marginBottom: '6px'}}>
+                    <div style={{ marginTop: '8px', padding: '10px', background: '#fff', borderRadius: '6px', border: '1px solid #c8d6e5' }}>
+                      <div style={{ fontSize: '13px', marginBottom: '6px' }}>
                         <strong>{addressResult.address}</strong>
                       </div>
-                      <div style={{fontSize: '12px', color: '#555', display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
+                      <div style={{ fontSize: '12px', color: '#555', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                         <span>ZIP: <strong>{addressResult.zip}</strong></span>
-                        <span>Ciudad: <strong>{addressResult.city}</strong></span>
-                        <span>Estado: <strong>{addressResult.state}</strong></span>
+                        <span>{t('coverage.modal.city')}: <strong>{addressResult.city}</strong></span>
+                        <span>{t('coverage.modal.state')}: <strong>{addressResult.state}</strong></span>
                       </div>
-                      <button className="btn-success" onClick={applyAddressResult} style={{marginTop: '8px', padding: '6px 14px', fontSize: '12px'}}>
-                        <span className="material-icons" style={{fontSize: '14px'}}>check</span>
-                        Usar estos datos
+                      <button className="btn-success" onClick={applyAddressResult} style={{ marginTop: '8px', padding: '6px 14px', fontSize: '12px' }}>
+                        <span className="material-icons" style={{ fontSize: '14px' }}>check</span>
+                        {t('coverage.modal.useThisData')}
                       </button>
                     </div>
                   )}
                 </div>
               )}
               <div className="field-group">
-                <label>Codigo Postal (ZIP) {loadingZipInfo && <span style={{fontSize: '12px', color: '#6366f1'}}>(buscando...)</span>}</label>
-                <input
-                  type="text"
-                  value={zoneForm.zip_code}
-                  onChange={handleZipChange}
-                  disabled={!!editingZone}
-                  placeholder="Ingresa 5 digitos para autocompletar"
-                />
+                <label>{t('coverage.modal.zip')} {loadingZipInfo && <span style={{ fontSize: '12px', color: '#6366f1' }}>({t('coverage.searching')}...)</span>}</label>
+                <input type="text" value={zoneForm.zip_code} onChange={handleZipChange} disabled={!!editingZone} placeholder={t('coverage.modal.zipPlaceholder')} />
               </div>
               <div className="field-group">
-                <label>Nombre de la zona</label>
-                <input
-                  type="text"
-                  value={zoneForm.zone_name}
-                  onChange={(e) => setZoneForm({ ...zoneForm, zone_name: e.target.value })}
-                />
+                <label>{t('coverage.modal.zoneName')}</label>
+                <input type="text" value={zoneForm.zone_name} onChange={(e) => setZoneForm({ ...zoneForm, zone_name: e.target.value })} />
               </div>
               <div className="field-row">
                 <div className="field-group">
-                  <label>Ciudad</label>
-                  <input
-                    type="text"
-                    value={zoneForm.city}
-                    onChange={(e) => setZoneForm({ ...zoneForm, city: e.target.value })}
-                  />
+                  <label>{t('coverage.modal.city')}</label>
+                  <input type="text" value={zoneForm.city} onChange={(e) => setZoneForm({ ...zoneForm, city: e.target.value })} />
                 </div>
                 <div className="field-group">
-                  <label>Estado</label>
-                  <input
-                    type="text"
-                    value={zoneForm.state}
-                    onChange={(e) => setZoneForm({ ...zoneForm, state: e.target.value })}
-                  />
+                  <label>{t('coverage.modal.state')}</label>
+                  <input type="text" value={zoneForm.state} onChange={(e) => setZoneForm({ ...zoneForm, state: e.target.value })} />
                 </div>
               </div>
               <div className="field-row">
                 <div className="field-group">
-                  <label>Costo de envio</label>
-                  <input
-                    type="number"
-                    value={zoneForm.delivery_fee}
-                    onChange={(e) => setZoneForm({ ...zoneForm, delivery_fee: e.target.value })}
-                  />
+                  <label>{t('coverage.modal.shippingCost')}</label>
+                  <input type="number" value={zoneForm.delivery_fee} onChange={(e) => setZoneForm({ ...zoneForm, delivery_fee: e.target.value })} />
                 </div>
                 <div className="field-group">
-                  <label>Tiempo estimado (min)</label>
-                  <input
-                    type="number"
-                    value={zoneForm.estimated_delivery_time}
-                    onChange={(e) => setZoneForm({ ...zoneForm, estimated_delivery_time: e.target.value })}
-                  />
+                  <label>{t('coverage.modal.estimatedTime')}</label>
+                  <input type="number" value={zoneForm.estimated_delivery_time} onChange={(e) => setZoneForm({ ...zoneForm, estimated_delivery_time: e.target.value })} />
                 </div>
               </div>
               <div className="field-group">
-                <label>Notas</label>
-                <textarea
-                  rows={2}
-                  value={zoneForm.notes}
-                  onChange={(e) => setZoneForm({ ...zoneForm, notes: e.target.value })}
-                />
+                <label>{t('coverage.modal.notes')}</label>
+                <textarea rows={2} value={zoneForm.notes} onChange={(e) => setZoneForm({ ...zoneForm, notes: e.target.value })} />
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-cancel" onClick={() => { setShowAddDialog(false); resetForm() }}>Cancelar</button>
+              <button className="btn-cancel" onClick={() => { setShowAddDialog(false); resetForm() }}>{t('common.cancel')}</button>
               <button className="btn-primary" onClick={saveZone} disabled={saving}>
-                {saving ? 'Guardando...' : editingZone ? 'Guardar' : 'Crear'}
+                {saving ? t('common.saving') : editingZone ? t('common.save') : t('coverage.create')}
               </button>
             </div>
           </div>
@@ -509,42 +416,38 @@ export default function CoveragePage() {
         <div className="modal-backdrop" onClick={() => setShowBulkDialog(false)}>
           <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Agregar Multiples ZIP Codes</h3>
+              <h3>{t('coverage.modal.bulkTitle')}</h3>
               <button className="modal-close" onClick={() => setShowBulkDialog(false)}>
                 <span className="material-icons">close</span>
               </button>
             </div>
             <div className="modal-body">
-              <div className="field-group" style={{background: '#f0f4ff', padding: '12px', borderRadius: '8px', marginBottom: '16px'}}>
-                <label style={{fontWeight: 600}}>
-                  <span className="material-icons" style={{fontSize: '16px', verticalAlign: 'middle', marginRight: '4px'}}>search</span>
-                  Buscar direccion para obtener ZIP
+              <div className="field-group" style={{ background: '#f0f4ff', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                <label style={{ fontWeight: 600 }}>
+                  <span className="material-icons" style={{ fontSize: '16px', verticalAlign: 'middle', marginRight: '4px' }}>search</span>
+                  {t('coverage.modal.searchForZip')}
                 </label>
-                <div style={{display: 'flex', gap: '8px', marginTop: '6px'}}>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                   <input
                     type="text"
                     value={bulkAddressSearch}
                     onChange={(e) => setBulkAddressSearch(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleBulkAddressSearch()}
-                    placeholder="Ej: 1234 Main St, Miami FL"
-                    style={{flex: 1}}
+                    placeholder={t('coverage.modal.addressPlaceholder')}
+                    style={{ flex: 1 }}
                   />
-                  <button className="btn-primary" onClick={handleBulkAddressSearch} disabled={bulkAddressSearching} style={{whiteSpace: 'nowrap'}}>
-                    {bulkAddressSearching ? 'Buscando...' : 'Buscar'}
+                  <button className="btn-primary" onClick={handleBulkAddressSearch} disabled={bulkAddressSearching} style={{ whiteSpace: 'nowrap' }}>
+                    {bulkAddressSearching ? t('coverage.searching') : t('common.search')}
                   </button>
                 </div>
-                {bulkAddressError && (
-                  <p style={{color: '#f44336', fontSize: '12px', marginTop: '6px', marginBottom: 0}}>{bulkAddressError}</p>
-                )}
+                {bulkAddressError && <p style={{ color: '#f44336', fontSize: '12px', marginTop: '6px', marginBottom: 0 }}>{bulkAddressError}</p>}
                 {bulkAddressResults.length > 0 && (
-                  <div style={{marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {bulkAddressResults.map((r, i) => (
-                      <div key={i} style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: '#fff', borderRadius: '6px', border: '1px solid #c8d6e5', fontSize: '12px'}}>
-                        <span style={{flex: 1}}>
-                          <strong>{r.zip}</strong> - {r.city}, {r.state}
-                        </span>
-                        <button onClick={() => removeBulkAddressResult(r.zip)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#f44336', padding: '2px'}}>
-                          <span className="material-icons" style={{fontSize: '16px'}}>close</span>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: '#fff', borderRadius: '6px', border: '1px solid #c8d6e5', fontSize: '12px' }}>
+                        <span style={{ flex: 1 }}><strong>{r.zip}</strong> - {r.city}, {r.state}</span>
+                        <button onClick={() => removeBulkAddressResult(r.zip)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f44336', padding: '2px' }}>
+                          <span className="material-icons" style={{ fontSize: '16px' }}>close</span>
                         </button>
                       </div>
                     ))}
@@ -552,27 +455,18 @@ export default function CoveragePage() {
                 )}
               </div>
               <div className="field-group">
-                <label>ZIP Codes (uno por linea o separados por coma)</label>
-                <textarea
-                  rows={6}
-                  value={bulkZipCodes}
-                  onChange={(e) => setBulkZipCodes(e.target.value)}
-                  placeholder="33101, 33102, 33103..."
-                />
+                <label>{t('coverage.modal.bulkZipsLabel')}</label>
+                <textarea rows={6} value={bulkZipCodes} onChange={(e) => setBulkZipCodes(e.target.value)} placeholder="33101, 33102, 33103..." />
               </div>
               <div className="field-group">
-                <label>Nombre de la zona (opcional)</label>
-                <input
-                  type="text"
-                  value={bulkZoneName}
-                  onChange={(e) => setBulkZoneName(e.target.value)}
-                />
+                <label>{t('coverage.modal.zoneNameOptional')}</label>
+                <input type="text" value={bulkZoneName} onChange={(e) => setBulkZoneName(e.target.value)} />
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-cancel" onClick={() => setShowBulkDialog(false)}>Cancelar</button>
+              <button className="btn-cancel" onClick={() => setShowBulkDialog(false)}>{t('common.cancel')}</button>
               <button className="btn-primary" onClick={addBulkZones} disabled={saving}>
-                {saving ? 'Agregando...' : 'Agregar'}
+                {saving ? t('coverage.adding') : t('coverage.add')}
               </button>
             </div>
           </div>

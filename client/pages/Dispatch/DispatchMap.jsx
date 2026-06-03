@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader } from '@googlemaps/js-api-loader'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../api'
@@ -63,6 +64,7 @@ function createStarIcon() {
 }
 
 export default function DispatchMap() {
+  const { t } = useTranslation()
   const { isAdmin, isDriver } = useAuth()
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
@@ -1002,28 +1004,28 @@ export default function DispatchMap() {
   }
 
   const handleCleanupDuplicates = async () => {
-    if (!window.confirm('¿Limpiar duplicados? Esto fusionará registros duplicados por teléfono o contacto.')) return
+    if (!window.confirm(t('dispatch.cleanupConfirm'))) return
     setCleaningDuplicates(true)
     try {
       const res = await api.post('/api/dispatch/cleanup-duplicates')
-      alert(`Limpieza completada: ${res.data.cleaned} duplicado(s) eliminado(s)`)
+      alert(t('dispatch.cleanupComplete', { count: res.data.cleaned }))
       await fetchData()
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al limpiar duplicados')
+      alert(error.response?.data?.error || t('dispatch.cleanupError'))
     } finally {
       setCleaningDuplicates(false)
     }
   }
 
   const handleLifecycleAudit = async () => {
-    if (!window.confirm('Auditar lifecycles: consultará Respond.io para cada orden activa. Puede tardar 1-2 minutos. ¿Continuar?')) return
+    if (!window.confirm(t('dispatch.lifecycleAuditConfirm'))) return
     setResyncing(true)
     setAuditPreview(null)
     try {
       const res = await api.get('/api/dispatch/lifecycle-audit')
       setAuditPreview(res.data)
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al auditar lifecycles')
+      alert(error.response?.data?.error || t('dispatch.lifecycleAuditError'))
     } finally {
       setResyncing(false)
     }
@@ -1031,15 +1033,22 @@ export default function DispatchMap() {
 
   const handleLifecycleResync = async () => {
     if (!auditPreview) return
-    if (!window.confirm(`Aplicar correcciones: ${auditPreview.mismatches} orden(es) serán movidas/archivadas. Las que están en ruta NO se tocarán. ¿Continuar?`)) return
+    if (!window.confirm(t('dispatch.lifecycleResyncConfirm', { count: auditPreview.mismatches }))) return
     setResyncing(true)
     try {
       const res = await api.post('/api/dispatch/lifecycle-resync')
-      alert(`Resync completado:\n- Actualizadas: ${res.data.updated}\n- Archivadas: ${res.data.archived}\n- Eliminadas (no existen en Respond): ${res.data.deleted}\n- Saltadas por ruta asignada: ${res.data.skipped_route}\n- Saltadas (delivered, marcar manual): ${res.data.skipped_delivered || 0}\n- Errores: ${res.data.errors}`)
+      alert(t('dispatch.lifecycleResyncComplete', {
+        updated: res.data.updated,
+        archived: res.data.archived,
+        deleted: res.data.deleted,
+        skipped_route: res.data.skipped_route,
+        skipped_delivered: res.data.skipped_delivered || 0,
+        errors: res.data.errors
+      }))
       setAuditPreview(null)
       await fetchData()
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al resincronizar')
+      alert(error.response?.data?.error || t('dispatch.lifecycleResyncError'))
     } finally {
       setResyncing(false)
     }
@@ -1054,7 +1063,7 @@ export default function DispatchMap() {
       fetchAllUsers()
       fetchData()
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al actualizar comisión')
+      alert(error.response?.data?.error || t('dispatch.commissionUpdateError'))
     } finally {
       setSavingDriverCommission(null)
     }
@@ -1063,7 +1072,7 @@ export default function DispatchMap() {
   const addOrderToFavorites = async (order) => {
     try {
       const res = await api.post('/api/dispatch/favorites', {
-        name: order.customer_name || 'Sin nombre',
+        name: order.customer_name || t('common.noName'),
         address: order.address || order.validated_address,
         lat: order.address_lat,
         lng: order.address_lng,
@@ -1072,7 +1081,7 @@ export default function DispatchMap() {
       })
       setFavorites(prev => [res.data.favorite, ...prev])
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al agregar a favoritos')
+      alert(error.response?.data?.error || t('dispatch.addFavoriteError'))
     }
   }
 
@@ -1081,12 +1090,12 @@ export default function DispatchMap() {
       await api.delete(`/api/dispatch/favorites/${favId}`)
       setFavorites(prev => prev.filter(f => f.id !== favId))
     } catch (error) {
-      alert(error.response?.data?.error || 'Error al eliminar favorito')
+      alert(error.response?.data?.error || t('dispatch.removeFavoriteError'))
     }
   }
 
   const isOrderFavorited = (order) => favorites.some(
-    f => f.address === (order.address || order.validated_address) && f.name === (order.customer_name || 'Sin nombre')
+    f => f.address === (order.address || order.validated_address) && f.name === (order.customer_name || t('common.noName'))
   )
 
   const autoGeocodeFav = (address) => {
@@ -1105,7 +1114,7 @@ export default function DispatchMap() {
           setFavGeo(null)
         }
       } catch (e) {
-        setFavError(e?.response?.data?.error || 'No se pudo geocodificar')
+        setFavError(e?.response?.data?.error || t('dispatch.geocodeError'))
       } finally {
         setFavGeoLoading(false)
       }
@@ -1113,7 +1122,7 @@ export default function DispatchMap() {
   }
 
   const handleSaveFavorite = async () => {
-    if (!favForm.name.trim()) { setFavError('Nombre requerido'); return }
+    if (!favForm.name.trim()) { setFavError(t('dispatch.nameRequired')); return }
     setSavingFav(true)
     setFavError('')
     try {
@@ -1125,7 +1134,7 @@ export default function DispatchMap() {
       setFavForm({ name: '', address: '', customer_phone: '', notes: '' })
       setFavGeo(null)
     } catch (e) {
-      setFavError(e.response?.data?.error || 'Error al guardar')
+      setFavError(e.response?.data?.error || t('dispatch.saveError'))
     } finally {
       setSavingFav(false)
     }
@@ -1284,7 +1293,7 @@ export default function DispatchMap() {
         await fetchPickupReady(true)
       }
     } catch (error) {
-      setPickupSyncResult({ success: false, error: error.response?.data?.error || 'Error al sincronizar' })
+      setPickupSyncResult({ success: false, error: error.response?.data?.error || t('dispatch.syncError') })
     } finally {
       setSyncingPickupReady(false)
     }
@@ -1297,13 +1306,13 @@ export default function DispatchMap() {
       const res = await api.post('/api/email/pickup-ready/diagnose')
       setPickupDiagnose(res.data)
     } catch (error) {
-      setPickupDiagnose({ success: false, error: error.response?.data?.error || 'Error al diagnosticar' })
+      setPickupDiagnose({ success: false, error: error.response?.data?.error || t('dispatch.diagnoseError') })
     } finally {
       setDiagnosingPickup(false)
     }
   }
 
-  const formatDate = (d) => d ? new Date(d).toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
 
   return (
     <div className="dispatch-container">
