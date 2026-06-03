@@ -1203,14 +1203,20 @@ class PollingService {
           const aiService = new AIService(aiKey, settingsForAI, userId);
           const aiAddr = await aiService.extractAddressFromMessages(incomingTexts);
           if (aiAddr && aiAddr.fullAddress && (aiAddr.confidence === 'high' || aiAddr.confidence === 'medium')) {
-            const aiNorm = aiAddr.fullAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const regexNorm = (latestAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (latestAddress && aiNorm !== regexNorm) {
-              console.log(`[AddressScan-AI] IA corrigio direccion para ${contactName}: regex="${latestAddress}" -> AI="${aiAddr.fullAddress}" (conf=${aiAddr.confidence})`);
-            } else if (!latestAddress) {
-              console.log(`[AddressScan-AI] IA detecto direccion que regex omitio para ${contactName}: "${aiAddr.fullAddress}" (conf=${aiAddr.confidence})`);
+            const aiStreetNum = aiAddr.streetNumber ? String(aiAddr.streetNumber).trim() : null;
+            const aiNumPresentInTexts = !aiStreetNum || incomingTexts.some(t => new RegExp(`\\b${aiStreetNum}\\b`).test(t));
+            if (!aiNumPresentInTexts) {
+              console.log(`[AddressScan-AI] IA cambio numero de calle a "${aiStreetNum}" (no encontrado en mensajes), rechazando: AI="${aiAddr.fullAddress}", usando regex="${latestAddress}"`);
+            } else {
+              const aiNorm = aiAddr.fullAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const regexNorm = (latestAddress || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (latestAddress && aiNorm !== regexNorm) {
+                console.log(`[AddressScan-AI] IA corrigio direccion para ${contactName}: regex="${latestAddress}" -> AI="${aiAddr.fullAddress}" (conf=${aiAddr.confidence})`);
+              } else if (!latestAddress) {
+                console.log(`[AddressScan-AI] IA detecto direccion que regex omitio para ${contactName}: "${aiAddr.fullAddress}" (conf=${aiAddr.confidence})`);
+              }
+              latestAddress = aiAddr.fullAddress;
             }
-            latestAddress = aiAddr.fullAddress;
           } else if (latestAddress && aiAddr === null) {
             // IA dice que NO hay dirección clara — mejor descartamos lo del regex
             // para no guardar basura tipo "Casa 7200" o un fragmento equivocado.
@@ -1291,14 +1297,26 @@ class PollingService {
         try {
           geocoded = await geocodingService.geocodeAddress(latestAddress);
           if (geocoded.success) {
-            finalAddress = geocoded.fullAddress;
-            finalZip = geocoded.zip || finalZip;
-            if (geocoded.wasChanged) {
-              console.log(`[AddressScan-Agent] Geocoding corrigio: "${latestAddress}" -> "${finalAddress}"`);
+            const originalNum = (latestAddress.trim().match(/^(\d+)/) || [])[1];
+            const geocodedNum = geocoded.streetNumber || '';
+            const numMismatch = originalNum && geocodedNum && originalNum !== geocodedNum;
+            if (numMismatch) {
+              console.log(`[AddressScan-Agent] Geocoding cambio numero de calle "${originalNum}" -> "${geocodedNum}", usando direccion original: "${latestAddress}"`);
+              finalZip = geocoded.zip || finalZip;
+            } else {
+              finalAddress = geocoded.fullAddress;
+              finalZip = geocoded.zip || finalZip;
+              if (geocoded.wasChanged) {
+                console.log(`[AddressScan-Agent] Geocoding corrigio: "${latestAddress}" -> "${finalAddress}"`);
+              }
             }
           }
         } catch (geoError) {
           console.error(`[AddressScan-Agent] Error geocoding:`, geoError.message);
+        }
+        if (!finalZip) {
+          const zipMatch = finalAddress?.match(/\b(\d{5})\b/);
+          if (zipMatch) finalZip = zipMatch[1];
         }
       }
 
