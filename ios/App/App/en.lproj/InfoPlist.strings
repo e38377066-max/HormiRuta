@@ -1,0 +1,9 @@
+/* English permission strings — shown on English-language devices */
+
+NSCameraUsageDescription = "Area 862 needs camera access to capture delivery evidence photos and payment receipts.";
+
+NSPhotoLibraryUsageDescription = "Area 862 needs access to your photos to attach delivery evidence and payment receipts.";
+
+NSPhotoLibraryAddUsageDescription = "Area 862 needs permission to save delivery evidence photos to your gallery.";
+
+NSLocationWhenInUseUsageDescription = "Area 862 uses your location while the app is open to show your position on the map, calculate delivery routes, and open turn-by-turn navigation to the next stop.";

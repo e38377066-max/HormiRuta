@@ -1,0 +1,9 @@
+/* Cadenas de permisos en español — se muestran en dispositivos con idioma español */
+
+NSCameraUsageDescription = "Area 862 necesita acceso a la cámara para capturar fotos de evidencia de entrega y comprobantes de pago.";
+
+NSPhotoLibraryUsageDescription = "Area 862 necesita acceso a tus fotos para adjuntar evidencia de entrega y comprobantes de pago.";
+
+NSPhotoLibraryAddUsageDescription = "Area 862 necesita permiso para guardar fotos de evidencia de entrega en tu galería.";
+
+NSLocationWhenInUseUsageDescription = "Area 862 usa tu ubicación mientras la app está abierta para mostrarte en el mapa, calcular rutas de entrega y abrir la navegación a la siguiente parada.";

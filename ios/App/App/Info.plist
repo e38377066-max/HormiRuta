@@ -2,81 +2,81 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>es</string>
-	<key>CFBundleDisplayName</key>
-	<string>Area 862</string>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
-	<key>UIMainStoryboardFile</key>
-	<string>Main</string>
-	<key>UIRequiredDeviceCapabilities</key>
-	<array>
-		<string>arm64</string>
-	</array>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Area 862 necesita acceso a la cámara para capturar fotos de evidencia de entrega y comprobantes de pago.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Area 862 necesita acceso a tus fotos para adjuntar evidencia de entrega y comprobantes de pago.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Area 862 necesita permiso para guardar fotos de evidencia de entrega en tu galería.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Area 862 usa tu ubicación mientras la app está abierta para mostrarte en el mapa, calcular rutas de entrega y abrir la navegación a la siguiente parada.</string>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>maps</string>
-		<string>comgooglemaps</string>
-		<string>waze</string>
-	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<true/>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-		<key>UISceneConfigurations</key>
-		<dict>
-			<key>UIWindowSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneConfigurationName</key>
-					<string>Default Configuration</string>
-					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-				</dict>
-			</array>
-		</dict>
-	</dict>
+        <key>CFBundleDevelopmentRegion</key>
+        <string>es</string>
+        <key>CFBundleDisplayName</key>
+        <string>Area 862</string>
+        <key>CFBundleExecutable</key>
+        <string>$(EXECUTABLE_NAME)</string>
+        <key>CFBundleIdentifier</key>
+        <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+        <key>CFBundleInfoDictionaryVersion</key>
+        <string>6.0</string>
+        <key>CFBundleName</key>
+        <string>$(PRODUCT_NAME)</string>
+        <key>CFBundlePackageType</key>
+        <string>APPL</string>
+        <key>CFBundleShortVersionString</key>
+        <string>$(MARKETING_VERSION)</string>
+        <key>CFBundleVersion</key>
+        <string>$(CURRENT_PROJECT_VERSION)</string>
+        <key>LSRequiresIPhoneOS</key>
+        <true/>
+        <key>UILaunchStoryboardName</key>
+        <string>LaunchScreen</string>
+        <key>UIMainStoryboardFile</key>
+        <string>Main</string>
+        <key>UIRequiredDeviceCapabilities</key>
+        <array>
+                <string>arm64</string>
+        </array>
+        <key>UISupportedInterfaceOrientations</key>
+        <array>
+                <string>UIInterfaceOrientationPortrait</string>
+                <string>UIInterfaceOrientationLandscapeLeft</string>
+                <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        <key>UISupportedInterfaceOrientations~ipad</key>
+        <array>
+                <string>UIInterfaceOrientationPortrait</string>
+                <string>UIInterfaceOrientationPortraitUpsideDown</string>
+                <string>UIInterfaceOrientationLandscapeLeft</string>
+                <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        <key>NSCameraUsageDescription</key>
+        <string>Area 862 needs camera access to capture delivery evidence photos and payment receipts.</string>
+        <key>NSPhotoLibraryUsageDescription</key>
+        <string>Area 862 needs access to your photos to attach delivery evidence and payment receipts.</string>
+        <key>NSPhotoLibraryAddUsageDescription</key>
+        <string>Area 862 needs permission to save delivery evidence photos to your gallery.</string>
+        <key>NSLocationWhenInUseUsageDescription</key>
+        <string>Area 862 uses your location while the app is open to show your position on the map, calculate delivery routes, and open turn-by-turn navigation to the next stop.</string>
+        <key>LSApplicationQueriesSchemes</key>
+        <array>
+                <string>maps</string>
+                <string>comgooglemaps</string>
+                <string>waze</string>
+        </array>
+        <key>ITSAppUsesNonExemptEncryption</key>
+        <false/>
+        <key>UIViewControllerBasedStatusBarAppearance</key>
+        <true/>
+        <key>UIApplicationSceneManifest</key>
+        <dict>
+                <key>UIApplicationSupportsMultipleScenes</key>
+                <false/>
+                <key>UISceneConfigurations</key>
+                <dict>
+                        <key>UIWindowSceneSessionRoleApplication</key>
+                        <array>
+                                <dict>
+                                        <key>UISceneConfigurationName</key>
+                                        <string>Default Configuration</string>
+                                        <key>UISceneDelegateClassName</key>
+                                        <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+                                </dict>
+                        </array>
+                </dict>
+        </dict>
 </dict>
 </plist>
