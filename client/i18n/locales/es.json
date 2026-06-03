@@ -744,7 +744,8 @@
         "detectDesc": "Detecta mensajes de tipo audio o voice de Respond.io",
         "downloadDesc": "Descarga el archivo de audio y lo transcribe en español",
         "requiresOpenAI": "Requiere que tengas configurada la clave de OpenAI en Ajustes",
-        "desc": "Cuando un cliente envíe un mensaje de voz por WhatsApp, el bot lo transcribirá automáticamente usando OpenAI Whisper y procesará el texto como si fuera un mensaje normal."
+        "desc": "Cuando un cliente envíe un mensaje de voz por WhatsApp, el bot lo transcribirá automáticamente usando OpenAI Whisper y procesará el texto como si fuera un mensaje normal.",
+        "processDesc": "El texto transcrito se pasa al bot como si fuera un mensaje de texto normal"
       },
       "images": {
         "title": "Imágenes y Diseños",

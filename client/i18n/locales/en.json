@@ -744,7 +744,8 @@
         "detectDesc": "Detects audio or voice messages from Respond.io",
         "downloadDesc": "Downloads the audio file and transcribes it in Spanish",
         "requiresOpenAI": "Requires your OpenAI key configured in Settings",
-        "desc": "When a client sends a voice message on WhatsApp, the bot will automatically transcribe it using OpenAI Whisper and process the text as a normal message."
+        "desc": "When a client sends a voice message on WhatsApp, the bot will automatically transcribe it using OpenAI Whisper and process the text as a normal message.",
+        "processDesc": "The transcribed text is passed to the bot as if it were a normal text message"
       },
       "images": {
         "title": "Images & Designs",

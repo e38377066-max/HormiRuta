@@ -266,7 +266,7 @@ export default function BotMemoryPage() {
         <button className="back-button" onClick={() => navigate('/admin')}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <h1>Memoria del Bot Area862</h1>
+        <h1>{t('admin.botMemory.title')}</h1>
       </div>
 
       {/* Stats */}
@@ -274,31 +274,31 @@ export default function BotMemoryPage() {
         <div className="stat-card blue">
           <div className="stat-icon"><span className="material-icons">psychology</span></div>
           <div className="stat-value">{stats.active || 0}</div>
-          <div className="stat-label">Lecciones Activas</div>
+          <div className="stat-label">{t('admin.botMemory.stats.activeLessons')}</div>
         </div>
         <div className="stat-card orange">
           <div className="stat-icon"><span className="material-icons">pending_actions</span></div>
           <div className="stat-value">{stats.pending || 0}</div>
-          <div className="stat-label">Pendientes</div>
+          <div className="stat-label">{t('admin.botMemory.stats.pending')}</div>
         </div>
         <div className="stat-card purple">
           <div className="stat-icon"><span className="material-icons">library_books</span></div>
           <div className="stat-value">{knowledge.filter(k => k.is_active).length}</div>
-          <div className="stat-label">Documentos Activos</div>
+          <div className="stat-label">{t('admin.botMemory.stats.activeDocs')}</div>
         </div>
         <div className="stat-card green">
           <div className="stat-icon"><span className="material-icons">record_voice_over</span></div>
           <div className="stat-value">Auto</div>
-          <div className="stat-label">Audio e Imágenes</div>
+          <div className="stat-label">{t('admin.botMemory.stats.audioImages')}</div>
         </div>
       </div>
 
       {/* Selector de sección principal */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#0f172a', borderRadius: 10, padding: 4 }}>
         {[
-          { key: 'lessons', label: 'Lecciones del Bot', icon: 'school' },
-          { key: 'docs', label: 'Documentos y Prompts', icon: 'library_books' },
-          { key: 'media', label: 'Audio e Imágenes', icon: 'perm_media' },
+          { key: 'lessons', label: t('admin.botMemory.sections.lessons'), icon: 'school' },
+          { key: 'docs', label: t('admin.botMemory.sections.docs'), icon: 'library_books' },
+          { key: 'media', label: t('admin.botMemory.sections.media'), icon: 'perm_media' },
         ].map(s => (
           <button
             key={s.key}
@@ -323,22 +323,22 @@ export default function BotMemoryPage() {
           <div className="admin-section" style={{ marginBottom: 20 }}>
             <div className="section-header">
               <span className="material-icons">mic</span>
-              <h3>Mensajes de Voz (Audio)</h3>
+              <h3>{t('admin.botMemory.audio.title')}</h3>
             </div>
             <div style={{ padding: '20px' }}>
               <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 16 }}>
-                Cuando un cliente envíe un <strong style={{ color: '#e2e8f0' }}>mensaje de voz</strong> por WhatsApp, el bot lo transcribirá automáticamente usando <strong style={{ color: '#5b8def' }}>OpenAI Whisper</strong> y procesará el texto como si fuera un mensaje normal.
+                {t('admin.botMemory.audio.desc')}
               </p>
               <div style={{ background: '#0f172a', borderRadius: 10, padding: 16, border: '1px solid #1e293b' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <span className="material-icons" style={{ color: '#22c55e', fontSize: 20 }}>check_circle</span>
-                  <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14 }}>Activado automáticamente</span>
+                  <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14 }}>{t('admin.botMemory.audio.autoDetect')}</span>
                 </div>
                 <ul style={{ color: '#94a3b8', fontSize: 13, lineHeight: 2, paddingLeft: 20, margin: 0 }}>
-                  <li>Detecta mensajes de tipo <code style={{ background: '#1e293b', padding: '1px 6px', borderRadius: 4 }}>audio</code> o <code style={{ background: '#1e293b', padding: '1px 6px', borderRadius: 4 }}>voice</code> de Respond.io</li>
-                  <li>Descarga el archivo de audio y lo transcribe en español</li>
-                  <li>El texto transcrito se pasa al bot como si fuera un mensaje de texto normal</li>
-                  <li>Requiere que tengas configurada la <strong style={{ color: '#5b8def' }}>clave de OpenAI</strong> en Ajustes</li>
+                  <li>{t('admin.botMemory.audio.detectDesc')}</li>
+                  <li>{t('admin.botMemory.audio.downloadDesc')}</li>
+                  <li>{t('admin.botMemory.audio.processDesc')}</li>
+                  <li>{t('admin.botMemory.audio.requiresOpenAI')}</li>
                 </ul>
               </div>
             </div>
@@ -347,22 +347,22 @@ export default function BotMemoryPage() {
           <div className="admin-section">
             <div className="section-header">
               <span className="material-icons">image</span>
-              <h3>Imágenes y Diseños</h3>
+              <h3>{t('admin.botMemory.images.title')}</h3>
             </div>
             <div style={{ padding: '20px' }}>
               <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.7, marginBottom: 16 }}>
-                Cuando un cliente envíe una <strong style={{ color: '#e2e8f0' }}>imagen</strong> (logo, diseño, referencia), el bot la analizará con <strong style={{ color: '#5b8def' }}>GPT-4o Vision</strong> y comprenderá lo que el cliente está mostrando para dar una respuesta contextual.
+                {t('admin.botMemory.images.desc')}
               </p>
               <div style={{ background: '#0f172a', borderRadius: 10, padding: 16, border: '1px solid #1e293b' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <span className="material-icons" style={{ color: '#22c55e', fontSize: 20 }}>check_circle</span>
-                  <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14 }}>Activado automáticamente</span>
+                  <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14 }}>{t('admin.botMemory.images.autoDetect')}</span>
                 </div>
                 <ul style={{ color: '#94a3b8', fontSize: 13, lineHeight: 2, paddingLeft: 20, margin: 0 }}>
-                  <li>Detecta mensajes de tipo <code style={{ background: '#1e293b', padding: '1px 6px', borderRadius: 4 }}>image</code> de Respond.io</li>
-                  <li>Analiza si la imagen es un diseño, logo, producto impreso o referencia visual</li>
-                  <li>El bot puede responder entendiendo qué tiene en mente el cliente</li>
-                  <li>Requiere que tengas configurada la <strong style={{ color: '#5b8def' }}>clave de OpenAI</strong> en Ajustes</li>
+                  <li>{t('admin.botMemory.images.details.detect')}</li>
+                  <li>{t('admin.botMemory.images.details.analyze')}</li>
+                  <li>{t('admin.botMemory.images.details.respond')}</li>
+                  <li>{t('admin.botMemory.images.details.requiresOpenAI')}</li>
                 </ul>
               </div>
             </div>
