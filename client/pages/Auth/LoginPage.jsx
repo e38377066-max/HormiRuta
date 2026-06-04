@@ -14,8 +14,6 @@ export default function LoginPage() {
   const [password,    setPassword]    = useState(remembered ? (localStorage.getItem(REMEMBER_PASS_KEY)  || '') : '')
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe,  setRememberMe]  = useState(remembered)
-  const [showTerms,   setShowTerms]   = useState(false)
-  const [showPrivacy, setShowPrivacy] = useState(false)
   const { login, loading, error } = useAuth()
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -112,38 +110,10 @@ export default function LoginPage() {
         </form>
 
         <div className="legal-links">
-          <button onClick={() => setShowTerms(true)}>{t('auth.terms')}</button>
-          <button onClick={() => setShowPrivacy(true)}>{t('auth.privacy')}</button>
+          <Link to="/terms">{t('auth.terms')}</Link>
+          <Link to="/privacy">{t('auth.privacy')}</Link>
         </div>
       </div>
-
-      {showTerms && (
-        <div className="modal-overlay" onClick={() => setShowTerms(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>{t('auth.termsTitle')}</h3>
-            <div className="modal-content">
-              <p><strong>{t('auth.termsCompany')}</strong></p>
-              <p><strong>{t('auth.termsDate')}</strong></p>
-              <h4>{t('auth.termsSection')}</h4>
-              <p>{t('auth.termsBody')}</p>
-            </div>
-            <button className="modal-close" onClick={() => setShowTerms(false)}>{t('common.close')}</button>
-          </div>
-        </div>
-      )}
-
-      {showPrivacy && (
-        <div className="modal-overlay" onClick={() => setShowPrivacy(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3>{t('auth.privacyTitle')}</h3>
-            <div className="modal-content">
-              <p><strong>{t('auth.privacyCompany')}</strong></p>
-              <p>{t('auth.privacyBody')}</p>
-            </div>
-            <button className="modal-close" onClick={() => setShowPrivacy(false)}>{t('common.close')}</button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

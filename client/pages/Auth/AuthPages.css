@@ -287,15 +287,18 @@
   margin-top: 20px;
 }
 
-.legal-links button {
+.legal-links button,
+.legal-links a {
   background: none;
   border: none;
   color: #9333ea;
   font-size: 12px;
   cursor: pointer;
+  text-decoration: none;
 }
 
-.legal-links button:hover {
+.legal-links button:hover,
+.legal-links a:hover {
   text-decoration: underline;
 }
 
