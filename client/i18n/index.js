@@ -17,7 +17,7 @@ i18n
     defaultNS: 'translation',
     detection: {
       order: ['localStorage', 'navigator'],
-      lookupLocalStorage: 'area862_language',
+      lookupLocalStorage: 'area862_lang',
       caches: ['localStorage']
     },
     interpolation: {
