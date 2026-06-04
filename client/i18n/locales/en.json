@@ -178,7 +178,28 @@
     "nameRequired": "Name is required",
     "saveError": "Error saving",
     "syncError": "Error syncing",
-    "diagnoseError": "Error running diagnosis"
+    "diagnoseError": "Error running diagnosis",
+    "tabs": {
+      "orders": "Orders",
+      "routes": "Routes",
+      "favorites": "Favorites",
+      "drivers": "Drivers",
+      "delivered": "Delivered"
+    },
+    "allStatuses": "All statuses",
+    "wholesale": "⬛ Wholesalers",
+    "searchByName": "Search by name...",
+    "notesPlaceholder": "Add notes...",
+    "audit": {
+      "client": "Client",
+      "dispatcher": "Dispatcher",
+      "respond": "Respond",
+      "action": "Action",
+      "note": "Note",
+      "syncGmail": "Sync Gmail Pickup Ready",
+      "diagnose": "Diagnose name mismatches",
+      "addManual": "Add manual order"
+    }
   },
   "orders": {
     "title": "Messaging Center",
@@ -618,6 +639,32 @@
       "clearDispatch": "Clear Dispatch",
       "clearDispatchDesc": "Delete all addresses, routes, stops and evidence",
       "clearing": "Clearing..."
+    },
+    "returns": {
+      "title": "Package Reception",
+      "subtitle": "Packages skipped by drivers that need to be received or re-routed",
+      "loading": "Loading...",
+      "noPackages": "No packages in this category",
+      "noName": "No name",
+      "tel": "Phone:",
+      "driver": "Driver:",
+      "skipped": "Skipped:",
+      "received": "Received:",
+      "withDriver": "With Driver",
+      "pendingReturn": "Pending Return",
+      "receivedAtOffice": "Received at Office",
+      "markReceived": "Mark as Received",
+      "receiveAtOffice": "Receive at Office",
+      "releaseNewRoute": "Release for New Route",
+      "releaseDirect": "Release (Direct)",
+      "confirmReceived": "Mark this package as received at the office?",
+      "confirmRelease": "Release this package so it can be added to a new route?",
+      "filters": {
+        "all": "All",
+        "pending": "Pending Return",
+        "withDriver": "With Driver",
+        "atOffice": "At Office"
+      }
     },
     "resetConfirm1": "WARNING: This will delete ALL addresses, routes, stops, history and delivery evidence photos from dispatch. This action cannot be undone.\n\nAre you sure?",
     "resetConfirm2": "FINAL CONFIRMATION: All dispatch data will be permanently deleted. Continue?",

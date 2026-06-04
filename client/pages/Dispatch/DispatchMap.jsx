@@ -347,17 +347,17 @@ export default function DispatchMap() {
         position: { lat: order.address_lat, lng: order.address_lng },
         map: mapInstance.current,
         icon,
-        title: `${order.customer_name || 'Sin nombre'} - ${order.address} | ${config.label}`,
+        title: `${order.customer_name || t('common.noName')} - ${order.address} | ${t(`dispatch.statuses.${order.order_status}`)}`,
         zIndex: isEditSelected ? 150 : isSelected ? 100 : 1
       })
 
       const badgeBg = config.color === '#ffffff' ? '#555' : config.color
       const infoContent = `
         <div style="font-family:sans-serif;min-width:200px">
-          <strong>${order.customer_name || 'Sin nombre'}</strong><br/>
+          <strong>${order.customer_name || t('common.noName')}</strong><br/>
           <span style="color:#666">${order.address || ''}</span><br/>
           <span style="color:#666">${order.customer_phone || ''}</span><br/>
-          <span style="background:${badgeBg};color:white;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:bold">● ${config.label}</span>
+          <span style="background:${badgeBg};color:white;padding:2px 10px;border-radius:4px;font-size:12px;font-weight:bold">● ${t(`dispatch.statuses.${order.order_status}`)}</span>
           ${order.amount ? `<br/><strong>$${order.amount.toFixed(2)}</strong>` : ''}
         </div>
       `
@@ -1396,7 +1396,7 @@ export default function DispatchMap() {
                     padding: '6px 14px', borderRadius: 4, cursor: 'pointer'
                   }}
                 >
-                  Cerrar
+                  {t('common.close')}
                 </button>
               </div>
             </div>
@@ -1404,11 +1404,11 @@ export default function DispatchMap() {
               <table style={{ width: '100%', fontSize: 12, color: '#ddd', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #444', textAlign: 'left' }}>
-                    <th style={{ padding: 4 }}>Cliente</th>
-                    <th style={{ padding: 4 }}>Dispatcher</th>
-                    <th style={{ padding: 4 }}>Respond</th>
-                    <th style={{ padding: 4 }}>Acción</th>
-                    <th style={{ padding: 4 }}>Nota</th>
+                    <th style={{ padding: 4 }}>{t('dispatch.audit.client')}</th>
+                    <th style={{ padding: 4 }}>{t('dispatch.audit.dispatcher')}</th>
+                    <th style={{ padding: 4 }}>{t('dispatch.audit.respond')}</th>
+                    <th style={{ padding: 4 }}>{t('dispatch.audit.action')}</th>
+                    <th style={{ padding: 4 }}>{t('dispatch.audit.note')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1430,19 +1430,19 @@ export default function DispatchMap() {
         {isAdmin && (
           <div className="dispatch-tabs">
             <button className={`dtab ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
-              <span className="material-icons">list_alt</span> Ordenes
+              <span className="material-icons">list_alt</span> {t('dispatch.tabs.orders')}
             </button>
             <button className={`dtab ${activeTab === 'routes' ? 'active' : ''}`} onClick={() => setActiveTab('routes')}>
-              <span className="material-icons">route</span> Rutas
+              <span className="material-icons">route</span> {t('dispatch.tabs.routes')}
             </button>
             <button className={`dtab ${activeTab === 'favorites' ? 'active' : ''}`} style={activeTab === 'favorites' ? { color: '#FFD600', borderBottomColor: '#FFD600' } : {}} onClick={() => { setActiveTab('favorites'); if (favorites.length === 0) fetchFavorites() }}>
-              <span className="material-icons">star</span> Favoritas
+              <span className="material-icons">star</span> {t('dispatch.tabs.favorites')}
             </button>
             <button className={`dtab ${activeTab === 'drivers' ? 'active' : ''}`} onClick={() => { setActiveTab('drivers'); if (allUsers.length === 0) fetchAllUsers() }}>
-              <span className="material-icons">people</span> Choferes
+              <span className="material-icons">people</span> {t('dispatch.tabs.drivers')}
             </button>
             <button className={`dtab ${activeTab === 'delivered' ? 'active' : ''}`} onClick={() => { setActiveTab('delivered'); fetchDeliveredOrders() }}>
-              <span className="material-icons">done_all</span> Entregadas
+              <span className="material-icons">done_all</span> {t('dispatch.tabs.delivered')}
             </button>
           </div>
         )}
@@ -1455,7 +1455,7 @@ export default function DispatchMap() {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Buscar por nombre..."
+                placeholder={t('dispatch.searchByName')}
               />
               {searchQuery && (
                 <button className="dispatch-search-clear" onClick={() => setSearchQuery('')}>
@@ -1465,21 +1465,21 @@ export default function DispatchMap() {
             </div>
             <div className="dispatch-filter-row">
               <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                <option value="">Todos los estados</option>
-                <option value="pending">Pendientes</option>
-                <option value="approved">Aprobadas</option>
-                <option value="ordered">Ordenadas</option>
-                <option value="pickup_ready">Listo p/Recoger</option>
-                <option value="on_delivery">En Entrega</option>
-                <option value="ups_shipped">UPS Shipped</option>
-                <option value="delivered">Entregadas</option>
-                <option value="wholesale">⬛ Mayoristas</option>
+                <option value="">{t('dispatch.allStatuses')}</option>
+                <option value="pending">{t('dispatch.statuses.pending')}</option>
+                <option value="approved">{t('dispatch.statuses.approved')}</option>
+                <option value="ordered">{t('dispatch.statuses.ordered')}</option>
+                <option value="pickup_ready">{t('dispatch.statuses.pickup_ready')}</option>
+                <option value="on_delivery">{t('dispatch.statuses.on_delivery')}</option>
+                <option value="ups_shipped">{t('dispatch.statuses.ups_shipped')}</option>
+                <option value="delivered">{t('dispatch.statuses.delivered')}</option>
+                <option value="wholesale">{t('dispatch.wholesale')}</option>
               </select>
               <button
                 className="btn-add-manual-order"
                 onClick={syncPickupReadyFromGmail}
                 disabled={syncingPickupReady}
-                title="Sincronizar Gmail Pickup Ready"
+                title={t('dispatch.audit.syncGmail')}
                 style={{ background: '#0d47a1', marginRight: 4 }}
               >
                 <span className="material-icons" style={{ fontSize: 18 }}>
@@ -1490,14 +1490,14 @@ export default function DispatchMap() {
                 className="btn-add-manual-order"
                 onClick={diagnosePickupReady}
                 disabled={diagnosingPickup}
-                title="Diagnosticar nombres sin coincidencia"
+                title={t('dispatch.audit.diagnose')}
                 style={{ background: '#7b1fa2', marginRight: 4 }}
               >
                 <span className="material-icons" style={{ fontSize: 18 }}>
                   {diagnosingPickup ? 'hourglass_empty' : 'troubleshoot'}
                 </span>
               </button>
-              <button className="btn-add-manual-order" onClick={openManualOrderModal} title="Agregar orden manual">
+              <button className="btn-add-manual-order" onClick={openManualOrderModal} title={t('dispatch.audit.addManual')}>
                 <span className="material-icons">add</span>
               </button>
             </div>
@@ -1812,7 +1812,7 @@ export default function DispatchMap() {
                     <div className="do-status-dot" style={{ backgroundColor: cfg.color, border: cfg.color === '#ffffff' ? '2px solid #555' : 'none' }}></div>
                     <div className="do-content">
                       <div className="do-top">
-                        <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
+                        <span className="do-name">{order.customer_name || t('common.noName')}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <button
                             onClick={e => { e.stopPropagation(); if (!isOrderFavorited(order)) addOrderToFavorites(order) }}
@@ -1824,7 +1824,7 @@ export default function DispatchMap() {
                           <span className="do-id">#{order.id}</span>
                         </div>
                       </div>
-                      <div className="do-address">{order.address || 'Sin direccion'}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
+                      <div className="do-address">{order.address || t('orders.placeholders.noAddress')}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
                       {order.customer_phone && (
                         <div className="do-contact-row" onClick={e => e.stopPropagation()}>
                           <span className="do-phone">{order.customer_phone}</span>
@@ -1843,7 +1843,7 @@ export default function DispatchMap() {
                       <div className="do-bottom">
                         <span className="do-tag" style={{ backgroundColor: cfg.color === '#ffffff' ? '#f5f5f5' : `${cfg.color}20`, color: cfg.color === '#ffffff' ? '#555' : cfg.color, borderColor: cfg.color === '#ffffff' ? '#999' : cfg.color }}>
                           <span className="material-icons" style={{ fontSize: '14px' }}>{cfg.icon}</span>
-                          {cfg.label}
+                          {t(`dispatch.statuses.${order.order_status}`)}
                         </span>
                         {order.notes && (
                           <span className="do-notes-tag">
@@ -1871,7 +1871,7 @@ export default function DispatchMap() {
                                   onClick={() => handleUpdateStatus(order.id, getNextStatus(order.order_status))}
                                 >
                                   <span className="material-icons" style={{ fontSize: '16px', color: isWhiteBg ? '#333' : '#fff' }}>{nextCfg.icon}</span>
-                                  {nextCfg.label}
+                                  {t(`dispatch.statuses.${getNextStatus(order.order_status)}`)}
                                 </button>
                               )
                             })()}
@@ -1881,7 +1881,7 @@ export default function DispatchMap() {
                               <textarea
                                 value={notesValue}
                                 onChange={e => setNotesValue(e.target.value)}
-                                placeholder="Agregar notas..."
+                                placeholder={t('dispatch.notesPlaceholder')}
                                 autoFocus
                                 rows={2}
                               />
@@ -2039,7 +2039,7 @@ export default function DispatchMap() {
                               <div className="do-top">
                                 <span className="do-tag" style={{ backgroundColor: cfg.color === '#ffffff' ? '#f5f5f5' : `${cfg.color}20`, color: cfg.color === '#ffffff' ? '#555' : cfg.color, borderColor: cfg.color === '#ffffff' ? '#999' : cfg.color, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 12, fontSize: 12, border: '1px solid', fontWeight: 600 }}>
                                   <span className="material-icons" style={{ fontSize: 13 }}>{cfg.icon}</span>
-                                  {cfg.label}
+                                  {t(`dispatch.statuses.${order.order_status}`)}
                                 </span>
                                 <span className="do-id">#{order.id}</span>
                               </div>
@@ -2058,7 +2058,7 @@ export default function DispatchMap() {
                                           onClick={() => handleUpdateStatus(order.id, getNextStatus(order.order_status))}
                                         >
                                           <span className="material-icons" style={{ fontSize: 16, color: isWhiteBg ? '#333' : '#fff' }}>{nextCfg.icon}</span>
-                                          {nextCfg.label}
+                                          {t(`dispatch.statuses.${getNextStatus(order.order_status)}`)}
                                         </button>
                                       )
                                     })()}
@@ -2077,7 +2077,7 @@ export default function DispatchMap() {
                 <div className="fav-orders-section">
                   <div className="fav-orders-header">
                     <span className="material-icons" style={{ color: '#FFD600', fontSize: 16 }}>star</span>
-                    <span>Favoritas</span>
+                    <span>{t('dispatch.tabs.favorites')}</span>
                   </div>
                   {filteredFavs.map(fav => {
                     const isFavSelected = selectedFavorites.includes(fav.id)
@@ -2333,10 +2333,10 @@ export default function DispatchMap() {
                     <div className="dr-orders">
                       <div className="dr-orders-scroll">
                         {(route.route_stops?.length > 0 ? route.route_stops : route.orders).map((s, i) => {
-                          const name = s.customer_name || s.name || 'Sin nombre'
+                          const name = s.customer_name || s.name || t('common.noName')
                           const statusKey = s.status || s.order_status || 'pending'
                           const dotColor = getStopStatusColor(statusKey)
-                          const statusLabel = STATUS_CONFIG[statusKey]?.label || ''
+                          const statusLabel = STATUS_CONFIG[statusKey] ? t(`dispatch.statuses.${statusKey}`) : ''
                           return (
                             <div key={s.id || i} className="dr-order-mini">
                               <span className="dr-stop-num">{i + 1}</span>
@@ -2745,7 +2745,7 @@ export default function DispatchMap() {
           {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
             <div key={key} className="legend-item">
               <span className="legend-dot" style={{ backgroundColor: cfg.color }}></span>
-              <span>{cfg.label}</span>
+              <span>{t(`dispatch.statuses.${key}`)}</span>
             </div>
           ))}
         </div>

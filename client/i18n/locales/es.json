@@ -160,6 +160,27 @@
     "saveError": "Error al guardar",
     "syncError": "Error al sincronizar",
     "diagnoseError": "Error al ejecutar diagnostico",
+    "tabs": {
+      "orders": "Ordenes",
+      "routes": "Rutas",
+      "favorites": "Favoritas",
+      "drivers": "Choferes",
+      "delivered": "Entregadas"
+    },
+    "allStatuses": "Todos los estados",
+    "wholesale": "⬛ Mayoristas",
+    "searchByName": "Buscar por nombre...",
+    "notesPlaceholder": "Agregar notas...",
+    "audit": {
+      "client": "Cliente",
+      "dispatcher": "Dispatcher",
+      "respond": "Respond",
+      "action": "Accion",
+      "note": "Nota",
+      "syncGmail": "Sincronizar Gmail Pickup Ready",
+      "diagnose": "Diagnosticar nombres sin coincidencia",
+      "addManual": "Agregar orden manual"
+    },
     "statuses": {
       "pending": "Pendiente",
       "approved": "Aprobada",
@@ -618,6 +639,32 @@
       "clearDispatch": "Vaciar Dispatch",
       "clearDispatchDesc": "Eliminar todas las direcciones, rutas, paradas y evidencias",
       "clearing": "Vaciando..."
+    },
+    "returns": {
+      "title": "Recepcion de Paquetes",
+      "subtitle": "Paquetes saltados por los choferes que necesitan ser recibidos o re-asignados",
+      "loading": "Cargando...",
+      "noPackages": "No hay paquetes en esta categoria",
+      "noName": "Sin nombre",
+      "tel": "Telefono:",
+      "driver": "Chofer:",
+      "skipped": "Saltado:",
+      "received": "Recibido:",
+      "withDriver": "Con el Chofer",
+      "pendingReturn": "Pendiente de Devolucion",
+      "receivedAtOffice": "Recibido en Oficina",
+      "markReceived": "Marcar como Recibido",
+      "receiveAtOffice": "Recibir en Oficina",
+      "releaseNewRoute": "Liberar para Nueva Ruta",
+      "releaseDirect": "Liberar (Directo)",
+      "confirmReceived": "¿Marcar este paquete como recibido en la oficina?",
+      "confirmRelease": "¿Liberar este paquete para que pueda agregarse a una nueva ruta?",
+      "filters": {
+        "all": "Todos",
+        "pending": "Pendiente Devolucion",
+        "withDriver": "Con el Chofer",
+        "atOffice": "En Oficina"
+      }
     },
     "resetConfirm1": "ATENCION: Esto eliminara TODAS las direcciones, rutas, paradas, historial y fotos de evidencia del dispatch. Esta accion no se puede deshacer.\n\n¿Estas seguro?",
     "resetConfirm2": "ULTIMA CONFIRMACION: Se borraran todos los datos del dispatch permanentemente. ¿Continuar?",
