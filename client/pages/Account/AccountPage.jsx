@@ -34,7 +34,6 @@ export default function AccountPage() {
 
   const handleLanguageChange = (lang) => {
     i18n.changeLanguage(lang)
-    localStorage.setItem('area862_language', lang)
   }
 
   return (

@@ -5,6 +5,9 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 import en from './locales/en.json'
 import es from './locales/es.json'
 
+localStorage.removeItem('area862_language')
+localStorage.removeItem('area862_lang')
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -17,7 +20,7 @@ i18n
     defaultNS: 'translation',
     detection: {
       order: ['localStorage'],
-      lookupLocalStorage: 'area862_lang',
+      lookupLocalStorage: 'area862_ui_lang',
       caches: ['localStorage']
     },
     interpolation: {
