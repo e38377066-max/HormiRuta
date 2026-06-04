@@ -1899,7 +1899,7 @@ class PollingService {
             if (this.businessAddressNorms.has(cfNormCheck)) {
               console.log(`[AddressScan] Campo Address en Respond era la del NEGOCIO para ${contactName} (${contact.id}): "${contactFieldAddress}" — limpiando (dirección incorrecta del local).`);
               try {
-                await respondio.updateContactCustomFields(contact.id, { Address: null });
+                await respondio.updateContactCustomFields(contact.id, { [cfAddress?.name || 'Address']: null });
               } catch (_) {}
               if (existing) {
                 const existValidNormB = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2145,7 +2145,7 @@ class PollingService {
                 // Push back al campo Address del contacto en Respond.io si difiere.
                 if (agentNorm !== cfNorm) {
                   try {
-                    const upd = await respondio.updateContactCustomFields(contact.id, { Address: agentFinal });
+                    const upd = await respondio.updateContactCustomFields(contact.id, { [cfAddress?.name || 'Address']: agentFinal });
                     if (upd.success) {
                       console.log(`[AddressScan] Campo Address actualizado en Respond para ${contactName} (${contact.id}): "${contactFieldAddress || '(vacio)'}" -> "${agentFinal}"`);
                     } else {
@@ -2168,7 +2168,7 @@ class PollingService {
                 await this.saveValidatedAddress(userId, contact, custFinal, customerAddress, custGeocoded.zip || null, custGeocoded, 'chat_message');
                 if (custNorm !== cfNorm) {
                   try {
-                    const upd = await respondio.updateContactCustomFields(contact.id, { Address: custFinal });
+                    const upd = await respondio.updateContactCustomFields(contact.id, { [cfAddress?.name || 'Address']: custFinal });
                     if (upd.success) {
                       console.log(`[AddressScan] Campo Address actualizado en Respond para ${contactName} (${contact.id}): "${contactFieldAddress || '(vacio)'}" -> "${custFinal}"`);
                     } else {
@@ -2185,7 +2185,7 @@ class PollingService {
               // Address en Respond esta vacio o desactualizado — push igual.
               if (custNorm === existValidNorm && cfNorm !== existValidNorm) {
                 try {
-                  const upd = await respondio.updateContactCustomFields(contact.id, { Address: existing.validated });
+                  const upd = await respondio.updateContactCustomFields(contact.id, { [cfAddress?.name || 'Address']: existing.validated });
                   if (upd.success) {
                     console.log(`[AddressScan] Campo Address vacio en Respond, pusheando direccion ya validada para ${contactName} (${contact.id}): "${existing.validated}"`);
                   }
@@ -2218,7 +2218,7 @@ class PollingService {
                         console.log(`[AddressScan] IA detectó nueva dirección para ${contactName} (${contact.id}): "${aiFinal}" (anterior: "${existing.validated}")`);
                         await this.saveValidatedAddress(userId, contact, aiFinal, aiExtracted.fullAddress, aiGeocoded.zip || null, aiGeocoded, 'chat_message');
                         try {
-                          await respondio.updateContactCustomFields(contact.id, { Address: aiFinal });
+                          await respondio.updateContactCustomFields(contact.id, { [cfAddress?.name || 'Address']: aiFinal });
                         } catch (_) {}
                         this.addressScannedContacts.delete(contactIdStr);
                         return;
@@ -2269,7 +2269,7 @@ class PollingService {
               // Limpiar también el campo Address en Respond.io si quedó con la del local.
               if (cfNorm && businessAddrNorms.some(n => n === cfNorm)) {
                 try {
-                  await respondio.updateContactCustomFields(contact.id, { Address: null });
+                  await respondio.updateContactCustomFields(contact.id, { [cfAddress?.name || 'Address']: null });
                   console.log(`[AddressScan] Campo Address en Respond limpiado (era la del local) para ${contactName} (${contact.id}).`);
                 } catch (_) {}
               }
@@ -2678,10 +2678,10 @@ class PollingService {
                   console.log(`[AddressScan] Placeholder con dirección de contacto para ${customerName}: "${placeholderAddress}"`);
 
                   try {
-                    await respondio.updateContactCustomFields(contact.id, {
-                      address: placeholderAddress,
-                      ...(placeholderZip ? { zip_code: placeholderZip } : {})
-                    });
+                    const addrFieldName = cfAddress?.name || 'Address';
+                    const fields = { [addrFieldName]: placeholderAddress };
+                    if (placeholderZip) fields['Zip Code'] = placeholderZip;
+                    await respondio.updateContactCustomFields(contact.id, fields);
                   } catch (updateErr) {}
                 } else {
                   placeholderAddress = addressText;
