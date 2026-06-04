@@ -33,7 +33,7 @@ export default function PlannerLayout() {
   ]
 
   const handleSupport = () => {
-    window.open('https://wa.me/18622862862', '_blank', 'noopener,noreferrer')
+    window.open('/soporte', '_blank', 'noopener,noreferrer')
     closeDrawer()
   }
 
