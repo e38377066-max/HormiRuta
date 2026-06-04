@@ -1320,7 +1320,7 @@ export default function DispatchMap() {
         <div className="dispatch-header">
           <h2>
             <span className="material-icons">local_shipping</span>
-            Despacho
+            {t('dispatch.header')}
           </h2>
         </div>
 
@@ -1328,19 +1328,19 @@ export default function DispatchMap() {
           <div className="dispatch-stats">
             <div className="dstat" style={{ borderColor: '#4caf50' }}>
               <span className="dstat-val">{stats.approved || 0}</span>
-              <span className="dstat-label">Aprobadas</span>
+              <span className="dstat-label">{t('dispatch.stats.approved')}</span>
             </div>
             <div className="dstat" style={{ borderColor: '#2196f3' }}>
               <span className="dstat-val">{stats.ordered || 0}</span>
-              <span className="dstat-label">Ordenadas</span>
+              <span className="dstat-label">{t('dispatch.stats.ordered')}</span>
             </div>
             <div className="dstat" style={{ borderColor: '#0d47a1' }}>
               <span className="dstat-val">{stats.pickup_ready || 0}</span>
-              <span className="dstat-label">Listo Recoger</span>
+              <span className="dstat-label">{t('dispatch.stats.pickupReady')}</span>
             </div>
             <div className="dstat" style={{ borderColor: '#ff9800' }}>
               <span className="dstat-val">{stats.on_delivery || 0}</span>
-              <span className="dstat-label">En Entrega</span>
+              <span className="dstat-label">{t('dispatch.stats.onDelivery')}</span>
             </div>
             <div className="dstat" style={{ borderColor: '#9c27b0' }}>
               <span className="dstat-val">{stats.ups_shipped || 0}</span>
@@ -1348,7 +1348,7 @@ export default function DispatchMap() {
             </div>
             <div className="dstat" style={{ borderColor: '#ff6d00' }}>
               <span className="dstat-val">{stats.delivered || 0}</span>
-              <span className="dstat-label">Entregadas</span>
+              <span className="dstat-label">{t('dispatch.stats.delivered')}</span>
             </div>
             <button
               className="dstat-cleanup-btn"

@@ -13,7 +13,7 @@ const fmtDate = (d) => {
 
 export default function AccountingPage() {
   const navigate = useNavigate()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState('summary')
 
   const [report, setReport] = useState([])
@@ -192,8 +192,7 @@ export default function AccountingPage() {
   const monthLabel = (my) => {
     if (!my) return ''
     const [y, m] = my.split('-')
-    const names = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-    return `${names[parseInt(m) - 1]} ${y}`
+    return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString(i18n.language, { month: 'long', year: 'numeric' })
   }
 
   const handleSummaryFilter = (e) => {
@@ -296,7 +295,7 @@ export default function AccountingPage() {
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
-        <h1>Contabilidad</h1>
+        <h1>{t('admin.accounting.title')}</h1>
       </div>
 
       <div className="accounting-tabs">
@@ -305,21 +304,21 @@ export default function AccountingPage() {
           onClick={() => setActiveTab('summary')}
         >
           <span className="material-icons">people</span>
-          Resumen por Chofer
+          {t('admin.accounting.driverSummary')}
         </button>
         <button
           className={`accounting-tab ${activeTab === 'deliveries' ? 'active' : ''}`}
           onClick={() => setActiveTab('deliveries')}
         >
           <span className="material-icons">local_shipping</span>
-          Reporte de Entregas
+          {t('admin.accounting.deliveryReport')}
         </button>
         <button
           className={`accounting-tab ${activeTab === 'payments' ? 'active' : ''}`}
           onClick={() => setActiveTab('payments')}
         >
           <span className="material-icons">payments</span>
-          Pagos a Empresa
+          {t('admin.accounting.companyPayments')}
         </button>
       </div>
 
@@ -329,31 +328,31 @@ export default function AccountingPage() {
             <form className="accounting-filter-form" onSubmit={handleSummaryFilter}>
               <div className="accounting-filter-fields">
                 <div className="field-group">
-                  <label>Chofer</label>
+                  <label>{t('admin.accounting.driver')}</label>
                   <select value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)}>
-                    <option value="">Todos los choferes</option>
+                    <option value="">{t('admin.accounting.allDrivers')}</option>
                     {drivers.map(d => (
                       <option key={d.id} value={d.id}>{d.username || d.email}</option>
                     ))}
                   </select>
                 </div>
                 <div className="field-group">
-                  <label>Desde</label>
+                  <label>{t('admin.accounting.from')}</label>
                   <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
                 </div>
                 <div className="field-group">
-                  <label>Hasta</label>
+                  <label>{t('admin.accounting.to')}</label>
                   <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
                 </div>
               </div>
               <div className="accounting-filter-actions">
                 <button type="submit" className="btn-primary" disabled={loading}>
                   <span className="material-icons">filter_list</span>
-                  Filtrar
+                  {t('admin.accounting.filter')}
                 </button>
                 <button type="button" className="btn-secondary" onClick={exportSummaryCSV} disabled={report.length === 0}>
                   <span className="material-icons">download</span>
-                  Exportar CSV
+                  {t('admin.accounting.exportCsv')}
                 </button>
               </div>
             </form>
@@ -365,7 +364,7 @@ export default function AccountingPage() {
             <div className="content-card">
               <div className="empty-state">
                 <span className="material-icons">receipt_long</span>
-                <p>No hay entregas en el periodo seleccionado</p>
+                <p>{t('admin.accounting.noDeliveries')}</p>
               </div>
             </div>
           ) : (
@@ -373,14 +372,14 @@ export default function AccountingPage() {
               <table className="data-table accounting-table">
                 <thead>
                   <tr>
-                    <th>Chofer</th>
-                    <th style={{ textAlign: 'center' }}>Paradas</th>
-                    <th style={{ textAlign: 'right' }}>Costo Orden</th>
-                    <th style={{ textAlign: 'right' }}>Depósito</th>
-                    <th style={{ textAlign: 'right' }}>Cobrado</th>
-                    <th style={{ textAlign: 'right' }}>Com./Parada</th>
-                    <th style={{ textAlign: 'right' }}>Total Comisión</th>
-                    <th style={{ textAlign: 'right' }}>Saldo Chofer</th>
+                    <th>{t('admin.accounting.driver')}</th>
+                    <th style={{ textAlign: 'center' }}>{t('admin.accounting.stops')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.orderCost')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.deposit')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.collected')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.commissionPerStop')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.totalCommission')}</th>
+                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.driverBalance')}</th>
                     <th></th>
                   </tr>
                 </thead>

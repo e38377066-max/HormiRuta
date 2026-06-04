@@ -383,7 +383,7 @@ export default function BotMemoryPage() {
               }}
             >
               <span className="material-icons">{showKForm ? 'close' : 'add'}</span>
-              {showKForm ? 'Cancelar' : 'Agregar Texto / Prompt'}
+              {showKForm ? t('common.cancel') : t('admin.botMemory.docs.addText')}
             </button>
 
             <label style={{
@@ -393,7 +393,7 @@ export default function BotMemoryPage() {
               borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: kUploading ? 'not-allowed' : 'pointer'
             }}>
               <span className="material-icons" style={{ fontSize: 18 }}>{kUploading ? 'autorenew' : 'upload_file'}</span>
-              {kUploading ? 'Subiendo...' : 'Subir Archivo .txt'}
+              {kUploading ? t('admin.botMemory.docs.uploading') : t('admin.botMemory.docs.uploadFile')}
               <input type="file" accept=".txt,.md" onChange={handleKUpload} style={{ display: 'none' }} disabled={kUploading} />
             </label>
           </div>
@@ -402,12 +402,12 @@ export default function BotMemoryPage() {
             <div className="admin-section" style={{ marginBottom: 20 }}>
               <div className="section-header">
                 <span className="material-icons">edit_document</span>
-                <h3>{editingKId ? 'Editar Documento' : 'Nuevo Documento / Prompt'}</h3>
+                <h3>{editingKId ? t('admin.botMemory.docs.editTitle') : t('admin.botMemory.docs.newTitle')}</h3>
               </div>
               <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div>
-                    <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Título</label>
+                    <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>{t('admin.botMemory.docs.titleLabel')}</label>
                     <input
                       type="text"
                       value={kForm.title}
@@ -417,7 +417,7 @@ export default function BotMemoryPage() {
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Tipo</label>
+                    <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>{t('admin.botMemory.docs.typeLabel')}</label>
                     <select
                       value={kForm.knowledge_type}
                       onChange={e => setKForm(f => ({ ...f, knowledge_type: e.target.value }))}
@@ -429,7 +429,7 @@ export default function BotMemoryPage() {
                 </div>
                 <div>
                   <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>
-                    Contenido — este texto será parte del contexto que el bot usará para responder
+                    {t('admin.botMemory.docs.contentLabel')}
                   </label>
                   <textarea
                     value={kForm.content}
@@ -438,14 +438,14 @@ export default function BotMemoryPage() {
                     rows={10}
                     style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', fontSize: 13, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
                   />
-                  <p style={{ color: '#475569', fontSize: 12, marginTop: 6 }}>{kForm.content.length} caracteres</p>
+                  <p style={{ color: '#475569', fontSize: 12, marginTop: 6 }}>{kForm.content.length} {t('admin.botMemory.docs.charCount')}</p>
                 </div>
                 <button
                   onClick={handleKSave}
                   disabled={kSaving}
                   style={{ alignSelf: 'flex-start', background: 'linear-gradient(135deg, #5b8def, #3b70d4)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: kSaving ? 'not-allowed' : 'pointer', opacity: kSaving ? 0.7 : 1 }}
                 >
-                  {kSaving ? 'Guardando...' : 'Guardar'}
+                  {kSaving ? t('common.saving') : t('admin.botMemory.docs.save')}
                 </button>
               </div>
             </div>
@@ -457,13 +457,13 @@ export default function BotMemoryPage() {
             const capChars = 6000
             const pct = Math.min(100, Math.round((activeChars / capChars) * 100))
             const color = pct < 50 ? '#22c55e' : pct < 85 ? '#f59e0b' : '#ef4444'
-            const label = pct < 50 ? 'Uso bajo — excelente para el consumo de créditos' : pct < 85 ? 'Uso moderado — considera reducir documentos grandes' : 'Límite alto — los documentos se truncarán automáticamente'
+            const label = pct < 50 ? t('admin.botMemory.docs.usageLow') : pct < 85 ? t('admin.botMemory.docs.usageMed') : t('admin.botMemory.docs.usageHigh')
             return (
               <div style={{ marginBottom: 16, background: '#0f172a', borderRadius: 10, padding: '12px 16px', border: `1px solid ${color}33` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <span style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span className="material-icons" style={{ fontSize: 15, color }}>token</span>
-                    Contexto inyectado por mensaje: <strong style={{ color }}>{activeChars.toLocaleString()} / {capChars.toLocaleString()} caracteres ({pct}%)</strong>
+                    {t('admin.botMemory.docs.contextPerMessage')}: <strong style={{ color }}>{activeChars.toLocaleString()} / {capChars.toLocaleString()} {t('admin.botMemory.docs.charCount')} ({pct}%)</strong>
                   </span>
                 </div>
                 <div style={{ height: 6, background: '#1e293b', borderRadius: 4, overflow: 'hidden' }}>

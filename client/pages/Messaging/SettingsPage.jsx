@@ -1051,11 +1051,11 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">waving_hand</span>
-                Mensajes de Bienvenida
+                {t('settings.messages.welcomeTitle')}
               </h3>
               
               <div className="field-group">
-                <label>Bienvenida para clientes existentes</label>
+                <label>{t('settings.messages.welcomeExisting')}</label>
                 <textarea
                   rows={3}
                   value={form.welcome_existing_customer}
@@ -1065,7 +1065,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="field-group">
-                <label>Bienvenida para clientes nuevos</label>
+                <label>{t('settings.messages.welcomeNew')}</label>
                 <textarea
                   rows={3}
                   value={form.welcome_new_customer}
@@ -1075,7 +1075,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="field-group">
-                <label>Respuesta cuando ya tiene informacion previa</label>
+                <label>{t('settings.messages.hasInfoResponse')}</label>
                 <textarea
                   rows={3}
                   value={form.has_info_response}
@@ -1088,11 +1088,11 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">pin_drop</span>
-                Mensajes de Validacion ZIP
+                {t('settings.messages.zipTitle')}
               </h3>
               
               <div className="field-group">
-                <label>Solicitud de codigo postal</label>
+                <label>{t('settings.messages.requestZip')}</label>
                 <textarea
                   rows={3}
                   value={form.request_zip_message}
@@ -1102,7 +1102,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="field-group">
-                <label>Recordatorio de codigo postal</label>
+                <label>{t('settings.messages.remindZip')}</label>
                 <textarea
                   rows={3}
                   value={form.remind_zip_message}
@@ -1115,11 +1115,11 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">local_shipping</span>
-                Mensajes de Cobertura
+                {t('settings.messages.coverageTitle')}
               </h3>
               
               <div className="field-group">
-                <label>Mensaje de cobertura confirmada</label>
+                <label>{t('settings.messages.coverageConfirmed')}</label>
                 <textarea
                   rows={3}
                   value={form.coverage_message}
@@ -1129,7 +1129,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="field-group">
-                <label>Mensaje sin cobertura</label>
+                <label>{t('settings.messages.noCoverage')}</label>
                 <textarea
                   rows={3}
                   value={form.no_coverage_message}
@@ -1142,11 +1142,11 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">receipt_long</span>
-                Mensajes de Ordenes
+                {t('settings.messages.ordersTitle')}
               </h3>
               
               <div className="field-group">
-                <label>Mensaje de orden confirmada</label>
+                <label>{t('settings.messages.orderConfirmed')}</label>
                 <textarea
                   rows={3}
                   value={form.order_confirmed_message}
@@ -1155,7 +1155,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="field-group">
-                <label>Mensaje de repartidor asignado</label>
+                <label>{t('settings.messages.driverAssigned')}</label>
                 <textarea
                   rows={3}
                   value={form.driver_assigned_message}
@@ -1164,7 +1164,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="field-group">
-                <label>Mensaje de orden completada</label>
+                <label>{t('settings.messages.orderCompleted')}</label>
                 <textarea
                   rows={3}
                   value={form.order_completed_message}
@@ -1180,9 +1180,9 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">timer</span>
-                Seguimiento Automatico
+                {t('settings.automation.followupTitle')}
               </h3>
-              <p className="description">Si el cliente no responde despues de un tiempo, el bot envia un recordatorio. Al segundo intento sin respuesta, se detiene.</p>
+              <p className="description">{t('settings.automation.followupDesc')}</p>
               
               <div className="checkbox-row">
                 <label>
@@ -1191,14 +1191,14 @@ export default function SettingsPage() {
                     checked={form.followup_enabled}
                     onChange={(e) => handleInputChange('followup_enabled', e.target.checked)}
                   />
-                  <span>Activar seguimiento automatico</span>
+                  <span>{t('settings.automation.enableFollowup')}</span>
                 </label>
               </div>
 
               {form.followup_enabled && (
                 <>
                   <div className="field-group">
-                    <label>Tiempo de espera (minutos)</label>
+                    <label>{t('settings.automation.timeoutLabel')}</label>
                     <input
                       type="number"
                       min="1"
@@ -1207,12 +1207,12 @@ export default function SettingsPage() {
                       onChange={(e) => handleInputChange('followup_timeout_minutes', parseInt(e.target.value) || 5)}
                     />
                     <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
-                      Si nadie responde en este tiempo, se envia el mensaje de seguimiento
+                      {t('settings.automation.timeoutHint')}
                     </small>
                   </div>
 
                   <div className="field-group">
-                    <label>1er mensaje de seguimiento</label>
+                    <label>{t('settings.automation.firstFollowup')}</label>
                     <textarea
                       rows={3}
                       value={form.followup_message}
@@ -1220,12 +1220,12 @@ export default function SettingsPage() {
                       placeholder="Hola! Sigues ahi? Quedamos pendientes de nuestra conversacion..."
                     />
                     <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
-                      Se envia la primera vez que el cliente no responde
+                      {t('settings.automation.firstFollowupHint')}
                     </small>
                   </div>
 
                   <div className="field-group">
-                    <label>2do mensaje de seguimiento</label>
+                    <label>{t('settings.automation.secondFollowup')}</label>
                     <textarea
                       rows={3}
                       value={form.followup_message_2}
@@ -1233,7 +1233,7 @@ export default function SettingsPage() {
                       placeholder="Hola de nuevo! Como no recibimos respuesta, pausaremos la conversacion..."
                     />
                     <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
-                      Se envia la segunda vez. Despues de este, el bot se detiene para esa conversacion
+                      {t('settings.automation.secondFollowupHint')}
                     </small>
                   </div>
                 </>
@@ -1243,7 +1243,7 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons">auto_fix_high</span>
-                Automatizacion
+                {t('settings.automation.automationTitle')}
               </h3>
               
               <div className="checkbox-row">
@@ -1253,7 +1253,7 @@ export default function SettingsPage() {
                     checked={form.auto_validate_addresses}
                     onChange={(e) => handleInputChange('auto_validate_addresses', e.target.checked)}
                   />
-                  <span>Validar direcciones automaticamente</span>
+                  <span>{t('settings.automation.validateAddresses')}</span>
                 </label>
               </div>
               
@@ -1264,7 +1264,7 @@ export default function SettingsPage() {
                     checked={form.auto_respond_coverage}
                     onChange={(e) => handleInputChange('auto_respond_coverage', e.target.checked)}
                   />
-                  <span>Responder automaticamente si hay cobertura</span>
+                  <span>{t('settings.automation.autoRespondCoverage')}</span>
                 </label>
               </div>
               
@@ -1275,7 +1275,7 @@ export default function SettingsPage() {
                     checked={form.auto_respond_no_coverage}
                     onChange={(e) => handleInputChange('auto_respond_no_coverage', e.target.checked)}
                   />
-                  <span>Responder automaticamente si NO hay cobertura</span>
+                  <span>{t('settings.automation.autoRespondNoCoverage')}</span>
                 </label>
               </div>
             </div>
@@ -1286,10 +1286,10 @@ export default function SettingsPage() {
             <div className="settings-card">
               <h3>
                 <span className="material-icons" style={{color: '#a78bfa'}}>psychology</span>
-                Cerebro de Inteligencia Artificial
+                {t('settings.ai.title')}
               </h3>
               <p className="description">
-                Conecta OpenAI (ChatGPT) al bot para que entienda mensajes naturales, detecte intenciones y sepa exactamente cuando intervenir en los chats sin interrumpir a los agentes.
+                {t('settings.ai.description')}
               </p>
 
               <div className="checkbox-row" style={{marginBottom: '20px'}}>
@@ -1299,7 +1299,7 @@ export default function SettingsPage() {
                     checked={form.ai_enabled}
                     onChange={(e) => handleInputChange('ai_enabled', e.target.checked)}
                   />
-                  <span style={{fontWeight: 600}}>Activar Cerebro IA</span>
+                  <span style={{fontWeight: 600}}>{t('settings.ai.enable')}</span>
                 </label>
               </div>
 
@@ -1309,13 +1309,13 @@ export default function SettingsPage() {
                     <div style={{background: '#052e16', border: '1px solid #16a34a', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px'}}>
                       <span className="material-icons" style={{color: '#4ade80'}}>verified</span>
                       <div>
-                        <strong style={{color: '#4ade80'}}>API Key de OpenAI configurada</strong>
-                        <p style={{color: '#86efac', margin: '2px 0 0', fontSize: '13px'}}>La clave ya esta activa. El cerebro IA esta listo para usarse.</p>
+                        <strong style={{color: '#4ade80'}}>{t('settings.ai.apiKeyConfigured')}</strong>
+                        <p style={{color: '#86efac', margin: '2px 0 0', fontSize: '13px'}}>{t('settings.ai.apiKeyActive')}</p>
                       </div>
                     </div>
                   )}
                   <div className="field-group">
-                    <label>API Key de OpenAI {hasOpenAIKey ? '(opcional — solo si quieres cambiarla)' : ''}</label>
+                    <label>{t('settings.ai.apiKeyLabel')} {hasOpenAIKey ? t('settings.ai.apiKeyOptional') : ''}</label>
                     <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
                       <input
                         type={showOpenAIKey ? 'text' : 'password'}
@@ -1336,7 +1336,7 @@ export default function SettingsPage() {
                     </div>
                     {!hasOpenAIKey && (
                       <small style={{color: '#aaa', marginTop: '4px', display: 'block'}}>
-                        Obtén tu API key en platform.openai.com → API Keys
+                        {t('settings.ai.apiKeyHint')}
                       </small>
                     )}
                   </div>
@@ -1348,18 +1348,18 @@ export default function SettingsPage() {
                       disabled={testingOpenAI || (!form.openai_api_key && !hasOpenAIKey)}
                     >
                       <span className="material-icons">bolt</span>
-                      {testingOpenAI ? 'Probando...' : 'Probar Conexion'}
+                      {testingOpenAI ? t('settings.ai.testing') : t('settings.ai.testAction')}
                     </button>
                     {openAIStatus === 'ok' && (
                       <span style={{color: '#4ade80', display: 'flex', alignItems: 'center', gap: '4px'}}>
                         <span className="material-icons">check_circle</span>
-                        Conexion exitosa con OpenAI
+                        {t('settings.ai.testOk')}
                       </span>
                     )}
                     {openAIStatus === 'error' && (
                       <span style={{color: '#f87171', display: 'flex', alignItems: 'center', gap: '4px'}}>
                         <span className="material-icons">error</span>
-                        Error de conexion. Verifica tu API key
+                        {t('settings.ai.testError')}
                       </span>
                     )}
                   </div>
@@ -1372,11 +1372,11 @@ export default function SettingsPage() {
                           checked={form.conversational_mode}
                           onChange={(e) => handleInputChange('conversational_mode', e.target.checked)}
                         />
-                        <span style={{fontWeight: 600, color: '#fbbf24'}}>🧠 Modo Vendedor Humano (conversacional)</span>
+                        <span style={{fontWeight: 600, color: '#fbbf24'}}>{t('settings.ai.conversationalTitle')}</span>
                       </label>
                     </div>
                     <p style={{color: '#cbd5e1', fontSize: '13px', margin: '4px 0 0 26px', lineHeight: '1.5'}}>
-                      Cuando esté activo, el bot dejará de seguir un guion rígido y conversará libremente como un agente humano: responderá preguntas laterales, mantendrá el objetivo (conseguir ZIP y producto), y aprenderá del estilo de tus agentes y de cada cliente con el tiempo. Solo activarlo cuando ya tengas el cerebro IA probado.
+                      {t('settings.ai.conversationalDesc')}
                     </p>
                   </div>
                 </>
@@ -1388,42 +1388,42 @@ export default function SettingsPage() {
                 <div className="settings-card">
                   <h3>
                     <span className="material-icons" style={{color: '#60a5fa'}}>auto_awesome</span>
-                    Que puede hacer el Cerebro IA
+                    {t('settings.ai.capabilitiesTitle')}
                   </h3>
                   <div style={{display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '8px'}}>
                     <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                       <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
                       <div>
-                        <strong>Entiende lenguaje natural</strong>
-                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>Interpreta "simon", "nel", "ta bien", "qro me intereza tarjetas" y cualquier variante del español</p>
+                        <strong>{t('settings.ai.cap1Title')}</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>{t('settings.ai.cap1Desc')}</p>
                       </div>
                     </div>
                     <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                       <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
                       <div>
-                        <strong>Interviene solo cuando debe</strong>
-                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>Si hay un agente atendiendo y el cliente pregunta "tienen gorras?" o "a que hora cierran?", responde eso sin interferir con el agente</p>
+                        <strong>{t('settings.ai.cap2Title')}</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>{t('settings.ai.cap2Desc')}</p>
                       </div>
                     </div>
                     <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                       <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
                       <div>
-                        <strong>Detecta frustracion con mas precision</strong>
-                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>Identifica cuando un cliente esta molesto aunque no use palabras exactas de frustración</p>
+                        <strong>{t('settings.ai.cap3Title')}</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>{t('settings.ai.cap3Desc')}</p>
                       </div>
                     </div>
                     <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                       <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
                       <div>
-                        <strong>Conoce el negocio</strong>
-                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>Tiene todo el contexto de Area 862 Graphics: productos, zona DFW, horarios, telefonos — y no inventa informacion que no sabe</p>
+                        <strong>{t('settings.ai.cap4Title')}</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>{t('settings.ai.cap4Desc')}</p>
                       </div>
                     </div>
                     <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
                       <span className="material-icons" style={{color: '#f59e0b', flexShrink: 0}}>info</span>
                       <div>
-                        <strong>El flujo del bot NO cambia</strong>
-                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>El bot sigue el mismo proceso (ZIP → productos → agente). La IA solo hace que lo entienda mejor y sea mas inteligente en casos especiales</p>
+                        <strong>{t('settings.ai.cap5Title')}</strong>
+                        <p style={{color: '#aaa', margin: '2px 0 0', fontSize: '13px'}}>{t('settings.ai.cap5Desc')}</p>
                       </div>
                     </div>
                   </div>
@@ -1432,25 +1432,25 @@ export default function SettingsPage() {
                 <div className="settings-card">
                   <h3>
                     <span className="material-icons" style={{color: '#f59e0b'}}>attach_money</span>
-                    Costo estimado de OpenAI
+                    {t('settings.ai.costTitle')}
                   </h3>
-                  <p className="description">El modelo que usa el bot es <strong>gpt-4o-mini</strong>, el mas economico y rapido de OpenAI.</p>
+                  <p className="description">{t('settings.ai.costDesc')}</p>
                   <div style={{background: '#1a1a1a', borderRadius: '8px', padding: '16px', marginTop: '12px'}}>
                     <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px'}}>
-                      <span style={{color: '#aaa'}}>Costo por 1,000 conversaciones</span>
+                      <span style={{color: '#aaa'}}>{t('settings.ai.cost1k')}</span>
                       <span style={{color: '#4ade80', fontWeight: 600}}>~$0.50 USD</span>
                     </div>
                     <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px'}}>
-                      <span style={{color: '#aaa'}}>Costo mensual tipico (bajo volumen)</span>
+                      <span style={{color: '#aaa'}}>{t('settings.ai.costMonthlyLow')}</span>
                       <span style={{color: '#4ade80', fontWeight: 600}}>$1 - $5 USD</span>
                     </div>
                     <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                      <span style={{color: '#aaa'}}>Costo mensual tipico (alto volumen)</span>
+                      <span style={{color: '#aaa'}}>{t('settings.ai.costMonthlyHigh')}</span>
                       <span style={{color: '#f59e0b', fontWeight: 600}}>$10 - $30 USD</span>
                     </div>
                   </div>
                   <small style={{color: '#666', marginTop: '8px', display: 'block'}}>
-                    El costo exacto depende del volumen de mensajes. Puedes monitorear el uso en tu cuenta de OpenAI en platform.openai.com/usage
+                    {t('settings.ai.costNote')}
                   </small>
                 </div>
               </>
@@ -1462,7 +1462,7 @@ export default function SettingsPage() {
       <div className="settings-footer">
         <button className="btn-primary btn-large" onClick={handleSave} disabled={saving}>
           <span className="material-icons">save</span>
-          {saving ? 'Guardando...' : 'Guardar Configuracion'}
+          {saving ? t('settings.saving') : t('settings.save')}
         </button>
       </div>
     </div>
