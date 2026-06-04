@@ -45,19 +45,22 @@
 }
 
 .q-avatar {
-  width: 32px;
-  height: 32px;
-  background: white;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .q-avatar img {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
 }
 
 .q-toolbar-title {

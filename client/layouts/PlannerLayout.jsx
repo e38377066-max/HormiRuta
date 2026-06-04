@@ -32,6 +32,11 @@ export default function PlannerLayout() {
     { icon: 'admin_panel_settings', labelKey: 'nav.adminPanel', path: '/messaging', adminOnly: true }
   ]
 
+  const handleSupport = () => {
+    window.open('https://wa.me/18622862862', '_blank', 'noopener,noreferrer')
+    closeDrawer()
+  }
+
   const contextValue = {
     toggleDrawer,
     closeDrawer,
@@ -54,7 +59,7 @@ export default function PlannerLayout() {
               <span className="material-icons">person</span>
             </div>
             <div className="user-info">
-              <div className="user-name">{user?.name || t('common.noName')}</div>
+              <div className="user-name">{user?.name || user?.username || t('common.noName')}</div>
               <div className="user-email">{user?.email}</div>
             </div>
           </div>
@@ -75,6 +80,10 @@ export default function PlannerLayout() {
           </nav>
           
           <div className="drawer-footer">
+            <button className="drawer-item" onClick={handleSupport} style={{color: '#25d366'}}>
+              <span className="material-icons">support_agent</span>
+              <span>{t('nav.support')}</span>
+            </button>
             <button className="drawer-item text-negative" onClick={handleLogout}>
               <span className="material-icons">logout</span>
               <span>{t('nav.logout')}</span>

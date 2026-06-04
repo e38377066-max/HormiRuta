@@ -2478,7 +2478,7 @@ export default function DispatchMap() {
             <div className="drivers-tab">
               <div className="drivers-section">
                 <div className="drivers-section-header">
-                  <h3><span className="material-icons">manage_accounts</span> Usuarios del Sistema</h3>
+                  <h3><span className="material-icons">manage_accounts</span> {t('dispatch.systemUsers')}</h3>
                   <button className="dbtn outline small" onClick={fetchAllUsers} disabled={loadingUsers}>
                     <span className="material-icons">{loadingUsers ? 'hourglass_empty' : 'refresh'}</span>
                   </button>
@@ -2513,7 +2513,7 @@ export default function DispatchMap() {
 
               <div className="drivers-section">
                 <div className="drivers-section-header">
-                  <h3><span className="material-icons">sync</span> Importar desde Respond.io</h3>
+                  <h3><span className="material-icons">sync</span> {t('dispatch.importFromRespond')}</h3>
                   <button className="dbtn outline small" onClick={fetchRespondUsers} disabled={loadingRespondUsers}>
                     <span className="material-icons">{loadingRespondUsers ? 'hourglass_empty' : 'refresh'}</span>
                     {loadingRespondUsers ? t('common.loading') : t('common.update')}
@@ -2549,7 +2549,7 @@ export default function DispatchMap() {
                           </div>
                           <div className="ru-info">
                             <strong>{u.name}</strong>
-                            <span>{u.email || 'Sin email'}</span>
+                            <span>{u.email || t('common.noEmail')}</span>
                             {u.role && <span className="ru-role">{u.role}</span>}
                           </div>
                           {u.already_exists && <span className="driver-badge synced">{t('dispatch.alreadyRegistered', { role: u.existing_role })}</span>}
@@ -2563,7 +2563,7 @@ export default function DispatchMap() {
                           <div className="password-input-wrapper">
                             <input
                               type={showImportPassword ? 'text' : 'password'}
-                              placeholder="Mínimo 6 caracteres"
+                              placeholder={t('dispatch.min6chars')}
                               value={importPassword}
                               onChange={e => setImportPassword(e.target.value)}
                               className="import-password-input"
@@ -2579,7 +2579,7 @@ export default function DispatchMap() {
                         </div>
                         <button className="dbtn purple full" onClick={handleSyncDrivers}>
                           <span className="material-icons">person_add</span>
-                          Importar {selectedRespondUsers.length} chofer{selectedRespondUsers.length > 1 ? 'es' : ''}
+                          {t('dispatch.importDriversBtn', { count: selectedRespondUsers.length })}
                         </button>
                       </div>
                     )}
@@ -2589,7 +2589,7 @@ export default function DispatchMap() {
 
               <div className="drivers-section">
                 <div className="drivers-section-header">
-                  <h3><span className="material-icons">paid</span> Comisión por Parada</h3>
+                  <h3><span className="material-icons">paid</span> {t('dispatch.commissionPerStop')}</h3>
                 </div>
                 <p className="gc-desc">{t('dispatch.commissionDesc')}</p>
                 <div className="driver-commissions-list">

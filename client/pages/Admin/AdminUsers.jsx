@@ -37,7 +37,7 @@ export default function AdminUsers() {
   const filteredUsers = users.filter(u => {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
-    return (u.name || '').toLowerCase().includes(query) ||
+    return (u.name || u.username || '').toLowerCase().includes(query) ||
            (u.email || '').toLowerCase().includes(query)
   })
 
@@ -149,8 +149,8 @@ export default function AdminUsers() {
                 <tr key={user.id}>
                   <td>
                     <div className="user-cell">
-                      <div className="avatar">{getInitials(user.name, user.email)}</div>
-                      <span>{user.name || t('admin.users.noName')}</span>
+                      <div className="avatar">{getInitials(user.name || user.username, user.email)}</div>
+                      <span>{user.name || user.username || t('admin.users.noName')}</span>
                     </div>
                   </td>
                   <td>{user.email}</td>
@@ -209,7 +209,7 @@ export default function AdminUsers() {
                 <label>{t('admin.users.fieldName')}</label>
                 <input
                   type="text"
-                  value={editingUser.name || ''}
+                  value={editingUser.name || editingUser.username || ''}
                   onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
                 />
               </div>

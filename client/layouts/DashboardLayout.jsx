@@ -103,6 +103,11 @@ export default function DashboardLayout() {
             <span>{t('nav.myAccount')}</span>
           </NavLink>
 
+          <a className="q-item" href="https://wa.me/18622862862" target="_blank" rel="noopener noreferrer" onClick={() => setDrawerOpen(false)}>
+            <span className="material-icons q-item-icon" style={{color: '#25d366'}}>support_agent</span>
+            <span>{t('nav.support')}</span>
+          </a>
+
           <button className="q-item logout" onClick={handleLogout}>
             <span className="material-icons q-item-icon" style={{color: '#f44336'}}>logout</span>
             <span>{t('nav.logout')}</span>

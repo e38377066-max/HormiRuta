@@ -19,6 +19,7 @@
     "active": "Active",
     "inactive": "Inactive",
     "noName": "No name",
+    "noEmail": "No email",
     "back": "Back",
     "error": "Error",
     "success": "Success",
@@ -67,7 +68,8 @@
     "myAccount": "My Account",
     "logout": "Log Out",
     "myRoute": "My Route",
-    "myAccounting": "My Accounting"
+    "myAccounting": "My Accounting",
+    "support": "Support"
   },
   "auth": {
     "subtitle": "Sign in to your account to continue",
@@ -238,6 +240,11 @@
     "deliveryEvidence": "Delivery Evidence",
     "receivedBy": "Received by",
     "sendMessage": "Send message",
+    "systemUsers": "System Users",
+    "importFromRespond": "Import from Respond.io",
+    "commissionPerStop": "Commission per Stop",
+    "min6chars": "Minimum 6 characters",
+    "importDriversBtn": "Import {{count}} driver(s)",
     "whatsappTemplates": "WhatsApp Templates",
     "loadingTemplates": "Loading templates...",
     "noTemplates": "No templates available. Check Respond.io configuration and channel.",
