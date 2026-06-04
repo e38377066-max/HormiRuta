@@ -1016,7 +1016,7 @@ export default function SettingsPage() {
                         </button>
                       </div>
                       <div className="product-message-field">
-                        <label>Mensaje de informacion para {product.name}:</label>
+                        <label>{t('settings.flow.productInfoMsg', {name: product.name})}</label>
                         <textarea
                           rows={3}
                           value={product.message || ''}
@@ -1035,7 +1035,7 @@ export default function SettingsPage() {
 
               {form.products_list && form.products_list.length > 0 && (
                 <div className="menu-preview" style={{ marginTop: '16px' }}>
-                  <label>Mensaje del menu de productos</label>
+                  <label>{t('settings.flow.productMenuMsg')}</label>
                   <div className="preview-box">
                     {form.products_list.map((p, i) => `${i + 1}. ${p.name}`).join('\n')}
                   </div>

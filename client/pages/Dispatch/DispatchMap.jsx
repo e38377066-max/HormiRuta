@@ -473,9 +473,9 @@ export default function DispatchMap() {
 
         const infoWindowLine = new window.google.maps.InfoWindow({
           content: `<div style="font-family:sans-serif;padding:4px 2px">
-            <strong style="color:${color}">&#9632; ${route.name || 'Ruta'}</strong><br/>
-            ${driverName ? `<span style="color:#555">Chofer: <strong>${driverName}</strong></span><br/>` : ''}
-            <span style="color:#888;font-size:12px">${validStops.length} paradas</span>
+            <strong style="color:${color}">&#9632; ${route.name || t('dispatch.route')}</strong><br/>
+            ${driverName ? `<span style="color:#555">${t('dispatch.driver')} <strong>${driverName}</strong></span><br/>` : ''}
+            <span style="color:#888;font-size:12px">${validStops.length} ${t('dispatch.stops')}</span>
           </div>`
         })
         polyline.addListener('click', (e) => {
@@ -1539,7 +1539,7 @@ export default function DispatchMap() {
                 display: 'flex', alignItems: 'center', gap: 8
               }}>
                 <span className="material-icons">troubleshoot</span>
-                <strong style={{ flex: 1 }}>Diagnóstico de nombres</strong>
+                <strong style={{ flex: 1 }}>{t('dispatch.namesDiagnosis')}</strong>
                 <button onClick={() => setPickupDiagnose(null)}
                   style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
                   <span className="material-icons">close</span>
@@ -1751,9 +1751,9 @@ export default function DispatchMap() {
                     autoFocus
                   />
                   <div className="create-route-btns">
-                    <button className="dbtn outline" onClick={() => { setShowCreateRoute(false); setRouteName('') }}>Cancelar</button>
+                    <button className="dbtn outline" onClick={() => { setShowCreateRoute(false); setRouteName('') }}>{t('common.cancel')}</button>
                     <button className="dbtn purple" onClick={handleCreateRoute} disabled={isCreatingRoute}>
-                      <span className="material-icons">check</span> {isCreatingRoute ? 'Creando...' : 'Crear'}
+                      <span className="material-icons">check</span> {isCreatingRoute ? t('dispatch.creating') : t('dispatch.create')}
                     </button>
                   </div>
                 </div>
@@ -1791,7 +1791,7 @@ export default function DispatchMap() {
               {filtered.length === 0 && filteredFavs.length === 0 ? (
                 <div className="empty-dispatch">
                   <span className="material-icons">inbox</span>
-                  <p>{searchQuery ? 'No se encontraron ordenes' : 'No hay ordenes con direccion'}</p>
+                  <p>{searchQuery ? t('dispatch.noOrdersFound') : t('dispatch.noOrdersAddress')}</p>
                 </div>
               ) : null}
               {regularOrders.map(order => {
@@ -1816,7 +1816,7 @@ export default function DispatchMap() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <button
                             onClick={e => { e.stopPropagation(); if (!isOrderFavorited(order)) addOrderToFavorites(order) }}
-                            title={isOrderFavorited(order) ? 'Ya en favoritos' : 'Agregar a favoritos'}
+                            title={isOrderFavorited(order) ? t('dispatch.alreadyFav') : t('dispatch.addFav')}
                             style={{ background: 'none', border: 'none', cursor: isOrderFavorited(order) ? 'default' : 'pointer', padding: '2px', display: 'flex', color: isOrderFavorited(order) ? '#FFD600' : '#555555' }}
                           >
                             <span className="material-icons" style={{ fontSize: '22px' }}>{isOrderFavorited(order) ? 'star' : 'star_border'}</span>
@@ -1932,15 +1932,15 @@ export default function DispatchMap() {
                           {editingBilling === order.id ? (
                             <div className="do-billing-edit" onClick={e => e.stopPropagation()}>
                               <div className="billing-field">
-                                <label>Costo $</label>
+                                <label>{t('admin.accounting.cost')} $</label>
                                 <input type="number" step="0.01" value={billingValues.order_cost} onChange={e => handleBillingChange('order_cost', e.target.value)} placeholder="0.00" />
                               </div>
                               <div className="billing-field">
-                                <label>Deposito $</label>
+                                <label>{t('admin.accounting.deposit')} $</label>
                                 <input type="number" step="0.01" value={billingValues.deposit_amount} onChange={e => handleBillingChange('deposit_amount', e.target.value)} placeholder="0.00" />
                               </div>
                               <div className="billing-field">
-                                <label>Total a cobrar $</label>
+                                <label>{t('admin.accounting.toCollect')} $</label>
                                 <input type="number" step="0.01" value={billingValues.total_to_collect} onChange={e => handleBillingChange('total_to_collect', e.target.value)} placeholder="0.00" />
                               </div>
                               <div className="do-notes-actions">
@@ -1953,16 +1953,16 @@ export default function DispatchMap() {
                               <span className="material-icons" style={{ fontSize: 16, color: '#4CAF50' }}>payments</span>
                               {order.total_to_collect != null ? (
                                 <span className="billing-summary">
-                                  Cobrar: <strong>${Number(order.total_to_collect).toFixed(2)}</strong>
-                                  {order.order_cost != null && <span className="billing-detail"> (Costo: ${Number(order.order_cost).toFixed(2)})</span>}
-                                  {order.deposit_amount > 0 && <span className="billing-detail"> - Dep: ${Number(order.deposit_amount).toFixed(2)}</span>}
+                                  {t('dispatch.collect')}: <strong>${Number(order.total_to_collect).toFixed(2)}</strong>
+                                  {order.order_cost != null && <span className="billing-detail"> ({t('admin.accounting.cost')}: ${Number(order.order_cost).toFixed(2)})</span>}
+                                  {order.deposit_amount > 0 && <span className="billing-detail"> - {t('admin.accounting.deposit')}: ${Number(order.deposit_amount).toFixed(2)}</span>}
                                 </span>
                               ) : (
-                                <span style={{ color: '#999', fontSize: 12 }}>Agregar cobranza</span>
+                                <span style={{ color: '#999', fontSize: 12 }}>{t('dispatch.addBilling')}</span>
                               )}
                               {order.payment_status && order.payment_status !== 'pending' && (
                                 <span className={`payment-badge ${order.payment_status}`}>
-                                  {order.payment_status === 'paid' ? 'Pagado' : 'Parcial'}
+                                  {order.payment_status === 'paid' ? t('dispatch.paid') : t('dispatch.partial')}
                                 </span>
                               )}
                             </div>
@@ -1979,16 +1979,16 @@ export default function DispatchMap() {
                             <div className="do-billing-display">
                               <span className="material-icons" style={{ fontSize: 16, color: '#4CAF50' }}>payments</span>
                               <div className="billing-info">
-                                {order.order_cost != null && <span>Costo: ${Number(order.order_cost).toFixed(2)}</span>}
-                                {order.deposit_amount > 0 && <span>Deposito: ${Number(order.deposit_amount).toFixed(2)}</span>}
-                                {order.total_to_collect != null && <strong>Cobrar: ${Number(order.total_to_collect).toFixed(2)}</strong>}
+                                {order.order_cost != null && <span>{t('admin.accounting.cost')}: ${Number(order.order_cost).toFixed(2)}</span>}
+                                {order.deposit_amount > 0 && <span>{t('admin.accounting.deposit')}: ${Number(order.deposit_amount).toFixed(2)}</span>}
+                                {order.total_to_collect != null && <strong>{t('dispatch.collect')}: ${Number(order.total_to_collect).toFixed(2)}</strong>}
                               </div>
                               {order.payment_method && (
                                 <span className="payment-method-tag">{order.payment_method}</span>
                               )}
                               {order.payment_status && order.payment_status !== 'pending' && (
                                 <span className={`payment-badge ${order.payment_status}`}>
-                                  {order.payment_status === 'paid' ? 'Pagado' : 'Parcial'}
+                                  {order.payment_status === 'paid' ? t('dispatch.paid') : t('dispatch.partial')}
                                 </span>
                               )}
                             </div>
@@ -2010,7 +2010,7 @@ export default function DispatchMap() {
                 <div className="wholesale-section">
                   <div className="wholesale-header">
                     <span className="material-icons" style={{ color: '#00897b', fontSize: 16 }}>storefront</span>
-                    <span>Mayoristas</span>
+                    <span>{t('dispatch.wholesale')}</span>
                     <span className="wholesale-count">{wholesaleOrders.length} orden{wholesaleOrders.length !== 1 ? 'es' : ''}</span>
                   </div>
                   {wholesaleGrouped.map(([clientName, clientOrders]) => (
@@ -2110,7 +2110,7 @@ export default function DispatchMap() {
               return activeRoutes.length === 0 ? (
               <div className="empty-dispatch">
                 <span className="material-icons">route</span>
-                <p>No hay rutas activas</p>
+                <p>{t('dispatch.noActiveRoutes')}</p>
               </div>
             ) : (
               activeRoutes.map((route) => {
@@ -2185,7 +2185,7 @@ export default function DispatchMap() {
                         <>
                           <div className="dr-edit-stops">
                             {stops.length === 0 ? (
-                              <p style={{ fontSize: 12, color: '#888', margin: 0 }}>Sin paradas</p>
+                              <p style={{ fontSize: 12, color: '#888', margin: 0 }}>{t('dispatch.noStops')}</p>
                             ) : stops.map((s, i) => (
                               <div key={s.id} className="dr-edit-stop-row">
                                 <span className="dr-edit-stop-num">{i + 1}</span>
@@ -2302,7 +2302,7 @@ export default function DispatchMap() {
                                   </>
                                 )}
                                 {filteredOrders.length === 0 && filteredFavs.length === 0 && (
-                                  <p style={{ fontSize: 12, color: '#888', textAlign: 'center', margin: '8px 0' }}>Sin resultados</p>
+                                  <p style={{ fontSize: 12, color: '#888', textAlign: 'center', margin: '8px 0' }}>{t('dispatch.noResults')}</p>
                                 )}
                                 {(editSelectedOrders.length > 0 || editSelectedFavorites.length > 0) && (
                                   <button
@@ -2435,10 +2435,10 @@ export default function DispatchMap() {
                   />
                   {favError && <div className="fav-error">{favError}</div>}
                   <div className="fav-form-btns">
-                    <button className="dbtn outline" onClick={() => setShowAddFav(false)}>Cancelar</button>
+                    <button className="dbtn outline" onClick={() => setShowAddFav(false)}>{t('common.cancel')}</button>
                     <button className="dbtn purple" onClick={handleSaveFavorite} disabled={savingFav}>
                       <span className="material-icons">{savingFav ? 'hourglass_empty' : 'star'}</span>
-                      Guardar
+                      {t('common.save')}
                     </button>
                   </div>
                 </div>
@@ -2449,7 +2449,7 @@ export default function DispatchMap() {
               ) : favorites.length === 0 ? (
                 <div className="empty-dispatch">
                   <span className="material-icons" style={{ color: '#FFD600' }}>star_border</span>
-                  <p>No hay favoritas aún.<br/>Agrega direcciones o usa la ★ en las órdenes.</p>
+                  <p>{t('dispatch.noFavorites')}</p>
                 </div>
               ) : (
                 <div className="fav-list">
@@ -2486,7 +2486,7 @@ export default function DispatchMap() {
                 {loadingUsers ? (
                   <div className="loading-center"><div className="spinner"></div></div>
                 ) : allUsers.length === 0 ? (
-                  <p className="drivers-empty">No hay usuarios registrados</p>
+                  <p className="drivers-empty">{t('dispatch.noUsersRegistered')}</p>
                 ) : (
                   <div className="drivers-list">
                     {allUsers.map(u => (
@@ -2502,8 +2502,8 @@ export default function DispatchMap() {
                           onChange={e => handleChangeRole(u.id, e.target.value)}
                         >
                           <option value="admin">Admin</option>
-                          <option value="driver">Chofer</option>
-                          <option value="client">Cliente</option>
+                          <option value="driver">{t('dispatch.roleDriver')}</option>
+                          <option value="client">{t('dispatch.roleClient')}</option>
                         </select>
                       </div>
                     ))}
@@ -2516,7 +2516,7 @@ export default function DispatchMap() {
                   <h3><span className="material-icons">sync</span> Importar desde Respond.io</h3>
                   <button className="dbtn outline small" onClick={fetchRespondUsers} disabled={loadingRespondUsers}>
                     <span className="material-icons">{loadingRespondUsers ? 'hourglass_empty' : 'refresh'}</span>
-                    {loadingRespondUsers ? 'Cargando...' : 'Actualizar'}
+                    {loadingRespondUsers ? t('common.loading') : t('common.update')}
                   </button>
                 </div>
 
@@ -2530,7 +2530,7 @@ export default function DispatchMap() {
                 {loadingRespondUsers ? (
                   <div className="loading-center"><div className="spinner"></div></div>
                 ) : respondUsers.length === 0 ? (
-                  <p className="drivers-empty">Presiona "Actualizar" para cargar miembros del equipo</p>
+                  <p className="drivers-empty">{t('dispatch.pressUpdate')}</p>
                 ) : (
                   <>
                     <div className="respond-users-list">
@@ -2552,14 +2552,14 @@ export default function DispatchMap() {
                             <span>{u.email || 'Sin email'}</span>
                             {u.role && <span className="ru-role">{u.role}</span>}
                           </div>
-                          {u.already_exists && <span className="driver-badge synced">Ya registrado ({u.existing_role})</span>}
+                          {u.already_exists && <span className="driver-badge synced">{t('dispatch.alreadyRegistered', { role: u.existing_role })}</span>}
                         </div>
                       ))}
                     </div>
                     {selectedRespondUsers.length > 0 && (
                       <div className="sync-actions">
                         <div className="import-password-field">
-                          <label>Contraseña para los choferes importados</label>
+                          <label>{t('dispatch.importPassword')}</label>
                           <div className="password-input-wrapper">
                             <input
                               type={showImportPassword ? 'text' : 'password'}
@@ -2591,10 +2591,10 @@ export default function DispatchMap() {
                 <div className="drivers-section-header">
                   <h3><span className="material-icons">paid</span> Comisión por Parada</h3>
                 </div>
-                <p className="gc-desc">Valor que cada chofer cobra por parada completada. Cada chofer puede tener un valor diferente.</p>
+                <p className="gc-desc">{t('dispatch.commissionDesc')}</p>
                 <div className="driver-commissions-list">
                   {allUsers.filter(u => u.role === 'driver').length === 0 ? (
-                    <p className="drivers-empty">No hay choferes registrados</p>
+                    <p className="drivers-empty">{t('dispatch.noDriversRegistered')}</p>
                   ) : (
                     allUsers.filter(u => u.role === 'driver').map(driver => (
                       <div key={driver.id} className="driver-commission-row">
@@ -2622,7 +2622,7 @@ export default function DispatchMap() {
                           </button>
                         </div>
                         {driver.commission_per_stop > 0 && driverCommissions[driver.id] === undefined && (
-                          <span className="dc-current">Actual: ${parseFloat(driver.commission_per_stop).toFixed(2)}/parada</span>
+                          <span className="dc-current">{t('dispatch.currentRate', { rate: parseFloat(driver.commission_per_stop).toFixed(2) })}</span>
                         )}
                       </div>
                     ))
@@ -2636,7 +2636,7 @@ export default function DispatchMap() {
             ) : deliveredOrders.length === 0 ? (
               <div className="empty-dispatch">
                 <span className="material-icons">inventory_2</span>
-                <p>No hay entregas completadas</p>
+                <p>{t('dispatch.noDeliveriesCompleted')}</p>
               </div>
             ) : (
               deliveredOrders.map(order => (
@@ -2644,15 +2644,15 @@ export default function DispatchMap() {
                   <div className="do-status-dot" style={{ backgroundColor: '#ff6d00' }}></div>
                   <div className="do-content">
                     <div className="do-top">
-                      <span className="do-name">{order.customer_name || 'Sin nombre'}</span>
+                      <span className="do-name">{order.customer_name || t('common.noName')}</span>
                       <span className="do-id">#{order.id}</span>
                     </div>
-                    <div className="do-address">{order.address || 'Sin direccion'}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
+                    <div className="do-address">{order.address || t('common.noAddress')}{order.apartment_number && <span className="do-apt"> Apt {order.apartment_number}</span>}</div>
                     <div className="do-phone">{order.customer_phone || ''}</div>
                     <div className="do-bottom">
                       <span className="do-tag" style={{ backgroundColor: '#ff6d0020', color: '#ff6d00', borderColor: '#ff6d00' }}>
                         <span className="material-icons" style={{ fontSize: '14px' }}>done_all</span>
-                        Entregada
+                        {t('dispatch.deliveredLabel')}
                       </span>
                       {order.total_to_collect > 0 && (
                         <span className="do-amount">${Number(order.total_to_collect).toFixed(2)}</span>
@@ -2662,7 +2662,7 @@ export default function DispatchMap() {
                       )}
                       {order.payment_status && order.payment_status !== 'pending' && (
                         <span className={`payment-badge ${order.payment_status}`}>
-                          {order.payment_status === 'paid' ? 'Pagado' : 'Parcial'}
+                          {order.payment_status === 'paid' ? t('dispatch.paid') : t('dispatch.partial')}
                         </span>
                       )}
                       {order.delivered_at && (
@@ -2684,7 +2684,7 @@ export default function DispatchMap() {
                     {order.evidence_photos?.length === 0 && (
                       <div className="do-no-evidence">
                         <span className="material-icons" style={{ fontSize: '14px', color: '#999' }}>no_photography</span>
-                        <span style={{ fontSize: '12px', color: '#999' }}>Sin evidencia</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>{t('dispatch.noEvidence')}</span>
                       </div>
                     )}
                   </div>
@@ -2714,7 +2714,7 @@ export default function DispatchMap() {
             </button>
             {showDriverFilter && (
               <div className="map-driver-filter-panel">
-                <div className="map-driver-filter-title">Mostrar rutas de:</div>
+                <div className="map-driver-filter-title">{t('dispatch.showRoutesOf')}</div>
                 <label className="map-driver-filter-row" onClick={() => {
                   setVisibleDrivers(null)
                 }}>
@@ -2723,7 +2723,7 @@ export default function DispatchMap() {
                     readOnly
                     checked={visibleDrivers === null}
                   />
-                  <span style={{ fontWeight: 600 }}>Todos los choferes</span>
+                  <span style={{ fontWeight: 600 }}>{t('dispatch.allDrivers')}</span>
                 </label>
                 <div className="map-driver-filter-divider" />
                 {activeDriversList.map(({ name, color }) => {
@@ -2759,15 +2759,15 @@ export default function DispatchMap() {
             </div>
             <div className="legend-item">
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#6a1b9a', color: 'white', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>1</span>
-              <span>Por entregar</span>
+              <span>{t('dispatch.toDeliver')}</span>
             </div>
             <div className="legend-item">
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#22c55e', color: 'white', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>✓</span>
-              <span>Entregada</span>
+              <span>{t('dispatch.deliveredLabel')}</span>
             </div>
             <div className="legend-item">
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: '50%', background: '#9e9e9e', color: 'white', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>✕</span>
-              <span>Saltada</span>
+              <span>{t('dispatch.skippedLabel')}</span>
             </div>
           </div>
         )}
@@ -2807,10 +2807,10 @@ export default function DispatchMap() {
       {showAssignDriver && (
         <div className="modal-backdrop" onClick={() => setShowAssignDriver(null)}>
           <div className="dispatch-modal" onClick={e => e.stopPropagation()}>
-            <h3>Asignar Chofer</h3>
+            <h3>{t('dispatch.assignDriver')}</h3>
             <div className="dm-drivers-list">
               {drivers.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#888' }}>No hay choferes registrados</p>
+                <p style={{ textAlign: 'center', color: '#888' }}>{t('dispatch.noDriversRegistered')}</p>
               ) : (
                 drivers.map(d => (
                   <button key={d.id} className="dm-driver-option" onClick={() => handleAssignDriver(showAssignDriver, d.id)}>
@@ -2824,7 +2824,7 @@ export default function DispatchMap() {
               )}
             </div>
             <div className="dm-actions">
-              <button className="dbtn outline" onClick={() => setShowAssignDriver(null)}>Cancelar</button>
+              <button className="dbtn outline" onClick={() => setShowAssignDriver(null)}>{t('common.cancel')}</button>
             </div>
           </div>
         </div>
@@ -2834,16 +2834,16 @@ export default function DispatchMap() {
         <div className="modal-backdrop" onClick={() => setEvidenceModal(null)}>
           <div className="dispatch-evidence-modal" onClick={e => e.stopPropagation()}>
             <div className="evidence-modal-header">
-              <h3>Evidencia de Entrega</h3>
+              <h3>{t('dispatch.deliveryEvidence')}</h3>
               <button className="evidence-modal-close" onClick={() => setEvidenceModal(null)}>
                 <span className="material-icons">close</span>
               </button>
             </div>
             <div className="evidence-modal-info">
-              <strong>{evidenceModal.order.customer_name || 'Sin nombre'}</strong>
+              <strong>{evidenceModal.order.customer_name || t('common.noName')}</strong>
               <span>{evidenceModal.order.address}</span>
               {evidenceModal.photo.recipient_name && (
-                <span>Recibido por: {evidenceModal.photo.recipient_name}</span>
+                <span>{t('dispatch.receivedBy')}: {evidenceModal.photo.recipient_name}</span>
               )}
               {evidenceModal.photo.completed_at && (
                 <span>{new Date(evidenceModal.photo.completed_at).toLocaleString('es-MX')}</span>
@@ -2859,7 +2859,7 @@ export default function DispatchMap() {
         <div className="modal-overlay" onClick={() => setMessageModal(null)}>
           <div className="message-modal" onClick={e => e.stopPropagation()}>
             <div className="message-modal-header">
-              <h3>Enviar mensaje</h3>
+              <h3>{t('dispatch.sendMessage')}</h3>
               <button className="evidence-modal-close" onClick={() => setMessageModal(null)}>
                 <span className="material-icons">close</span>
               </button>
@@ -2867,7 +2867,7 @@ export default function DispatchMap() {
             <div className="message-modal-client">
               <span className="material-icons">person</span>
               <div>
-                <strong>{messageModal.customer_name || 'Sin nombre'}</strong>
+                <strong>{messageModal.customer_name || t('common.noName')}</strong>
                 <span>{messageModal.customer_phone}</span>
               </div>
             </div>
@@ -2878,11 +2878,11 @@ export default function DispatchMap() {
               </div>
             )}
             <div className="message-modal-body">
-              <h4>Templates de WhatsApp</h4>
+              <h4>{t('dispatch.whatsappTemplates')}</h4>
               {loadingTemplates ? (
-                <div className="message-loading">Cargando templates...</div>
+                <div className="message-loading">{t('dispatch.loadingTemplates')}</div>
               ) : templates.length === 0 ? (
-                <div className="message-empty">No hay templates disponibles. Verifica la configuracion de Respond.io y el canal.</div>
+                <div className="message-empty">{t('dispatch.noTemplates')}</div>
               ) : (
                 <div className="template-list">
                   {templates.map((tpl, i) => (
@@ -2904,7 +2904,7 @@ export default function DispatchMap() {
             {sendingMessage && (
               <div className="message-sending">
                 <span className="material-icons rotating">hourglass_empty</span>
-                Enviando...
+                {t('dispatch.sending')}
               </div>
             )}
 
@@ -2917,7 +2917,7 @@ export default function DispatchMap() {
           <div className="order-modal" onClick={e => e.stopPropagation()}>
             <div className="order-modal-header">
               <span className="material-icons">add_location_alt</span>
-              <h3>Nueva Orden Manual</h3>
+              <h3>{t('dispatch.newManualOrder')}</h3>
               <button className="order-modal-close" onClick={() => setShowManualOrder(false)}>
                 <span className="material-icons">close</span>
               </button>
@@ -2925,15 +2925,15 @@ export default function DispatchMap() {
             <div className="order-modal-body">
               {manualOrderError && <div className="order-modal-error">{manualOrderError}</div>}
               <div className="order-form-field">
-                <label>Nombre del cliente *</label>
+                <label>{t('dispatch.customerName')} *</label>
                 <input type="text" value={manualOrderForm.customer_name} onChange={e => setManualOrderForm(p => ({ ...p, customer_name: e.target.value }))} placeholder="Nombre completo" />
               </div>
               <div className="order-form-field">
-                <label>Teléfono</label>
+                <label>{t('common.phone')}</label>
                 <input type="tel" value={manualOrderForm.customer_phone} onChange={e => setManualOrderForm(p => ({ ...p, customer_phone: e.target.value }))} placeholder="+1 (000) 000-0000" />
               </div>
               <div className="order-form-field">
-                <label>Dirección *</label>
+                <label>{t('dispatch.address')} *</label>
                 <div className="order-address-row">
                   <input type="text" value={manualOrderForm.validated_address} onChange={e => { const val = e.target.value; setManualOrderForm(p => ({ ...p, validated_address: val })); autoGeocodeManual(val) }} placeholder="123 Main St, Dallas TX 75201" />
                   {manualOrderGeoLoading && <span className="material-icons rotating geo-indicator">hourglass_empty</span>}
@@ -2948,33 +2948,33 @@ export default function DispatchMap() {
                 )}
               </div>
               <div className="order-form-field">
-                <label>Apt / Unidad</label>
+                <label>{t('dispatch.aptUnit')}</label>
                 <input type="text" value={manualOrderForm.apartment_number} onChange={e => setManualOrderForm(p => ({ ...p, apartment_number: e.target.value }))} placeholder="Ej: #201, Suite B" style={{ maxWidth: '200px' }} />
               </div>
               <div className="order-form-row">
                 <div className="order-form-field">
-                  <label>Costo ($)</label>
+                  <label>{t('admin.accounting.cost')} ($)</label>
                   <input type="number" step="0.01" min="0" value={manualOrderForm.order_cost} onChange={e => setManualOrderForm(p => ({ ...p, order_cost: e.target.value }))} placeholder="0.00" />
                 </div>
                 <div className="order-form-field">
-                  <label>Depósito ($)</label>
+                  <label>{t('admin.accounting.deposit')} ($)</label>
                   <input type="number" step="0.01" min="0" value={manualOrderForm.deposit_amount} onChange={e => setManualOrderForm(p => ({ ...p, deposit_amount: e.target.value }))} placeholder="0.00" />
                 </div>
                 <div className="order-form-field">
-                  <label>Total a cobrar</label>
+                  <label>{t('admin.accounting.toCollect')}</label>
                   <input type="text" readOnly value={`$${calcTotal(manualOrderForm)}`} className="readonly-field" />
                 </div>
               </div>
               <div className="order-form-field">
-                <label>Notas</label>
+                <label>{t('common.notes')}</label>
                 <textarea value={manualOrderForm.notes} onChange={e => setManualOrderForm(p => ({ ...p, notes: e.target.value }))} placeholder="Notas internas..." rows={2} />
               </div>
             </div>
             <div className="order-modal-footer">
-              <button className="dbtn outline" onClick={() => setShowManualOrder(false)}>Cancelar</button>
+              <button className="dbtn outline" onClick={() => setShowManualOrder(false)}>{t('common.cancel')}</button>
               <button className="dbtn purple" onClick={handleSaveManualOrder} disabled={manualOrderSaving}>
                 {manualOrderSaving ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">save</span>}
-                Guardar Orden
+                {t('dispatch.saveOrder')}
               </button>
             </div>
           </div>
@@ -2986,7 +2986,7 @@ export default function DispatchMap() {
           <div className="order-modal" onClick={e => e.stopPropagation()}>
             <div className="order-modal-header">
               <span className="material-icons">edit</span>
-              <h3>Editar Orden #{editOrderModal.id}</h3>
+              <h3>{t('dispatch.editOrder', { id: editOrderModal.id })}</h3>
               <button className="order-modal-close" onClick={() => setEditOrderModal(null)}>
                 <span className="material-icons">close</span>
               </button>
@@ -2994,15 +2994,15 @@ export default function DispatchMap() {
             <div className="order-modal-body">
               {editOrderError && <div className="order-modal-error">{editOrderError}</div>}
               <div className="order-form-field">
-                <label>Nombre del cliente</label>
+                <label>{t('dispatch.customerName')}</label>
                 <input type="text" value={editOrderForm.customer_name} onChange={e => setEditOrderForm(p => ({ ...p, customer_name: e.target.value }))} placeholder="Nombre completo" />
               </div>
               <div className="order-form-field">
-                <label>Teléfono</label>
+                <label>{t('common.phone')}</label>
                 <input type="tel" value={editOrderForm.customer_phone} onChange={e => setEditOrderForm(p => ({ ...p, customer_phone: e.target.value }))} placeholder="+1 (000) 000-0000" />
               </div>
               <div className="order-form-field">
-                <label>Dirección</label>
+                <label>{t('dispatch.address')}</label>
                 <div className="order-address-row">
                   <input type="text" value={editOrderForm.validated_address} onChange={e => { const val = e.target.value; setEditOrderForm(p => ({ ...p, validated_address: val })); autoGeocodeEdit(val) }} placeholder="123 Main St, Dallas TX 75201" />
                   {editOrderGeoLoading && <span className="material-icons rotating geo-indicator">hourglass_empty</span>}
@@ -3017,33 +3017,33 @@ export default function DispatchMap() {
                 )}
               </div>
               <div className="order-form-field">
-                <label>Apt / Unidad</label>
+                <label>{t('dispatch.aptUnit')}</label>
                 <input type="text" value={editOrderForm.apartment_number} onChange={e => setEditOrderForm(p => ({ ...p, apartment_number: e.target.value }))} placeholder="Ej: #201, Suite B" style={{ maxWidth: '200px' }} />
               </div>
               <div className="order-form-row">
                 <div className="order-form-field">
-                  <label>Costo ($)</label>
+                  <label>{t('admin.accounting.cost')} ($)</label>
                   <input type="number" step="0.01" min="0" value={editOrderForm.order_cost} onChange={e => setEditOrderForm(p => ({ ...p, order_cost: e.target.value }))} placeholder="0.00" />
                 </div>
                 <div className="order-form-field">
-                  <label>Depósito ($)</label>
+                  <label>{t('admin.accounting.deposit')} ($)</label>
                   <input type="number" step="0.01" min="0" value={editOrderForm.deposit_amount} onChange={e => setEditOrderForm(p => ({ ...p, deposit_amount: e.target.value }))} placeholder="0.00" />
                 </div>
                 <div className="order-form-field">
-                  <label>Total a cobrar</label>
+                  <label>{t('admin.accounting.toCollect')}</label>
                   <input type="text" readOnly value={`$${calcTotal(editOrderForm)}`} className="readonly-field" />
                 </div>
               </div>
               <div className="order-form-field">
-                <label>Notas</label>
+                <label>{t('common.notes')}</label>
                 <textarea value={editOrderForm.notes} onChange={e => setEditOrderForm(p => ({ ...p, notes: e.target.value }))} placeholder="Notas internas..." rows={2} />
               </div>
             </div>
             <div className="order-modal-footer">
-              <button className="dbtn outline" onClick={() => setEditOrderModal(null)}>Cancelar</button>
+              <button className="dbtn outline" onClick={() => setEditOrderModal(null)}>{t('common.cancel')}</button>
               <button className="dbtn purple" onClick={handleSaveEditOrder} disabled={editOrderSaving}>
                 {editOrderSaving ? <span className="material-icons rotating">hourglass_empty</span> : <span className="material-icons">save</span>}
-                Guardar Cambios
+                {t('common.saveChanges')}
               </button>
             </div>
           </div>

@@ -481,8 +481,8 @@ export default function BotMemoryPage() {
           ) : knowledge.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
               <span className="material-icons" style={{ fontSize: 48, display: 'block', marginBottom: 12 }}>library_books</span>
-              <p style={{ fontSize: 16, marginBottom: 4 }}>Sin documentos aún</p>
-              <p style={{ fontSize: 13, color: '#475569' }}>Agrega prompts, instrucciones, precios, FAQ o sube archivos .txt para que el bot tenga más contexto</p>
+              <p style={{ fontSize: 16, marginBottom: 4 }}>{t('admin.botMemory.docs.noDocs')}</p>
+              <p style={{ fontSize: 13, color: '#475569' }}>{t('admin.botMemory.docs.noDocsDesc')}</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -514,14 +514,14 @@ export default function BotMemoryPage() {
                     </p>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button onClick={() => handleKEdit(doc)} style={{ background: '#5b8def22', color: '#5b8def', border: '1px solid #5b8def44', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span className="material-icons" style={{ fontSize: 15 }}>edit</span>Editar
+                        <span className="material-icons" style={{ fontSize: 15 }}>edit</span>{t('common.edit')}
                       </button>
                       <button onClick={() => handleKToggle(doc)} style={{ background: doc.is_active ? '#ef444422' : '#22c55e22', color: doc.is_active ? '#ef4444' : '#22c55e', border: `1px solid ${doc.is_active ? '#ef444444' : '#22c55e44'}`, borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span className="material-icons" style={{ fontSize: 15 }}>{doc.is_active ? 'pause' : 'play_arrow'}</span>
-                        {doc.is_active ? 'Desactivar' : 'Activar'}
+                        {doc.is_active ? t('admin.users.deactivate') : t('admin.users.activate')}
                       </button>
                       <button onClick={() => handleKDelete(doc.id)} style={{ background: '#ef444422', color: '#ef4444', border: '1px solid #ef444444', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span className="material-icons" style={{ fontSize: 15 }}>delete</span>Eliminar
+                        <span className="material-icons" style={{ fontSize: 15 }}>delete</span>{t('common.delete')}
                       </button>
                     </div>
                   </div>
@@ -543,7 +543,7 @@ export default function BotMemoryPage() {
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px' }}
         >
           <span className="material-icons">{showForm ? 'close' : 'add'}</span>
-          {showForm ? 'Cancelar' : 'Agregar Lección Manual'}
+          {showForm ? t('common.cancel') : t('admin.botMemory.lessons.addManual')}
         </button>
 
         <button
@@ -562,12 +562,12 @@ export default function BotMemoryPage() {
           {analyzing ? (
             <>
               <span className="material-icons" style={{ fontSize: 18, animation: 'spin 1s linear infinite' }}>autorenew</span>
-              Analizando conversaciones...
+              {t('admin.botMemory.lessons.analyzing')}
             </>
           ) : (
             <>
               <span className="material-icons" style={{ fontSize: 18 }}>manage_search</span>
-              Analizar Historial de Chats
+              {t('admin.botMemory.lessons.analyzeHistory')}
             </>
           )}
         </button>
@@ -578,8 +578,8 @@ export default function BotMemoryPage() {
         <div style={{ marginBottom: 20, background: '#1e293b', borderRadius: 12, padding: 20, border: '1px solid #a855f744', display: 'flex', alignItems: 'center', gap: 16 }}>
           <span className="material-icons" style={{ color: '#a855f7', fontSize: 32, animation: 'spin 2s linear infinite' }}>psychology</span>
           <div>
-            <p style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: 4 }}>Analizando historial de conversaciones con IA...</p>
-            <p style={{ color: '#64748b', fontSize: 13 }}>Esto puede tardar varios minutos. No cierres esta ventana.</p>
+            <p style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: 4 }}>{t('admin.botMemory.lessons.analyzingConvs')}</p>
+            <p style={{ color: '#64748b', fontSize: 13 }}>{t('admin.botMemory.lessons.analyzeConfirm')}</p>
           </div>
         </div>
       )}
@@ -588,30 +588,30 @@ export default function BotMemoryPage() {
         <div style={{ marginBottom: 20, background: '#1e293b', borderRadius: 12, padding: 20, border: '1px solid #22c55e44' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
             <span className="material-icons" style={{ color: '#22c55e' }}>check_circle</span>
-            <h4 style={{ color: '#e2e8f0', margin: 0 }}>Análisis completado</h4>
+            <h4 style={{ color: '#e2e8f0', margin: 0 }}>{t('admin.botMemory.lessons.analyzeComplete')}</h4>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 12 }}>
             <div style={{ background: '#0f172a', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#a855f7' }}>{analyzeResult.lessons_created}</div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Lecciones extraídas</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{t('admin.botMemory.lessons.lessonsExtracted')}</div>
             </div>
             <div style={{ background: '#0f172a', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#5b8def' }}>{analyzeResult.contacts_analyzed}</div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Conversaciones analizadas</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{t('admin.botMemory.lessons.convsAnalyzed')}</div>
             </div>
             <div style={{ background: '#0f172a', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#94a3b8' }}>{analyzeResult.total_contacts}</div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Contactos totales</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{t('admin.botMemory.lessons.totalContacts')}</div>
             </div>
           </div>
           <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>{analyzeResult.message}</p>
           {analyzeResult.lessons_created > 0 && (
             <p style={{ color: '#f59e0b', fontSize: 13, marginTop: 8 }}>
-              Las lecciones nuevas están en la pestaña <strong>Pendientes</strong> para que las revises y apruebes.
+              {t('admin.botMemory.lessons.analyzeResultHint')}
             </p>
           )}
           <button onClick={() => setAnalyzeResult(null)} style={{ marginTop: 12, background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer' }}>
-            Cerrar
+            {t('common.close')}
           </button>
         </div>
       )}
@@ -620,11 +620,11 @@ export default function BotMemoryPage() {
         <div style={{ marginBottom: 20, background: '#1e293b', borderRadius: 12, padding: 20, border: '1px solid #ef444444' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <span className="material-icons" style={{ color: '#ef4444' }}>error</span>
-            <h4 style={{ color: '#e2e8f0', margin: 0 }}>Error en el análisis</h4>
+            <h4 style={{ color: '#e2e8f0', margin: 0 }}>{t('admin.botMemory.lessons.analyzeErrorTitle')}</h4>
           </div>
           <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>{analyzeError}</p>
           <button onClick={() => setAnalyzeError(null)} style={{ marginTop: 12, background: 'none', border: 'none', color: '#475569', fontSize: 12, cursor: 'pointer' }}>
-            Cerrar
+            {t('common.close')}
           </button>
         </div>
       )}
@@ -634,12 +634,12 @@ export default function BotMemoryPage() {
         <div className="admin-section" style={{ marginBottom: 24 }}>
           <div className="section-header">
             <span className="material-icons">school</span>
-            <h3>{editingId ? 'Editar Lección' : 'Nueva Lección'}</h3>
+            <h3>{editingId ? t('admin.botMemory.lessons.editLesson') : t('admin.botMemory.lessons.newLesson')}</h3>
           </div>
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>
-                Tipo de contexto
+                {t('admin.botMemory.lessons.contextTypeLabel')}
               </label>
               <select
                 value={form.context_type}
@@ -651,7 +651,7 @@ export default function BotMemoryPage() {
             </div>
             <div>
               <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>
-                Lección (lo que el bot debe aprender / hacer)
+                {t('admin.botMemory.lessons.lessonInstructions')}
               </label>
               <textarea
                 value={form.lesson}
@@ -663,7 +663,7 @@ export default function BotMemoryPage() {
             </div>
             <div>
               <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>
-                Ejemplo de mensaje del cliente (opcional)
+                {t('admin.botMemory.lessons.triggerOptional')}
               </label>
               <input
                 type="text"
@@ -678,7 +678,7 @@ export default function BotMemoryPage() {
               disabled={saving}
               style={{ alignSelf: 'flex-start', background: 'linear-gradient(135deg, #5b8def, #3b70d4)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
             >
-              {saving ? 'Guardando...' : 'Guardar Lección'}
+              {saving ? t('common.saving') : t('admin.botMemory.lessons.saveLesson')}
             </button>
           </div>
         </div>
@@ -687,9 +687,9 @@ export default function BotMemoryPage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '1px solid #1e293b', paddingBottom: 12 }}>
         {[
-          { key: 'active', label: 'Activas', count: stats.active },
-          { key: 'pending', label: 'Pendientes', count: stats.pending },
-          { key: 'all', label: 'Todas', count: stats.total },
+          { key: 'active', label: t('admin.botMemory.lessons.tabActive'), count: stats.active },
+          { key: 'pending', label: t('admin.botMemory.lessons.tabPending'), count: stats.pending },
+          { key: 'all', label: t('admin.botMemory.lessons.tabAll'), count: stats.total },
         ].map(tab => (
           <button
             key={tab.key}
@@ -718,10 +718,10 @@ export default function BotMemoryPage() {
             {activeTab === 'pending' ? 'check_circle' : 'psychology'}
           </span>
           <p style={{ fontSize: 16, marginBottom: 4 }}>
-            {activeTab === 'pending' ? 'No hay lecciones pendientes de revisión' : 'Sin lecciones aún'}
+            {activeTab === 'pending' ? t('admin.botMemory.lessons.noPending') : t('admin.botMemory.lessons.noLessons')}
           </p>
           {activeTab === 'active' && (
-            <p style={{ fontSize: 13, color: '#475569' }}>Agrega lecciones manuales o el bot las detectará automáticamente</p>
+            <p style={{ fontSize: 13, color: '#475569' }}>{t('admin.botMemory.lessons.noLessonsDesc')}</p>
           )}
         </div>
       ) : (
@@ -743,19 +743,19 @@ export default function BotMemoryPage() {
                   {mem.source === 'auto_detected' && (
                     <span style={{ fontSize: 11, color: '#f97316', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
                       <span className="material-icons" style={{ fontSize: 13 }}>auto_fix_high</span>
-                      Auto-detectada
+                      {t('admin.botMemory.lessons.autoDetected')}
                     </span>
                   )}
                   {mem.is_approved && mem.is_active && (
                     <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
                       <span className="material-icons" style={{ fontSize: 13 }}>check_circle</span>
-                      Activa
+                      {t('admin.users.active')}
                     </span>
                   )}
                   {!mem.is_approved && (
                     <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
                       <span className="material-icons" style={{ fontSize: 13 }}>pending</span>
-                      Pendiente aprobación
+                      {t('admin.botMemory.lessons.pendingApproval')}
                     </span>
                   )}
                 </div>
@@ -771,7 +771,7 @@ export default function BotMemoryPage() {
               {mem.trigger_example && (
                 <div style={{ background: '#0f172a', borderRadius: 8, padding: '10px 14px', marginBottom: 8, borderLeft: '3px solid #5b8def' }}>
                   <p style={{ color: '#64748b', fontSize: 11, marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Mensaje del cliente
+                    {t('admin.botMemory.lessons.clientMessage')}
                   </p>
                   <p style={{ color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }}>"{mem.trigger_example}"</p>
                 </div>
@@ -780,7 +780,7 @@ export default function BotMemoryPage() {
               {mem.agent_correction && (
                 <div style={{ background: '#0f172a', borderRadius: 8, padding: '10px 14px', marginBottom: 8, borderLeft: '3px solid #22c55e' }}>
                   <p style={{ color: '#64748b', fontSize: 11, marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Respuesta del agente (referencia)
+                    {t('admin.botMemory.lessons.agentResponse')}
                   </p>
                   <p style={{ color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }}>"{mem.agent_correction}"</p>
                 </div>
@@ -793,7 +793,7 @@ export default function BotMemoryPage() {
                     style={{ background: '#22c55e22', color: '#22c55e', border: '1px solid #22c55e44', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                   >
                     <span className="material-icons" style={{ fontSize: 15 }}>check</span>
-                    Aprobar y activar
+                    {t('admin.botMemory.lessons.approveAndActivate')}
                   </button>
                 )}
                 <button
@@ -801,7 +801,7 @@ export default function BotMemoryPage() {
                   style={{ background: '#5b8def22', color: '#5b8def', border: '1px solid #5b8def44', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                 >
                   <span className="material-icons" style={{ fontSize: 15 }}>edit</span>
-                  Editar
+                  {t('common.edit')}
                 </button>
                 {mem.is_approved && (
                   <button
@@ -809,7 +809,7 @@ export default function BotMemoryPage() {
                     style={{ background: mem.is_active ? '#ef444422' : '#22c55e22', color: mem.is_active ? '#ef4444' : '#22c55e', border: `1px solid ${mem.is_active ? '#ef444444' : '#22c55e44'}`, borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                   >
                     <span className="material-icons" style={{ fontSize: 15 }}>{mem.is_active ? 'pause' : 'play_arrow'}</span>
-                    {mem.is_active ? 'Desactivar' : 'Activar'}
+                    {mem.is_active ? t('admin.users.deactivate') : t('admin.users.activate')}
                   </button>
                 )}
                 <button
@@ -817,7 +817,7 @@ export default function BotMemoryPage() {
                   style={{ background: '#ef444422', color: '#ef4444', border: '1px solid #ef444444', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                 >
                   <span className="material-icons" style={{ fontSize: 15 }}>delete</span>
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -829,14 +829,14 @@ export default function BotMemoryPage() {
       <div style={{ marginTop: 32, background: '#0f172a', borderRadius: 12, padding: 20, border: '1px solid #1e293b' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <span className="material-icons" style={{ color: '#5b8def' }}>info</span>
-          <h4 style={{ color: '#e2e8f0', margin: 0 }}>¿Cómo funciona el auto-aprendizaje?</h4>
+          <h4 style={{ color: '#e2e8f0', margin: 0 }}>{t('admin.botMemory.lessons.autoLearnTitle')}</h4>
         </div>
         <ul style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.8, paddingLeft: 20, margin: 0 }}>
-          <li>El bot guarda sus lecciones en la base de datos y las inyecta en su cerebro (IA) en cada conversación.</li>
-          <li>Cuando un agente responde dentro de 3 minutos después del bot, el sistema detecta que posiblemente el bot cometió un error y genera una lección automática.</li>
-          <li>Las lecciones auto-detectadas quedan en "Pendientes" hasta que tú las revises y apruebes.</li>
-          <li>Las lecciones manuales que tú agregas se activan de inmediato.</li>
-          <li>Con el tiempo, el bot se va puliendo solo basado en los patrones que van aprendiendo.</li>
+          <li>{t('admin.botMemory.lessons.autoLearnBullet1')}</li>
+          <li>{t('admin.botMemory.lessons.autoLearnBullet2')}</li>
+          <li>{t('admin.botMemory.lessons.autoLearnBullet3')}</li>
+          <li>{t('admin.botMemory.lessons.autoLearnBullet4')}</li>
+          <li>{t('admin.botMemory.lessons.autoLearnBullet5')}</li>
         </ul>
       </div>
       </>}
