@@ -16,7 +16,7 @@ i18n
     fallbackLng: 'en',
     defaultNS: 'translation',
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['localStorage'],
       lookupLocalStorage: 'area862_lang',
       caches: ['localStorage']
     },
