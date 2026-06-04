@@ -1241,11 +1241,34 @@
     }
   },
   "support": {
+    "title": "Support",
+    "contactTitle": "Contact Us",
     "openChat": "Open chat",
     "emailTitle": "Email",
     "sendEmail": "Send email",
     "webTitle": "Website",
     "visitSite": "Visit site",
-    "hours": "Monday to Friday, 8am – 6pm CST. For urgent matters, use WhatsApp."
+    "hours": "Monday to Friday, 8am – 6pm CST. For urgent matters, use WhatsApp.",
+    "legalTitle": "Policies & Terms",
+    "privacyTitle": "Privacy Policy",
+    "privacyDesc": "How we collect, use, and protect your information.",
+    "termsTitle": "Terms & Conditions",
+    "termsDesc": "Rules of use for the Area 862 application.",
+    "faqTitle": "Frequently Asked Questions",
+    "faq1Q": "How do I report a bug in the app?",
+    "faq1A": "Contact us via WhatsApp or email with a description of the issue and, if possible, a screenshot.",
+    "faq2Q": "How do I change my password?",
+    "faq2A": "Go to My Account from the side menu and select the option to change password.",
+    "faq3Q": "How do I add a coverage zone?",
+    "faq3A": "Go to Settings → Coverage and add the ZIP codes or cities you want to cover.",
+    "faq4Q": "How do I delete my account?",
+    "faq4A": "Go to My Account → Settings and select Delete Account. This action is permanent.",
+    "faq5Q": "Where can I see my route history?",
+    "faq5A": "Administrators can view the full history in the Admin Panel → Route History.",
+    "aboutTitle": "About the App",
+    "appName": "Application",
+    "company": "Company",
+    "contact": "Contact",
+    "website": "Website"
   }
 }

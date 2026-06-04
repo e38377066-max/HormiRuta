@@ -1241,11 +1241,34 @@
     }
   },
   "support": {
+    "title": "Soporte",
+    "contactTitle": "Contáctanos",
     "openChat": "Abrir chat",
     "emailTitle": "Correo electrónico",
     "sendEmail": "Enviar correo",
     "webTitle": "Sitio web",
     "visitSite": "Visitar sitio",
-    "hours": "Lunes a viernes, 8am – 6pm CST. Para urgencias, usa WhatsApp."
+    "hours": "Lunes a viernes, 8am – 6pm CST. Para urgencias usa WhatsApp.",
+    "legalTitle": "Políticas y Términos",
+    "privacyTitle": "Política de Privacidad",
+    "privacyDesc": "Cómo recopilamos, usamos y protegemos tu información.",
+    "termsTitle": "Términos y Condiciones",
+    "termsDesc": "Reglas de uso de la aplicación Area 862.",
+    "faqTitle": "Preguntas Frecuentes",
+    "faq1Q": "¿Cómo reporto un error en la app?",
+    "faq1A": "Contáctanos por WhatsApp o correo electrónico con una descripción del problema y, si es posible, una captura de pantalla.",
+    "faq2Q": "¿Cómo cambio mi contraseña?",
+    "faq2A": "Ve a Mi Cuenta desde el menú lateral y selecciona la opción de cambiar contraseña.",
+    "faq3Q": "¿Cómo agrego una zona de cobertura?",
+    "faq3A": "Accede a Configuración → Cobertura y agrega los códigos ZIP o ciudades que quieres cubrir.",
+    "faq4Q": "¿Cómo elimino mi cuenta?",
+    "faq4A": "Ve a Mi Cuenta → Configuración y selecciona Eliminar cuenta. Esta acción es permanente.",
+    "faq5Q": "¿Dónde veo el historial de mis rutas?",
+    "faq5A": "Los administradores pueden ver el historial completo en el Panel de Admin → Historial de Rutas.",
+    "aboutTitle": "Sobre la App",
+    "appName": "Aplicación",
+    "company": "Empresa",
+    "contact": "Contacto",
+    "website": "Sitio web"
   }
 }

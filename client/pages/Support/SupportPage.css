@@ -25,7 +25,7 @@
 }
 
 .support-main {
-  max-width: 540px;
+  max-width: 680px;
   margin: 0 auto;
   padding: 28px 20px 60px;
 }
@@ -41,7 +41,7 @@
   padding: 8px 14px;
   font-size: 0.85rem;
   cursor: pointer;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
   transition: background 0.2s;
 }
 
@@ -49,76 +49,89 @@
   background: rgba(0,0,0,0.1);
 }
 
+.support-section {
+  margin-bottom: 32px;
+}
+
+.support-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin: 0 0 12px;
+}
+
+.support-section-title .material-icons {
+  font-size: 16px !important;
+}
+
 .support-grid {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .support-card {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   background: #fff;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 18px 20px;
+  border-radius: 12px;
+  padding: 16px 18px;
   text-decoration: none;
   color: inherit;
   transition: box-shadow 0.2s, transform 0.15s;
 }
 
 .support-card:hover {
-  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.09);
   transform: translateY(-1px);
 }
 
 .support-card-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.support-whatsapp .support-card-icon {
-  background: #dcfce7;
-  color: #16a34a;
-}
-
-.support-email .support-card-icon {
-  background: #dbeafe;
-  color: #2563eb;
-}
-
-.support-web .support-card-icon {
-  background: #f3e8ff;
-  color: #9333ea;
-}
+.support-whatsapp .support-card-icon { background: #dcfce7; color: #16a34a; }
+.support-email .support-card-icon    { background: #dbeafe; color: #2563eb; }
+.support-web .support-card-icon      { background: #f3e8ff; color: #9333ea; }
 
 .support-card-text {
   flex: 1;
+  min-width: 0;
 }
 
 .support-card-text h3 {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   margin: 0 0 2px;
   color: #0f172a;
 }
 
 .support-card-text p {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: #64748b;
-  margin: 0 0 4px;
+  margin: 0 0 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .support-card-action {
   font-size: 0.78rem;
   font-weight: 600;
-  color: #3b82f6;
 }
 
 .support-whatsapp .support-card-action { color: #16a34a; }
@@ -127,7 +140,8 @@
 
 .support-card-arrow {
   color: #cbd5e1;
-  font-size: 22px !important;
+  font-size: 20px !important;
+  flex-shrink: 0;
 }
 
 .support-info-card {
@@ -136,17 +150,190 @@
   gap: 10px;
   background: #f1f5f9;
   border-radius: 10px;
-  padding: 14px 16px;
-  margin-top: 20px;
+  padding: 12px 16px;
+}
+
+.support-info-card .material-icons {
+  font-size: 18px !important;
+  color: #64748b;
+  margin-top: 1px;
+  flex-shrink: 0;
 }
 
 .support-info-card p {
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   color: #64748b;
   margin: 0;
   line-height: 1.5;
 }
 
+.support-legal-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.support-legal-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.support-legal-card:hover {
+  box-shadow: 0 4px 14px rgba(0,0,0,0.09);
+  transform: translateY(-1px);
+}
+
+.support-legal-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  background: #f0fdf4;
+  color: #15803d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.support-legal-icon:last-of-type {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.support-legal-card:nth-child(2) .support-legal-icon {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.support-legal-icon .material-icons {
+  font-size: 22px !important;
+}
+
+.support-legal-text {
+  flex: 1;
+}
+
+.support-legal-text h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 3px;
+  color: #0f172a;
+}
+
+.support-legal-text p {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.support-faq {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.support-faq-item {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.support-faq-item:last-child {
+  border-bottom: none;
+}
+
+.support-faq-item summary {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e293b;
+  padding: 16px 18px;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.support-faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.support-faq-item summary::after {
+  content: 'expand_more';
+  font-family: 'Material Icons';
+  font-size: 20px;
+  color: #94a3b8;
+  transition: transform 0.2s;
+}
+
+.support-faq-item[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.support-faq-item p {
+  font-size: 0.87rem;
+  color: #475569;
+  padding: 0 18px 16px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.support-about-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.support-about-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 12px;
+}
+
+.support-about-row:last-child {
+  border-bottom: none;
+}
+
+.support-about-row span:first-child {
+  font-size: 0.87rem;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.support-about-row span:last-child,
+.support-about-row a {
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: right;
+  text-decoration: none;
+}
+
+.support-about-row a {
+  color: #3b82f6;
+}
+
+.support-footer {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-top: 16px;
+}
+
 @media (max-width: 480px) {
   .support-header h1 { font-size: 1.3rem; }
+  .support-main { padding: 20px 16px 50px; }
 }
