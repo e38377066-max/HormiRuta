@@ -4,13 +4,9 @@ import AgentStyleProfile from '../models/AgentStyleProfile.js';
 import StyleLearningService from '../services/styleLearningService.js';
 import CustomerProfileService from '../services/customerProfileService.js';
 import { Op } from 'sequelize';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
-
-function requireAuth(req, res, next) {
-  if (!req.session?.userId) return res.status(401).json({ error: 'No autenticado' });
-  next();
-}
 
 // ===== Customer profiles =====
 router.get('/customers', requireAuth, async (req, res) => {

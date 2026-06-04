@@ -52,12 +52,24 @@ const allowedOrigins = [
   'http://localhost'
 ];
 
-app.use(cors({
-  origin: true,
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    if (!origin) return callback(null, true);
+    const isAllowed =
+      allowedOrigins.includes(origin) ||
+      origin === 'capacitor://localhost' ||
+      origin.startsWith('http://localhost');
+    if (isAllowed) callback(null, true);
+    else callback(new Error(`CORS: origin not allowed — ${origin}`));
+  },
   credentials: true
-}));
+};
+app.use(cors(corsOptions));
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret && process.env.NODE_ENV === 'production') {

@@ -366,7 +366,7 @@ export default function DispatchMap() {
       marker.addListener('click', () => {
         if (isAdmin && showAddStopsPanel !== null) {
           if (isPending) {
-            alert('Los pedidos Pendientes no se pueden agregar a rutas hasta que sean aprobados.')
+            alert(t('dispatch.pendingWarning'))
           } else {
             setEditSelectedOrders(prev =>
               prev.includes(order.id) ? prev.filter(id => id !== order.id) : [...prev, order.id]
@@ -795,7 +795,7 @@ export default function DispatchMap() {
 
   const handleAddOrdersToRoute = async (routeId) => {
     if (!editSelectedOrders.length && !editSelectedFavorites.length) {
-      alert('Selecciona órdenes o favoritas primero')
+      alert(t('dispatch.selectFirst'))
       return
     }
     if (isAddingOrders) return
@@ -901,7 +901,7 @@ export default function DispatchMap() {
       setNotesValue('')
       fetchData()
     } catch (error) {
-      alert('Error al guardar notas')
+      alert(t('dispatch.saveNotesError'))
     }
   }
 
@@ -916,7 +916,7 @@ export default function DispatchMap() {
       setBillingValues({ order_cost: '', deposit_amount: '', total_to_collect: '' })
       fetchData()
     } catch (error) {
-      alert('Error al guardar cobranza')
+      alert(t('dispatch.saveBillingError'))
     }
   }
 
@@ -983,7 +983,7 @@ export default function DispatchMap() {
   const handleSyncDrivers = async () => {
     if (!selectedRespondUsers.length) return
     if (!importPassword || importPassword.length < 6) {
-      alert('La contraseña debe tener al menos 6 caracteres')
+      alert(t('dispatch.passwordTooShort'))
       return
     }
     try {

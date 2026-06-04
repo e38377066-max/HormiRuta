@@ -9,7 +9,7 @@ import {
   ServiceAgent,
   User
 } from '../models/index.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import RespondioService from '../services/respondio.js';
 import respondApiService from '../services/respondApiService.js';
 import AddressValidationService from '../services/addressValidation.js';
@@ -43,7 +43,7 @@ router.get('/settings', requireAuth, async (req, res) => {
   }
 });
 
-router.put('/settings', requireAuth, async (req, res) => {
+router.put('/settings', requireAdmin, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
 
@@ -764,11 +764,11 @@ router.post('/geocode-address', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/validate-zip', async (req, res) => {
+router.post('/validate-zip', requireAuth, async (req, res) => {
   try {
     const { zipOrCity } = req.body;
     
-    const userId = req.session?.userId || 1;
+    const userId = req.userId;
     console.log('Validate ZIP request:', { zipOrCity, userId });
     
     if (!zipOrCity || !zipOrCity.trim()) {
@@ -905,6 +905,14 @@ router.post('/validate-address', requireAuth, async (req, res) => {
 
 router.post('/webhook', async (req, res) => {
   try {
+    const webhookSecret = process.env.WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const incoming = req.headers['x-webhook-secret'] || req.headers['x-respond-secret'] || '';
+      if (incoming !== webhookSecret) {
+        return res.status(401).json({ error: 'Invalid webhook secret' });
+      }
+    }
+
     const event = req.body;
     console.log('Received webhook from Respond.io:', JSON.stringify(event, null, 2));
 

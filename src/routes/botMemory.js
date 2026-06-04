@@ -8,6 +8,7 @@ import MessagingSettings from '../models/MessagingSettings.js';
 import RespondioService from '../services/respondio.js';
 import AIService from '../services/aiService.js';
 import { Op } from 'sequelize';
+import { requireAuth } from '../middleware/auth.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -21,11 +22,6 @@ const upload = multer({
 });
 
 const router = express.Router();
-
-function requireAuth(req, res, next) {
-  if (!req.session?.userId) return res.status(401).json({ error: 'No autenticado' });
-  next();
-}
 
 // GET /api/bot-memory — listar todas las memorias
 router.get('/', requireAuth, async (req, res) => {
