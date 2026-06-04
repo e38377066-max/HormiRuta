@@ -1,0 +1,152 @@
+.support-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #1e293b;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.support-header {
+  background: #0f172a;
+  color: #fff;
+  padding: 28px 24px;
+  text-align: center;
+}
+
+.support-header h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.support-header p {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.support-main {
+  max-width: 540px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+}
+
+.support-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,0,0,0.06);
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-bottom: 24px;
+  transition: background 0.2s;
+}
+
+.support-back-btn:hover {
+  background: rgba(0,0,0,0.1);
+}
+
+.support-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.support-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.support-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  transform: translateY(-1px);
+}
+
+.support-card-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.support-whatsapp .support-card-icon {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.support-email .support-card-icon {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.support-web .support-card-icon {
+  background: #f3e8ff;
+  color: #9333ea;
+}
+
+.support-card-text {
+  flex: 1;
+}
+
+.support-card-text h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 2px;
+  color: #0f172a;
+}
+
+.support-card-text p {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0 0 4px;
+}
+
+.support-card-action {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #3b82f6;
+}
+
+.support-whatsapp .support-card-action { color: #16a34a; }
+.support-email .support-card-action    { color: #2563eb; }
+.support-web .support-card-action      { color: #9333ea; }
+
+.support-card-arrow {
+  color: #cbd5e1;
+  font-size: 22px !important;
+}
+
+.support-info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 20px;
+}
+
+.support-info-card p {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .support-header h1 { font-size: 1.3rem; }
+}

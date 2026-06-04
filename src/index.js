@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 console.log('===========================================');
@@ -118,17 +119,6 @@ app.use(express.static(distPath, {
   }
 }));
 
-app.get('/privacidad', (req, res) => {
-  res.sendFile(path.join(__dirname, 'pages', 'privacidad.html'));
-});
-
-app.get('/soporte', (req, res) => {
-  res.sendFile(path.join(__dirname, 'pages', 'soporte.html'));
-});
-
-app.get('/support', (req, res) => {
-  res.sendFile(path.join(__dirname, 'pages', 'soporte.html'));
-});
 
 app.get('/dev-login', async (req, res) => {
   if (process.env.NODE_ENV === 'production') return res.status(404).send('Not found');
@@ -154,7 +144,12 @@ app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
   }
-  res.sendFile(path.join(distPath, 'index.html'));
+  const indexHtml = path.join(distPath, 'index.html');
+  if (fs.existsSync(indexHtml)) {
+    res.sendFile(indexHtml);
+  } else {
+    next();
+  }
 });
 
 async function startServer() {

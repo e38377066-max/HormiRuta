@@ -9,6 +9,7 @@ import LoginPage from './pages/Auth/LoginPage'
 import RegisterPage from './pages/Auth/RegisterPage'
 import PrivacyPage from './pages/Legal/PrivacyPage'
 import TermsPage from './pages/Legal/TermsPage'
+import SupportPage from './pages/Support/SupportPage'
 
 import OrdersPage from './pages/Messaging/OrdersPage'
 
@@ -88,6 +89,7 @@ export default function App() {
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
+      <Route path="/soporte" element={<ProtectedRoute><SupportPage /></ProtectedRoute>} />
       
       <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to={isAuthenticated ? getDefaultRoute(user) : '/login'} replace />} />

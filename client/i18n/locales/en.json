@@ -1239,5 +1239,13 @@
       "s7Title": "G. Contact",
       "s7Body": "For questions about these terms, contact us at:"
     }
+  },
+  "support": {
+    "openChat": "Open chat",
+    "emailTitle": "Email",
+    "sendEmail": "Send email",
+    "webTitle": "Website",
+    "visitSite": "Visit site",
+    "hours": "Monday to Friday, 8am – 6pm CST. For urgent matters, use WhatsApp."
   }
 }

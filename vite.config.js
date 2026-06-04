@@ -17,18 +17,6 @@ export default defineConfig({
       '/uploads': {
         target: 'http://localhost:3000',
         changeOrigin: true
-      },
-      '/privacidad': {
-        target: 'http://localhost:3000',
-        changeOrigin: true
-      },
-      '/soporte': {
-        target: 'http://localhost:3000',
-        changeOrigin: true
-      },
-      '/support': {
-        target: 'http://localhost:3000',
-        changeOrigin: true
       }
     }
   },
