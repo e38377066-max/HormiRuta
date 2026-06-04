@@ -352,31 +352,55 @@ class RespondioService {
   }
 
   async updateContactCustomFields(contactIdentifier, customFields) {
+    const idStr = String(contactIdentifier);
+    const identifier = (typeof contactIdentifier === 'number' || /^\d+$/.test(idStr))
+      ? `id:${idStr}`
+      : idStr;
+
+    const isFieldNotFound = (err) => {
+      const msg = err?.response?.data?.message || err?.message || '';
+      return err?.response?.status === 400 && /not found in the workspace/i.test(msg);
+    };
+
+    const custom_fields = Object.entries(customFields).map(([name, value]) => ({
+      name,
+      value: value != null ? String(value) : null
+    }));
+
+    // Try batch update first
     try {
-      const idStr = String(contactIdentifier);
-      const identifier = (typeof contactIdentifier === 'number' || /^\d+$/.test(idStr))
-        ? `id:${idStr}`
-        : idStr;
-
-      const custom_fields = Object.entries(customFields).map(([name, value]) => ({
-        name,
-        value: value != null ? String(value) : null
-      }));
-
-      const response = await this.requestWithRetry('put', `/contact/${identifier}`, {
-        custom_fields
-      });
-      return {
-        success: true,
-        data: response.data
-      };
-    } catch (error) {
-      console.error('Respond.io update custom fields error:', error.response?.data || error.message);
-      return {
-        success: false,
-        error: error.response?.data?.message || error.message
-      };
+      const response = await this.requestWithRetry('put', `/contact/${identifier}`, { custom_fields });
+      return { success: true, data: response.data };
+    } catch (batchError) {
+      if (!isFieldNotFound(batchError) || custom_fields.length <= 1) {
+        console.error('Respond.io update custom fields error:', batchError.response?.data || batchError.message);
+        return { success: false, error: batchError.response?.data?.message || batchError.message };
+      }
     }
+
+    // Batch failed due to missing field(s) — update one by one, skip missing fields
+    const skipped = [];
+    let lastSuccess = null;
+    for (const cf of custom_fields) {
+      try {
+        const r = await this.requestWithRetry('put', `/contact/${identifier}`, { custom_fields: [cf] });
+        lastSuccess = r.data;
+      } catch (fieldError) {
+        if (isFieldNotFound(fieldError)) {
+          skipped.push(cf.name);
+          console.warn(`[Respond.io] Campo personalizado no encontrado en workspace, omitido: "${cf.name}"`);
+        } else {
+          console.error(`[Respond.io] Error actualizando campo "${cf.name}":`, fieldError.response?.data || fieldError.message);
+        }
+      }
+    }
+
+    const updated = custom_fields.length - skipped.length;
+    return {
+      success: updated > 0,
+      skippedFields: skipped.length > 0 ? skipped : undefined,
+      data: lastSuccess
+    };
   }
 
   async listMessages(contactIdentifier, options = {}) {
