@@ -51,6 +51,8 @@
         <string>Area 862 needs permission to save delivery evidence photos to your gallery.</string>
         <key>NSLocationWhenInUseUsageDescription</key>
         <string>Area 862 uses your location while the app is open to show your position on the map, calculate delivery routes, and open turn-by-turn navigation to the next stop.</string>
+        <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+        <string>Area 862 uses your location to show your position on the map, calculate delivery routes, and open turn-by-turn navigation to the next stop.</string>
         <key>LSApplicationQueriesSchemes</key>
         <array>
                 <string>maps</string>
