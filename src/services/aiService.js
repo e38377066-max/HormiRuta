@@ -176,6 +176,19 @@ class AIService {
   getSystemPrompt(memories = [], knowledge = [], extras = {}) {
     const { customerProfile = null, agentStyle = null } = extras;
     const products = this.getProductsList();
+    let pricingSection = '';
+    const productPrices = this.settings.product_prices;
+    if (productPrices && Array.isArray(productPrices) && productPrices.length > 0) {
+      const rows = productPrices.map(p => {
+        let row = `- ${p.product}`;
+        if (p.description) row += ` (${p.description})`;
+        row += `: ${p.price}`;
+        if (p.deposit) row += ` | Depósito requerido: ${p.deposit}`;
+        if (p.notes) row += ` — ${p.notes}`;
+        return row;
+      }).join('\n');
+      pricingSection = `\n\n## PRECIOS REALES DE PRODUCTOS\nEstos son los precios OFICIALES y ACTUALIZADOS. SÍ puedes darlos exactamente cuando el cliente pregunte:\n${rows}\n\nSi el cliente pregunta por un producto o cantidad que NO aparece en esta lista, di "déjame confirmar ese precio con mi compañero y te digo" — no inventes.`;
+    }
     let memoriesSection = '';
     if (memories && memories.length > 0) {
       const lessonsText = memories.map((m, i) => `${i + 1}. [${m.context_type}] ${m.lesson}`).join('\n');
@@ -213,7 +226,7 @@ class AIService {
 - ~15 años en el mercado atendiendo principalmente a empresarios hispanos
 
 ## PRODUCTOS Y SERVICIOS DISPONIBLES
-${products}
+${products}${pricingSection}
 
 ## TU FUNCIÓN — VENDEDOR HUMANO, NO ROBOT
 Eres el primer punto de contacto con el cliente. Te comportas como un vendedor experimentado de Area 862 que ya conoce a su comunidad — NO como un asistente automático. Tu trabajo:
@@ -227,8 +240,9 @@ Eres el primer punto de contacto con el cliente. Te comportas como un vendedor e
 - Siempre en español natural y cálido (con tono tex-mex hispano de Dallas si encaja)
 - NUNCA preguntes algo que el cliente YA contestó (revisa "Datos que ya tenemos" antes de cada respuesta)
 - NUNCA repitas el mismo saludo si ya saludaste antes
-- NUNCA inventes precios EXACTOS, pero SÍ puedes dar RANGOS o "desde $X" si están en la base de conocimiento
-- NUNCA digas "te paso con un agente" para una pregunta simple que tú puedes responder (precios generales, materiales, tiempos, ubicación, horario, pago, archivos)
+- Si hay precios en "PRECIOS REALES DE PRODUCTOS", SÍ puedes darlos directamente al cliente — son oficiales
+- Si NO hay precio configurado para algo, di "déjame confirmar ese precio con mi compañero"
+- NUNCA digas "te paso con un agente" para una pregunta simple que tú puedes responder (materiales, tiempos, ubicación, horario, pago, archivos)
 - SÍ pasa al agente cuando: cliente quiere cotización exacta para un pedido, quiere mandar arte, quiere agendar entrega, ya dio ZIP+producto y quiere proceder, o muestra frustración
 - Mantén respuestas CORTAS (1-3 líneas máximo, como WhatsApp real). No hagas párrafos largos.
 - Usa emojis con moderación (1-2 por mensaje, naturales)

@@ -231,6 +231,11 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
     comment: 'Si true, la IA actúa como vendedor humano fluido en vez del state machine'
+  },
+  // Lista de precios de productos para el bot
+  product_prices: {
+    type: DataTypes.JSON,
+    defaultValue: []
   }
 }, {
   tableName: 'messaging_settings',
@@ -291,6 +296,7 @@ MessagingSettings.prototype.toDict = function() {
     ai_enabled: this.ai_enabled,
     has_openai_key: !!this.openai_api_key,
     conversational_mode: this.conversational_mode,
+    product_prices: this.product_prices || [],
     created_at: this.created_at,
     updated_at: this.updated_at
   };

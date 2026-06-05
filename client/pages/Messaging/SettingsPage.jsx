@@ -106,9 +106,12 @@ export default function SettingsPage() {
     test_contact_id: '',
     ai_enabled: false,
     openai_api_key: '',
-    conversational_mode: false
+    conversational_mode: false,
+    product_prices: []
   })
   const [hasExistingToken, setHasExistingToken] = useState(false)
+  const [newPrice, setNewPrice] = useState({ product: '', description: '', price: '', deposit: '', notes: '' })
+  const [addingPrice, setAddingPrice] = useState(false)
 
   const attentionModes = [
     { label: t('settings.attention.modes.automatic'), value: 'automatic' },
@@ -259,7 +262,8 @@ export default function SettingsPage() {
           test_contact_id: settings.test_contact_id || '',
           ai_enabled: settings.ai_enabled || false,
           openai_api_key: '',
-          conversational_mode: settings.conversational_mode || false
+          conversational_mode: settings.conversational_mode || false,
+          product_prices: Array.isArray(settings.product_prices) ? settings.product_prices : []
         })
         setHasOpenAIKey(settings.has_openai_key || settings.has_openai_env_key || false)
         if (settings.has_openai_env_key && !settings.ai_enabled) {
@@ -431,12 +435,32 @@ export default function SettingsPage() {
     }
   }
 
+  const handleAddPrice = () => {
+    if (!newPrice.product.trim() || !newPrice.price.trim()) return
+    const entry = { ...newPrice, id: Date.now() }
+    setForm(prev => ({ ...prev, product_prices: [...(prev.product_prices || []), entry] }))
+    setNewPrice({ product: '', description: '', price: '', deposit: '', notes: '' })
+    setAddingPrice(false)
+  }
+
+  const handleDeletePrice = (id) => {
+    setForm(prev => ({ ...prev, product_prices: (prev.product_prices || []).filter(p => p.id !== id) }))
+  }
+
+  const handleUpdatePrice = (id, field, value) => {
+    setForm(prev => ({
+      ...prev,
+      product_prices: (prev.product_prices || []).map(p => p.id === id ? { ...p, [field]: value } : p)
+    }))
+  }
+
   const tabs = [
     { id: 'connection', label: t('settings.tabs.connection'), icon: 'link' },
     { id: 'chatbot', label: t('settings.tabs.chatbot'), icon: 'smart_toy' },
     { id: 'messages', label: t('settings.tabs.messages'), icon: 'chat' },
     { id: 'automation', label: t('settings.tabs.automation'), icon: 'auto_fix_high' },
-    { id: 'ia', label: t('settings.tabs.ai'), icon: 'psychology' }
+    { id: 'ia', label: t('settings.tabs.ai'), icon: 'psychology' },
+    { id: 'precios', label: 'Precios', icon: 'sell' }
   ]
 
   return (
@@ -1455,6 +1479,207 @@ export default function SettingsPage() {
                 </div>
               </>
             )}
+          </>
+        )}
+
+        {activeTab === 'precios' && (
+          <>
+            <div className="settings-card">
+              <h3>
+                <span className="material-icons" style={{color: '#4ade80'}}>sell</span>
+                Precios de Productos
+              </h3>
+              <p className="description">
+                Configura los precios reales de tus productos. El bot los usará para responder a los clientes con información exacta cuando pregunten por precios.
+              </p>
+
+              {(form.product_prices || []).length === 0 && !addingPrice && (
+                <div style={{textAlign: 'center', padding: '32px', color: '#666', background: '#1a1a1a', borderRadius: '8px', marginBottom: '16px'}}>
+                  <span className="material-icons" style={{fontSize: '48px', marginBottom: '8px', display: 'block', color: '#333'}}>price_change</span>
+                  <p style={{margin: 0}}>Todavía no hay precios configurados.</p>
+                  <p style={{margin: '4px 0 0', fontSize: '13px', color: '#555'}}>Agrega los paquetes que manejas para que el bot los comparta con los clientes.</p>
+                </div>
+              )}
+
+              {(form.product_prices || []).length > 0 && (
+                <div style={{marginBottom: '16px', overflowX: 'auto'}}>
+                  <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '14px'}}>
+                    <thead>
+                      <tr style={{borderBottom: '2px solid #333'}}>
+                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Producto</th>
+                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Descripción / Cantidad</th>
+                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Precio</th>
+                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Depósito</th>
+                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Notas</th>
+                        <th style={{padding: '8px 10px'}}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(form.product_prices || []).map((item) => (
+                        <tr key={item.id} style={{borderBottom: '1px solid #222'}}>
+                          <td style={{padding: '8px 10px'}}>
+                            <input
+                              type="text"
+                              value={item.product}
+                              onChange={(e) => handleUpdatePrice(item.id, 'product', e.target.value)}
+                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#fff', padding: '4px 8px', width: '100%', minWidth: '100px'}}
+                            />
+                          </td>
+                          <td style={{padding: '8px 10px'}}>
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => handleUpdatePrice(item.id, 'description', e.target.value)}
+                              placeholder="ej. 500 piezas"
+                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#fff', padding: '4px 8px', width: '100%', minWidth: '110px'}}
+                            />
+                          </td>
+                          <td style={{padding: '8px 10px'}}>
+                            <input
+                              type="text"
+                              value={item.price}
+                              onChange={(e) => handleUpdatePrice(item.id, 'price', e.target.value)}
+                              placeholder="ej. $60"
+                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#4ade80', fontWeight: 600, padding: '4px 8px', width: '100%', minWidth: '70px'}}
+                            />
+                          </td>
+                          <td style={{padding: '8px 10px'}}>
+                            <input
+                              type="text"
+                              value={item.deposit}
+                              onChange={(e) => handleUpdatePrice(item.id, 'deposit', e.target.value)}
+                              placeholder="ej. $30"
+                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#f59e0b', padding: '4px 8px', width: '100%', minWidth: '70px'}}
+                            />
+                          </td>
+                          <td style={{padding: '8px 10px'}}>
+                            <input
+                              type="text"
+                              value={item.notes}
+                              onChange={(e) => handleUpdatePrice(item.id, 'notes', e.target.value)}
+                              placeholder="opcional"
+                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#aaa', padding: '4px 8px', width: '100%', minWidth: '100px'}}
+                            />
+                          </td>
+                          <td style={{padding: '8px 10px'}}>
+                            <button
+                              onClick={() => handleDeletePrice(item.id)}
+                              style={{background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '4px'}}
+                            >
+                              <span className="material-icons" style={{fontSize: '20px'}}>delete</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {addingPrice && (
+                <div style={{background: '#1a2a1a', border: '1px solid #4ade80', borderRadius: '8px', padding: '16px', marginBottom: '16px'}}>
+                  <p style={{color: '#4ade80', fontWeight: 600, margin: '0 0 12px', fontSize: '14px'}}>Nuevo precio</p>
+                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 2fr', gap: '8px', marginBottom: '12px'}}>
+                    <div>
+                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Producto *</label>
+                      <input
+                        type="text"
+                        value={newPrice.product}
+                        onChange={(e) => setNewPrice(prev => ({...prev, product: e.target.value}))}
+                        placeholder="ej. Tarjetas"
+                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#fff', padding: '6px 10px', boxSizing: 'border-box'}}
+                      />
+                    </div>
+                    <div>
+                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Descripción / Cantidad</label>
+                      <input
+                        type="text"
+                        value={newPrice.description}
+                        onChange={(e) => setNewPrice(prev => ({...prev, description: e.target.value}))}
+                        placeholder="ej. 500 piezas"
+                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#fff', padding: '6px 10px', boxSizing: 'border-box'}}
+                      />
+                    </div>
+                    <div>
+                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Precio *</label>
+                      <input
+                        type="text"
+                        value={newPrice.price}
+                        onChange={(e) => setNewPrice(prev => ({...prev, price: e.target.value}))}
+                        placeholder="ej. $60"
+                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#4ade80', fontWeight: 600, padding: '6px 10px', boxSizing: 'border-box'}}
+                      />
+                    </div>
+                    <div>
+                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Depósito</label>
+                      <input
+                        type="text"
+                        value={newPrice.deposit}
+                        onChange={(e) => setNewPrice(prev => ({...prev, deposit: e.target.value}))}
+                        placeholder="ej. $30"
+                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#f59e0b', padding: '6px 10px', boxSizing: 'border-box'}}
+                      />
+                    </div>
+                    <div>
+                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Notas</label>
+                      <input
+                        type="text"
+                        value={newPrice.notes}
+                        onChange={(e) => setNewPrice(prev => ({...prev, notes: e.target.value}))}
+                        placeholder="opcional"
+                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#aaa', padding: '6px 10px', boxSizing: 'border-box'}}
+                      />
+                    </div>
+                  </div>
+                  <div style={{display: 'flex', gap: '8px'}}>
+                    <button
+                      onClick={handleAddPrice}
+                      disabled={!newPrice.product.trim() || !newPrice.price.trim()}
+                      style={{background: '#4ade80', color: '#000', border: 'none', borderRadius: '6px', padding: '8px 18px', fontWeight: 600, cursor: 'pointer', fontSize: '14px', opacity: (!newPrice.product.trim() || !newPrice.price.trim()) ? 0.5 : 1}}
+                    >
+                      Agregar
+                    </button>
+                    <button
+                      onClick={() => { setAddingPrice(false); setNewPrice({ product: '', description: '', price: '', deposit: '', notes: '' }) }}
+                      style={{background: '#333', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 18px', cursor: 'pointer', fontSize: '14px'}}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!addingPrice && (
+                <button
+                  onClick={() => setAddingPrice(true)}
+                  style={{display: 'flex', alignItems: 'center', gap: '6px', background: '#1a2a1a', border: '1px dashed #4ade80', borderRadius: '8px', padding: '10px 16px', color: '#4ade80', cursor: 'pointer', fontSize: '14px', fontWeight: 500}}
+                >
+                  <span className="material-icons" style={{fontSize: '18px'}}>add</span>
+                  Agregar precio
+                </button>
+              )}
+            </div>
+
+            <div className="settings-card">
+              <h3>
+                <span className="material-icons" style={{color: '#60a5fa'}}>info</span>
+                ¿Cómo funciona?
+              </h3>
+              <div style={{display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px'}}>
+                <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                  <span className="material-icons" style={{color: '#4ade80', flexShrink: 0}}>check_circle</span>
+                  <p style={{margin: 0, color: '#aaa', fontSize: '14px'}}>Los precios que configures aquí se inyectan directamente en el contexto del bot. Cuando un cliente pregunte "¿cuánto cuestan las tarjetas?", el bot le dará el precio exacto.</p>
+                </div>
+                <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                  <span className="material-icons" style={{color: '#f59e0b', flexShrink: 0}}>info</span>
+                  <p style={{margin: 0, color: '#aaa', fontSize: '14px'}}>El campo <strong style={{color: '#fff'}}>Depósito</strong> es opcional — úsalo para productos que requieren un pago parcial por adelantado (ej. Zelle de $30 para apartar).</p>
+                </div>
+                <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                  <span className="material-icons" style={{color: '#a78bfa', flexShrink: 0}}>psychology</span>
+                  <p style={{margin: 0, color: '#aaa', fontSize: '14px'}}>Si el bot recibe una pregunta de precio para un producto o cantidad que NO está en la lista, dirá que lo confirma con el equipo — nunca inventa.</p>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>

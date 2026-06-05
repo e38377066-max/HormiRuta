@@ -61,7 +61,8 @@ router.put('/settings', requireAdmin, async (req, res) => {
       'product_menu_message', 'excluded_tags', 'products',
       'test_mode', 'test_contact_id', 'catalog_link', 'products_list',
       'followup_enabled', 'followup_timeout_minutes', 'followup_message', 'followup_message_2',
-      'ai_enabled', 'openai_api_key', 'conversational_mode'
+      'ai_enabled', 'openai_api_key', 'conversational_mode',
+      'product_prices'
     ];
 
     for (const field of allowedFields) {
