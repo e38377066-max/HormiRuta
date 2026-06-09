@@ -134,22 +134,6 @@ app.use(express.static(distPath, {
 }));
 
 
-// Páginas HTML estáticas de soporte legal (Apple App Store requiere URL de soporte funcional)
-/**
- * @description Sirve la página de soporte estática.
- * @route GET /soporte
- */
-app.get('/soporte', (req, res) => {
-  res.sendFile(path.join(__dirname, 'pages', 'soporte.html'));
-});
-
-/**
- * @description Sirve la página de privacidad estática.
- * @route GET /privacidad
- */
-app.get('/privacidad', (req, res) => {
-  res.sendFile(path.join(__dirname, 'pages', 'privacidad.html'));
-});
 
 /**
  * @description Helper para login en desarrollo. Inyecta el token en localStorage y redirecciona.
