@@ -97,9 +97,15 @@ export function AuthProvider({ children }) {
       return { success: true, user: res.data.user }
     } catch (err) {
       let msg = err.response?.data?.error || ''
-      if (!msg) msg = err.code === 'ERR_NETWORK'
-        ? 'No se pudo conectar al servidor. Verifica tu conexión.'
-        : `${err.message} [${err.code || 'UNKNOWN'}]`
+      if (!msg) {
+        if (err.friendlyMessage) {
+          msg = err.friendlyMessage
+        } else if (err.code === 'ERR_NETWORK' || err.code === 'ECONNABORTED' || err.isTimeout) {
+          msg = 'No se pudo conectar al servidor. Verifica tu conexión a internet.'
+        } else {
+          msg = `${err.message} [${err.code || 'UNKNOWN'}]`
+        }
+      }
       setError(msg)
       return { success: false, error: msg }
     } finally {
