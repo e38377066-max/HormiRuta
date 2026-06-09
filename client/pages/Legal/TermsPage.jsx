@@ -63,7 +63,7 @@ export default function TermsPage() {
             <h2>{t('legal.terms.s7Title')}</h2>
             <p>
               {t('legal.terms.s7Body')}<br />
-              <a href="mailto:admin@area862system.com">admin@area862system.com</a>
+              <a href="mailto:felipedelgado2006@gmail.com">felipedelgado2006@gmail.com</a>
             </p>
           </div>
         </div>

@@ -108,7 +108,7 @@ export default function PrivacyPage() {
             <h2>{t('legal.privacy.s11Title')}</h2>
             <p>
               {t('legal.privacy.s11Body')}<br />
-              <a href="mailto:admin@area862system.com">admin@area862system.com</a><br />
+              <a href="mailto:felipedelgado2006@gmail.com">felipedelgado2006@gmail.com</a><br />
               <a href="https://area862system.com" target="_blank" rel="noopener noreferrer">area862system.com</a>
             </p>
           </div>
