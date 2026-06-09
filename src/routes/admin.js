@@ -387,117 +387,123 @@ router.delete('/dispatch/reset', requireAdmin, async (req, res) => {
   }
 });
 
+// ── Shared helpers for export ──────────────────────────────────────────────
+const VALID_DISPATCH_STATUSES = ['available', 'assigned', 'delivered', 'archived'];
+const VALID_ORDER_STATUSES = ['approved', 'pending', 'ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'];
+
+const DISPATCH_STATUS_LABELS = {
+  available: 'Disponible', assigned: 'Asignado',
+  delivered: 'Entregado', archived: 'Archivado'
+};
+const ORDER_STATUS_LABELS = {
+  approved: 'Aprobado', pending: 'Pendiente', ordered: 'Ordenado',
+  pickup_ready: 'Listo para recoger', on_delivery: 'En camino',
+  ups_shipped: 'UPS Enviado', delivered: 'Entregado'
+};
+const PAYMENT_STATUS_LABELS = { pending: 'Pendiente', paid: 'Pagado' };
+
+// Todas las columnas posibles: key → { header, width, getter }
+const ALL_COLUMNS = {
+  customer_name:     { header: 'Nombre Cliente',     width: 28, get: r => r.customer_name || '' },
+  customer_phone:    { header: 'Teléfono',           width: 16, get: r => r.customer_phone || '' },
+  validated_address: { header: 'Dirección Validada', width: 40, get: r => r.validated_address || '' },
+  original_address:  { header: 'Dirección Original', width: 35, get: r => r.original_address || '' },
+  apartment_number:  { header: 'Apartamento',        width: 12, get: r => r.apartment_number || '' },
+  city:              { header: 'Ciudad',             width: 18, get: r => r.city || '' },
+  state:             { header: 'Estado',             width: 8,  get: r => r.state || '' },
+  zip_code:          { header: 'ZIP',                width: 8,  get: r => r.zip_code || '' },
+  dispatch_status:   { header: 'Estado Despacho',   width: 14, get: r => DISPATCH_STATUS_LABELS[r.dispatch_status] || r.dispatch_status || '' },
+  order_status:      { header: 'Estado Orden',      width: 16, get: r => ORDER_STATUS_LABELS[r.order_status] || r.order_status || '' },
+  order_cost:        { header: 'Costo ($)',          width: 10, get: r => r.order_cost != null ? Number(r.order_cost).toFixed(2) : '' },
+  deposit_amount:    { header: 'Depósito ($)',       width: 10, get: r => r.deposit_amount != null ? Number(r.deposit_amount).toFixed(2) : '' },
+  total_to_collect:  { header: 'Por Cobrar ($)',     width: 12, get: r => r.total_to_collect != null ? Number(r.total_to_collect).toFixed(2) : '' },
+  amount_collected:  { header: 'Cobrado ($)',        width: 10, get: r => r.amount_collected != null ? Number(r.amount_collected).toFixed(2) : '' },
+  payment_method:    { header: 'Método Pago',        width: 12, get: r => r.payment_method || '' },
+  payment_status:    { header: 'Estado Pago',        width: 12, get: r => PAYMENT_STATUS_LABELS[r.payment_status] || r.payment_status || '' },
+  driver_name:       { header: 'Driver',             width: 20, get: r => r.driver_name || '' },
+  notes:             { header: 'Notas',              width: 30, get: r => r.notes || '' },
+  source:            { header: 'Fuente',             width: 14, get: r => r.source || '' },
+  created_at:        { header: 'Fecha Creación',     width: 18, get: r => r.created_at ? new Date(r.created_at).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '' },
+  delivered_at:      { header: 'Fecha Entrega',      width: 18, get: r => r.delivered_at ? new Date(r.delivered_at).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '' }
+};
+
+function buildExportWhere(req) {
+  const rawStatuses = (req.query.statuses || '').split(',').map(s => s.trim()).filter(Boolean);
+  const dispatchStatuses = rawStatuses.filter(s => VALID_DISPATCH_STATUSES.includes(s));
+
+  const rawOrder = (req.query.orderStatuses || '').split(',').map(s => s.trim()).filter(Boolean);
+  const orderStatuses = rawOrder.filter(s => VALID_ORDER_STATUSES.includes(s));
+
+  if (dispatchStatuses.length === 0) return null;
+
+  const where = { dispatch_status: { [Op.in]: dispatchStatuses } };
+  if (orderStatuses.length > 0) {
+    where.order_status = { [Op.in]: orderStatuses };
+  }
+  return where;
+}
+
+/**
+ * @description Devuelve el conteo de registros según los filtros de exportación.
+ * @route GET /api/admin/dispatch/export-count
+ * @access Private (Admin)
+ */
+router.get('/dispatch/export-count', requireAdmin, async (req, res) => {
+  try {
+    const where = buildExportWhere(req);
+    if (!where) return res.json({ count: 0 });
+    const count = await ValidatedAddress.count({ where });
+    res.json({ count });
+  } catch (error) {
+    console.error('Export count error:', error);
+    res.status(500).json({ error: 'Error al contar registros' });
+  }
+});
+
 /**
  * @description Exporta registros del dispatcher a un archivo Excel.
- * Permite filtrar por dispatch_status (múltiples estados separados por coma).
+ * Permite filtrar por dispatch_status, order_status y elegir columnas específicas.
  * @route GET /api/admin/dispatch/export
  * @access Private (Admin)
- * @param {string} [req.query.statuses] - Estados a exportar (ej: "available,assigned,delivered")
+ * @param {string} [req.query.statuses] - Estados de despacho (ej: "available,assigned")
+ * @param {string} [req.query.orderStatuses] - Estados de orden (ej: "approved,ordered")
+ * @param {string} [req.query.columns] - Columnas a incluir (ej: "customer_name,validated_address")
  * @returns {Buffer} 200 - Archivo .xlsx para descarga
  */
 router.get('/dispatch/export', requireAdmin, async (req, res) => {
   try {
-    const rawStatuses = req.query.statuses || 'available,assigned,delivered,archived';
-    const statuses = rawStatuses.split(',').map(s => s.trim()).filter(Boolean);
-
-    const VALID_STATUSES = ['available', 'assigned', 'delivered', 'archived'];
-    const filteredStatuses = statuses.filter(s => VALID_STATUSES.includes(s));
-    if (filteredStatuses.length === 0) {
-      return res.status(400).json({ error: 'Sin estados válidos para exportar' });
+    const where = buildExportWhere(req);
+    if (!where) {
+      return res.status(400).json({ error: 'Sin estados de despacho válidos para exportar' });
     }
 
-    const records = await ValidatedAddress.findAll({
-      where: { dispatch_status: { [Op.in]: filteredStatuses } },
-      order: [['created_at', 'DESC']]
+    // Columnas solicitadas — si no se pasa nada se exportan todas
+    const rawCols = (req.query.columns || '').split(',').map(s => s.trim()).filter(Boolean);
+    const colKeys = rawCols.length > 0
+      ? rawCols.filter(k => ALL_COLUMNS[k])
+      : Object.keys(ALL_COLUMNS);
+
+    if (colKeys.length === 0) {
+      return res.status(400).json({ error: 'Sin columnas válidas para exportar' });
+    }
+
+    const records = await ValidatedAddress.findAll({ where, order: [['created_at', 'DESC']] });
+
+    const rows = records.map(r => {
+      const row = {};
+      for (const key of colKeys) {
+        row[ALL_COLUMNS[key].header] = ALL_COLUMNS[key].get(r);
+      }
+      return row;
     });
-
-    const DISPATCH_STATUS_LABELS = {
-      available: 'Disponible',
-      assigned: 'Asignado',
-      delivered: 'Entregado',
-      archived: 'Archivado'
-    };
-    const ORDER_STATUS_LABELS = {
-      approved: 'Aprobado',
-      pending: 'Pendiente',
-      ordered: 'Ordenado',
-      pickup_ready: 'Listo para recoger',
-      on_delivery: 'En camino',
-      ups_shipped: 'UPS Enviado',
-      delivered: 'Entregado'
-    };
-    const PAYMENT_STATUS_LABELS = {
-      pending: 'Pendiente',
-      paid: 'Pagado'
-    };
-
-    const formatDate = (d) => {
-      if (!d) return '';
-      const dt = new Date(d);
-      return dt.toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-    };
-    const formatMoney = (v) => (v !== null && v !== undefined) ? Number(v).toFixed(2) : '';
-
-    const rows = records.map(r => ({
-      'ID': r.id,
-      'Nombre Cliente': r.customer_name || '',
-      'Teléfono': r.customer_phone || '',
-      'Dirección Validada': r.validated_address || '',
-      'Dirección Original': r.original_address || '',
-      'Apartamento': r.apartment_number || '',
-      'Ciudad': r.city || '',
-      'Estado': r.state || '',
-      'ZIP': r.zip_code || '',
-      'Estado Despacho': DISPATCH_STATUS_LABELS[r.dispatch_status] || r.dispatch_status || '',
-      'Estado Orden': ORDER_STATUS_LABELS[r.order_status] || r.order_status || '',
-      'Costo ($)': formatMoney(r.order_cost),
-      'Depósito ($)': formatMoney(r.deposit_amount),
-      'Por Cobrar ($)': formatMoney(r.total_to_collect),
-      'Cobrado ($)': formatMoney(r.amount_collected),
-      'Método Pago': r.payment_method || '',
-      'Estado Pago': PAYMENT_STATUS_LABELS[r.payment_status] || r.payment_status || '',
-      'Driver': r.driver_name || '',
-      'Notas': r.notes || '',
-      'Fuente': r.source || '',
-      'Fecha Creación': formatDate(r.created_at),
-      'Fecha Entrega': formatDate(r.delivered_at)
-    }));
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
-
-    // Ancho de columnas
-    ws['!cols'] = [
-      { wch: 6 },  // ID
-      { wch: 28 }, // Nombre
-      { wch: 16 }, // Teléfono
-      { wch: 40 }, // Dir Validada
-      { wch: 35 }, // Dir Original
-      { wch: 12 }, // Apt
-      { wch: 18 }, // Ciudad
-      { wch: 8 },  // Estado
-      { wch: 8 },  // ZIP
-      { wch: 14 }, // Estado Despacho
-      { wch: 16 }, // Estado Orden
-      { wch: 10 }, // Costo
-      { wch: 10 }, // Depósito
-      { wch: 12 }, // Por Cobrar
-      { wch: 10 }, // Cobrado
-      { wch: 12 }, // Método Pago
-      { wch: 12 }, // Estado Pago
-      { wch: 20 }, // Driver
-      { wch: 30 }, // Notas
-      { wch: 14 }, // Fuente
-      { wch: 18 }, // Fecha Creación
-      { wch: 18 }  // Fecha Entrega
-    ];
-
+    ws['!cols'] = colKeys.map(k => ({ wch: ALL_COLUMNS[k].width }));
     XLSX.utils.book_append_sheet(wb, ws, 'Dispatcher');
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = `dispatcher_${dateStr}.xlsx`;
+    const filename = `dispatcher_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

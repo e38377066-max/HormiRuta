@@ -216,6 +216,25 @@ button.section-item.danger-item:disabled {
   cursor: not-allowed;
 }
 
+.export-toggle-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid #d0d5dd;
+  background: #fff;
+  color: #444;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+
+.export-toggle-btn:hover {
+  background: #f0f4ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
 .item-content {
   flex: 1;
 }
