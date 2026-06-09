@@ -1911,6 +1911,7 @@ class PollingService {
           let contactFieldAddress = null;
           let contactBilling = null;
           let cfApartment = null;
+          let cfAddress = null;
           try {
             const contactDetail = await respondio.getContact(contact.id);
             if (!contactDetail.success && contactDetail.notFound && existing) {
@@ -1928,7 +1929,7 @@ class PollingService {
               const cData = contactDetail.data;
               const normalizeFieldName = (n) => (n || '').toLowerCase()
                 .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-              const cfAddress = cData.custom_fields?.find(f => {
+              cfAddress = cData.custom_fields?.find(f => {
                 const fn = normalizeFieldName(f.name);
                 return fn === 'address' || fn === 'direccion' ||
                   fn === 'delivery address' || fn === 'delivery' ||
@@ -3844,6 +3845,14 @@ class PollingService {
           await record.update({ respond_contact_id: contactIdStr });
           console.log(`[ValidatedAddr] Vinculado registro manual de ${customerName} (por nombre) al contacto ${contactIdStr}`);
         }
+      }
+
+      // Rechazar resultados de geocodificación que sean solo ciudad/estado sin número de calle.
+      // Ejemplo: "Los Angeles, CA" o "United States" pasan la confianza de Google Maps
+      // pero no son direcciones entregables — no archivar como "fuera de TX", solo ignorar.
+      if (geocoded?.success && !geocoded?.streetNumber && sourceOverride !== 'contact_corrected') {
+        console.log(`[ValidatedAddr] Geocodificación sin número de calle para ${customerName}: "${finalAddress}" — descartada (resultado vago sin dirección entregable)`);
+        return null;
       }
 
       const geocodedState = geocoded?.stateShort || geocoded?.state || null;
