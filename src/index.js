@@ -120,6 +120,14 @@ app.use(express.static(distPath, {
 }));
 
 
+// Páginas HTML estáticas de soporte legal (Apple App Store requiere URL de soporte funcional)
+app.get('/soporte', (req, res) => {
+  res.sendFile(path.join(__dirname, 'pages', 'soporte.html'));
+});
+app.get('/privacidad', (req, res) => {
+  res.sendFile(path.join(__dirname, 'pages', 'privacidad.html'));
+});
+
 app.get('/dev-login', async (req, res) => {
   if (process.env.NODE_ENV === 'production') return res.status(404).send('Not found');
   const { token, redirect = '/messaging' } = req.query;
