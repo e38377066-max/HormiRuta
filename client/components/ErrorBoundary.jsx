@@ -1,24 +1,53 @@
+/**
+ * @fileoverview Componente Boundary para capturar errores de renderizado en React.
+ * Proporciona una interfaz amigable cuando ocurre un error inesperado para evitar el colapso de toda la aplicación.
+ */
+
 import React from 'react'
 
+/**
+ * Componente ErrorBoundary que captura errores en sus componentes hijos.
+ * @extends React.Component
+ */
 class ErrorBoundary extends React.Component {
+  /**
+   * @param {Object} props - Propiedades del componente.
+   * @param {React.ReactNode} props.children - Componentes hijos que serán monitoreados.
+   */
   constructor(props) {
     super(props)
     this.state = { hasError: false, error: null }
   }
 
+  /**
+   * Actualiza el estado cuando ocurre un error durante el renderizado.
+   * @param {Error} error - El error capturado.
+   * @returns {Object} Nuevo estado indicando la presencia de un error.
+   */
   static getDerivedStateFromError(error) {
     return { hasError: true, error }
   }
 
+  /**
+   * Registra el error capturado para fines de depuración.
+   * @param {Error} error - El error capturado.
+   * @param {React.ErrorInfo} errorInfo - Información adicional sobre el error.
+   */
   componentDidCatch(error, errorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo)
   }
 
+  /**
+   * Maneja el reintento recargando la página completa.
+   */
   handleReload = () => {
     this.setState({ hasError: false, error: null })
     window.location.reload()
   }
 
+  /**
+   * Maneja el regreso a la página anterior en el historial del navegador.
+   */
   handleGoBack = () => {
     this.setState({ hasError: false, error: null })
     window.history.back()

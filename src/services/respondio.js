@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Servicio para la integración con la API v2 de Respond.io.
+ * Proporciona métodos para enviar mensajes, gestionar contactos, listar conversaciones
+ * y actualizar campos personalizados, incluyendo manejo de límites de tasa y reintentos.
+ */
+
 import axios from 'axios';
 
 const RESPOND_API_BASE = 'https://api.respond.io/v2';
@@ -6,11 +12,23 @@ const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 5000;
 let cloudFrontCooldown = 0;
 
+/**
+ * Función de utilidad para pausar la ejecución.
+ * @param {number} ms - Milisegundos a esperar.
+ * @returns {Promise<void>}
+ */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Clase RespondioService para interactuar con la API de Respond.io.
+ */
 class RespondioService {
+  /**
+   * Crea una instancia de RespondioService.
+   * @param {string} apiToken - Token de API para autenticación.
+   */
   constructor(apiToken) {
     this.apiToken = apiToken;
     this.lastRequestTime = 0;
@@ -24,6 +42,12 @@ class RespondioService {
     });
   }
 
+  /**
+   * Implementa un retraso entre peticiones para evitar límites de tasa.
+   * @description Respeta tanto un retraso fijo entre peticiones como un cooldown si se detecta un bloqueo de CloudFront.
+   * @returns {Promise<void>}
+   * @private
+   */
   async throttle() {
     const now = Date.now();
     if (cloudFrontCooldown > now) {
@@ -38,6 +62,12 @@ class RespondioService {
     this.lastRequestTime = Date.now();
   }
 
+  /**
+   * Verifica si el error es un bloqueo de CloudFront.
+   * @param {Error} error - El error de axios.
+   * @returns {boolean} True si es un bloqueo de CloudFront.
+   * @private
+   */
   isCloudFrontBlock(error) {
     const responseData = error.response?.data;
     if (typeof responseData === 'string' && responseData.includes('cloudfront')) {
@@ -46,6 +76,16 @@ class RespondioService {
     return false;
   }
 
+  /**
+   * Realiza una petición HTTP con lógica de reintentos y control de tasa.
+   * @param {string} method - Método HTTP (get, post, patch, put, delete).
+   * @param {string} url - URL relativa del endpoint.
+   * @param {Object} [data=null] - Cuerpo de la petición.
+   * @param {Object} [config={}] - Configuración adicional de axios.
+   * @returns {Promise<Object>} Respuesta de la petición.
+   * @throws {Error} Si la petición falla después de los reintentos o por bloqueo de CloudFront.
+   * @private
+   */
   async requestWithRetry(method, url, data = null, config = {}) {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -83,6 +123,13 @@ class RespondioService {
     }
   }
 
+  /**
+   * Envía un mensaje de texto a un contacto.
+   * @param {number|string} contactIdentifier - ID o identificador del contacto.
+   * @param {string} text - Texto del mensaje.
+   * @param {string|number} [channelId=null] - ID del canal (opcional).
+   * @returns {Promise<Object>} Resultado del envío.
+   */
   async sendMessage(contactIdentifier, text, channelId = null) {
     try {
       let identifier = contactIdentifier;
@@ -118,6 +165,16 @@ class RespondioService {
     }
   }
 
+  /**
+   * Lista contactos con opciones de filtrado y búsqueda.
+   * @param {Object} [options={}] - Opciones de listado.
+   * @param {number} [options.limit=50] - Límite de resultados.
+   * @param {string} [options.cursorId] - Cursor para paginación.
+   * @param {string} [options.status] - Filtrar por estado de contacto (ej. 'open', 'closed').
+   * @param {string} [options.search] - Texto de búsqueda.
+   * @param {string} [options.timezone] - Zona horaria.
+   * @returns {Promise<Object>} Lista de contactos y datos de paginación.
+   */
   async listContacts(options = {}) {
     try {
       const { limit = 50, cursorId = null, status = null, search = '', timezone = 'America/Mexico_City' } = options;
@@ -161,6 +218,11 @@ class RespondioService {
     }
   }
 
+  /**
+   * Lista contactos con conversaciones abiertas.
+   * @param {Object} [options={}] - Opciones de listado.
+   * @returns {Promise<Object>} Lista de contactos con conversaciones abiertas.
+   */
   async listOpenConversations(options = {}) {
     try {
       const { limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
@@ -201,6 +263,11 @@ class RespondioService {
     }
   }
 
+  /**
+   * Lista contactos con conversaciones cerradas.
+   * @param {Object} [options={}] - Opciones de listado.
+   * @returns {Promise<Object>} Lista de contactos con conversaciones cerradas.
+   */
   async listClosedConversations(options = {}) {
     try {
       const { limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
@@ -239,6 +306,13 @@ class RespondioService {
     }
   }
 
+  /**
+   * Lista contactos filtrando por etapa de ciclo de vida.
+   * @description Prueba varios formatos de filtro debido a la variabilidad de la API de Respond.io.
+   * @param {Object} [options={}] - Opciones de filtrado.
+   * @param {string} [options.lifecycleStage='Pending'] - Etapa a filtrar.
+   * @returns {Promise<Object>} Resultado del listado.
+   */
   async listContactsByLifecycle(options = {}) {
     const { lifecycleStage = 'Pending', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
 
@@ -286,6 +360,11 @@ class RespondioService {
     };
   }
 
+  /**
+   * Lista contactos por valor de ciclo de vida (formato específico).
+   * @param {Object} [options={}] - Opciones de filtrado.
+   * @returns {Promise<Object>} Resultado del listado.
+   */
   async listContactsByLifecycleValue(options = {}) {
     const { lifecycle = 'New Lead', limit = 50, cursorId = null, timezone = 'America/Mexico_City' } = options;
     
@@ -322,6 +401,11 @@ class RespondioService {
     }
   }
 
+  /**
+   * Obtiene los detalles de un contacto específico.
+   * @param {string|number} contactIdentifier - ID o identificador del contacto.
+   * @returns {Promise<Object>} Datos del contacto.
+   */
   async getContact(contactIdentifier) {
     try {
       const identifier = typeof contactIdentifier === 'number' 
@@ -351,6 +435,13 @@ class RespondioService {
     }
   }
 
+  /**
+   * Actualiza los campos personalizados de un contacto.
+   * @description Intenta actualización por lotes primero; si falla por campos inexistentes, actualiza uno por uno omitiendo los fallidos.
+   * @param {string|number} contactIdentifier - ID o identificador del contacto.
+   * @param {Object} customFields - Objeto con los campos personalizados a actualizar {nombre: valor}.
+   * @returns {Promise<Object>} Resultado de la actualización.
+   */
   async updateContactCustomFields(contactIdentifier, customFields) {
     const idStr = String(contactIdentifier);
     const identifier = (typeof contactIdentifier === 'number' || /^\d+$/.test(idStr))
@@ -403,6 +494,12 @@ class RespondioService {
     };
   }
 
+  /**
+   * Lista los mensajes de una conversación específica.
+   * @param {string|number} contactIdentifier - ID o identificador del contacto.
+   * @param {Object} [options={}] - Opciones de listado (limit, cursorId).
+   * @returns {Promise<Object>} Lista de mensajes.
+   */
   async listMessages(contactIdentifier, options = {}) {
     try {
       const identifier = typeof contactIdentifier === 'number' 
@@ -431,6 +528,12 @@ class RespondioService {
     }
   }
 
+  /**
+   * Obtiene un mensaje específico por su ID.
+   * @param {string|number} contactIdentifier - ID o identificador del contacto.
+   * @param {string} messageId - ID del mensaje.
+   * @returns {Promise<Object>} Detalles del mensaje.
+   */
   async getMessage(contactIdentifier, messageId) {
     try {
       const identifier = typeof contactIdentifier === 'number' 
@@ -451,6 +554,10 @@ class RespondioService {
     }
   }
 
+  /**
+   * Prueba la conexión con la API de Respond.io.
+   * @returns {Promise<Object>} Resultado de la prueba.
+   */
   async testConnection() {
     try {
       const response = await this.requestWithRetry('post', '/contact/list', {
@@ -471,6 +578,12 @@ class RespondioService {
       };
     }
   }
+
+  /**
+   * Lista todos los usuarios (miembros) del workspace.
+   * @description Realiza paginación automática para obtener la lista completa de usuarios.
+   * @returns {Promise<Object>} Lista de usuarios.
+   */
   async listUsers() {
     try {
       let allUsers = [];
@@ -511,3 +624,4 @@ class RespondioService {
 }
 
 export default RespondioService;
+

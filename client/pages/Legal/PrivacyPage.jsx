@@ -1,7 +1,16 @@
+/**
+ * @fileoverview Página de Política de Privacidad de la aplicación.
+ * Muestra los términos legales relacionados con el manejo de datos personales y privacidad.
+ */
+
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import './LegalPage.css'
 
+/**
+ * Componente PrivacyPage que renderiza la política de privacidad.
+ * @returns {JSX.Element}
+ */
 export default function PrivacyPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()

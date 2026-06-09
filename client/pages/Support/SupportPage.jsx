@@ -1,7 +1,16 @@
+/**
+ * @fileoverview Página de soporte y ayuda para los usuarios.
+ * Centraliza los canales de contacto, enlaces legales, preguntas frecuentes e información de la aplicación.
+ */
+
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import './SupportPage.css'
 
+/**
+ * Componente SupportPage que ofrece recursos de ayuda y contacto.
+ * @returns {JSX.Element}
+ */
 export default function SupportPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()

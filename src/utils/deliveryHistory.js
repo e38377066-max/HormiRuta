@@ -1,10 +1,18 @@
+/**
+ * @fileoverview Utilidades para el manejo del historial de entregas.
+ * Proporciona funciones para guardar instantáneas de órdenes completadas.
+ */
+
 import DeliveryHistory from '../models/DeliveryHistory.js';
 import User from '../models/User.js';
 
-// Snapshot unico de una orden a DeliveryHistory.
-// Dedup: (original_order_id, delivered_at). Permite multiples snapshots
-// cuando la misma orden se reactiva (cliente vuelve a pedir) y se entrega de nuevo.
-// Usado por el endpoint manual de dispatch y por el sync automatico de Respond.io.
+/**
+ * @description Guarda un snapshot único de una orden en DeliveryHistory.
+ * Evita duplicados basados en (original_order_id, delivered_at).
+ * Permite múltiples snapshots si la misma orden se reactiva y se entrega de nuevo.
+ * @param {Object} order - El objeto de la orden a guardar.
+ * @returns {Promise<void>}
+ */
 export async function saveToDeliveryHistory(order) {
   try {
     const deliveredAt = order.delivered_at || new Date();

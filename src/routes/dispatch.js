@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Rutas de despacho y gestión de logística.
+ * Maneja la gestión de órdenes de despacho, estadísticas, historial de entregas,
+ * estados de órdenes, facturación, geocodificación y gestión de rutas para choferes.
+ * Incluye integración con Respond.io para actualización de ciclos de vida.
+ */
+
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -13,6 +20,9 @@ import { optimizeRouteOrder } from '../services/optimization.js';
 import geocodingService from '../services/geocodingService.js';
 import AddressExtractorService from '../services/addressExtractorService.js';
 
+/**
+ * Mapeo de estados de orden a nombres de ciclos de vida en Respond.io.
+ */
 const ORDER_STATUS_TO_LIFECYCLE = {
   approved: 'Approved',
   ordered: 'Ordered',
@@ -22,15 +32,20 @@ const ORDER_STATUS_TO_LIFECYCLE = {
   delivered: 'Delivered'
 };
 
-// Solo el efectivo (cash) es dinero que el chofer lleva en mano y debe entregar.
-// Zelle/transferencia/tarjeta/cheque van directo a la empresa, por eso NO cuentan
-// en "a entregar" del chofer. Las paradas sin metodo (datos antiguos) se tratan
-// como efectivo para no alterar la contabilidad historica.
+/**
+ * Determina si un método de pago se considera efectivo (cash).
+ * @description Los métodos nulos o explícitamente 'cash' son tratados como efectivo que el chofer maneja.
+ * @param {string} m - Método de pago.
+ * @returns {boolean} True si es efectivo.
+ */
 const isCashMethod = (m) => !m || m === 'cash';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Configuración de almacenamiento para multer para las fotos de evidencia.
+ */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, path.join(__dirname, '..', '..', 'uploads', 'evidence'));
@@ -41,6 +56,9 @@ const storage = multer.diskStorage({
   }
 });
 
+/**
+ * Middleware de carga de archivos configurado para imágenes.
+ */
 const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -59,6 +77,9 @@ const VALID_ORDER_STATUSES = ['approved', 'ordered', 'pickup_ready', 'on_deliver
 const ADMIN_STATUSES = ['approved', 'ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'];
 const DRIVER_STATUSES = ['delivered'];
 
+/**
+ * Transiciones de estado permitidas para las órdenes.
+ */
 const VALID_TRANSITIONS = {
   approved: ['ordered'],
   ordered: ['pickup_ready', 'on_delivery'],
@@ -68,6 +89,15 @@ const VALID_TRANSITIONS = {
   delivered: []
 };
 
+/**
+ * GET /orders
+ * @description Obtiene la lista de órdenes de despacho filtradas por rol (admin/driver) y estado.
+ * @route GET /orders
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de órdenes filtradas.
+ */
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -124,6 +154,15 @@ router.get('/orders', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /stats
+ * @description Obtiene estadísticas de conteo de órdenes por cada estado de despacho válido.
+ * @route GET /stats
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Conteos de órdenes totales y por estado.
+ */
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
     // Excluye archivadas en TODOS los contadores (las archivadas no se muestran
@@ -154,6 +193,15 @@ router.get('/stats', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * GET /orders/delivered
+ * @description Obtiene el historial de órdenes entregadas, incluyendo fotos de evidencia y datos de cobro de las paradas asociadas.
+ * @route GET /orders/delivered
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de órdenes entregadas con evidencia.
+ */
 router.get('/orders/delivered', requireAdmin, async (req, res) => {
   try {
     const deliveredOrders = await ValidatedAddress.findAll({
@@ -205,6 +253,15 @@ router.get('/orders/delivered', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * PUT /orders/:id/status
+ * @description Actualiza el estado de una orden de despacho y sincroniza el ciclo de vida en Respond.io si es necesario.
+ * @route PUT /orders/:id/status
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden actualizada.
+ */
 router.put('/orders/:id/status', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -280,6 +337,15 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /orders/:id/notes
+ * @description Actualiza las notas de una orden de despacho específica.
+ * @route PUT /orders/:id/notes
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden actualizada con las nuevas notas.
+ */
 router.put('/orders/:id/notes', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -303,6 +369,15 @@ router.put('/orders/:id/notes', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /orders/:id/billing
+ * @description Actualiza la información de facturación (costo, depósito, por cobrar) de una orden y su parada de ruta.
+ * @route PUT /orders/:id/billing
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden actualizada con los datos de cobro.
+ */
 router.put('/orders/:id/billing', requireAdmin, async (req, res) => {
   try {
     const order = await ValidatedAddress.findByPk(req.params.id);
@@ -342,6 +417,15 @@ router.put('/orders/:id/billing', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * GET /geocode-address
+ * @description Geocodifica una dirección para obtener sus coordenadas y detalles normalizados usando el servicio de geocodificación.
+ * @route GET /geocode-address
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Datos de geocodificación.
+ */
 router.get('/geocode-address', requireAdmin, async (req, res) => {
   try {
     const { address } = req.query;
@@ -367,6 +451,15 @@ router.get('/geocode-address', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders
+ * @description Crea una nueva orden de despacho manualmente con geocodificación automática.
+ * @route POST /orders
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Nueva orden creada.
+ */
 router.post('/orders', requireAdmin, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -417,6 +510,15 @@ router.post('/orders', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * PUT /orders/:id/edit
+ * @description Edita los campos de una orden existente, incluyendo re-geocodificación si la dirección cambia.
+ * @route PUT /orders/:id/edit
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden editada.
+ */
 router.put('/orders/:id/edit', requireAdmin, async (req, res) => {
   try {
     const order = await ValidatedAddress.findByPk(req.params.id);
@@ -460,6 +562,15 @@ router.put('/orders/:id/edit', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders/:id/refresh
+ * @description Escanea los mensajes recientes de Respond.io para intentar extraer una nueva dirección para la orden.
+ * @route POST /orders/:id/refresh
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden refrescada.
+ */
 router.post('/orders/:id/refresh', requireAdmin, async (req, res) => {
   try {
     const order = await ValidatedAddress.findByPk(req.params.id);
@@ -637,6 +748,15 @@ router.post('/orders/:id/refresh', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /orders/:id
+ * @description Elimina permanentemente una orden de despacho de la base de datos.
+ * @route DELETE /orders/:id
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la eliminación.
+ */
 router.delete('/orders/:id', requireAdmin, async (req, res) => {
   try {
     const order = await ValidatedAddress.findByPk(req.params.id);
@@ -654,6 +774,15 @@ router.delete('/orders/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * GET /accounting
+ * @description Obtiene un resumen contable detallado agrupado por chofer, basado en el historial de entregas.
+ * @route GET /accounting
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Datos contables por chofer.
+ */
 router.get('/accounting', requireAdmin, async (req, res) => {
   try {
     const { driver_id, date_from, date_to } = req.query;
@@ -745,6 +874,15 @@ router.get('/accounting', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * GET /deliveries-report
+ * @description Genera un reporte de entregas para un mes y año específicos.
+ * @route GET /deliveries-report
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Datos del reporte de entregas.
+ */
 router.get('/deliveries-report', requireAdmin, async (req, res) => {
   try {
     const { driver_id, date_from, date_to, search, month_year } = req.query;
@@ -806,6 +944,15 @@ router.get('/deliveries-report', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /deliveries-report/archive-month
+ * @description Archiva las entregas de un mes específico y genera un archivo Excel de respaldo.
+ * @route POST /deliveries-report/archive-month
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Stream} Archivo Excel generado para descarga.
+ */
 router.post('/deliveries-report/archive-month', requireAdmin, async (req, res) => {
   try {
     const { month_year } = req.body;
@@ -891,6 +1038,15 @@ router.post('/deliveries-report/archive-month', requireAdmin, async (req, res) =
   }
 });
 
+/**
+ * PUT /orders/bulk-status
+ * @description Actualiza el estado de múltiples órdenes de despacho de forma masiva y sincroniza con Respond.io.
+ * @route PUT /orders/bulk-status
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Número de órdenes actualizadas.
+ */
 router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
   try {
     const { order_ids, order_status } = req.body;
@@ -944,6 +1100,15 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /routes
+ * @description Crea una nueva ruta de despacho con órdenes y/o paradas favoritas asignadas.
+ * @route POST /routes
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Ruta creada.
+ */
 router.post('/routes', requireAdmin, async (req, res) => {
   try {
     const { name, order_ids, pre_optimized, favorite_stops } = req.body;
@@ -1019,6 +1184,15 @@ router.post('/routes', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /routes/:id
+ * @description Elimina una ruta de despacho, desvinculando las órdenes asociadas y eliminando sus paradas.
+ * @route DELETE /routes/:id
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la eliminación.
+ */
 router.delete('/routes/:id', requireAdmin, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
@@ -1035,6 +1209,15 @@ router.delete('/routes/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /routes/:id/stops/:stopId
+ * @description Elimina una parada específica de una ruta de despacho y desvincula la orden correspondiente.
+ * @route DELETE /routes/:id/stops/:stopId
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la eliminación de la parada.
+ */
 router.delete('/routes/:id/stops/:stopId', requireAdmin, async (req, res) => {
   try {
     const stop = await Stop.findOne({ where: { id: req.params.stopId, route_id: req.params.id } });
@@ -1050,6 +1233,15 @@ router.delete('/routes/:id/stops/:stopId', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /routes/:id/orders
+ * @description Agrega nuevas órdenes y/o paradas favoritas a una ruta de despacho existente.
+ * @route POST /routes/:id/orders
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Ruta actualizada.
+ */
 router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
   try {
     const { order_ids, favorite_stops } = req.body;
@@ -1104,6 +1296,15 @@ router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * PUT /drivers/global-commission
+ * @description Actualiza la comisión por parada para todos los choferes de forma global.
+ * @route PUT /drivers/global-commission
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Número de choferes actualizados y nueva comisión.
+ */
 router.put('/drivers/global-commission', requireAdmin, async (req, res) => {
   try {
     const { commission_per_stop } = req.body;
@@ -1121,6 +1322,15 @@ router.put('/drivers/global-commission', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * GET /routes
+ * @description Obtiene la lista de todas las rutas de despacho, con detalles de órdenes, paradas y comisiones de chofer.
+ * @route GET /routes
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de rutas con detalles.
+ */
 router.get('/routes', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -1172,6 +1382,15 @@ router.get('/routes', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /routes/payment-status
+ * @description Obtiene el estado de los pagos de las rutas completadas, incluyendo desglose de efectivo vs electrónico.
+ * @route GET /routes/payment-status
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de rutas con su estado de pago.
+ */
 router.get('/routes/payment-status', requireAdmin, async (req, res) => {
   try {
     const { driver_id, date_from, date_to } = req.query;
@@ -1270,6 +1489,15 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /routes/:id/optimize
+ * @description Optimiza el orden de las paradas en una ruta de despacho para minimizar la distancia y duración del viaje.
+ * @route POST /routes/:id/optimize
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Ruta optimizada con totales de distancia y duración.
+ */
 router.post('/routes/:id/optimize', requireAdmin, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
@@ -1319,6 +1547,15 @@ router.post('/routes/:id/optimize', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * PUT /routes/:id/assign
+ * @description Asigna un chofer a una ruta de despacho, actualiza estados de órdenes y sincroniza con Respond.io.
+ * @route PUT /routes/:id/assign
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Ruta asignada y órdenes actualizadas.
+ */
 router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
   try {
     const { driver_id } = req.body;
@@ -1687,7 +1924,15 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
   }
 });
 
-// Listado de paquetes saltados (Recepcion / Contabilidad de devoluciones)
+/**
+ * GET /returns
+ * @description Obtiene el listado de paquetes saltados que requieren devolución o gestión en oficina.
+ * @route GET /returns
+ * @access requireAuth (Admin o Chofer)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de paquetes devueltos/retenidos.
+ */
 router.get('/returns', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -1725,7 +1970,15 @@ router.get('/returns', requireAuth, async (req, res) => {
   }
 });
 
-// Marcar paquete recibido en oficina
+/**
+ * PUT /returns/:id/receive
+ * @description Marca un paquete como recibido físicamente en la oficina.
+ * @route PUT /returns/:id/receive
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden actualizada.
+ */
 router.put('/returns/:id/receive', requireAdmin, async (req, res) => {
   try {
     const order = await ValidatedAddress.findByPk(req.params.id);
@@ -1744,7 +1997,15 @@ router.put('/returns/:id/receive', requireAdmin, async (req, res) => {
   }
 });
 
-// Liberar paquete (volver a "normal" disponible para nueva ruta)
+/**
+ * PUT /returns/:id/release
+ * @description Libera una orden marcada como devolución, volviéndola a marcar como disponible para ser asignada a una nueva ruta.
+ * @route PUT /returns/:id/release
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden liberada.
+ */
 router.put('/returns/:id/release', requireAdmin, async (req, res) => {
   try {
     const order = await ValidatedAddress.findByPk(req.params.id);
@@ -1769,6 +2030,15 @@ router.put('/returns/:id/release', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * PUT /routes/:id/complete
+ * @description Marca una ruta de despacho como completada y registra la fecha de finalización.
+ * @route PUT /routes/:id/complete
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Ruta completada.
+ */
 router.put('/routes/:id/complete', requireAuth, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
@@ -1820,6 +2090,15 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /routes/:id/deliver-payment
+ * @description Registra la entrega del pago de una ruta por parte del chofer a la oficina.
+ * @route PUT /routes/:id/deliver-payment
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resumen de la entrega de pago registrada.
+ */
 router.put('/routes/:id/deliver-payment', requireAuth, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
@@ -1865,6 +2144,15 @@ router.put('/routes/:id/deliver-payment', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /routes/:id/admin-confirm-payment
+ * @description Permite al administrador confirmar la recepción del pago de una ruta (parcial o total).
+ * @route PUT /routes/:id/admin-confirm-payment
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Estado de confirmación de pago de la ruta.
+ */
 router.put('/routes/:id/admin-confirm-payment', requireAdmin, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
@@ -1921,6 +2209,15 @@ router.put('/routes/:id/admin-confirm-payment', requireAdmin, async (req, res) =
   }
 });
 
+/**
+ * GET /routes/:id/detail
+ * @description Obtiene el detalle completo de una ruta de despacho, incluyendo órdenes asociadas.
+ * @route GET /routes/:id/detail
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Detalle de la ruta.
+ */
 router.get('/routes/:id/detail', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -1949,6 +2246,15 @@ router.get('/routes/:id/detail', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /routes/history
+ * @description Obtiene el historial de rutas completadas o asignadas para el administrador.
+ * @route GET /routes/history
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de rutas históricas con detalles básicos.
+ */
 router.get('/routes/history', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -1977,6 +2283,15 @@ router.get('/routes/history', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /orders/:id/delivered
+ * @description Marca una orden de despacho como entregada y guarda el registro en el historial de entregas.
+ * @route PUT /orders/:id/delivered
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden actualizada.
+ */
 router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -2003,6 +2318,15 @@ router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /templates
+ * @description Obtiene la lista de plantillas de mensajes (templates) desde Respond.io para el canal predeterminado.
+ * @route GET /templates
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de plantillas disponibles.
+ */
 router.get('/templates', requireAuth, async (req, res) => {
   try {
     // Solo usar el token del usuario autenticado (sin fallback cross-tenant)
@@ -2020,6 +2344,15 @@ router.get('/templates', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders/:id/send-template
+ * @description Envía una plantilla de mensaje de WhatsApp a un contacto asociado a una orden a través de Respond.io.
+ * @route POST /orders/:id/send-template
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado del envío de la plantilla.
+ */
 router.post('/orders/:id/send-template', requireAuth, async (req, res) => {
   try {
     const { templateName, languageCode, components } = req.body;
@@ -2064,6 +2397,15 @@ router.post('/orders/:id/send-template', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders/:id/send-message
+ * @description Envía un mensaje de texto libre a un contacto asociado a una orden a través de Respond.io.
+ * @route POST /orders/:id/send-message
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado del envío del mensaje.
+ */
 router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
   try {
     const { text } = req.body;
@@ -2099,6 +2441,15 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /stops/:id/send-template
+ * @description Envía una plantilla de mensaje a través de Respond.io usando los datos de una parada de ruta específica.
+ * @route POST /stops/:id/send-template
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado del envío de la plantilla.
+ */
 router.post('/stops/:id/send-template', requireAuth, async (req, res) => {
   try {
     const { templateName, languageCode, components } = req.body;
@@ -2146,6 +2497,15 @@ router.post('/stops/:id/send-template', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /stops/:id/send-message
+ * @description Envía un mensaje de texto libre a través de Respond.io usando los datos de una parada de ruta específica.
+ * @route POST /stops/:id/send-message
+ * @access requireAuth (Admin o Chofer asignado)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado del envío del mensaje.
+ */
 router.post('/stops/:id/send-message', requireAuth, async (req, res) => {
   try {
     const { text } = req.body;
@@ -2191,6 +2551,15 @@ router.post('/stops/:id/send-message', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /my-accounting
+ * @description Obtiene el resumen contable personal del chofer autenticado, incluyendo entregas y comisiones.
+ * @route GET /my-accounting
+ * @access requireAuth (Driver)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Datos contables del chofer.
+ */
 router.get('/my-accounting', requireAuth, async (req, res) => {
   try {
     const { month_year, date_from, date_to } = req.query;
@@ -2337,6 +2706,15 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /my-completed-routes
+ * @description Obtiene la lista de rutas completadas por el chofer autenticado, con detalles de cobros y comisiones.
+ * @route GET /my-completed-routes
+ * @access requireAuth (Driver)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de rutas completadas con desglose.
+ */
 router.get('/my-completed-routes', requireAuth, async (req, res) => {
   try {
     const routes = await Route.findAll({
@@ -2418,6 +2796,15 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /favorites
+ * @description Obtiene la lista de direcciones favoritas (puntos frecuentes de entrega/recogida).
+ * @route GET /favorites
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de direcciones favoritas.
+ */
 router.get('/favorites', requireAdmin, async (req, res) => {
   try {
     const favorites = await FavoriteAddress.findAll({ order: [['created_at', 'DESC']] });
@@ -2428,6 +2815,15 @@ router.get('/favorites', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /favorites
+ * @description Crea una nueva dirección favorita, opcionalmente geocodificándola si solo se proporciona el texto.
+ * @route POST /favorites
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Dirección favorita creada.
+ */
 router.post('/favorites', requireAdmin, async (req, res) => {
   try {
     const { name, address, lat, lng, notes, customer_phone } = req.body;
@@ -2462,6 +2858,15 @@ router.post('/favorites', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /favorites/:id
+ * @description Elimina una dirección favorita de la base de datos.
+ * @route DELETE /favorites/:id
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la eliminación.
+ */
 router.delete('/favorites/:id', requireAdmin, async (req, res) => {
   try {
     const fav = await FavoriteAddress.findByPk(req.params.id);
@@ -2474,9 +2879,15 @@ router.delete('/favorites/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Auditoria autoritativa: para cada orden activa del dispatcher consulta el
-// lifecycle ACTUAL en Respond.io via getContact (no el campo cacheado del
-// listado masivo) y reporta diferencias. Usar antes de aplicar resync.
+/**
+ * GET /lifecycle-audit
+ * @description Realiza una auditoría de los ciclos de vida de Respond.io comparándolos con el estado de las órdenes en el dispatcher.
+ * @route GET /lifecycle-audit
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultados de la auditoría con discrepancias detectadas.
+ */
 router.get('/lifecycle-audit', requireAdmin, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
@@ -2597,10 +3008,15 @@ router.get('/lifecycle-audit', requireAdmin, async (req, res) => {
   }
 });
 
-// Aplica las correcciones detectadas por la auditoria. Respeta route_id
-// (ordenes con chofer asignado NO se tocan). Si action es WRONG_COLUMN
-// y respond.lifecycle es 'delivered', la orden tambien se respeta porque
-// marcar como entregada disparara el flujo de DeliveryHistory en su sitio.
+/**
+ * POST /lifecycle-resync
+ * @description Sincroniza los estados de las órdenes del dispatcher basándose en los ciclos de vida actuales de Respond.io.
+ * @route POST /lifecycle-resync
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resumen de las acciones realizadas durante la sincronización.
+ */
 router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
   try {
     const settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
@@ -2787,6 +3203,15 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /cleanup-duplicates
+ * @description Limpia órdenes duplicadas basándose en el ID de contacto de Respond.io y el número de teléfono.
+ * @route POST /cleanup-duplicates
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Número de duplicados eliminados.
+ */
 router.post('/cleanup-duplicates', requireAdmin, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -2884,8 +3309,15 @@ router.post('/cleanup-duplicates', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/dispatch/bot/initiate-closing/:contactId
-// Inicia el flujo de cierre de venta manualmente desde el panel de despacho
+/**
+ * POST /bot/initiate-closing/:contactId
+ * @description Inicia manualmente el flujo de cierre de venta para un contacto a través del chatbot.
+ * @route POST /bot/initiate-closing/:contactId
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado del inicio del flujo de cierre.
+ */
 router.post('/bot/initiate-closing/:contactId', requireAuth, async (req, res) => {
   try {
     const { contactId } = req.params;

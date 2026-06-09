@@ -1,3 +1,21 @@
+/**
+ * @fileoverview Servicio de Chatbot para la gestión automatizada de conversaciones.
+ * 
+ * Este servicio implementa una máquina de estados finitos que guía al cliente a través de un flujo
+ * de ventas y atención. El bot puede operar en dos modos principales:
+ * 1. Máquina de estados rígida: Sigue pasos predefinidos (saludo -> ZIP -> producto -> diseño -> asignación).
+ * 2. Modo conversacional (IA): Utiliza procesamiento de lenguaje natural para actuar como un vendedor
+ *    humano fluido, extrayendo datos y respondiendo de forma natural.
+ * 
+ * Arquitectura y Flujo:
+ * - Detección de agentes: El bot monitorea si un humano ha intervenido para ceder el control.
+ * - Validación de cobertura: Integra AddressValidationService para verificar zonas de servicio.
+ * - Inteligencia Artificial: Utiliza OpenAI para detección de intenciones, frustración y generación de respuestas.
+ * - Gestión de estados: Persiste el progreso del cliente en la base de datos (ConversationState).
+ * - Flujo de cierre: Incluye una lógica especializada para productos como tarjetas, gestionando
+ *   cantidades, direcciones y verificación de depósitos Zelle.
+ */
+
 import ConversationState from '../models/ConversationState.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import MessagingOrder from '../models/MessagingOrder.js';
@@ -9,6 +27,12 @@ import CustomerProfileService from './customerProfileService.js';
 import StyleLearningService from './styleLearningService.js';
 
 class ChatbotService {
+  /**
+   * Crea una instancia de ChatbotService.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {Object} settings - Configuraciones de mensajería del usuario.
+   * @param {boolean} [isTestMode=false] - Indica si el bot está en modo de prueba.
+   */
   constructor(userId, settings, isTestMode = false) {
     this.userId = userId;
     this.settings = settings;
@@ -17,7 +41,10 @@ class ChatbotService {
     this.addressValidation = new AddressValidationService(userId);
     this.api.setContext(userId, settings.respond_api_token);
     
-    // Tiempo de abandono en minutos (configurable)
+    /**
+     * Tiempo de abandono en minutos antes de considerar una conversación inactiva.
+     * @type {number}
+     */
     this.abandonmentMinutes = settings.abandonment_minutes || 30;
 
     // Cerebro de IA — usa key de settings o del entorno (OPENAI_API_KEY)
@@ -25,6 +52,11 @@ class ChatbotService {
     const dbKey = settings.openai_api_key || null;
     const aiKey = dbKey || envKey;
     const aiActive = settings.ai_enabled || !!envKey;
+    
+    /**
+     * Servicio de IA para procesamiento de lenguaje natural.
+     * @type {AIService}
+     */
     this.ai = new AIService(aiActive ? aiKey : null, settings, userId);
     if (aiActive && aiKey) {
       console.log(`[Bot] Cerebro IA activado con OpenAI (fuente: ${dbKey ? 'base de datos' : 'entorno'})`);
@@ -33,6 +65,12 @@ class ChatbotService {
 
   // ==================== UTILIDADES DE ENVÍO ====================
 
+  /**
+   * Envía un mensaje de texto al contacto.
+   * @param {string|number} contactId - ID del contacto en Respond.io.
+   * @param {string} text - Contenido del mensaje.
+   * @returns {Promise<Object>} Resultado del envío.
+   */
   async sendMessage(contactId, text) {
     try {
       const result = await this.api.sendMessage(`id:${contactId}`, text);
@@ -50,6 +88,13 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Envía un archivo adjunto al contacto.
+   * @param {string|number} contactId - ID del contacto.
+   * @param {string} url - URL pública del archivo.
+   * @param {string} [type='image'] - Tipo de archivo (image, video, file, audio).
+   * @returns {Promise<void>}
+   */
   async sendAttachmentMsg(contactId, url, type = 'image') {
     try {
       await this.api.sendAttachment(`id:${contactId}`, type, url);
@@ -60,6 +105,13 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Asigna la conversación a un agente humano.
+   * @param {string|number} contactId - ID del contacto.
+   * @param {string} agentIdOrEmail - ID o email del agente en Respond.io.
+   * @param {string|null} [agentName=null] - Nombre del agente para registro.
+   * @returns {Promise<Object>} Resultado de la asignación.
+   */
   async assignToAgent(contactId, agentIdOrEmail, agentName = null) {
     try {
       const result = await this.api.assignConversation(`id:${contactId}`, agentIdOrEmail);
@@ -78,6 +130,12 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Agrega una etiqueta de rastreo al contacto.
+   * @param {string|number} contactId - ID del contacto.
+   * @param {string} tag - Nombre de la etiqueta.
+   * @returns {Promise<void>}
+   */
   async addTrackingTag(contactId, tag) {
     try {
       await this.api.addTags(`id:${contactId}`, [tag]);
@@ -87,6 +145,12 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Agrega un comentario interno a la conversación.
+   * @param {string|number} contactId - ID del contacto.
+   * @param {string} comment - Texto del comentario.
+   * @returns {Promise<void>}
+   */
   async addComment(contactId, comment) {
     try {
       await this.api.addComment(`id:${contactId}`, comment);
@@ -97,6 +161,10 @@ class ChatbotService {
 
   // ==================== HORARIO ====================
 
+  /**
+   * Genera el texto descriptivo del horario de atención.
+   * @returns {string} Texto formateado con días y horas.
+   */
   getBusinessHoursText() {
     const start = this.settings.business_hours_start || '09:00';
     const end = this.settings.business_hours_end || '18:00';
@@ -129,6 +197,10 @@ class ChatbotService {
     return `${daysText} de ${fmt(start)} a ${fmt(end)} (hora de Dallas)`;
   }
 
+  /**
+   * Genera el texto de transferencia basado en el horario actual.
+   * @returns {string} Mensaje para el cliente.
+   */
   getHandoffText() {
     if (!this.isWithinBusinessHours()) {
       const hoursText = this.getBusinessHoursText();
@@ -139,6 +211,10 @@ class ChatbotService {
 
   // ==================== VERIFICACIONES ====================
 
+  /**
+   * Verifica si el momento actual está dentro del horario de atención.
+   * @returns {boolean} Verdadero si está en horario laboral.
+   */
   isWithinBusinessHours() {
     if (!this.settings.business_hours_enabled) {
       return true;
@@ -185,6 +261,11 @@ class ChatbotService {
     return withinHours;
   }
 
+  /**
+   * Determina si un contacto tiene alguna etiqueta excluida del bot.
+   * @param {Object} contact - Datos del contacto de Respond.io.
+   * @returns {boolean} Verdadero si está excluido.
+   */
   hasExcludedTag(contact) {
     // Etiquetas que SIEMPRE excluyen al contacto del bot, aunque la configuracion
     // guardada este desactualizada. Incluye variantes singular/plural (Personal /
@@ -208,6 +289,11 @@ class ChatbotService {
     return false;
   }
 
+  /**
+   * Verifica si una conversación ha sido abandonada por el agente.
+   * @param {ConversationState} convState - Estado de la conversación.
+   * @returns {boolean} Verdadero si ha pasado el tiempo de abandono.
+   */
   isConversationAbandoned(convState) {
     if (!convState.agent_active || !convState.last_agent_message_at) {
       return false;
@@ -220,6 +306,11 @@ class ChatbotService {
     return diffMinutes >= this.abandonmentMinutes;
   }
 
+  /**
+   * Determina si el bot debe responder en el estado actual.
+   * @param {ConversationState} convState - Estado de la conversación.
+   * @returns {Object} Objeto con flag 'respond' y razón opcional.
+   */
   shouldBotRespond(convState) {
     // Si el bot está pausado, no responder
     if (convState.bot_paused) {
@@ -245,6 +336,11 @@ class ChatbotService {
     return { respond: true };
   }
 
+  /**
+   * Verifica si una conversación fue reabierta recientemente.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<boolean>} Verdadero si fue cerrada y reabierta.
+   */
   async isConversationReopened(contactId) {
     try {
       const convState = await ConversationState.findOne({
@@ -268,6 +364,13 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Verifica si un agente humano ha respondido después de un tiempo de corte.
+   * @param {string|number} contactId - ID del contacto.
+   * @param {boolean} [isReopened=false] - Indica si es una re-apertura.
+   * @param {number|null} [cutoffTime=null] - Timestamp del momento de re-apertura.
+   * @returns {Promise<Object>} Resultado {hasResponded, agentName}.
+   */
   async hasAgentAlreadyResponded(contactId, isReopened = false, cutoffTime = null) {
     try {
       const result = await this.api.listMessages(`id:${contactId}`, 50);
@@ -303,6 +406,11 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Verifica si el bot ha interactuado previamente en la conversación.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<boolean>} Verdadero si el bot envió mensajes.
+   */
   async hasBotAlreadyInteracted(contactId) {
     try {
       const result = await this.api.listMessages(`id:${contactId}`, 50);
@@ -331,6 +439,11 @@ class ChatbotService {
 
   // ==================== ESTADO DE CONVERSACIÓN ====================
 
+  /**
+   * Obtiene o crea el estado de conversación para un contacto.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<ConversationState>} El estado de la conversación.
+   */
   async getOrCreateConversationState(contactId) {
     let state = await ConversationState.findOne({
       where: { contact_id: contactId.toString() }
@@ -347,6 +460,12 @@ class ChatbotService {
     return state;
   }
 
+  /**
+   * Actualiza el estado de la conversación en la base de datos.
+   * @param {string|number} contactId - ID del contacto.
+   * @param {Object} updates - Campos a actualizar.
+   * @returns {Promise<void>}
+   */
   async updateConversationState(contactId, updates) {
     const finalUpdates = { ...updates, last_interaction: new Date() };
     
@@ -360,6 +479,11 @@ class ChatbotService {
     );
   }
 
+  /**
+   * Verifica si el contacto es un cliente existente (ha realizado pedidos).
+   * @param {Object} contact - Datos del contacto.
+   * @returns {Promise<boolean>} Verdadero si existe en la tabla de pedidos.
+   */
   async checkIfExistingCustomer(contact) {
     const existingOrder = await MessagingOrder.findOne({
       where: {
@@ -371,6 +495,11 @@ class ChatbotService {
 
   // ==================== PARSERS ====================
 
+  /**
+   * Procesa una respuesta de tipo sí/no usando IA o expresiones regulares.
+   * @param {string} text - El texto del mensaje.
+   * @returns {Promise<string|null>} 'yes', 'no' o null.
+   */
   async parseYesNoResponse(text) {
     // Intentar con IA primero (entiende "simon", "nel", "ta bien", etc.)
     if (this.ai.isAvailable) {
@@ -395,6 +524,12 @@ class ChatbotService {
     return null;
   }
 
+  /**
+   * Calcula la distancia de Levenshtein entre dos cadenas.
+   * @param {string} a - Primera cadena.
+   * @param {string} b - Segunda cadena.
+   * @returns {number} Distancia calculada.
+   */
   levenshteinDistance(a, b) {
     const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i]);
     for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
@@ -411,6 +546,12 @@ class ChatbotService {
     return matrix[b.length][a.length];
   }
 
+  /**
+   * Calcula la proporción de letras compartidas entre dos cadenas.
+   * @param {string} a - Primera cadena.
+   * @param {string} b - Segunda cadena.
+   * @returns {number} Ratio calculado (0 a 1).
+   */
   sharedLetterRatio(a, b) {
     const aChars = {};
     const bChars = {};
@@ -423,6 +564,13 @@ class ChatbotService {
     return shared / Math.max(a.length, b.length);
   }
 
+  /**
+   * Verifica si una palabra es similar a un objetivo basado en distancia y ratio de letras.
+   * @param {string} word - Palabra a comparar.
+   * @param {string} target - Palabra objetivo.
+   * @param {number} [threshold=0.55] - Umbral de similitud.
+   * @returns {boolean} Verdadero si son similares.
+   */
   isSimilar(word, target, threshold) {
     if (!word || !target) return false;
     const maxLen = Math.max(word.length, target.length);
@@ -434,6 +582,12 @@ class ChatbotService {
     return combined >= (threshold || 0.55);
   }
 
+  /**
+   * Identifica la selección de un producto en un texto.
+   * @param {string} text - El texto del mensaje.
+   * @param {boolean} [keywordOnly=false] - Si es verdadero, omite el fuzzy matching por IA.
+   * @returns {Promise<Object|null>} El producto seleccionado o null.
+   */
   async parseProductSelection(text, keywordOnly = false) {
     // Construir lista de productos para la IA
     let productsList = [];
@@ -592,6 +746,11 @@ class ChatbotService {
     return null;
   }
 
+  /**
+   * Detecta si un mensaje expresa frustración o urgencia usando IA o longitud/mayúsculas.
+   * @param {string} text - El texto del mensaje.
+   * @returns {Promise<boolean>} Verdadero si se detecta frustración.
+   */
   async detectFrustration(text) {
     const cleanText = text.trim();
 
@@ -620,7 +779,13 @@ class ChatbotService {
 
   // ==================== HELPER IA ====================
 
-  // Genera un mensaje con IA o usa el fallback del template si la IA no está disponible
+  /**
+   * Genera un mensaje utilizando IA si está disponible, o usa un mensaje de respaldo.
+   * @param {string} intent - Intención o tipo de mensaje a generar.
+   * @param {Object} params - Parámetros para personalizar el mensaje (ej. nombre del cliente).
+   * @param {string} fallbackMsg - Mensaje predeterminado si la IA no está disponible o falla.
+   * @returns {Promise<string>} El mensaje generado o el de respaldo.
+   */
   async getAIMsg(intent, params, fallbackMsg) {
     if (this.ai.isAvailable) {
       const aiMsg = await this.ai.generateFlowMessage(intent, params);
@@ -631,6 +796,10 @@ class ChatbotService {
 
   // ==================== MENSAJES CONFIGURABLES ====================
 
+  /**
+   * Obtiene los mensajes configurados para el bot.
+   * @returns {Object} Diccionario de mensajes.
+   */
   getMessages() {
     return {
       // Saludo nuevo cliente
@@ -710,6 +879,15 @@ class ChatbotService {
 
   // ==================== PROCESO PRINCIPAL ====================
 
+  /**
+   * Procesa un mensaje entrante y gestiona el flujo de la conversación.
+   * @description Esta es la función principal que orquesta la lógica del bot, manejando reaperturas,
+   * detección de agentes, estados de pausa, frustración y transiciones de la máquina de estados.
+   * @param {Object} contact - Datos del contacto de Respond.io.
+   * @param {string} messageText - Contenido del mensaje del cliente.
+   * @param {string|null} [imageUrl=null] - URL de imagen adjunta si existe.
+   * @returns {Promise<Object>} Resultado del procesamiento {handled, reason|action}.
+   */
   async processMessage(contact, messageText, imageUrl = null) {
     const msgs = this.getMessages();
     
@@ -991,6 +1169,11 @@ class ChatbotService {
 
   // ==================== HANDLERS POR ESTADO ====================
 
+  /**
+   * Detecta la intención del mensaje del cliente.
+   * @param {string} messageText - El texto del mensaje.
+   * @returns {string} La intención detectada ('wants_info', 'wants_order', 'greeting', 'unknown').
+   */
   detectMessageIntent(messageText) {
     const lowerText = messageText.toLowerCase().trim();
     
@@ -1018,10 +1201,11 @@ class ChatbotService {
 
   /**
    * Intenta extraer el producto del que vino el cliente cuando hizo clic
-   * en un anuncio (Click-To-WhatsApp / Facebook Ad). Recorre los primeros
-   * mensajes y campos del contacto buscando texto que mencione un producto
-   * conocido (ej. "1000 Tarjetas por $65 USD" → tarjetas).
-   * Devuelve el objeto producto si lo identifica, o null.
+   * en un anuncio (Click-To-WhatsApp / Facebook Ad).
+   * @description Recorre los primeros mensajes y campos del contacto buscando texto que mencione
+   * un producto conocido (ej. "1000 Tarjetas por $65 USD" → tarjetas).
+   * @param {Object} contact - Datos del contacto de Respond.io.
+   * @returns {Promise<Object|null>} El objeto producto si lo identifica, o null.
    */
   async extractAdProductHint(contact) {
     try {
@@ -1082,6 +1266,12 @@ class ChatbotService {
     return null;
   }
 
+  /**
+   * Extrae la campaña y el precio de un texto (usualmente del anuncio).
+   * @private
+   * @param {string} text - Texto a analizar.
+   * @returns {Object|null} Objeto con campaña y precio, o null.
+   */
   _parseCampaignFromText(text) {
     if (!text || typeof text !== 'string') return null;
     const t = text.toLowerCase();
@@ -1165,12 +1355,22 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Obtiene los parámetros de campaña publicitaria del estado de la conversación.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Object} Parámetros de campaña (adCampaign, adPrice).
+   */
   getAdCampaignParams(convState) {
     const ctx = convState?.context_data || {};
     if (!ctx.ad_campaign && !ctx.ad_price) return {};
     return { adCampaign: ctx.ad_campaign, adPrice: ctx.ad_price };
   }
 
+  /**
+   * Detecta si el contacto proviene de un anuncio de Facebook.
+   * @param {Object} contact - Datos del contacto de Respond.io.
+   * @returns {boolean} Verdadero si proviene de Facebook Ad.
+   */
   detectFacebookAdOrigin(contact) {
     // Detectar si viene de Facebook Ad por el canal o fuente
     const source = contact.source?.toLowerCase() || '';
@@ -1206,6 +1406,13 @@ class ChatbotService {
     return false;
   }
 
+  /**
+   * Maneja el estado inicial de una conversación.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleInitialState(contact, messageText, convState) {
     const msgs = this.getMessages();
     const isExistingFromDB = await this.checkIfExistingCustomer(contact);
@@ -1323,7 +1530,15 @@ class ChatbotService {
     return { handled: true, action: 'welcome_new' };
   }
 
-  // Maneja el caso donde el cliente llega ya sabiendo lo que quiere
+  /**
+   * Maneja el caso donde el cliente llega ya sabiendo lo que quiere (pedido directo).
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} product - Producto identificado.
+   * @param {string|null} customerName - Nombre del cliente.
+   * @param {Object|null} [convState=null] - Estado actual de la conversación.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleDirectOrderRequest(contact, messageText, product, customerName, convState = null) {
     const ooh = !this.isWithinBusinessHours();
     const oohParams = ooh ? { outOfHours: true, businessHours: this.getBusinessHoursText() } : {};
@@ -1406,6 +1621,13 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Maneja el estado de espera de selección de producto.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleAwaitingProductSelection(contact, messageText, convState) {
     // Este handler es para clientes que YA tienen información
     const msgs = this.getMessages();
@@ -1459,6 +1681,13 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Maneja el estado de espera de información sobre el diseño.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleAwaitingDesignInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
     const hasDesign = this.parseDesignResponse(messageText);
@@ -1493,6 +1722,11 @@ class ChatbotService {
     return { handled: true, action: 'design_info_received_assigned' };
   }
 
+  /**
+   * Procesa la respuesta del cliente sobre si tiene un diseño.
+   * @param {string} text - Texto del mensaje.
+   * @returns {string} 'yes' o 'no'.
+   */
   parseDesignResponse(text) {
     const lowerText = text.toLowerCase().trim();
     
@@ -1747,7 +1981,11 @@ class ChatbotService {
     return { handled: true, action: 'product_response_assigned' };
   }
 
-  // Obtener mensaje de información del producto desde products_list
+  /**
+   * Obtiene el mensaje informativo de un producto específico.
+   * @param {string} productName - Nombre del producto.
+   * @returns {string|null} El mensaje informativo o null si no se encuentra.
+   */
   getProductInfoMessage(productName) {
     try {
       let productsList = this.settings.products_list;
@@ -1766,7 +2004,10 @@ class ChatbotService {
     return null;
   }
 
-  // Generar menú de productos desde products_list
+  /**
+   * Genera el menú de productos disponibles basado en la configuración.
+   * @returns {string} El menú de productos formateado como texto.
+   */
   generateProductMenu() {
     try {
       let productsList = this.settings.products_list;
@@ -1832,6 +2073,13 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Maneja el estado de espera de continuación tras una pausa.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleAwaitingContinuation(contact, messageText, convState) {
     const msgs = this.getMessages();
     const response = await this.parseYesNoResponse(messageText);
@@ -1865,6 +2113,15 @@ class ChatbotService {
   // ====================================================================
   // FASE 1 — Handler conversacional (vendedor humano fluido)
   // ====================================================================
+  /**
+   * Maneja la conversación en modo conversacional (IA fluida).
+   * @description En este modo, la IA actúa como un vendedor humano, recolectando datos de forma natural
+   * sin seguir una máquina de estados rígida.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object|null>} Resultado del procesamiento o null si falla.
+   */
   async handleConversational(contact, messageText, convState) {
     try {
       // ── HANDOFF INMEDIATO: si ya tenemos ZIP + producto, asignar sin más preguntas ──
@@ -1978,6 +2235,11 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Asigna el contacto al agente predeterminado configurado.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<void>}
+   */
   async assignToDefaultAgent(contactId) {
     const agentId = this.settings.default_agent_id || this.settings.default_agent_email;
     if (agentId) {
@@ -1985,6 +2247,11 @@ class ChatbotService {
     }
   }
 
+  /**
+   * Busca un agente disponible que maneje un producto específico.
+   * @param {string} productName - Nombre del producto.
+   * @returns {Promise<Object|null>} El agente encontrado o null.
+   */
   async findAgentForProduct(productName) {
     try {
       const agents = await ServiceAgent.findAll({
@@ -2013,6 +2280,13 @@ class ChatbotService {
   // ==================== FLUJO DE CIERRE (TARJETAS) ====================
 
   // Paso 0: Envía el mensaje de aprobación con imagen aviso
+  /**
+   * Inicia el flujo de cierre para un producto específico.
+   * @description Envía un mensaje de aprobación y cambia el estado a 'closing_approval'.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} [product='tarjetas'] - Producto que se está cerrando.
+   * @returns {Promise<Object>} Resultado del inicio del flujo.
+   */
   async startClosingFlow(contact, product = 'tarjetas') {
     // Guard: si ya hay un flujo de cierre activo iniciado en los ultimos 30 min, no re-disparar
     try {
@@ -2058,6 +2332,11 @@ class ChatbotService {
   }
 
   // Detecta si el cliente está corrigiendo algo en el flujo de cierre
+  /**
+   * Detecta si el cliente está realizando una corrección en su respuesta.
+   * @param {string} text - El texto del mensaje.
+   * @returns {boolean} Verdadero si es una corrección.
+   */
   isClosingCorrection(text) {
     const lower = text.toLowerCase();
     return (
@@ -2080,6 +2359,13 @@ class ChatbotService {
   }
 
   // Paso 1: Procesa APROBADO o Necesita cambios
+  /**
+   * Maneja el estado de aprobación del cierre del pedido.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleClosingApproval(contact, messageText, convState) {
     const lower = messageText.toLowerCase().trim();
 
@@ -2116,6 +2402,13 @@ class ChatbotService {
   }
 
   // Paso 2: Procesa la cantidad elegida
+  /**
+   * Maneja el estado de selección de cantidad en el flujo de cierre.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleClosingQuantity(contact, messageText, convState) {
     const lower = messageText.toLowerCase().replace(/,/g, '').trim();
 
@@ -2258,6 +2551,13 @@ No repitas los precios en formato de lista — responde conversacionalmente.`
   }
 
   // Paso 3: Procesa la dirección y cierra el pedido
+  /**
+   * Maneja el estado de recepción de dirección en el flujo de cierre.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleClosingAddress(contact, messageText, convState) {
     const lower = messageText.toLowerCase().replace(/,/g, '').trim();
 
@@ -2418,6 +2718,12 @@ Responde de forma empática y amigable preguntando qué desea corregir (la canti
   }
 
   // Busca en el historial de mensajes si ya se envió una captura de Zelle
+  /**
+   * Busca en el historial si ya se envió un comprobante de Zelle.
+   * @param {string|number} contactId - ID del contacto.
+   * @param {string|number} expectedDeposit - Monto esperado del depósito.
+   * @returns {Promise<Object>} Resultado de la búsqueda {found, verified, ...}.
+   */
   async findZelleInHistory(contactId, expectedDeposit) {
     try {
       const result = await this.api.listMessages(`id:${contactId}`, { limit: 50 });
@@ -2509,6 +2815,14 @@ Responde SOLO en JSON: { "esZelle": true/false, "monto": "valor o null", "coinci
   }
 
   // Paso 4 (solo paquetes con depósito): Verifica captura de Zelle
+  /**
+   * Maneja la verificación del depósito en el flujo de cierre.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} messageText - Mensaje del cliente.
+   * @param {Object} convState - Estado de la conversación.
+   * @param {string|null} [imageUrl=null] - URL de la imagen del comprobante.
+   * @returns {Promise<Object>} Resultado del procesamiento.
+   */
   async handleClosingDepositVerification(contact, messageText, convState, imageUrl = null) {
     const existingCtx = convState.context_data || {};
     const depositAmount = existingCtx.closing_deposit;
@@ -2636,6 +2950,15 @@ Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": tru
     return { handled: true, action: 'closing_deposit_remind' };
   }
 
+  /**
+   * Crea o actualiza una orden en la base de datos basada en la interacción del bot.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} zipCode - Código postal validado.
+   * @param {string} customerName - Nombre del cliente.
+   * @param {string} validationStatus - Estado de validación ('covered', 'no_coverage').
+   * @param {Object|null} zone - Zona de cobertura encontrada.
+   * @returns {Promise<void>}
+   */
   async createOrUpdateOrder(contact, zipCode, customerName, validationStatus, zone) {
     try {
       let order = await MessagingOrder.findOne({
@@ -2677,16 +3000,31 @@ Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": tru
 
   // ==================== CONTROL DEL BOT ====================
 
+  /**
+   * Pausa el bot para un contacto específico.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<Object>} Resultado de la operación.
+   */
   async pauseBot(contactId) {
     await this.updateConversationState(contactId, { bot_paused: true });
     return { success: true, message: 'Bot pausado para este contacto' };
   }
 
+  /**
+   * Reactiva el bot para un contacto específico.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<Object>} Resultado de la operación.
+   */
   async resumeBot(contactId) {
     await this.updateConversationState(contactId, { bot_paused: false });
     return { success: true, message: 'Bot reactivado para este contacto' };
   }
 
+  /**
+   * Reinicia el estado de la conversación para un contacto.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<Object>} Resultado de la operación.
+   */
   async resetConversation(contactId) {
     await this.updateConversationState(contactId, {
       state: 'initial',
@@ -2705,6 +3043,12 @@ Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": tru
     return { success: true, message: 'Conversación reiniciada' };
   }
 
+  /**
+   * Marca a un agente como activo en la conversación.
+   * @param {string|number} contactId - ID del contacto.
+   * @param {string|number} agentId - ID del agente.
+   * @returns {Promise<Object>} Resultado de la operación.
+   */
   async markAgentActive(contactId, agentId) {
     await this.updateConversationState(contactId, { 
       agent_active: true,
@@ -2714,6 +3058,11 @@ Responde en formato JSON: { "esZelle": true/false, "monto": "X", "coincide": tru
     return { success: true };
   }
 
+  /**
+   * Marca a un agente como inactivo en la conversación.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<Object>} Resultado de la operación.
+   */
   async markAgentInactive(contactId) {
     await this.updateConversationState(contactId, { 
       agent_active: false 

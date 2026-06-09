@@ -1,20 +1,37 @@
+/**
+ * @fileoverview Panel de administración principal.
+ * Proporciona un resumen de estadísticas del sistema y enlaces rápidos a las diferentes secciones de gestión (IA, Usuarios, Rutas, etc.).
+ */
+
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
+/**
+ * Componente AdminDashboard que centraliza las funciones administrativas.
+ * @returns {JSX.Element}
+ */
 export default function AdminDashboard() {
   const navigate = useNavigate()
+  /** @type {[Object, Function]} Estadísticas generales (usuarios, órdenes, etc.) */
   const [stats, setStats] = useState({})
+  /** @type {[boolean, Function]} Indica si se están cargando las estadísticas */
   const [loading, setLoading] = useState(true)
+  /** @type {[boolean, Function]} Indica si se está realizando un reset del sistema de despacho */
   const [resetting, setResetting] = useState(false)
   const { t } = useTranslation()
 
+  /** Carga las estadísticas iniciales al montar el componente */
   useEffect(() => {
     fetchStats()
   }, [])
 
+  /**
+   * Obtiene estadísticas administrativas del backend.
+   * @async
+   */
   const fetchStats = async () => {
     try {
       const response = await api.get('/api/admin/stats')
@@ -26,6 +43,11 @@ export default function AdminDashboard() {
     }
   }
 
+  /**
+   * Maneja el proceso de borrado completo de los datos de despacho (rutas, paradas, historial).
+   * Requiere doble confirmación por seguridad.
+   * @async
+   */
   const handleResetDispatch = async () => {
     const confirmed = window.confirm(t('admin.resetConfirm1'))
     if (!confirmed) return
@@ -103,7 +125,7 @@ export default function AdminDashboard() {
 
       <div className="admin-sections">
 
-        {/* AI Brain */}
+        {/* Cerebro de IA */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">psychology</span>
@@ -143,7 +165,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Configuration */}
+        {/* Configuración */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">settings</span>
@@ -173,7 +195,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Users */}
+        {/* Usuarios */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">people</span>
@@ -213,7 +235,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Routes & Deliveries */}
+        {/* Rutas y Entregas */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">route</span>
@@ -263,7 +285,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* System */}
+        {/* Sistema */}
         <div className="admin-section">
           <div className="section-header">
             <span className="material-icons">monitor_heart</span>

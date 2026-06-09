@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Rutas para la gestión de la memoria del bot.
+ * Permite listar, crear, editar y analizar lecciones aprendidas a partir de conversaciones,
+ * así como gestionar la base de conocimientos (documentos y prompts).
+ */
+
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -23,7 +29,15 @@ const upload = multer({
 
 const router = express.Router();
 
-// GET /api/bot-memory — listar todas las memorias
+/**
+ * @description Lista todas las memorias/lecciones del bot para el usuario autenticado.
+ * @route GET /api/bot-memory
+ * @access Private (Requiere Auth)
+ * @param {string} [req.query.source] - Filtrar por fuente (manual, auto_detected).
+ * @param {boolean} [req.query.is_approved] - Filtrar por estado de aprobación.
+ * @param {string} [req.query.context_type] - Filtrar por tipo de contexto.
+ * @returns {Array} 200 - Lista de memorias.
+ */
 router.get('/', requireAuth, async (req, res) => {
   try {
     const { source, is_approved, context_type } = req.query;
@@ -42,7 +56,12 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/bot-memory/pending — lecciones auto-detectadas pendientes de revisión
+/**
+ * @description Obtiene las lecciones auto-detectadas que están pendientes de revisión.
+ * @route GET /api/bot-memory/pending
+ * @access Private (Requiere Auth)
+ * @returns {Array} 200 - Lista de memorias pendientes.
+ */
 router.get('/pending', requireAuth, async (req, res) => {
   try {
     const memories = await BotMemory.findAll({
@@ -60,7 +79,12 @@ router.get('/pending', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/bot-memory/stats
+/**
+ * @description Obtiene estadísticas sobre las memorias (total, activas, pendientes, manuales).
+ * @route GET /api/bot-memory/stats
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Estadísticas de memorias.
+ */
 router.get('/stats', requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId;
@@ -74,7 +98,12 @@ router.get('/stats', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/bot-memory/analyze-history — analiza el historial completo de Respond.io
+/**
+ * @description Inicia un proceso de análisis masivo del historial de Respond.io para extraer nuevas lecciones.
+ * @route POST /api/bot-memory/analyze-history
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Resultado del análisis con conteo de lecciones creadas.
+ */
 router.post('/analyze-history', requireAuth, async (req, res) => {
   const userId = req.session.userId;
   try {
@@ -301,7 +330,15 @@ Responde SOLO con JSON válido (sin markdown):
   }
 });
 
-// POST /api/bot-memory — crear lección manual
+/**
+ * @description Crea una nueva lección manual para el bot.
+ * @route POST /api/bot-memory
+ * @access Private (Requiere Auth)
+ * @param {string} req.body.lesson - El contenido de la lección.
+ * @param {string} [req.body.context_type] - El tipo de contexto (general, greeting, etc.).
+ * @param {string} [req.body.trigger_example] - Ejemplo de mensaje que dispararía esta lección.
+ * @returns {Object} 200 - La memoria creada.
+ */
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { lesson, context_type, trigger_example } = req.body;
@@ -322,7 +359,14 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
-// PUT /api/bot-memory/:id — editar o aprobar/rechazar
+/**
+ * @description Actualiza una memoria existente o la aprueba/rechaza.
+ * @route PUT /api/bot-memory/:id
+ * @access Private (Requiere Auth)
+ * @param {Object} req.body - Campos: lesson, context_type, trigger_example, is_approved, is_active.
+ * @returns {Object} 200 - Memoria actualizada.
+ * @returns {Object} 404 - Memoria no encontrada.
+ */
 router.put('/:id', requireAuth, async (req, res) => {
   try {
     const memory = await BotMemory.findOne({
@@ -345,7 +389,13 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/bot-memory/:id
+/**
+ * @description Elimina permanentemente una memoria.
+ * @route DELETE /api/bot-memory/:id
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Confirmación de eliminación.
+ * @returns {Object} 404 - Memoria no encontrada.
+ */
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const memory = await BotMemory.findOne({
@@ -361,7 +411,12 @@ router.delete('/:id', requireAuth, async (req, res) => {
 
 // ==================== KNOWLEDGE (Documentos y Prompts) ====================
 
-// GET /api/bot-memory/knowledge
+/**
+ * @description Lista todos los documentos de conocimiento del bot.
+ * @route GET /api/bot-memory/knowledge
+ * @access Private (Requiere Auth)
+ * @returns {Array} 200 - Lista de documentos.
+ */
 router.get('/knowledge', requireAuth, async (req, res) => {
   try {
     const docs = await BotKnowledge.findAll({
@@ -374,7 +429,15 @@ router.get('/knowledge', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/bot-memory/knowledge — crear desde texto
+/**
+ * @description Crea un nuevo documento de conocimiento a partir de texto.
+ * @route POST /api/bot-memory/knowledge
+ * @access Private (Requiere Auth)
+ * @param {string} req.body.title - Título del documento.
+ * @param {string} req.body.content - Contenido del conocimiento.
+ * @param {string} [req.body.knowledge_type] - Tipo (document, prompt).
+ * @returns {Object} 200 - El documento creado.
+ */
 router.post('/knowledge', requireAuth, async (req, res) => {
   try {
     const { title, content, knowledge_type } = req.body;
@@ -394,7 +457,12 @@ router.post('/knowledge', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/bot-memory/knowledge/upload — subir archivo .txt
+/**
+ * @description Sube un archivo (.txt o .md) para ser usado como conocimiento del bot.
+ * @route POST /api/bot-memory/knowledge/upload
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - El documento creado a partir del archivo.
+ */
 router.post('/knowledge/upload', requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
@@ -418,7 +486,14 @@ router.post('/knowledge/upload', requireAuth, upload.single('file'), async (req,
   }
 });
 
-// PUT /api/bot-memory/knowledge/:id
+/**
+ * @description Actualiza un documento de conocimiento existente.
+ * @route PUT /api/bot-memory/knowledge/:id
+ * @access Private (Requiere Auth)
+ * @param {Object} req.body - Campos: title, content, knowledge_type, is_active.
+ * @returns {Object} 200 - Documento actualizado.
+ * @returns {Object} 404 - No encontrado.
+ */
 router.put('/knowledge/:id', requireAuth, async (req, res) => {
   try {
     const doc = await BotKnowledge.findOne({ where: { id: req.params.id, user_id: req.session.userId } });
@@ -438,7 +513,13 @@ router.put('/knowledge/:id', requireAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/bot-memory/knowledge/:id
+/**
+ * @description Elimina permanentemente un documento de conocimiento.
+ * @route DELETE /api/bot-memory/knowledge/:id
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Confirmación de eliminación.
+ * @returns {Object} 404 - No encontrado.
+ */
 router.delete('/knowledge/:id', requireAuth, async (req, res) => {
   try {
     const doc = await BotKnowledge.findOne({ where: { id: req.params.id, user_id: req.session.userId } });

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Página de inicio de sesión de la aplicación.
+ * Permite a los usuarios autenticarse, recordar sus credenciales y acceder a las políticas legales.
+ */
+
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -8,16 +13,30 @@ const REMEMBER_EMAIL_KEY = 'rem_email'
 const REMEMBER_PASS_KEY  = 'rem_pass'
 const REMEMBER_FLAG_KEY  = 'rem_on'
 
+/**
+ * Componente LoginPage para la autenticación de usuarios.
+ * @returns {JSX.Element}
+ */
 export default function LoginPage() {
+  /** Verifica si el usuario marcó "Recordarme" anteriormente */
   const remembered = localStorage.getItem(REMEMBER_FLAG_KEY) === '1'
+  /** @type {[string, Function]} Estado del campo email */
   const [email,       setEmail]       = useState(remembered ? (localStorage.getItem(REMEMBER_EMAIL_KEY) || '') : '')
+  /** @type {[string, Function]} Estado del campo contraseña */
   const [password,    setPassword]    = useState(remembered ? (localStorage.getItem(REMEMBER_PASS_KEY)  || '') : '')
+  /** @type {[boolean, Function]} Controla la visibilidad de la contraseña */
   const [showPassword, setShowPassword] = useState(false)
+  /** @type {[boolean, Function]} Estado del checkbox "Recordarme" */
   const [rememberMe,  setRememberMe]  = useState(remembered)
   const { login, loading, error } = useAuth()
   const navigate = useNavigate()
   const { t } = useTranslation()
 
+  /**
+   * Maneja el envío del formulario de login.
+   * @async
+   * @param {React.FormEvent} e - Evento de formulario.
+   */
   const handleSubmit = async (e) => {
     e.preventDefault()
     const result = await login(email, password)

@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Punto de entrada principal para el servidor de Area 862 System.
+ * Configura el servidor Express, middlewares, rutas, sesiones, CORS, y sincronización de base de datos.
+ * También inicia servicios en segundo plano como el polling de órdenes y sincronización de Gmail.
+ */
+
 import 'dotenv/config';
 import logBuffer from './services/logService.js';
 import express from 'express';
@@ -53,6 +59,10 @@ const allowedOrigins = [
   'http://localhost'
 ];
 
+/**
+ * Opciones de configuración para CORS.
+ * Permite orígenes específicos y credenciales.
+ */
 const corsOptions = {
   origin: (origin, callback) => {
     if (process.env.NODE_ENV !== 'production') {
@@ -91,6 +101,10 @@ app.use(session({
   }
 }));
 
+/**
+ * @description Endpoint de salud para verificar que la API está funcionando.
+ * @route GET /api/health
+ */
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Area 862 System API funcionando (Node.js)' });
 });
@@ -121,13 +135,28 @@ app.use(express.static(distPath, {
 
 
 // Páginas HTML estáticas de soporte legal (Apple App Store requiere URL de soporte funcional)
+/**
+ * @description Sirve la página de soporte estática.
+ * @route GET /soporte
+ */
 app.get('/soporte', (req, res) => {
   res.sendFile(path.join(__dirname, 'pages', 'soporte.html'));
 });
+
+/**
+ * @description Sirve la página de privacidad estática.
+ * @route GET /privacidad
+ */
 app.get('/privacidad', (req, res) => {
   res.sendFile(path.join(__dirname, 'pages', 'privacidad.html'));
 });
 
+/**
+ * @description Helper para login en desarrollo. Inyecta el token en localStorage y redirecciona.
+ * @route GET /dev-login
+ * @param {string} req.query.token - Token de autenticación
+ * @param {string} [req.query.redirect] - URL a la cual redireccionar
+ */
 app.get('/dev-login', async (req, res) => {
   if (process.env.NODE_ENV === 'production') return res.status(404).send('Not found');
   const { token, redirect = '/messaging' } = req.query;
@@ -148,6 +177,10 @@ app.get('/dev-login', async (req, res) => {
   }
 });
 
+/**
+ * @description Manejador de rutas para el frontend (Single Page Application).
+ * Sirve index.html para cualquier ruta que no sea de API.
+ */
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
@@ -160,6 +193,10 @@ app.get('*', (req, res, next) => {
   }
 });
 
+/**
+ * @description Inicia el servidor, sincroniza la base de datos y arranca servicios secundarios.
+ * @returns {Promise<void>}
+ */
 async function startServer() {
   try {
     await sequelize.authenticate();

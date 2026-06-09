@@ -1,6 +1,17 @@
+/**
+ * @fileoverview Servicio para geocodificación y geocodificación inversa utilizando la API de Google Maps.
+ * Incluye gestión de caché, manejo de límites de tasa y resolución de enlaces de Google Maps.
+ */
+
 import axios from 'axios';
 
+/**
+ * Clase GeocodingService para interactuar con Google Maps Geocoding API.
+ */
 class GeocodingService {
+  /**
+   * Crea una instancia de GeocodingService.
+   */
   constructor() {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
     this.baseUrl = 'https://maps.googleapis.com/maps/api/geocode/json';
@@ -11,6 +22,12 @@ class GeocodingService {
     this.rateLimitedUntil = 0;
   }
 
+  /**
+   * Geocodifica una dirección de texto plano a coordenadas y dirección normalizada.
+   * @description Realiza una petición a Google Geocoding API, con reintentos sin restricciones de país si falla inicialmente.
+   * @param {string} rawAddress - La dirección a geocodificar.
+   * @returns {Promise<Object>} Resultado de la geocodificación con coordenadas y componentes de dirección.
+   */
   async geocodeAddress(rawAddress) {
     if (!this.apiKey) {
       console.warn('[Geocoding] No API key configured');
@@ -147,6 +164,11 @@ class GeocodingService {
     }
   }
 
+  /**
+   * Procesa los componentes de dirección de la respuesta de Google.
+   * @param {Array} components - Lista de componentes de dirección.
+   * @returns {Object} Objeto normalizado con los campos de la dirección.
+   */
   parseAddressComponents(components) {
     const result = {
       streetNumber: '',
@@ -185,6 +207,11 @@ class GeocodingService {
     return result;
   }
 
+  /**
+   * Construye una cadena de dirección limpia a partir de sus componentes.
+   * @param {Object} components - Los componentes parseados.
+   * @returns {string} Dirección formateada.
+   */
   buildCleanAddress(components) {
     const parts = [];
 
@@ -209,6 +236,12 @@ class GeocodingService {
     return parts.join(', ');
   }
 
+  /**
+   * Geocodificación inversa: de coordenadas a dirección.
+   * @param {number} lat - Latitud.
+   * @param {number} lng - Longitud.
+   * @returns {Promise<Object>} Resultado de la geocodificación inversa.
+   */
   async reverseGeocode(lat, lng) {
     if (!this.apiKey) {
       return { success: false, error: 'No API key' };
@@ -281,6 +314,11 @@ class GeocodingService {
     }
   }
 
+  /**
+   * Resuelve un enlace de Google Maps a coordenadas o dirección de lugar.
+   * @param {string} url - URL de Google Maps.
+   * @returns {Promise<Object>} Coordenadas o dirección resuelta.
+   */
   async resolveGoogleMapsLink(url) {
     try {
       if (!url.startsWith('http')) {
@@ -331,6 +369,12 @@ class GeocodingService {
     }
   }
 
+  /**
+   * Añade un resultado al caché interno.
+   * @param {string} key - Clave del caché (dirección o coordenadas).
+   * @param {Object} result - Resultado a cachear.
+   * @param {boolean} [isError=false] - Si el resultado es un error.
+   */
   addToCache(key, result, isError = false) {
     if (this.cache.size >= this.CACHE_MAX_SIZE) {
       const firstKey = this.cache.keys().next().value;
@@ -342,3 +386,4 @@ class GeocodingService {
 
 const geocodingServiceInstance = new GeocodingService();
 export default geocodingServiceInstance;
+

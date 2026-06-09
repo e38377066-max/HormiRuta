@@ -1,9 +1,16 @@
+/**
+ * @fileoverview Página de gestión de clientes mayoristas (Wholesale).
+ * Permite registrar clientes frecuentes, gestionar sus direcciones validadas,
+ * consultar sus órdenes activas y disparar despachos directos.
+ */
+
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
+/** Mapeo de estados de órdenes a claves de traducción */
 const STATUS_LABELS_KEY = {
   pickup_ready: 'wholesale.status.pickupReady',
   on_delivery: 'wholesale.status.onDelivery',
@@ -11,6 +18,7 @@ const STATUS_LABELS_KEY = {
   null: 'wholesale.status.noOrder'
 }
 
+/** Colores visuales para los estados de órdenes */
 const STATUS_COLORS = {
   pickup_ready: '#22c55e',
   on_delivery: '#f59e0b',
@@ -18,6 +26,12 @@ const STATUS_COLORS = {
   null: '#6b7280'
 }
 
+/**
+ * Componente que muestra un badge con el estado de las órdenes activas del cliente.
+ * @param {Object} props
+ * @param {Object} props.client - Objeto del cliente con info de órdenes.
+ * @returns {JSX.Element}
+ */
 function ActiveOrdersBadge({ client }) {
   const { t } = useTranslation()
   const count = client.active_orders_count || 0
@@ -44,22 +58,36 @@ function ActiveOrdersBadge({ client }) {
   )
 }
 
+/**
+ * Componente principal WholesalePage para la gestión de clientes recurrentes.
+ * @returns {JSX.Element}
+ */
 export default function WholesalePage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  /** @type {[Array, Function]} Lista de clientes mayoristas */
   const [clients, setClients] = useState([])
+  /** @type {[boolean, Function]} Indica si se están cargando los clientes */
   const [loading, setLoading] = useState(true)
+  /** @type {[boolean, Function]} Controla la visibilidad del formulario de cliente */
   const [showForm, setShowForm] = useState(false)
+  /** @type {[Object|null, Function]} Cliente que se está editando */
   const [editingClient, setEditingClient] = useState(null)
+  /** @type {[boolean, Function]} Indica si se está guardando un cambio */
   const [saving, setSaving] = useState(false)
+  /** @type {[number|null, Function]} ID del cliente para el que se está creando una orden manual */
   const [dispatchingId, setDispatchingId] = useState(null)
+  /** @type {[Object|null, Function]} Mensaje de notificación temporal */
   const [msg, setMsg] = useState(null)
 
+  /** Estructura inicial del formulario de cliente */
   const emptyForm = { customer_name: '', customer_phone: '', validated_address: '', respond_contact_id: '', notes: '', is_active: true }
   const [form, setForm] = useState(emptyForm)
 
+  /** Carga inicial */
   useEffect(() => { fetchClients() }, [])
 
+  /** Obtiene la lista de clientes del backend */
   const fetchClients = async () => {
     setLoading(true)
     try {
@@ -72,6 +100,7 @@ export default function WholesalePage() {
     }
   }
 
+  /** Muestra un mensaje de éxito o error temporal */
   const showMsg = (text, type = 'success') => {
     setMsg({ text, type })
     setTimeout(() => setMsg(null), 4000)
@@ -92,6 +121,7 @@ export default function WholesalePage() {
     setShowForm(true)
   }
 
+  /** Guarda los datos del cliente */
   const handleSave = async () => {
     if (!form.customer_name.trim()) { showMsg(t('wholesale.nameRequired'), 'error'); return }
     setSaving(true)
@@ -112,6 +142,7 @@ export default function WholesalePage() {
     }
   }
 
+  /** Elimina un registro de cliente mayorista */
   const handleDelete = async (client) => {
     if (!window.confirm(`${t('wholesale.confirmDelete')} "${client.customer_name}"?`)) return
     try {
@@ -123,6 +154,7 @@ export default function WholesalePage() {
     }
   }
 
+  /** Crea una nueva orden de despacho de forma inmediata para el cliente */
   const handleDispatchNow = async (client) => {
     if (!client.validated_address) { showMsg(t('wholesale.noAddress'), 'error'); return }
     const count = client.active_orders_count || 0

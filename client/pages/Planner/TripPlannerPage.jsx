@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Página de planificación de viajes (Trip Planner).
+ * Proporciona una interfaz interactiva con Google Maps para gestionar paradas,
+ * optimizar rutas, seguimiento de ubicación en tiempo real y modo de navegación
+ * paso a paso para los conductores.
+ */
+
 import { useEffect, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader } from '@googlemaps/js-api-loader'
@@ -6,6 +13,10 @@ import { usePlanner } from '../../layouts/PlannerLayout'
 import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
+/**
+ * Componente principal de la página de planificación de viajes.
+ * @returns {JSX.Element} El elemento JSX de la página.
+ */
 export default function TripPlannerPage() {
   const { t } = useTranslation()
   const plannerContext = usePlanner()
@@ -98,15 +109,18 @@ export default function TripPlannerPage() {
   const startHeight = useRef(0)
   const SNAP_POINTS = { min: 25, mid: 45, max: 80 }
 
+  // Efecto inicial para inicializar el mapa y cargar rutas de despacho
   useEffect(() => {
     initMap()
     loadDispatchRoutes()
   }, [])
 
+  // Sincroniza la referencia de modo de navegación para uso en callbacks
   useEffect(() => {
     navigationModeRef.current = navigationMode
   }, [navigationMode])
 
+  // Restaura el modo de navegación si hay una ruta optimizada pendiente de restaurar
   useEffect(() => {
     if (isOptimized && pendingNavRestoreRef.current) {
       pendingNavRestoreRef.current = false
@@ -128,12 +142,16 @@ export default function TripPlannerPage() {
     }
   }, [isOptimized])
 
+  // Guarda el estado de optimización en el almacenamiento local
   useEffect(() => {
     if (currentRouteId) {
       localStorage.setItem(`isOptimized_${currentRouteId}`, String(isOptimized))
     }
   }, [isOptimized, currentRouteId])
 
+  /**
+   * Envía la entrega de pago de una ruta al administrador.
+   */
   const deliverRoutePayment = async () => {
     if (!payDeliveryModal || !payDeliveryMethod) return
     setDeliveringPay(true)
@@ -149,6 +167,9 @@ export default function TripPlannerPage() {
     }
   }
 
+  /**
+   * Carga las rutas de despacho asignadas al conductor desde la API.
+   */
   const loadDispatchRoutes = async () => {
     try {
       setLoadingDispatch(true)
@@ -180,6 +201,10 @@ export default function TripPlannerPage() {
     }
   }
 
+  /**
+   * Carga una ruta de despacho específica y sus paradas.
+   * @param {Object} route - Los datos de la ruta a cargar.
+   */
   const loadDispatchRoute = (route) => {
     const skippedOnceKey = `skippedOnce_${route.id}`
     const skippedOnceIds = new Set(
@@ -236,6 +261,7 @@ export default function TripPlannerPage() {
     }
   }
 
+  // Efecto para manejar el arrastre del panel inferior
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isDragging.current) return
@@ -295,6 +321,10 @@ export default function TripPlannerPage() {
     }
   }, [panelHeight])
 
+  /**
+   * Inicia el proceso de arrastre del panel.
+   * @param {Object} e - Evento de ratón o toque.
+   */
   const handlePanelDragStart = (e) => {
     isDragging.current = true
     startY.current = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY
@@ -303,6 +333,9 @@ export default function TripPlannerPage() {
     document.body.style.userSelect = 'none'
   }
 
+  /**
+   * Inicializa el mapa de Google Maps con las configuraciones por defecto.
+   */
   const initMap = async () => {
     const loader = new Loader({
       apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
@@ -337,6 +370,9 @@ export default function TripPlannerPage() {
     startLocationTracking()
   }
 
+  /**
+   * Inicia el seguimiento de la ubicación del usuario mediante GPS.
+   */
   const startLocationTracking = async () => {
     if (isNative) {
       setupStatusBar()

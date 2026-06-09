@@ -1,22 +1,37 @@
+/**
+ * @fileoverview Página de contabilidad administrativa.
+ * Proporciona un resumen de liquidaciones por chofer, reportes de entregas detallados y gestión de estados de pago de rutas.
+ */
+
 import { useEffect, useState, useCallback, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
+/** Formatea un valor numérico a moneda USD */
 const fmt = (val) => val != null ? `$${Number(val).toFixed(2)}` : '-'
 
+/** Formatea una fecha para visualización */
 const fmtDate = (d) => {
   if (!d) return '-'
   return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+/**
+ * Componente AccountingPage para la gestión financiera de repartos.
+ * @returns {JSX.Element}
+ */
 export default function AccountingPage() {
   const navigate = useNavigate()
   const { t, i18n } = useTranslation()
+  /** @type {[string, Function]} Pestaña activa ('summary', 'deliveries', 'payments') */
   const [activeTab, setActiveTab] = useState('summary')
 
+  // --- Estados para Resumen por Chofer ---
+  /** @type {[Array, Function]} Datos del reporte de cobranza acumulada */
   const [report, setReport] = useState([])
+  /** @type {[Array, Function]} Lista de repartidores para filtros */
   const [drivers, setDrivers] = useState([])
   const [loading, setLoading] = useState(false)
   const [selectedDriver, setSelectedDriver] = useState('')
@@ -24,6 +39,8 @@ export default function AccountingPage() {
   const [dateTo, setDateTo] = useState('')
   const [expandedDriver, setExpandedDriver] = useState(null)
 
+  // --- Estados para Reporte de Entregas ---
+  /** @type {[Array, Function]} Lista de paradas/órdenes entregadas */
   const [deliveries, setDeliveries] = useState([])
   const [loadingDeliveries, setLoadingDeliveries] = useState(false)
   const [delDriver, setDelDriver] = useState('')
@@ -31,10 +48,13 @@ export default function AccountingPage() {
   const [delDateTo, setDelDateTo] = useState('')
   const [delSearch, setDelSearch] = useState('')
   const [delSearchInput, setDelSearchInput] = useState('')
+  /** @type {[Array, Function]} Meses disponibles para reportes históricos */
   const [availableMonths, setAvailableMonths] = useState([])
   const [selectedMonth, setSelectedMonth] = useState('')
   const [archivingMonth, setArchivingMonth] = useState(false)
 
+  // --- Estados para Pagos de Rutas ---
+  /** @type {[Array, Function]} Estado de liquidación de rutas completadas */
   const [routePayments, setRoutePayments] = useState([])
   const [loadingPayments, setLoadingPayments] = useState(false)
   const [payDriver, setPayDriver] = useState('')
@@ -42,6 +62,7 @@ export default function AccountingPage() {
   const [payDateTo, setPayDateTo] = useState('')
   const [payFilter, setPayFilter] = useState('all')
 
+  // --- Estados para Modales y UI ---
   const [confirmModal, setConfirmModal] = useState(null)
   const [confirmType, setConfirmType] = useState('full')
   const [confirmAmount, setConfirmAmount] = useState('')
@@ -50,16 +71,19 @@ export default function AccountingPage() {
   const [expandedPayRoute, setExpandedPayRoute] = useState(null)
   const [viewingPhoto, setViewingPhoto] = useState(null)
 
+  /** Carga inicial de choferes y reporte base */
   useEffect(() => {
     fetchDrivers()
     fetchReport()
   }, [])
 
+  /** Carga datos específicos al cambiar de pestaña */
   useEffect(() => {
     if (activeTab === 'deliveries') fetchDeliveries()
     if (activeTab === 'payments') fetchRoutePayments()
   }, [activeTab])
 
+  /** Refresco automático del resumen cada 90 segundos si la pestaña está activa */
   useEffect(() => {
     if (activeTab !== 'summary') return
     const interval = setInterval(() => {
@@ -68,6 +92,7 @@ export default function AccountingPage() {
     return () => clearInterval(interval)
   }, [activeTab, selectedDriver, dateFrom, dateTo])
 
+  /** Obtiene la lista de usuarios con rol 'driver' */
   const fetchDrivers = async () => {
     try {
       const res = await api.get('/api/admin/users', { params: { role: 'driver' } })
@@ -77,6 +102,10 @@ export default function AccountingPage() {
     }
   }
 
+  /**
+   * Obtiene el reporte consolidado de cobranza por chofer.
+   * @async
+   */
   const fetchReport = async () => {
     setLoading(true)
     try {
@@ -93,6 +122,10 @@ export default function AccountingPage() {
     }
   }
 
+  /**
+   * Obtiene el reporte detallado de entregas realizadas.
+   * @async
+   */
   const fetchDeliveries = useCallback(async () => {
     setLoadingDeliveries(true)
     try {
@@ -115,6 +148,10 @@ export default function AccountingPage() {
     }
   }, [delDriver, delDateFrom, delDateTo, delSearch, selectedMonth])
 
+  /**
+   * Archiva un mes de entregas y descarga el reporte en formato Excel.
+   * @async
+   */
   const handleArchiveMonth = async () => {
     const target = selectedMonth || currentMonthYear()
     if (!window.confirm(t('admin.accounting.closeAndExport', { month: target }))) return
@@ -136,6 +173,10 @@ export default function AccountingPage() {
     }
   }
 
+  /**
+   * Obtiene el listado de rutas y su estado de liquidación.
+   * @async
+   */
   const fetchRoutePayments = async (overrides = {}) => {
     setLoadingPayments(true)
     try {
@@ -155,6 +196,7 @@ export default function AccountingPage() {
     }
   }
 
+  /** Prepara el modal para confirmar la recepción de dinero de una ruta */
   const openConfirmModal = (route) => {
     setConfirmModal(route)
     setConfirmType('full')
@@ -162,6 +204,10 @@ export default function AccountingPage() {
     setConfirmMethod(route.payment_delivery_method || 'cash')
   }
 
+  /**
+   * Registra la confirmación administrativa de un pago de ruta.
+   * @async
+   */
   const handleAdminConfirm = async () => {
     if (!confirmModal) return
     if (confirmType === 'partial' && (!confirmAmount || isNaN(Number(confirmAmount)) || Number(confirmAmount) <= 0)) {
@@ -184,11 +230,13 @@ export default function AccountingPage() {
     }
   }
 
+  /** Retorna el mes/año actual en formato YYYY-MM */
   const currentMonthYear = () => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   }
 
+  /** Obtiene una etiqueta legible para el mes y año */
   const monthLabel = (my) => {
     if (!my) return ''
     const [y, m] = my.split('-')
@@ -210,6 +258,7 @@ export default function AccountingPage() {
     if (activeTab === 'deliveries') fetchDeliveries()
   }, [delDriver, delDateFrom, delDateTo, delSearch, selectedMonth])
 
+  /** Calcula totales acumulados del reporte de resumen */
   const summaryTotals = report.reduce((acc, row) => ({
     stops: acc.stops + row.stops_count,
     cost: acc.cost + row.total_order_cost,
@@ -218,6 +267,7 @@ export default function AccountingPage() {
     commission: acc.commission + row.total_commission
   }), { stops: 0, cost: 0, deposit: 0, collected: 0, commission: 0 })
 
+  /** Calcula totales acumulados del reporte de entregas */
   const deliveryTotals = deliveries.reduce((acc, d) => ({
     count: acc.count + 1,
     cost: acc.cost + d.order_cost,
@@ -227,6 +277,7 @@ export default function AccountingPage() {
     commission: acc.commission + d.commission_per_stop
   }), { count: 0, cost: 0, deposit: 0, to_collect: 0, collected: 0, commission: 0 })
 
+  /** Exporta el resumen de choferes a CSV */
   const exportSummaryCSV = () => {
     const headers = [
       t('admin.accounting.driver'),
@@ -247,6 +298,7 @@ export default function AccountingPage() {
     downloadCSV([headers, ...rows], `cobranza_${today()}`)
   }
 
+  /** Exporta el detalle de entregas a CSV */
   const exportDeliveriesCSV = () => {
     const headers = [
       '#Orden',
@@ -276,6 +328,7 @@ export default function AccountingPage() {
     downloadCSV([headers, ...rows], `entregas_${today()}`)
   }
 
+  /** Descarga un array de datos como archivo CSV */
   const downloadCSV = (data, filename) => {
     const csv = data.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })

@@ -1,22 +1,45 @@
+/**
+ * @fileoverview Visualizador de registros (logs) del sistema para administradores.
+ * Permite monitorear eventos en tiempo real, filtrar por nivel de gravedad, buscar texto, 
+ * limpiar la memoria y descargar archivos históricos de logs.
+ */
+
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
+/**
+ * Componente AdminLogs que implementa una terminal de visualización de registros.
+ * @returns {JSX.Element}
+ */
 export default function AdminLogs() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  /** @type {[Array, Function]} Lista de logs cargados en memoria */
   const [logs, setLogs] = useState([])
+  /** @type {[boolean, Function]} Indica si se está realizando la carga inicial */
   const [loading, setLoading] = useState(true)
+  /** @type {[boolean, Function]} Controla si el refresco automático está encendido */
   const [autoRefresh, setAutoRefresh] = useState(true)
+  /** @type {[string, Function]} Filtro por nivel (all, info, warn, error) */
   const [levelFilter, setLevelFilter] = useState('all')
+  /** @type {[string, Function]} Filtro de búsqueda por texto */
   const [search, setSearch] = useState('')
+  /** @type {[Object|null, Function]} Estadísticas de los archivos de logs en disco */
   const [fileStats, setFileStats] = useState(null)
+  /** @type {[Array, Function]} Lista de archivos históricos (archives) disponibles */
   const [archives, setArchives] = useState([])
+  /** @type {React.RefObject} Referencia para el scroll automático al final de la terminal */
   const logsEndRef = useRef(null)
+  /** @type {React.RefObject} Referencia al contenedor de la terminal */
   const containerRef = useRef(null)
 
+  /**
+   * Obtiene los logs más recientes del servidor.
+   * @async
+   */
   const fetchLogs = useCallback(async () => {
     try {
       const params = { limit: 500 }
@@ -31,6 +54,7 @@ export default function AdminLogs() {
     }
   }, [levelFilter, search])
 
+  /** Obtiene estadísticas de tamaño y entradas de los archivos actuales */
   const fetchFileStats = async () => {
     try {
       const response = await api.get('/api/admin/logs/stats')
@@ -40,6 +64,7 @@ export default function AdminLogs() {
     }
   }
 
+  /** Obtiene la lista de archivos de logs antiguos comprimidos o archivados */
   const fetchArchives = async () => {
     try {
       const response = await api.get('/api/admin/logs/archives')
@@ -49,18 +74,21 @@ export default function AdminLogs() {
     }
   }
 
+  /** Carga inicial al montar el componente */
   useEffect(() => {
     fetchLogs()
     fetchFileStats()
     fetchArchives()
   }, [fetchLogs])
 
+  /** Maneja el intervalo de refresco automático (cada 5 segundos) */
   useEffect(() => {
     if (!autoRefresh) return
     const interval = setInterval(fetchLogs, 5000)
     return () => clearInterval(interval)
   }, [autoRefresh, fetchLogs])
 
+  /** Desplaza el scroll al final de la terminal cuando llegan nuevos logs si el usuario está cerca del fondo */
   useEffect(() => {
     if (logsEndRef.current && containerRef.current) {
       const container = containerRef.current
@@ -71,6 +99,10 @@ export default function AdminLogs() {
     }
   }, [logs])
 
+  /**
+   * Limpia los logs almacenados en la memoria del servidor.
+   * @async
+   */
   const handleClearLogs = async () => {
     try {
       await api.delete('/api/admin/logs')
@@ -80,6 +112,11 @@ export default function AdminLogs() {
     }
   }
 
+  /**
+   * Descarga un archivo de logs actual (24h o 3días).
+   * @async
+   * @param {string} type - Tipo de descarga ('important' o 'full').
+   */
   const handleDownload = async (type) => {
     try {
       const response = await api.get(`/api/admin/logs/download/${type}`, { responseType: 'blob' })
@@ -100,6 +137,11 @@ export default function AdminLogs() {
     }
   }
 
+  /**
+   * Descarga un archivo del histórico archivado.
+   * @async
+   * @param {string} filename - Nombre del archivo a descargar.
+   */
   const handleDownloadArchive = async (filename) => {
     try {
       const response = await api.get(`/api/admin/logs/archives/${filename}`, { responseType: 'blob' })
@@ -116,6 +158,7 @@ export default function AdminLogs() {
     }
   }
 
+  /** Determina el color del texto según el nivel del log */
   const getLevelColor = (level) => {
     switch (level) {
       case 'error': return '#ff5252'
@@ -125,6 +168,7 @@ export default function AdminLogs() {
     }
   }
 
+  /** Determina la clase CSS para el badge del nivel */
   const getLevelBadgeClass = (level) => {
     switch (level) {
       case 'error': return 'log-badge-error'
@@ -134,6 +178,7 @@ export default function AdminLogs() {
     }
   }
 
+  /** Formatea la estampa de tiempo del log */
   const formatTime = (timestamp) => {
     const d = new Date(timestamp)
     return d.toLocaleTimeString(undefined, { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0')

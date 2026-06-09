@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Configuración de la conexión a la base de datos PostgreSQL usando Sequelize.
+ * Gestiona la URL de conexión, opciones de SSL y el pool de conexiones.
+ */
+
 import { Sequelize } from 'sequelize';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -8,9 +13,16 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+/**
+ * Determina si se debe usar SSL para la conexión a la base de datos.
+ * Se habilita si DATABASE_SSL es 'true' o si el host pertenece a proveedores conocidos que lo requieren.
+ */
 const useSSL = process.env.DATABASE_SSL === 'true' || 
   (databaseUrl.includes('neon.tech') || databaseUrl.includes('rds.amazonaws.com') || databaseUrl.includes('supabase'));
 
+/**
+ * Instancia de Sequelize configurada para PostgreSQL.
+ */
 const sequelize = new Sequelize(databaseUrl, {
   dialect: 'postgres',
   logging: false,

@@ -1,11 +1,31 @@
+/**
+ * @fileoverview Servicio para la validación de direcciones y comprobación de cobertura.
+ * Proporciona métodos para extraer códigos postales y nombres de ciudades de textos,
+ * validar si una dirección está dentro de las zonas de cobertura y detectar el tipo de vivienda.
+ */
+
 import { CoverageZone } from '../models/index.js';
 import { Op } from 'sequelize';
 
+/**
+ * Clase AddressValidationService para gestionar la lógica de validación de direcciones.
+ * @description Utiliza patrones de expresiones regulares y búsquedas en base de datos para validar cobertura.
+ */
 class AddressValidationService {
+  /**
+   * Crea una instancia de AddressValidationService.
+   * @param {number|string} [userId] - ID del usuario para filtrar zonas de cobertura (opcional).
+   */
   constructor(userId) {
     this.userId = userId;
   }
 
+  /**
+   * Extrae un código postal (5 dígitos) de un texto dado.
+   * @description Prueba varios patrones comunes de mención de código postal (ZIP, CP, etc.).
+   * @param {string} text - El texto a analizar.
+   * @returns {string|null} El código postal de 5 dígitos o null si no se encuentra.
+   */
   extractZipCode(text) {
     if (!text) return null;
     
@@ -28,6 +48,12 @@ class AddressValidationService {
     return null;
   }
 
+  /**
+   * Extrae el nombre de una ciudad conocida de un texto.
+   * @description Compara el texto con una lista predefinida de ciudades del área de DFW.
+   * @param {string} text - El texto a analizar.
+   * @returns {string|null} El nombre de la ciudad encontrada o null.
+   */
   extractCityName(text) {
     if (!text) return null;
     
@@ -63,6 +89,12 @@ class AddressValidationService {
     return null;
   }
 
+  /**
+   * Busca una zona de cobertura por el nombre de la ciudad.
+   * @description Realiza una búsqueda insensible a mayúsculas en la tabla CoverageZone.
+   * @param {string} cityName - Nombre de la ciudad.
+   * @returns {Promise<Object|null>} El modelo de la zona encontrada o null.
+   */
   async findZoneByCity(cityName) {
     if (!cityName || cityName.length < 3) return null;
     
@@ -85,6 +117,11 @@ class AddressValidationService {
     return zone;
   }
 
+  /**
+   * Determina si un mensaje contiene predominantemente un código postal.
+   * @param {string} text - El texto a analizar.
+   * @returns {boolean} True si parece ser un mensaje de código postal.
+   */
   isZipCodeMessage(text) {
     if (!text) return false;
     
@@ -100,6 +137,10 @@ class AddressValidationService {
     return false;
   }
 
+  /**
+   * Lista de ciudades conocidas en el área de Dallas-Fort Worth.
+   * @type {string[]}
+   */
   knownCities = [
     'dallas', 'fort worth', 'arlington', 'garland', 'irving', 'plano', 
     'mesquite', 'richardson', 'carrollton', 'grand prairie', 'denton',
@@ -112,6 +153,11 @@ class AddressValidationService {
     'bedford', 'hurst', 'grapevine', 'colleyville', 'southlake', 'keller'
   ];
 
+  /**
+   * Determina si un mensaje contiene el nombre de una ciudad conocida.
+   * @param {string} text - El texto a analizar.
+   * @returns {boolean} True si contiene una ciudad conocida.
+   */
   isCityMessage(text) {
     if (!text) return false;
     
@@ -143,6 +189,11 @@ class AddressValidationService {
     return false;
   }
 
+  /**
+   * Valida si un texto contiene un código postal o ciudad con cobertura.
+   * @param {string} text - El texto a validar.
+   * @returns {Promise<Object>} Resultado de la validación con estado, tipo y mensaje.
+   */
   async validateZipOrCity(text) {
     const zipCode = this.extractZipCode(text);
     
@@ -210,6 +261,11 @@ class AddressValidationService {
     };
   }
 
+  /**
+   * Detecta si una dirección parece ser un apartamento o una casa.
+   * @param {string} address - La dirección a analizar.
+   * @returns {string} 'apartment' o 'house'.
+   */
   detectAddressType(address) {
     const lowerAddress = address.toLowerCase();
     
@@ -229,6 +285,11 @@ class AddressValidationService {
     return 'house';
   }
 
+  /**
+   * Verifica si una dirección contiene un número de unidad o apartamento.
+   * @param {string} address - La dirección a analizar.
+   * @returns {boolean} True si tiene número de apartamento.
+   */
   hasApartmentNumber(address) {
     const patterns = [
       /apt\.?\s*#?\s*\d+/i,
@@ -244,6 +305,11 @@ class AddressValidationService {
     return patterns.some(pattern => pattern.test(address));
   }
 
+  /**
+   * Comprueba si un código postal tiene cobertura activa.
+   * @param {string} zipCode - El código postal.
+   * @returns {Promise<Object>} Resultado con hasCoverage, zone y reason.
+   */
   async checkCoverage(zipCode) {
     if (!zipCode) {
       return {
@@ -276,6 +342,11 @@ class AddressValidationService {
     };
   }
 
+  /**
+   * Evalúa si un texto parece ser una dirección física.
+   * @param {string} text - El texto a evaluar.
+   * @returns {boolean} True si es probable que sea una dirección.
+   */
   isLikelyAddress(text) {
     if (!text || text.length < 8) return false;
     
@@ -346,6 +417,12 @@ class AddressValidationService {
     return false;
   }
 
+  /**
+   * Realiza una validación completa de una dirección.
+   * @description Valida si es dirección, extrae ZIP, determina tipo y comprueba cobertura.
+   * @param {string} address - La dirección a validar.
+   * @returns {Promise<Object>} Resultado detallado de la validación.
+   */
   async validateAddress(address) {
     const zipCode = this.extractZipCode(address);
     const addressType = this.detectAddressType(address);
@@ -383,3 +460,4 @@ class AddressValidationService {
 }
 
 export default AddressValidationService;
+

@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Rutas para la gestión de mensajería y automatización.
+ * Maneja la configuración de Respond.io, OpenAI, plantillas de mensajes,
+ * registro de mensajes y sincronización de contactos.
+ */
+
 import express from 'express';
 import { Op } from 'sequelize';
 import { 
@@ -18,11 +24,22 @@ import pollingService from '../services/pollingService.js';
 
 const router = express.Router();
 
+/**
+ * Verifica si un usuario tiene el rol de administrador.
+ * @param {number|string} userId - ID del usuario.
+ * @returns {Promise<boolean>} True si es administrador.
+ * @private
+ */
 const isAdminUser = async (userId) => {
   const user = await User.findByPk(userId);
   return user?.role === 'admin';
 };
 
+/**
+ * Obtiene la configuración de mensajería (singleton por ahora).
+ * @returns {Promise<Object>} Objeto con settings e isAdmin.
+ * @private
+ */
 async function getSettingsForUser() {
   let settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
   if (!settings) {
@@ -31,6 +48,12 @@ async function getSettingsForUser() {
   return { settings, isAdmin: true };
 }
 
+/**
+ * GET /settings
+ * @description Obtiene la configuración de mensajería global.
+ * @auth requireAuth
+ * @returns {Object} Configuración detallada.
+ */
 router.get('/settings', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -43,6 +66,15 @@ router.get('/settings', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /settings
+ * @description Actualiza la configuración de mensajería global.
+ * @route PUT /settings
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Configuración actualizada.
+ */
 router.put('/settings', requireAdmin, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -83,6 +115,15 @@ router.put('/settings', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /settings/test-connection
+ * @description Prueba la conexión con Respond.io usando el token configurado.
+ * @route POST /settings/test-connection
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la prueba de conexión.
+ */
 router.post('/settings/test-connection', requireAuth, async (req, res) => {
   try {
     console.log('[Test Connection] Iniciando prueba de conexión...');
@@ -107,7 +148,15 @@ router.post('/settings/test-connection', requireAuth, async (req, res) => {
   }
 });
 
-// Probar conexión con OpenAI
+/**
+ * POST /settings/test-openai
+ * @description Prueba la conexión con OpenAI usando la API key proporcionada o configurada.
+ * @route POST /settings/test-openai
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la prueba de conexión con OpenAI.
+ */
 router.post('/settings/test-openai', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -128,7 +177,15 @@ router.post('/settings/test-openai', requireAuth, async (req, res) => {
   }
 });
 
-// Reiniciar historial de prueba
+/**
+ * POST /settings/reset-test
+ * @description Reinicia el historial de prueba para un contacto específico, eliminando estados de conversación, pedidos y logs.
+ * @route POST /settings/reset-test
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Mensaje de éxito y datos del contacto.
+ */
 router.post('/settings/reset-test', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -184,6 +241,15 @@ router.post('/settings/reset-test', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /orders
+ * @description Obtiene la lista de órdenes de mensajería con soporte para filtrado y paginación.
+ * @route GET /orders
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de órdenes y total de registros.
+ */
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const { status, limit = 50, offset = 0 } = req.query;
@@ -209,6 +275,15 @@ router.get('/orders', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /orders/:id
+ * @description Obtiene el detalle de una orden de mensajería específica, incluyendo sus logs de mensajes.
+ * @route GET /orders/:id
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Detalle de la orden y mensajes asociados.
+ */
 router.get('/orders/:id', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -233,6 +308,15 @@ router.get('/orders/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders
+ * @description Crea una nueva orden de mensajería y valida la dirección proporcionada.
+ * @route POST /orders
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden creada.
+ */
 router.post('/orders', requireAuth, async (req, res) => {
   try {
     const {
@@ -273,6 +357,15 @@ router.post('/orders', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /orders/:id
+ * @description Actualiza una orden de mensajería existente y re-valida la dirección si cambia.
+ * @route PUT /orders/:id
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden actualizada.
+ */
 router.put('/orders/:id', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -312,6 +405,15 @@ router.put('/orders/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders/:id/confirm
+ * @description Confirma una orden de mensajería y envía un mensaje de confirmación al contacto a través de Respond.io.
+ * @route POST /orders/:id/confirm
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden confirmada.
+ */
 router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -381,6 +483,15 @@ router.post('/orders/:id/confirm', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders/:id/cancel
+ * @description Cancela una orden de mensajería registrando el motivo y la fecha de cancelación.
+ * @route POST /orders/:id/cancel
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden cancelada.
+ */
 router.post('/orders/:id/cancel', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -402,6 +513,15 @@ router.post('/orders/:id/cancel', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders/:id/complete
+ * @description Marca una orden de mensajería como completada y envía un mensaje de finalización al contacto.
+ * @route POST /orders/:id/complete
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Orden completada.
+ */
 router.post('/orders/:id/complete', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -449,6 +569,15 @@ router.post('/orders/:id/complete', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /orders/:id
+ * @description Elimina una orden de mensajería de la base de datos.
+ * @route DELETE /orders/:id
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la eliminación.
+ */
 router.delete('/orders/:id', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -466,6 +595,15 @@ router.delete('/orders/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders/revalidate
+ * @description Re-valida manualmente las órdenes que no tenían cobertura, verificando si sus códigos postales ahora están en una zona activa.
+ * @route POST /orders/revalidate
+ * @access requireAdmin
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Número de órdenes re-validadas y total procesado.
+ */
 router.post('/orders/revalidate', requireAuth, async (req, res) => {
   try {
     const requestingUser = await User.findByPk(req.userId);
@@ -498,6 +636,15 @@ router.post('/orders/revalidate', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /orders/:id/send-message
+ * @description Envía un mensaje manual a un contacto asociado a una orden a través de Respond.io.
+ * @route POST /orders/:id/send-message
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado del envío y log del mensaje creado.
+ */
 router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -551,6 +698,15 @@ router.post('/orders/:id/send-message', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /coverage-zones
+ * @description Obtiene la lista de zonas de cobertura configuradas.
+ * @route GET /coverage-zones
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Array<Object>} Lista de zonas de cobertura.
+ */
 router.get('/coverage-zones', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -568,6 +724,15 @@ router.get('/coverage-zones', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /coverage-zones
+ * @description Crea una nueva zona de cobertura y re-valida órdenes pendientes para ese código postal.
+ * @route POST /coverage-zones
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Zona de cobertura creada.
+ */
 router.post('/coverage-zones', requireAuth, async (req, res) => {
   try {
     const { zip_code, zone_name, city, state, country, is_active,
@@ -610,6 +775,15 @@ router.post('/coverage-zones', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /coverage-zones/bulk
+ * @description Crea múltiples zonas de cobertura a partir de una lista de códigos postales.
+ * @route POST /coverage-zones/bulk
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resumen de zonas creadas y omitidas.
+ */
 router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
   try {
     const { zip_codes, zone_name, city, state } = req.body;
@@ -685,6 +859,15 @@ router.post('/coverage-zones/bulk', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /coverage-zones/:id
+ * @description Actualiza los datos de una zona de cobertura existente.
+ * @route PUT /coverage-zones/:id
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Zona de cobertura actualizada.
+ */
 router.put('/coverage-zones/:id', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -715,6 +898,15 @@ router.put('/coverage-zones/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /coverage-zones/:id
+ * @description Elimina una zona de cobertura de la base de datos.
+ * @route DELETE /coverage-zones/:id
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la eliminación.
+ */
 router.delete('/coverage-zones/:id', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
@@ -765,6 +957,15 @@ router.post('/geocode-address', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /validate-zip
+ * @description Valida un código postal o ciudad verificando si se encuentra dentro de las zonas de cobertura activas.
+ * @route POST /validate-zip
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la validación y mensaje descriptivo.
+ */
 router.post('/validate-zip', requireAuth, async (req, res) => {
   try {
     const { zipOrCity } = req.body;
@@ -886,6 +1087,15 @@ router.post('/validate-zip', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /validate-address
+ * @description Valida una dirección completa usando el servicio de validación de direcciones.
+ * @route POST /validate-address
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado detallado de la validación de dirección.
+ */
 router.post('/validate-address', requireAuth, async (req, res) => {
   try {
     const { address } = req.body;
@@ -904,6 +1114,15 @@ router.post('/validate-address', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /webhook
+ * @description Punto de entrada para webhooks de Respond.io (actualmente solo registra el evento).
+ * @route POST /webhook
+ * @access Public (with secret verification)
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Confirmación de recepción.
+ */
 router.post('/webhook', async (req, res) => {
   try {
     const webhookSecret = process.env.WEBHOOK_SECRET;
@@ -924,6 +1143,15 @@ router.post('/webhook', async (req, res) => {
   }
 });
 
+/**
+ * GET /stats
+ * @description Obtiene estadísticas generales de órdenes de mensajería y zonas de cobertura para el usuario autenticado.
+ * @route GET /stats
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Conteos de órdenes por estado y zonas de cobertura.
+ */
 router.get('/stats', requireAuth, async (req, res) => {
   try {
     const userId = req.userId;
@@ -961,6 +1189,15 @@ router.get('/stats', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /polling/status
+ * @description Obtiene el estado actual del servicio de polling de Respond.io para el usuario o global si es administrador.
+ * @route GET /polling/status
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Estado del polling.
+ */
 router.get('/polling/status', requireAuth, async (req, res) => {
   try {
     let status = pollingService.getPollingStatus(req.userId);
@@ -974,6 +1211,15 @@ router.get('/polling/status', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /polling/start
+ * @description Inicia el servicio de polling para sincronizar mensajes de Respond.io.
+ * @route POST /polling/start
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado del inicio del polling.
+ */
 router.post('/polling/start', requireAuth, async (req, res) => {
   try {
     const intervalSeconds = req.body.interval || 30;
@@ -997,6 +1243,15 @@ router.post('/polling/start', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /polling/stop
+ * @description Detiene el servicio de polling de Respond.io para el usuario.
+ * @route POST /polling/stop
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la detención del polling.
+ */
 router.post('/polling/stop', requireAuth, async (req, res) => {
   try {
     let result = pollingService.stopPolling(req.userId);
@@ -1015,6 +1270,15 @@ router.post('/polling/stop', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /polling/sync
+ * @description Sincroniza manualmente las conversaciones abiertas de Respond.io.
+ * @route POST /polling/sync
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la sincronización.
+ */
 router.post('/polling/sync', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -1041,6 +1305,15 @@ router.post('/polling/sync', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /contacts
+ * @description Obtiene la lista de contactos desde Respond.io.
+ * @route GET /contacts
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de contactos y datos de paginación.
+ */
 router.get('/contacts', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -1069,6 +1342,15 @@ router.get('/contacts', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /contacts/:contactId/messages
+ * @description Obtiene el historial de mensajes de un contacto específico desde Respond.io.
+ * @route GET /contacts/:contactId/messages
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de mensajes y datos de paginación.
+ */
 router.get('/contacts/:contactId/messages', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -1096,6 +1378,15 @@ router.get('/contacts/:contactId/messages', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /chatbot/states
+ * @description Obtiene los estados actuales de todas las conversaciones del chatbot.
+ * @route GET /chatbot/states
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Lista de estados de conversación.
+ */
 router.get('/chatbot/states', requireAuth, async (req, res) => {
   try {
     const where = {};
@@ -1112,6 +1403,15 @@ router.get('/chatbot/states', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /chatbot/state/:contactId
+ * @description Obtiene el estado de la conversación del chatbot para un contacto específico.
+ * @route GET /chatbot/state/:contactId
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Estado de la conversación.
+ */
 router.get('/chatbot/state/:contactId', requireAuth, async (req, res) => {
   try {
     const state = await ConversationState.findOne({
@@ -1132,6 +1432,15 @@ router.get('/chatbot/state/:contactId', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /chatbot/pause/:contactId
+ * @description Pausa la automatización del chatbot para un contacto específico.
+ * @route POST /chatbot/pause/:contactId
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la operación.
+ */
 router.post('/chatbot/pause/:contactId', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -1150,6 +1459,15 @@ router.post('/chatbot/pause/:contactId', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /chatbot/resume/:contactId
+ * @description Reanuda la automatización del chatbot para un contacto específico.
+ * @route POST /chatbot/resume/:contactId
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la operación.
+ */
 router.post('/chatbot/resume/:contactId', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -1168,6 +1486,15 @@ router.post('/chatbot/resume/:contactId', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /chatbot/reset/:contactId
+ * @description Reinicia la conversación del chatbot para un contacto específico.
+ * @route POST /chatbot/reset/:contactId
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la operación.
+ */
 router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
   try {
     const { settings } = await getSettingsForUser();
@@ -1186,6 +1513,15 @@ router.post('/chatbot/reset/:contactId', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /agents
+ * @description Obtiene la lista de todos los agentes de servicio.
+ * @route GET /agents
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Array<Object>} Lista de agentes.
+ */
 router.get('/agents', requireAuth, async (req, res) => {
   try {
     const where = {};
@@ -1200,6 +1536,15 @@ router.get('/agents', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * POST /agents
+ * @description Crea un nuevo agente de servicio.
+ * @route POST /agents
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Agente creado.
+ */
 router.post('/agents', requireAuth, async (req, res) => {
   try {
     const { agent_id, agent_name, agent_email, service_name, products, is_default } = req.body;
@@ -1233,6 +1578,15 @@ router.post('/agents', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * PUT /agents/:id
+ * @description Actualiza los datos de un agente de servicio existente.
+ * @route PUT /agents/:id
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Agente actualizado.
+ */
 router.put('/agents/:id', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -1268,6 +1622,15 @@ router.put('/agents/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * DELETE /agents/:id
+ * @description Elimina un agente de servicio de la base de datos.
+ * @route DELETE /agents/:id
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Object} Resultado de la eliminación.
+ */
 router.delete('/agents/:id', requireAuth, async (req, res) => {
   try {
     const where = { id: req.params.id };
@@ -1285,6 +1648,15 @@ router.delete('/agents/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /agents/by-service/:serviceName
+ * @description Obtiene los agentes de servicio filtrados por nombre de servicio.
+ * @route GET /agents/by-service/:serviceName
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Array<Object>} Lista de agentes filtrados.
+ */
 router.get('/agents/by-service/:serviceName', requireAuth, async (req, res) => {
   try {
     const where = admin
@@ -1301,6 +1673,15 @@ router.get('/agents/by-service/:serviceName', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /agents/by-product/:productName
+ * @description Obtiene los agentes de servicio que ofrecen un producto específico.
+ * @route GET /agents/by-product/:productName
+ * @access requireAuth
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {Array<Object>} Lista de agentes que ofrecen el producto.
+ */
 router.get('/agents/by-product/:productName', requireAuth, async (req, res) => {
   try {
     const where = admin ? { is_active: true } : { user_id: req.userId, is_active: true };

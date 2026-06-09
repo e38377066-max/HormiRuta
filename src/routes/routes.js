@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Rutas para la gestión de rutas de entrega y optimización.
+ */
+
 import { Router } from 'express';
 import { Route, Stop, RouteHistory } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -5,6 +9,12 @@ import { optimizeRouteOrder, calculateEtas } from '../services/optimization.js';
 
 const router = Router();
 
+/**
+ * @description Obtiene todas las rutas del usuario autenticado.
+ * @route GET /api/routes
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Lista de rutas con sus paradas.
+ */
 router.get('/', requireAuth, async (req, res) => {
   try {
     const routes = await Route.findAll({
@@ -20,6 +30,14 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Crea una nueva ruta de entrega.
+ * @route POST /api/routes
+ * @access Private (Requiere Auth)
+ * @param {string} [req.body.name] - Nombre de la ruta.
+ * @param {Array} [req.body.stops] - Lista inicial de paradas.
+ * @returns {Object} 201 - Ruta creada exitosamente.
+ */
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { name, stops: stopsData = [] } = req.body;
@@ -57,6 +75,13 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Obtiene el detalle completo de una ruta específica.
+ * @route GET /api/routes/:id
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Datos detallados de la ruta y sus paradas.
+ * @returns {Object} 404 - Ruta no encontrada.
+ */
 router.get('/:id', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
@@ -73,6 +98,15 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Actualiza los datos generales de una ruta (nombre o estado).
+ * @route PUT /api/routes/:id
+ * @access Private (Requiere Auth)
+ * @param {string} [req.body.name] - Nuevo nombre.
+ * @param {string} [req.body.status] - Nuevo estado.
+ * @returns {Object} 200 - Ruta actualizada.
+ * @returns {Object} 404 - Ruta no encontrada.
+ */
 router.put('/:id', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
@@ -98,6 +132,12 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Elimina permanentemente una ruta.
+ * @route DELETE /api/routes/:id
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Mensaje de éxito.
+ */
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
@@ -115,6 +155,13 @@ router.delete('/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Agrega una nueva parada a una ruta existente.
+ * @route POST /api/routes/:id/stops
+ * @access Private (Requiere Auth)
+ * @param {Object} req.body - Datos de la parada (dirección, notas, etc.).
+ * @returns {Object} 201 - Parada creada.
+ */
 router.post('/:id/stops', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
@@ -148,6 +195,13 @@ router.post('/:id/stops', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Reordena las paradas de una ruta manualmente.
+ * @route POST /api/routes/:id/reorder
+ * @access Private (Requiere Auth)
+ * @param {Array} req.body.stop_order - Lista de IDs de paradas en el nuevo orden.
+ * @returns {Object} 200 - Ruta con paradas reordenadas.
+ */
 router.post('/:id/reorder', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
@@ -173,6 +227,15 @@ router.post('/:id/reorder', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Optimiza el orden de las paradas de una ruta usando algoritmos de ruteo.
+ * @route POST /api/routes/:id/optimize
+ * @access Private (Requiere Auth)
+ * @param {number} [req.body.start_lat] - Latitud de inicio.
+ * @param {number} [req.body.start_lng] - Longitud de inicio.
+ * @param {boolean} [req.body.return_to_start] - Si debe volver al punto de inicio.
+ * @returns {Object} 200 - Ruta optimizada con nuevas ETAs y distancias.
+ */
 router.post('/:id/optimize', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
@@ -247,6 +310,12 @@ router.post('/:id/optimize', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Inicia el recorrido de una ruta, marcando la hora de inicio.
+ * @route POST /api/routes/:id/start
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Ruta iniciada.
+ */
 router.post('/:id/start', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
@@ -270,6 +339,12 @@ router.post('/:id/start', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Finaliza una ruta y crea el registro correspondiente en el historial.
+ * @route POST /api/routes/:id/complete
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Ruta completada y datos del historial creado.
+ */
 router.post('/:id/complete', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({
@@ -309,6 +384,14 @@ router.post('/:id/complete', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Importa una lista de direcciones en texto plano hacia una ruta.
+ * Cada línea se trata como una nueva parada.
+ * @route POST /api/routes/:id/import-text
+ * @access Private (Requiere Auth)
+ * @param {string} req.body.text - Bloque de texto con direcciones.
+ * @returns {Object} 200 - Conteo de paradas importadas.
+ */
 router.post('/:id/import-text', requireAuth, async (req, res) => {
   try {
     const route = await Route.findOne({

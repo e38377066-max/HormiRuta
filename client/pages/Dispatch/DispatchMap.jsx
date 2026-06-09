@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Componente de Mapa de Despacho (Dispatch Map).
+ * Proporciona una interfaz visual basada en Google Maps para gestionar órdenes,
+ * crear rutas, asignar conductores y monitorear el progreso de las entregas en tiempo real.
+ * Es la herramienta principal para los administradores de despacho.
+ */
+
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader } from '@googlemaps/js-api-loader'
@@ -5,6 +12,9 @@ import { useAuth } from '../../contexts/AuthContext'
 import api from '../../api'
 import './DispatchMap.css'
 
+/**
+ * Configuración visual de los estados de las órdenes.
+ */
 const STATUS_CONFIG = {
   pending: { label: 'Pendiente', color: '#9e9e9e', icon: 'hourglass_empty' },
   approved: { label: 'Aprobada', color: '#ffc107', icon: 'check_circle' },
@@ -15,14 +25,28 @@ const STATUS_CONFIG = {
   delivered: { label: 'Entregada', color: '#ff6d00', icon: 'done_all' }
 }
 
+/**
+ * Colores asignados a los conductores para distinguir sus rutas en el mapa.
+ */
 const DRIVER_COLORS = [
   '#6200ea', '#e91e63', '#00897b', '#ff6f00', '#1565c0',
   '#6a1b9a', '#2e7d32', '#c62828', '#00838f', '#ef6c00',
   '#4527a0', '#ad1457', '#00695c', '#d84315', '#283593'
 ]
 
+/**
+ * Obtiene un color basado en el índice del conductor.
+ * @param {number} driverIdx - Índice del conductor.
+ * @returns {string} Código de color hexadecimal.
+ */
 const getDriverColor = (driverIdx) => DRIVER_COLORS[driverIdx % DRIVER_COLORS.length]
 
+/**
+ * Crea un icono SVG numerado para los marcadores del mapa.
+ * @param {number|string} number - El número o texto a mostrar.
+ * @param {string} color - El color de fondo del marcador.
+ * @returns {string} URL de datos SVG.
+ */
 function createNumberedIcon(number, color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44">
     <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26s18-12.5 18-26C36 8.06 27.94 0 18 0z" fill="${color}" stroke="#fff" stroke-width="2"/>
@@ -31,6 +55,11 @@ function createNumberedIcon(number, color) {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
 
+/**
+ * Crea un icono SVG para marcar paradas completadas.
+ * @param {number|string} number - El número de parada.
+ * @returns {string} URL de datos SVG.
+ */
 function createCompletedIcon(number) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44">
     <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26s18-12.5 18-26C36 8.06 27.94 0 18 0z" fill="#22c55e" stroke="#fff" stroke-width="2"/>
@@ -40,6 +69,11 @@ function createCompletedIcon(number) {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
 
+/**
+ * Crea un icono SVG para marcar paradas saltadas.
+ * @param {number|string} number - El número de parada.
+ * @returns {string} URL de datos SVG.
+ */
 function createSkippedIcon(number) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="44">
     <path d="M18 0C8.06 0 0 8.06 0 18c0 13.5 18 26 18 26s18-12.5 18-26C36 8.06 27.94 0 18 0z" fill="#9e9e9e" stroke="#fff" stroke-width="2"/>
@@ -49,6 +83,11 @@ function createSkippedIcon(number) {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
 
+/**
+ * Crea un icono SVG triangular para órdenes pendientes.
+ * @param {string} color - El color de relleno.
+ * @returns {string} URL de datos SVG.
+ */
 function createTriangleIcon(color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34">
     <polygon points="17,2 32,32 2,32" fill="${color}" stroke="#fff" stroke-width="2.5"/>
@@ -56,6 +95,10 @@ function createTriangleIcon(color) {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
 
+/**
+ * Crea un icono SVG de estrella para direcciones favoritas.
+ * @returns {string} URL de datos SVG.
+ */
 function createStarIcon() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="38">
     <polygon points="19,2 23,14 36,14 26,22 30,34 19,27 8,34 12,22 2,14 15,14" fill="#FFD600" stroke="#fff" stroke-width="2"/>
@@ -63,6 +106,10 @@ function createStarIcon() {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
 
+/**
+ * Componente principal del Mapa de Despacho.
+ * @returns {JSX.Element} El elemento JSX del componente.
+ */
 export default function DispatchMap() {
   const { t } = useTranslation()
   const { isAdmin, isDriver } = useAuth()
@@ -170,6 +217,10 @@ export default function DispatchMap() {
     return entries
   }, [routes])
 
+  /**
+   * Alterna la visibilidad de las rutas de un conductor específico en el mapa.
+   * @param {string} driverName - Nombre del conductor.
+   */
   const toggleDriverVisibility = useCallback((driverName) => {
     setVisibleDrivers(prev => {
       const allNames = activeDriversList.map(d => d.name)
@@ -184,6 +235,9 @@ export default function DispatchMap() {
     })
   }, [activeDriversList])
 
+  /**
+   * Carga los datos iniciales de órdenes, rutas y estadísticas desde la API.
+   */
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
@@ -211,6 +265,9 @@ export default function DispatchMap() {
     }
   }, [filterStatus, isAdmin])
 
+  /**
+   * Carga la lista de órdenes que ya han sido entregadas.
+   */
   const fetchDeliveredOrders = useCallback(async () => {
     try {
       setLoadingDelivered(true)
@@ -223,6 +280,9 @@ export default function DispatchMap() {
     }
   }, [])
 
+  /**
+   * Carga la lista de direcciones favoritas.
+   */
   const fetchFavorites = useCallback(async () => {
     try {
       setLoadingFavorites(true)
@@ -235,6 +295,10 @@ export default function DispatchMap() {
     }
   }, [])
 
+  /**
+   * Carga las órdenes que están listas para ser recogidas (pickup-ready).
+   * @param {boolean} [forceRefresh=false] - Si se debe forzar la actualización desde el correo.
+   */
   const fetchPickupReady = useCallback(async (forceRefresh = false) => {
     try {
       setLoadingPickupReady(true)
@@ -258,6 +322,7 @@ export default function DispatchMap() {
     }
   }, [fetchData])
 
+  // Efecto inicial para cargar todos los datos y configurar intervalos de actualización
   useEffect(() => {
     fetchData()
     fetchFavorites()
@@ -267,6 +332,7 @@ export default function DispatchMap() {
     return () => { clearInterval(interval); clearInterval(pickupInterval) }
   }, [fetchData, fetchFavorites, fetchPickupReady])
 
+  // Inicialización del mapa de Google Maps
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
 

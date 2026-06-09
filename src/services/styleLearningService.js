@@ -1,11 +1,24 @@
+/**
+ * @fileoverview Servicio para el aprendizaje y extracción del estilo de comunicación de los agentes.
+ * Analiza los mensajes enviados por humanos para generar un perfil de estilo que el bot puede imitar.
+ * Incluye un programador automático para mantener los perfiles actualizados.
+ */
+
 import { Op } from 'sequelize';
 import AgentStyleProfile from '../models/AgentStyleProfile.js';
 import MessageLog from '../models/MessageLog.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import AIService from './aiService.js';
 
+/**
+ * Clase StyleLearningService para gestionar el perfil de estilo comunicativo de los agentes.
+ */
 class StyleLearningService {
-  // Carga el perfil de estilo activo (uno por user_id)
+  /**
+   * Carga el perfil de estilo activo para un usuario.
+   * @param {number|string} userId - ID del usuario.
+   * @returns {Promise<Object|null>} El perfil de estilo activo o null.
+   */
   static async getActive(userId) {
     if (!userId) return null;
     try {
@@ -15,8 +28,13 @@ class StyleLearningService {
     }
   }
 
-  // Analiza los mensajes recientes de los agentes humanos para extraer su estilo
-  // Se ejecuta periódicamente (1 vez al día) o bajo demanda desde admin
+  /**
+   * Analiza los mensajes recientes de los agentes humanos para extraer su estilo.
+   * @description Extrae hasta 200 mensajes recientes de agentes, los analiza con IA y actualiza el perfil de estilo.
+   * Tiene un límite de re-análisis de 12 horas.
+   * @param {number|string} userId - ID del usuario.
+   * @returns {Promise<Object|null>} El perfil de estilo actualizado o creado.
+   */
   static async refreshStyleProfile(userId) {
     if (!userId) return null;
     try {
@@ -87,7 +105,11 @@ class StyleLearningService {
     }
   }
 
-  // Schedule diario que recorre todos los users activos y refresca su perfil
+  /**
+   * Inicia el planificador (scheduler) para el aprendizaje de estilo.
+   * @description Ejecuta el análisis periódicamente para todos los usuarios con IA activa.
+   * Primera ejecución a los 5 minutos, luego cada hora.
+   */
   static startScheduler() {
     const ONE_HOUR = 60 * 60 * 1000;
     const run = async () => {
@@ -111,3 +133,4 @@ class StyleLearningService {
 }
 
 export default StyleLearningService;
+

@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Rutas para la gestión de clientes mayoristas.
+ */
+
 import express from 'express';
 import { Op } from 'sequelize';
 import { requireAdmin } from '../middleware/auth.js';
@@ -6,6 +10,12 @@ import geocodingService from '../services/geocodingService.js';
 
 const router = express.Router();
 
+/**
+ * @description Lista todos los clientes mayoristas junto con el estado de sus órdenes activas.
+ * @route GET /api/wholesale
+ * @access Private (Admin)
+ * @returns {Object} 200 - Lista de clientes mayoristas.
+ */
 router.get('/', requireAdmin, async (req, res) => {
   try {
     const clients = await WholesaleClient.findAll({
@@ -54,6 +64,15 @@ router.get('/', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Crea un nuevo cliente mayorista y geocodifica su dirección.
+ * @route POST /api/wholesale
+ * @access Private (Admin)
+ * @param {string} req.body.customer_name - Nombre del cliente (único).
+ * @param {string} [req.body.validated_address] - Dirección a geocodificar.
+ * @returns {Object} 201 - Cliente creado.
+ * @returns {Object} 409 - El cliente ya existe.
+ */
 router.post('/', requireAdmin, async (req, res) => {
   try {
     const { customer_name, customer_phone, validated_address, respond_contact_id, notes } = req.body;
@@ -111,6 +130,14 @@ router.post('/', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Actualiza los datos de un cliente mayorista existente.
+ * @route PUT /api/wholesale/:id
+ * @access Private (Admin)
+ * @param {Object} req.body - Campos actualizables del cliente.
+ * @returns {Object} 200 - Cliente actualizado.
+ * @returns {Object} 404 - No encontrado.
+ */
 router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const client = await WholesaleClient.findByPk(req.params.id);
@@ -151,6 +178,12 @@ router.put('/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Elimina permanentemente un cliente mayorista.
+ * @route DELETE /api/wholesale/:id
+ * @access Private (Admin)
+ * @returns {Object} 200 - Mensaje de éxito.
+ */
 router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const client = await WholesaleClient.findByPk(req.params.id);
@@ -166,6 +199,13 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Crea una orden de despacho inmediata ("Pickup Ready") para un cliente mayorista.
+ * @route POST /api/wholesale/:id/dispatch-now
+ * @access Private (Admin)
+ * @returns {Object} 200 - Orden creada.
+ * @returns {Object} 400 - Falta dirección.
+ */
 router.post('/:id/dispatch-now', requireAdmin, async (req, res) => {
   try {
     const client = await WholesaleClient.findByPk(req.params.id);

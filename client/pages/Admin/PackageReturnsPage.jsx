@@ -1,9 +1,16 @@
+/**
+ * @fileoverview Página de gestión de retornos de paquetes.
+ * Permite a los administradores registrar la recepción física de paquetes no entregados (skipped) 
+ * y liberarlos para nuevos intentos de entrega o despacho manual.
+ */
+
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 import './PackageReturnsPage.css'
 
+/** Formatea una fecha para visualización compacta */
 const fmtDate = (d) => {
   if (!d) return '-'
   return new Date(d).toLocaleString(undefined, {
@@ -12,13 +19,25 @@ const fmtDate = (d) => {
   })
 }
 
+/**
+ * Componente PackageReturnsPage que gestiona el ciclo de vida de los paquetes devueltos.
+ * @returns {JSX.Element}
+ */
 export default function PackageReturnsPage() {
   const { t } = useTranslation()
+  /** @type {[Array, Function]} Lista de órdenes con paquetes en retorno */
   const [orders, setOrders] = useState([])
+  /** @type {[boolean, Function]} Indica si se está realizando la carga inicial */
   const [loading, setLoading] = useState(false)
+  /** @type {[string, Function]} Filtro activo (all, pending_return, held_by_driver, returned_to_office) */
   const [filter, setFilter] = useState('all')
+  /** @type {[number|null, Function]} ID de la orden que está siendo procesada */
   const [busy, setBusy] = useState(null)
 
+  /**
+   * Obtiene la etiqueta y clase CSS según la disposición del paquete.
+   * @param {string} d - Valor de package_disposition.
+   */
   const dispositionLabel = (d) => {
     switch (d) {
       case 'held_by_driver': return { txt: t('admin.returns.withDriver'), cls: 'pr-pill-driver' }
@@ -28,6 +47,10 @@ export default function PackageReturnsPage() {
     }
   }
 
+  /**
+   * Carga la lista de retornos del servidor.
+   * @async
+   */
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -42,6 +65,11 @@ export default function PackageReturnsPage() {
 
   useEffect(() => { load() }, [load])
 
+  /**
+   * Registra que el paquete ha sido recibido físicamente en la oficina.
+   * @async
+   * @param {number} id - ID de la orden.
+   */
   const receive = async (id) => {
     if (!confirm(t('admin.returns.confirmReceived'))) return
     setBusy(id)
@@ -55,6 +83,11 @@ export default function PackageReturnsPage() {
     }
   }
 
+  /**
+   * Libera el paquete para que pueda ser re-asignado a una nueva ruta de despacho.
+   * @async
+   * @param {number} id - ID de la orden.
+   */
   const release = async (id) => {
     if (!confirm(t('admin.returns.confirmRelease'))) return
     setBusy(id)
@@ -68,8 +101,10 @@ export default function PackageReturnsPage() {
     }
   }
 
+  /** Filtrado local de órdenes */
   const filtered = orders.filter(o => filter === 'all' || o.package_disposition === filter)
 
+  /** Contadores para los badges de las pestañas */
   const counts = {
     all: orders.length,
     held_by_driver: orders.filter(o => o.package_disposition === 'held_by_driver').length,

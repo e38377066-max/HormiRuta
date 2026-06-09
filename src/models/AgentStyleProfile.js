@@ -1,55 +1,68 @@
+/**
+ * @fileoverview Definición del modelo de Perfil de Estilo del Agente (AgentStyleProfile).
+ * Almacena el ADN de comunicación de los agentes humanos para que el bot pueda imitarlos.
+ */
+
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/database.js';
 
+/**
+ * Modelo AgentStyleProfile para definir la personalidad de la IA.
+ */
 const AgentStyleProfile = sequelize.define('AgentStyleProfile', {
+  /** ID único autoincremental */
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true
   },
+  /** ID del usuario administrador dueño del perfil de estilo */
   user_id: {
     type: DataTypes.INTEGER,
     allowNull: false,
     unique: true
   },
+  /** Resumen de la personalidad, tono y ritmo de los agentes humanos */
   style_summary: {
     type: DataTypes.TEXT,
-    allowNull: true,
-    comment: 'Descripción del estilo de los agentes humanos (tono, formalidad, ritmo)'
+    allowNull: true
   },
+  /** Listado de frases comunes, saludos y muletillas usadas por los agentes */
   common_phrases: {
     type: DataTypes.JSON,
-    defaultValue: [],
-    comment: 'Frases típicas que usan los agentes (saludos, cierres, transiciones)'
+    defaultValue: []
   },
+  /** Descripción del uso de emojis por parte de los agentes humanos */
   emoji_usage: {
     type: DataTypes.STRING(255),
-    allowNull: true,
-    comment: 'Cómo usan emojis: cuáles, con qué frecuencia, en qué contexto'
+    allowNull: true
   },
+  /** Técnicas de cierre de ventas detectadas en las conversaciones humanas */
   closing_techniques: {
     type: DataTypes.TEXT,
-    allowNull: true,
-    comment: 'Cómo cierran ventas: ofertas, urgencia, llamadas a la acción'
+    allowNull: true
   },
+  /** Ejemplos de frases que el bot DEBE decir para sonar humano */
   do_phrases: {
     type: DataTypes.JSON,
-    defaultValue: [],
-    comment: 'Frases ejemplares que el bot debería imitar'
+    defaultValue: []
   },
+  /** Ejemplos de frases que el bot NO DEBE decir por sonar robóticas */
   dont_phrases: {
     type: DataTypes.JSON,
-    defaultValue: [],
-    comment: 'Frases que el bot debería evitar (muy robóticas, formales, etc.)'
+    defaultValue: []
   },
+  /** Indica si este perfil de estilo está activo y se aplica a la IA */
   is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
+  /** Cantidad total de mensajes analizados para construir este perfil */
   messages_analyzed: {
     type: DataTypes.INTEGER,
     defaultValue: 0
   },
+  /** Fecha y hora del último análisis de estilo realizado */
   last_analyzed_at: {
     type: DataTypes.DATE,
     allowNull: true

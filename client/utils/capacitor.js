@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Utilidades para interactuar con las APIs de Capacitor y funcionalidades nativas.
+ * Proporciona abstracciones para geolocalización, cámara, barra de estado, haptics y navegación.
+ */
+
 import { Capacitor } from '@capacitor/core'
 import { Geolocation } from '@capacitor/geolocation'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
@@ -5,9 +10,16 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { KeepAwake } from '@capacitor-community/keep-awake'
 
+/** @type {boolean} Indica si la aplicación se está ejecutando en una plataforma nativa (iOS/Android) */
 export const isNative = Capacitor.isNativePlatform()
+
+/** @type {string} Nombre de la plataforma actual ('ios', 'android', o 'web') */
 export const platform = Capacitor.getPlatform()
 
+/**
+ * Configura el estilo inicial de la barra de estado.
+ * @async
+ */
 export const setupStatusBar = async () => {
   if (isNative) {
     try {
@@ -19,6 +31,10 @@ export const setupStatusBar = async () => {
   }
 }
 
+/**
+ * Inicializa la barra de estado con colores específicos y configuración de overlay.
+ * @async
+ */
 export const initStatusBar = async () => {
   if (isNative) {
     try {
@@ -31,6 +47,11 @@ export const initStatusBar = async () => {
   }
 }
 
+/**
+ * Solicita permisos de ubicación si es necesario.
+ * @async
+ * @returns {Promise<boolean>} True si se concedieron los permisos, false en caso contrario.
+ */
 export const requestLocationPermission = async () => {
   if (!isNative) return true
   try {
@@ -44,6 +65,13 @@ export const requestLocationPermission = async () => {
   }
 }
 
+/**
+ * Obtiene la posición actual del dispositivo.
+ * @async
+ * @param {Object} [options={}] - Opciones de geolocalización.
+ * @returns {Promise<Object>} Objeto con las coordenadas de la posición.
+ * @throws {Error} Si el permiso es denegado o el GPS está desactivado.
+ */
 export const getCurrentPosition = async (options = {}) => {
   if (isNative) {
     const granted = await requestLocationPermission()
@@ -79,6 +107,13 @@ export const getCurrentPosition = async (options = {}) => {
   }
 }
 
+/**
+ * Suscribe una función de callback para recibir actualizaciones de la posición en tiempo real.
+ * @param {Function} callback - Función que recibe la nueva posición.
+ * @param {Function} errorCallback - Función que recibe errores de geolocalización.
+ * @param {Object} [options={}] - Opciones de seguimiento.
+ * @returns {Function} Función para cancelar el seguimiento.
+ */
 export const watchPosition = (callback, errorCallback, options = {}) => {
   if (isNative) {
     let watchId
@@ -137,6 +172,11 @@ export const watchPosition = (callback, errorCallback, options = {}) => {
   }
 }
 
+/**
+ * Solicita permisos para usar la cámara.
+ * @async
+ * @returns {Promise<boolean>} True si se concedieron los permisos.
+ */
 export const requestCameraPermission = async () => {
   if (!isNative) return true
   try {
@@ -151,6 +191,12 @@ export const requestCameraPermission = async () => {
   }
 }
 
+/**
+ * Abre la cámara para capturar una foto.
+ * @async
+ * @returns {Promise<Object|null>} Objeto de la foto capturada o null si no es plataforma nativa.
+ * @throws {Error} Si el permiso de cámara es denegado.
+ */
 export const takePhoto = async () => {
   if (isNative) {
     const granted = await requestCameraPermission()
@@ -177,6 +223,12 @@ export const takePhoto = async () => {
   return null
 }
 
+/**
+ * Convierte un DataURL de imagen en un objeto File.
+ * @param {string} dataUrl - La cadena de datos de la imagen.
+ * @param {string} filename - El nombre que tendrá el archivo generado.
+ * @returns {File} El objeto archivo listo para subir.
+ */
 export const dataUrlToFile = (dataUrl, filename) => {
   const arr = dataUrl.split(',')
   const mime = arr[0].match(/:(.*?);/)[1]
@@ -189,6 +241,11 @@ export const dataUrlToFile = (dataUrl, filename) => {
   return new File([u8arr], filename, { type: mime })
 }
 
+/**
+ * Activa la vibración háptica del dispositivo.
+ * @async
+ * @param {string} [style='medium'] - Estilo de impacto ('light', 'medium', 'heavy').
+ */
 export const vibrate = async (style = 'medium') => {
   if (isNative) {
     try {
@@ -209,6 +266,10 @@ export const vibrate = async (style = 'medium') => {
   }
 }
 
+/**
+ * Mantiene la pantalla del dispositivo encendida (evita el bloqueo).
+ * @async
+ */
 export const keepScreenAwake = async () => {
   try {
     await KeepAwake.keepAwake()
@@ -221,12 +282,21 @@ export const keepScreenAwake = async () => {
   }
 }
 
+/**
+ * Permite que la pantalla del dispositivo se apague normalmente.
+ * @async
+ */
 export const allowScreenSleep = async () => {
   try {
     await KeepAwake.allowSleep()
   } catch (e) {}
 }
 
+/**
+ * Abre la aplicación de navegación nativa (Apple Maps o Google Maps) con una lista de paradas.
+ * @param {Array<Object>} stops - Lista de paradas a incluir en la ruta.
+ * @param {Object} [userLocation=null] - Ubicación actual del usuario para el punto de origen.
+ */
 export const openNativeNavigation = (stops, userLocation = null) => {
   if (!stops || stops.length === 0) return
 
@@ -306,6 +376,12 @@ export const openNativeNavigation = (stops, userLocation = null) => {
 let speechSynth = null
 let currentUtterance = null
 
+/**
+ * Utiliza la síntesis de voz del navegador para leer un texto instructivo.
+ * Limpia el texto de etiquetas HTML y entidades especiales antes de hablar.
+ * @param {string} text - El texto a leer.
+ * @param {string} [lang='es-MX'] - Idioma de la voz.
+ */
 export const speakInstruction = (text, lang = 'es-MX') => {
   if (!text) return
   if (!('speechSynthesis' in window)) return
@@ -342,6 +418,9 @@ export const speakInstruction = (text, lang = 'es-MX') => {
   speechSynth.speak(currentUtterance)
 }
 
+/**
+ * Detiene cualquier síntesis de voz en curso.
+ */
 export const stopSpeaking = () => {
   if (speechSynth) {
     speechSynth.cancel()

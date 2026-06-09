@@ -1,5 +1,16 @@
+/**
+ * @fileoverview Servicio de lectura de Gmail.
+ * Este servicio se encarga de conectar con la API de Gmail para buscar y leer
+ * correos electrónicos, específicamente aquellos que indican que un pedido está listo para recoger.
+ */
+
 import { google } from 'googleapis';
 
+/**
+ * Crea y configura un cliente OAuth2 para interactuar con la API de Google.
+ * @description Utiliza las variables de entorno para las credenciales y el token de actualización.
+ * @returns {google.auth.OAuth2} Cliente OAuth2 configurado.
+ */
 function getOAuth2Client() {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
@@ -12,6 +23,12 @@ function getOAuth2Client() {
   return oauth2Client;
 }
 
+/**
+ * Extrae el nombre del cliente del asunto del correo.
+ * @description Busca patrones específicos en el asunto para identificar al cliente.
+ * @param {string} subject - El asunto del correo.
+ * @returns {string|null} El nombre del cliente extraído o null si no se encuentra.
+ */
 function extractClientNameFromSubject(subject) {
   const match = subject.match(/,\s*(?:bc\s+)?(.+?)(?:\s+-\s+Shipment|\s+-\s+Set|$)/i);
   if (match) {
@@ -20,6 +37,12 @@ function extractClientNameFromSubject(subject) {
   return null;
 }
 
+/**
+ * Extrae el nombre del cliente del cuerpo del mensaje.
+ * @description Busca el campo "Project/PO" en el cuerpo del correo.
+ * @param {string} body - El cuerpo del mensaje.
+ * @returns {string|null} El nombre del cliente extraído o null.
+ */
 function extractClientNameFromBody(body) {
   const match = body.match(/Project\/PO:\s*(?:bc\s+)?(.+?)(?:\s+-\s+Shipment|\s+-\s+Set|\n|$)/i);
   if (match) {
@@ -28,11 +51,21 @@ function extractClientNameFromBody(body) {
   return null;
 }
 
+/**
+ * Decodifica una cadena en formato Base64URL a UTF-8.
+ * @param {string} data - Los datos codificados.
+ * @returns {string} La cadena decodificada.
+ */
 function decodeBase64Url(data) {
   const base64 = data.replace(/-/g, '+').replace(/_/g, '/');
   return Buffer.from(base64, 'base64').toString('utf-8');
 }
 
+/**
+ * Extrae de forma recursiva el texto plano del payload de un mensaje de Gmail.
+ * @param {Object} payload - El payload del mensaje de la API de Gmail.
+ * @returns {string} El texto extraído.
+ */
 function extractTextFromPayload(payload) {
   if (!payload) return '';
   if (payload.body && payload.body.data) {
@@ -47,10 +80,28 @@ function extractTextFromPayload(payload) {
   return '';
 }
 
+/**
+ * Caché para las órdenes listas para recoger.
+ * @type {Array|null}
+ */
 let cachedPickupReady = null;
+
+/**
+ * Marca de tiempo de la última actualización de la caché.
+ * @type {number}
+ */
 let cacheTime = 0;
+
+/**
+ * Tiempo de vida de la caché (5 minutos).
+ * @type {number}
+ */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * Error personalizado para indicar que el token de Gmail no tiene los permisos necesarios.
+ * @extends Error
+ */
 export class GmailScopeError extends Error {
   constructor(detail = '') {
     super(`El token de Gmail no tiene permisos suficientes. Se necesita el scope https://mail.google.com/ para buscar correos.${detail ? ' Detalle: ' + detail : ''}`);
@@ -59,6 +110,15 @@ export class GmailScopeError extends Error {
   }
 }
 
+/**
+ * Recupera los correos de órdenes que están listas para ser recogidas ("Pickup Ready").
+ * @description Consulta la API de Gmail buscando correos de "4over" de los últimos 7 días.
+ * Implementa un mecanismo de caché para evitar llamadas excesivas.
+ * @param {boolean} [forceRefresh=false] - Si es true, ignora la caché y realiza una nueva consulta.
+ * @returns {Promise<Array<{clientName: string, subject: string, date: string, messageId: string}>>} Lista de órdenes encontradas.
+ * @throws {GmailScopeError} Si los permisos del token son insuficientes.
+ * @throws {Error} Si ocurre un error en la comunicación con la API.
+ */
 export async function getPickupReadyOrders(forceRefresh = false) {
   const now = Date.now();
   if (!forceRefresh && cachedPickupReady && (now - cacheTime) < CACHE_TTL_MS) {
@@ -138,6 +198,9 @@ export async function getPickupReadyOrders(forceRefresh = false) {
   return readyOrders;
 }
 
+/**
+ * Limpia la caché de órdenes listas para recoger.
+ */
 export function clearPickupCache() {
   cachedPickupReady = null;
   cacheTime = 0;

@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Componente principal de la aplicación que gestiona el enrutamiento y la protección de rutas.
+ */
+
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
@@ -30,6 +34,10 @@ import DriverAccountingPage from './pages/Planner/DriverAccountingPage'
 import DispatchMap from './pages/Dispatch/DispatchMap'
 import AccountPage from './pages/Account/AccountPage'
 
+/**
+ * Pantalla de carga que se muestra mientras se inicializa el estado de autenticación.
+ * @returns {JSX.Element}
+ */
 function LoadingScreen() {
   const { t } = useTranslation()
   return (
@@ -42,12 +50,25 @@ function LoadingScreen() {
   )
 }
 
+/**
+ * Determina la ruta por defecto según el rol del usuario.
+ * @param {Object} user - Objeto de usuario autenticado.
+ * @returns {string} Ruta de destino recomendada.
+ */
 function getDefaultRoute(user) {
   if (!user) return '/login'
   if (user.role === 'admin') return '/messaging'
   return '/planner'
 }
 
+/**
+ * Componente que protege rutas requiriendo autenticación y, opcionalmente, roles específicos.
+ * @param {Object} props - Propiedades del componente.
+ * @param {React.ReactNode} props.children - Componentes hijos a renderizar si se cumple el acceso.
+ * @param {boolean} [props.adminOnly=false] - Indica si la ruta es exclusiva para administradores.
+ * @param {string[]} [props.allowedRoles=null] - Lista de roles permitidos para acceder a la ruta.
+ * @returns {JSX.Element} El contenido protegido o una redirección.
+ */
 function ProtectedRoute({ children, adminOnly = false, allowedRoles = null }) {
   const { isAuthenticated, isAdmin, user, initializing } = useAuth()
 
@@ -68,6 +89,12 @@ function ProtectedRoute({ children, adminOnly = false, allowedRoles = null }) {
   return children
 }
 
+/**
+ * Componente que protege rutas públicas (como Login) para que usuarios autenticados sean redirigidos.
+ * @param {Object} props - Propiedades del componente.
+ * @param {React.ReactNode} props.children - Componentes hijos a renderizar si no está autenticado.
+ * @returns {JSX.Element} El contenido público o una redirección al dashboard.
+ */
 function PublicRoute({ children }) {
   const { isAuthenticated, user, initializing } = useAuth()
 
@@ -80,6 +107,10 @@ function PublicRoute({ children }) {
   return children
 }
 
+/**
+ * Definición de las rutas de la aplicación.
+ * @returns {JSX.Element}
+ */
 export default function App() {
   const { user, isAuthenticated } = useAuth()
 

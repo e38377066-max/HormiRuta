@@ -1,18 +1,33 @@
+/**
+ * @fileoverview Panel de control principal (Dashboard) para administradores.
+ * Muestra métricas generales, estado del servicio de polling y resumen de cobertura.
+ */
+
 import { useEffect, useState } from 'react'
 import { useMessaging } from '../../contexts/MessagingContext'
 import { useTranslation } from 'react-i18next'
 import './DashboardPage.css'
 
+/**
+ * Componente DashboardPage que resume la actividad del sistema.
+ * @returns {JSX.Element}
+ */
 export default function DashboardPage() {
   const { stats, pollingStatus, fetchStats, getPollingStatus, startPolling, stopPolling, syncContacts } = useMessaging()
+  /** @type {[boolean, Function]} Indica si se está realizando una sincronización manual */
   const [syncing, setSyncing] = useState(false)
   const { t } = useTranslation()
 
+  /** Carga inicial de datos al montar el componente */
   useEffect(() => {
     fetchStats()
     getPollingStatus()
   }, [])
 
+  /**
+   * Alterna el estado del servicio de polling (inicia/detiene).
+   * @async
+   */
   const handleTogglePolling = async () => {
     try {
       if (pollingStatus.active) {
@@ -25,6 +40,10 @@ export default function DashboardPage() {
     }
   }
 
+  /**
+   * Dispara una sincronización manual de contactos de Respond.io.
+   * @async
+   */
   const handleSync = async () => {
     setSyncing(true)
     try {

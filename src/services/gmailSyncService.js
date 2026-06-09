@@ -1,5 +1,5 @@
 /**
- * gmailSyncService.js
+ * @fileoverview Servicio de sincronización de Gmail.
  * Lógica central del sync Gmail → órdenes del sistema.
  * Puede ser llamada desde el route HTTP (manual) o desde el scheduler
  * automático (cada 15 minutos).
@@ -13,6 +13,12 @@ import respondApiService from './respondApiService.js';
 
 // ─── Helpers de normalización y matching ────────────────────────────────────
 
+/**
+ * Normaliza un nombre para facilitar la comparación.
+ * @description Convierte a minúsculas, elimina caracteres no alfanuméricos y espacios extra.
+ * @param {string} name - El nombre a normalizar.
+ * @returns {string} El nombre normalizado.
+ */
 export function normalizeForMatch(name) {
   return String(name || '')
     .toLowerCase()
@@ -21,11 +27,21 @@ export function normalizeForMatch(name) {
     .trim();
 }
 
+/**
+ * Etiquetas de prefijo comunes en los nombres de pedidos de imprenta.
+ * @type {Set<string>}
+ */
 const PREFIX_LABELS = new Set([
   'bc', 'pc', 'fl', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm',
   'ys', 'dh', 'bann', 'sn'
 ]);
 
+/**
+ * Elimina las etiquetas de prefijo de imprenta del nombre.
+ * @description Detecta y remueve prefijos como "bc", "pc", etc., al inicio del nombre.
+ * @param {string} name - El nombre del cual remover el prefijo.
+ * @returns {string} El nombre limpio.
+ */
 export function stripPrefixLabel(name) {
   if (!name) return '';
   let trimmed = String(name).trim();
@@ -36,6 +52,10 @@ export function stripPrefixLabel(name) {
   return trimmed;
 }
 
+/**
+ * Palabras comunes al final de los nombres de negocios que son poco distintivas.
+ * @type {Set<string>}
+ */
 const SUFFIX_WORDS = new Set([
   'services', 'service', 'srv', 'srvs',
   'llc', 'inc', 'corp', 'co', 'company', 'ltd',
@@ -63,6 +83,12 @@ const SUFFIX_WORDS = new Set([
   'iglesia', 'church'
 ]);
 
+/**
+ * Elimina sufijos genéricos y números al final de un nombre normalizado.
+ * @description Limpia palabras como "Services", "LLC" o números que no ayudan al matching.
+ * @param {string} normName - El nombre normalizado.
+ * @returns {string} El nombre limpio de sufijos.
+ */
 export function stripGenericSuffixes(normName) {
   if (!normName) return '';
   let words = normName.split(' ').filter(Boolean);
@@ -72,6 +98,12 @@ export function stripGenericSuffixes(normName) {
   return words.join(' ');
 }
 
+/**
+ * Aplica una transformación fonética básica orientada al español.
+ * @description Simplifica sonidos para permitir coincidencias aproximadas (v=b, z=s, etc.).
+ * @param {string} s - La cadena a transformar.
+ * @returns {string} La representación fonética simplificada.
+ */
 function spanishPhonetic(s) {
   if (!s) return '';
   return s
@@ -86,6 +118,11 @@ function spanishPhonetic(s) {
     .trim();
 }
 
+/**
+ * Convierte una palabra al singular (regla básica del español).
+ * @param {string} w - La palabra.
+ * @returns {string} La palabra en singular.
+ */
 function singularizeWord(w) {
   if (!w || w.length < 4) return w;
   if (/ss$/.test(w)) return w;
@@ -93,14 +130,30 @@ function singularizeWord(w) {
   return w;
 }
 
+/**
+ * Convierte todas las palabras de un nombre al singular.
+ * @param {string} s - El nombre.
+ * @returns {string} El nombre singularizado.
+ */
 function singularizeName(s) {
   return String(s || '').split(' ').filter(Boolean).map(singularizeWord).join(' ');
 }
 
+/**
+ * Divide una cadena en un array de palabras (tokens).
+ * @param {string} s - La cadena.
+ * @returns {string[]} Array de tokens.
+ */
 function tokensOf(s) {
   return String(s || '').split(' ').filter(Boolean);
 }
 
+/**
+ * Determina si un token es distintivo para el matching.
+ * @description Ignora tokens que son sufijos genéricos o prefijos de imprenta.
+ * @param {string} t - El token a evaluar.
+ * @returns {boolean} Verdadero si es distintivo.
+ */
 function isDistinctiveToken(t) {
   if (!t || t.length < 3) return false;
   if (SUFFIX_WORDS.has(t)) return false;
@@ -108,6 +161,13 @@ function isDistinctiveToken(t) {
   return true;
 }
 
+/**
+ * Determina si dos nombres coinciden utilizando varias heurísticas.
+ * @description Compara nombres normalizados, fonéticos, singularizados y por tokens distintivos.
+ * @param {string} orderName - Nombre en la orden del sistema.
+ * @param {string} gmailName - Nombre extraído de Gmail.
+ * @returns {boolean} Verdadero si se considera que coinciden.
+ */
 export function namesMatch(orderName, gmailName) {
   const normOrder = normalizeForMatch(stripPrefixLabel(orderName));
   const normGmail = normalizeForMatch(stripPrefixLabel(gmailName));
@@ -149,10 +209,22 @@ export function namesMatch(orderName, gmailName) {
   return false;
 }
 
+/**
+ * Determina si un nombre corresponde a un cliente mayorista.
+ * @description Busca el sufijo "-MAY" o la palabra "MAY" en el nombre.
+ * @param {string} name - El nombre a evaluar.
+ * @returns {boolean} Verdadero si es mayorista.
+ */
 export function isWholesaleName(name) {
   return /\bMAY\b/i.test(name) || /\-MAY\b/i.test(name) || /\bMAY\-/i.test(name);
 }
 
+/**
+ * Calcula un índice de similitud de Jaccard entre dos nombres basado en sus tokens.
+ * @param {string} a - Primer nombre.
+ * @param {string} b - Segundo nombre.
+ * @returns {number} Valor entre 0 y 1 representativo de la similitud.
+ */
 export function nameSimilarity(a, b) {
   const tokensA = new Set(normalizeForMatch(stripPrefixLabel(a)).split(' ').filter(w => w.length > 1));
   const tokensB = new Set(normalizeForMatch(stripPrefixLabel(b)).split(' ').filter(w => w.length > 1));
@@ -163,6 +235,14 @@ export function nameSimilarity(a, b) {
   return union === 0 ? 0 : inter / union;
 }
 
+/**
+ * Obtiene los mejores candidatos de una lista basados en la similitud de nombre.
+ * @param {string} gmailName - Nombre objetivo.
+ * @param {Array} candidates - Lista de candidatos.
+ * @param {Function} getName - Función para extraer el nombre de un candidato.
+ * @param {number} [n=10] - Número máximo de candidatos a devolver.
+ * @returns {Array<{c: Object, sim: number}>} Lista de candidatos con su puntuación de similitud.
+ */
 export function topCandidatesByName(gmailName, candidates, getName, n = 10) {
   return candidates
     .map(c => ({ c, sim: nameSimilarity(getName(c), gmailName) }))
@@ -173,13 +253,33 @@ export function topCandidatesByName(gmailName, candidates, getName, n = 10) {
 
 // ─── Respaldo IA ─────────────────────────────────────────────────────────────
 
+/**
+ * Caché para resultados de coincidencias realizadas por IA.
+ * @type {Map<string, {at: number, result: string|null}>}
+ */
 const aiMatchCache = new Map();
+
+/**
+ * Tiempo de vida de la caché de IA (30 minutos).
+ * @type {number}
+ */
 const AI_CACHE_TTL_MS = 30 * 60 * 1000;
 
+/**
+ * Genera una clave de caché para la comparación de nombres mediante IA.
+ * @param {string} gmailName - Nombre en Gmail.
+ * @param {string[]} candidateNames - Nombres de los candidatos.
+ * @returns {string} Clave de caché única.
+ */
 function aiCacheKey(gmailName, candidateNames) {
   return `${normalizeForMatch(gmailName)}::${candidateNames.slice().sort().join('||')}`;
 }
 
+/**
+ * Recupera la clave de API de OpenAI configurada.
+ * @description Busca en las variables de entorno o en la tabla de configuración.
+ * @returns {Promise<string|null>} La clave de API o null si no existe.
+ */
 export async function getOpenAIKey() {
   if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
   try {
@@ -192,6 +292,14 @@ export async function getOpenAIKey() {
   }
 }
 
+/**
+ * Utiliza OpenAI para decidir si un nombre de Gmail coincide con alguno de los candidatos.
+ * @description Emplea GPT-4o-mini con un prompt especializado en nombres comerciales en español.
+ * @param {string} gmailName - Nombre en el correo.
+ * @param {string[]} candidateNames - Lista de nombres candidatos del sistema.
+ * @param {string} apiKey - Clave de API de OpenAI.
+ * @returns {Promise<string|null>} El nombre del candidato que coincide o null si no hay coincidencia.
+ */
 export async function aiNameMatch(gmailName, candidateNames, apiKey) {
   if (!apiKey || !gmailName || !candidateNames?.length) return null;
   const cacheKey = aiCacheKey(gmailName, candidateNames);
@@ -259,14 +367,20 @@ Responde SOLO con JSON valido en este formato:
 
 // ─── Lógica central del sync ──────────────────────────────────────────────────
 
+/**
+ * Conjunto de estados de orden que ya han sido procesados.
+ * @type {Set<string>}
+ */
 export const ALREADY_PROCESSED_STATUSES = new Set([
   'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'
 ]);
 
 /**
- * Ejecuta el sync Gmail → órdenes.
- * @param {boolean} forceRefresh  Forzar re-lectura de Gmail (ignora caché)
- * @returns {object} Resultado del sync
+ * Ejecuta el proceso de sincronización Gmail → órdenes.
+ * @description Busca correos "Pickup Ready", identifica a qué orden del sistema corresponden y actualiza su estado.
+ * Maneja ambigüedades, clientes mayoristas y utiliza IA como respaldo para el matching.
+ * @param {boolean} [forceRefresh=true] - Si es true, ignora la caché de Gmail.
+ * @returns {Promise<Object>} Resultado de la sincronización con estadísticas y nombres procesados.
  */
 export async function runPickupReadySync(forceRefresh = true) {
   clearPickupCache();
@@ -330,6 +444,11 @@ export async function runPickupReadySync(forceRefresh = true) {
       continue;
     }
 
+    /**
+     * Aplica la coincidencia encontrada a la base de datos y actualiza el estado.
+     * @param {Object} match - La fila de la orden que coincidió.
+     * @param {boolean} [viaAI=false] - Si la coincidencia fue por IA.
+     */
     const applyRegularMatch = async (match, viaAI = false) => {
       processedGmailOrders.add(gmailOrder.messageId);
       if (ALREADY_PROCESSED_STATUSES.has(match.order_status)) {
@@ -503,9 +622,22 @@ export async function runPickupReadySync(forceRefresh = true) {
 
 // ─── Scheduler automático ────────────────────────────────────────────────────
 
-const SYNC_INTERVAL_MS = 15 * 60 * 1000; // cada 15 minutos
+/**
+ * Intervalo de tiempo para la sincronización automática (15 minutos).
+ * @type {number}
+ */
+const SYNC_INTERVAL_MS = 15 * 60 * 1000;
+
+/**
+ * Temporizador del scheduler.
+ * @type {NodeJS.Timeout|null}
+ */
 let syncTimer = null;
 
+/**
+ * Verifica si las credenciales de Gmail necesarias están presentes en el entorno.
+ * @returns {boolean} Verdadero si las credenciales existen.
+ */
 function gmailCredentialsAvailable() {
   return !!(
     process.env.GMAIL_CLIENT_ID &&
@@ -514,6 +646,11 @@ function gmailCredentialsAvailable() {
   );
 }
 
+/**
+ * Ejecuta una iteración del sync programado.
+ * @description Maneja errores específicos como falta de permisos (Scope Error).
+ * @returns {Promise<void>}
+ */
 async function runScheduledSync() {
   if (!gmailCredentialsAvailable()) return;
   try {
@@ -530,6 +667,10 @@ async function runScheduledSync() {
   }
 }
 
+/**
+ * Inicia el planificador de sincronización automática.
+ * @description Comienza después de un retardo de 2 minutos tras el arranque.
+ */
 export function startGmailSyncScheduler() {
   if (!gmailCredentialsAvailable()) {
     console.log('[GmailSync] Scheduler no iniciado: faltan credenciales de Gmail (GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN).');
@@ -546,6 +687,9 @@ export function startGmailSyncScheduler() {
   console.log(`[GmailSync] Scheduler iniciado: primera ejecución en 2 min, luego cada ${SYNC_INTERVAL_MS / 60000} min.`);
 }
 
+/**
+ * Detiene el planificador de sincronización automática.
+ */
 export function stopScheduler() {
   if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
 }

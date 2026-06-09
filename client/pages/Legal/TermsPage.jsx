@@ -1,7 +1,16 @@
+/**
+ * @fileoverview Página de Términos y Condiciones de la aplicación.
+ * Muestra los términos legales y condiciones de uso del servicio Area 862.
+ */
+
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import './LegalPage.css'
 
+/**
+ * Componente TermsPage que renderiza los términos y condiciones de servicio.
+ * @returns {JSX.Element}
+ */
 export default function TermsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()

@@ -1,26 +1,47 @@
+/**
+ * @fileoverview Página de gestión de usuarios para administradores.
+ * Permite listar, filtrar por rol, buscar, editar perfiles y activar/desactivar cuentas de usuario.
+ */
+
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
+/**
+ * Componente AdminUsers que gestiona la base de usuarios del sistema.
+ * @returns {JSX.Element}
+ */
 export default function AdminUsers() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  /** Filtro de rol obtenido de la URL (admin, driver, client) */
   const roleFilter = searchParams.get('role')
   const { t } = useTranslation()
   
+  /** @type {[Array, Function]} Lista completa de usuarios cargados */
   const [users, setUsers] = useState([])
+  /** @type {[boolean, Function]} Indica si se están cargando los usuarios */
   const [loading, setLoading] = useState(true)
+  /** @type {[string, Function]} Consulta de búsqueda por nombre o email */
   const [searchQuery, setSearchQuery] = useState('')
+  /** @type {[boolean, Function]} Controla la visibilidad del diálogo de edición */
   const [showEditDialog, setShowEditDialog] = useState(false)
+  /** @type {[Object|null, Function]} Usuario que se está editando actualmente */
   const [editingUser, setEditingUser] = useState(null)
+  /** @type {[boolean, Function]} Indica si se está guardando un cambio */
   const [saving, setSaving] = useState(false)
 
+  /** Recarga la lista cuando cambia el filtro de rol */
   useEffect(() => {
     fetchUsers()
   }, [roleFilter])
 
+  /**
+   * Obtiene la lista de usuarios del servidor.
+   * @async
+   */
   const fetchUsers = async () => {
     setLoading(true)
     try {
@@ -34,6 +55,7 @@ export default function AdminUsers() {
     }
   }
 
+  /** Usuarios filtrados localmente por la búsqueda de texto */
   const filteredUsers = users.filter(u => {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
@@ -41,6 +63,11 @@ export default function AdminUsers() {
            (u.email || '').toLowerCase().includes(query)
   })
 
+  /**
+   * Alterna el estado activo/inactivo de un usuario.
+   * @async
+   * @param {Object} user - El usuario a modificar.
+   */
   const handleToggleActive = async (user) => {
     try {
       await api.put(`/api/admin/users/${user.id}`, { 
@@ -52,11 +79,19 @@ export default function AdminUsers() {
     }
   }
 
+  /**
+   * Abre el diálogo de edición con los datos del usuario seleccionado.
+   * @param {Object} user - El usuario a editar.
+   */
   const openEditDialog = (user) => {
     setEditingUser({ ...user, commission_per_stop: user.commission_per_stop ?? '' })
     setShowEditDialog(true)
   }
 
+  /**
+   * Guarda los cambios realizados en el perfil del usuario editado.
+   * @async
+   */
   const handleSaveUser = async () => {
     if (!editingUser) return
     setSaving(true)
@@ -79,11 +114,13 @@ export default function AdminUsers() {
     }
   }
 
+  /** Obtiene la etiqueta traducida del rol */
   const getRoleLabel = (role) => {
     const map = { admin: t('admin.users.roles.admin'), driver: t('admin.users.roles.driver'), client: t('admin.users.roles.client') }
     return map[role] || role
   }
 
+  /** Genera iniciales para el avatar del usuario */
   const getInitials = (name, email) => {
     if (name) {
       const parts = name.split(' ')
@@ -94,6 +131,7 @@ export default function AdminUsers() {
     return email ? email.substring(0, 2).toUpperCase() : 'U'
   }
 
+  /** Formatea una fecha de registro */
   const formatDate = (dateStr) => {
     if (!dateStr) return '-'
     return new Date(dateStr).toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' })

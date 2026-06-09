@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Servicio de Polling para sincronización y monitoreo de mensajes.
+ * Este servicio se encarga de consultar periódicamente la API de Respond.io para detectar
+ * nuevos mensajes, gestionar seguimientos automáticos, y realizar escaneos de direcciones.
+ * Implementa lógica de reintento, enfriamiento para llamadas a la IA y reconciliación de estados.
+ */
+
 import { Op } from 'sequelize';
 import sequelize from '../config/database.js';
 import RespondioService from './respondio.js';
@@ -16,14 +23,27 @@ import WholesaleClient from '../models/WholesaleClient.js';
 import User from '../models/User.js';
 import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
 
+/**
+ * Verifica si un nombre de contacto corresponde a un cliente mayorista.
+ * @param {string} name - Nombre del contacto.
+ * @returns {boolean} Verdadero si es mayorista.
+ */
 function contactIsWholesale(name) {
   return /\bMAY\b/i.test(name) || /\-MAY\b/i.test(name) || /\bMAY\-/i.test(name);
 }
 
+/**
+ * Obtiene la configuración global de mensajería.
+ * @returns {Promise<MessagingSettings>}
+ */
 async function getGlobalSettings() {
   return await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
 }
 
+/**
+ * Obtiene el ID del usuario del sistema (admin).
+ * @returns {Promise<number>}
+ */
 async function getSystemUserId() {
   const settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
   if (settings?.user_id) return settings.user_id;
@@ -32,41 +52,52 @@ async function getSystemUserId() {
 }
 
 class PollingService {
+  /**
+   * Crea una instancia de PollingService.
+   */
   constructor() {
+    /** @type {Map<number, Object>} Pollers activos por ID de usuario. */
     this.activePollers = new Map();
+    /** @type {Map<string, boolean>} Mensajes ya procesados para evitar duplicados. */
     this.processedMessages = new Map();
+    /** @type {Set<string>} Contactos ya escaneados para búsqueda de dirección. */
     this.addressScannedContacts = new Set();
+    /** @type {Date|null} Marca de tiempo del último escaneo completo de direcciones. */
     this.lastFullAddressScan = null;
+    /** @type {Map<string, RespondioService>} Instancias de servicio Respondio por token. */
     this.respondioInstances = new Map();
+    
     // Direcciones (normalizadas) que el NEGOCIO envía describiendo su propia
     // ubicación. Se memorizan al leer mensajes para detectar de forma barata
     // contactos cuyo campo Address/dirección guardada quedó contaminado con la
     // dirección del local, sin volver a leer mensajes en cada ciclo.
+    /** @type {Set<string>} Direcciones del negocio memorizadas. */
     this.businessAddressNorms = new Set();
+    
     // Contactos a los que ya se les revisó (una vez) sus mensajes buscando la
     // dirección del local. Evita releer mensajes en cada ciclo para contactos
     // ya resueltos por campo Address.
+    /** @type {Set<string>} IDs de contactos verificados para dirección de negocio. */
     this.businessCheckedContacts = new Set();
-    // Se reinician periódicamente (cada hora) para que, si el local cambia de
-    // dirección, las direcciones viejas dejen de marcarse como del negocio.
+    
+    /** @type {number|null} Timestamp del último reset de la caché de negocio. */
     this.lastBusinessCacheReset = null;
+    
     // Firma de los últimos mensajes entrantes que se enviaron a la IA para
     // extraer dirección, por contacto. Evita re-llamar a la IA cada ~3s sobre
     // los MISMOS mensajes (un contacto sin dirección que nunca la envía generaba
-    // una llamada a OpenAI en cada ciclo del escáner). La IA solo se vuelve a
-    // llamar cuando los mensajes del cliente cambiaron (llegó algo nuevo).
+    // una llamada a OpenAI en cada ciclo del escáner).
+    /** @type {Map<string, Object>} Firmas de escaneo de dirección por IA. */
     this.aiAddressScanSig = new Map();
   }
 
-  // Decide si vale la pena llamar a la IA para extraer dirección de este
-  // contacto. Devuelve true cuando:
-  //   - los mensajes entrantes cambiaron desde el último intento, o
-  //   - pasó la ventana de enfriamiento (cooldown) desde el último intento
-  //     con los MISMOS mensajes (así un fallo transitorio de OpenAI se
-  //     reintenta más tarde en vez de bloquear al contacto para siempre).
-  // Devuelve false cuando los mensajes son idénticos y el intento es reciente,
-  // evitando re-llamar a la IA cada ~3s sobre el mismo contenido (el origen del
-  // consumo masivo de tokens).
+  /**
+   * Decide si vale la pena llamar a la IA para extraer dirección de un contacto.
+   * @private
+   * @param {string|number} contactId - ID del contacto.
+   * @param {string[]} texts - Lista de textos de mensajes recientes.
+   * @returns {boolean} Verdadero si se debe ejecutar el escaneo con IA.
+   */
   _shouldRunAddressAI(contactId, texts) {
     if (!Array.isArray(texts) || texts.length === 0) return false;
     const key = String(contactId);
@@ -85,6 +116,11 @@ class PollingService {
     return true;
   }
 
+  /**
+   * Obtiene o crea una instancia de RespondioService para un token.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @returns {RespondioService} Instancia de RespondioService.
+   */
   getRespondioInstance(apiToken) {
     if (!this.respondioInstances.has(apiToken)) {
       this.respondioInstances.set(apiToken, new RespondioService(apiToken));
@@ -92,6 +128,12 @@ class PollingService {
     return this.respondioInstances.get(apiToken);
   }
 
+  /**
+   * Inicia el proceso de polling para un usuario.
+   * @param {number} userId - ID del usuario.
+   * @param {number} [intervalSeconds=30] - Intervalo en segundos.
+   * @returns {Promise<Object>} Resultado de la operación.
+   */
   async startPolling(userId, intervalSeconds = 30) {
     const sysUserId = await getSystemUserId();
     userId = sysUserId;
@@ -135,6 +177,10 @@ class PollingService {
       botReactiveScanIntervalId: null
     };
 
+    /**
+     * Función interna que ejecuta un ciclo de polling.
+     * @inner
+     */
     const pollFn = async () => {
       if (!poller.isRunning) return;
       if (poller.pollInProgress) {
@@ -156,9 +202,10 @@ class PollingService {
       }
     };
 
-    // Loop auto-programado: el siguiente ciclo arranca apenas termina el anterior.
-    // No se salta ciclos por `inProgress` — si un ciclo tarda 30s, el próximo
-    // empieza 3s después de que termine, sin acumularse en paralelo.
+    /**
+     * Función interna que ejecuta el loop de escaneo de direcciones.
+     * @inner
+     */
     const runScanLoop = async () => {
       while (poller.isRunning) {
         try {
@@ -192,6 +239,10 @@ class PollingService {
       setTimeout(() => runScanLoop(), 5000);
       console.log(`[AddressScan] Scanner ACTIVO para usuario ${userId} — loop continuo (ciclo cada ~3s tras finalizar, lotes de ${10} paralelos)`);
 
+      /**
+       * Función interna que ejecuta el escaneo reactivo del bot.
+       * @inner
+       */
       const botReactiveScanFn = async () => {
         if (!poller.isRunning) return;
         if (poller.botReactiveScanInProgress) return;
@@ -208,10 +259,10 @@ class PollingService {
       poller.botReactiveScanIntervalId = setInterval(botReactiveScanFn, 3000);
       console.log(`[BotReactiveScan] Escáner de reactivación ACTIVO cada 3s`);
 
-      // Reconciliacion COMPLETA por lifecycle cada 5 min. Trae TODOS los
-      // contactos por lifecycle (no solo conversaciones abiertas), garantizando
-      // que las columnas del dispatcher coincidan EXACTAMENTE con Respond
-      // incluso cuando la conversacion esta cerrada.
+      /**
+       * Función interna que ejecuta la reconciliación completa por lifecycle.
+       * @inner
+       */
       const fullReconcileFn = async () => {
         if (!poller.isRunning) return;
         if (poller.fullReconcileInProgress) return;
@@ -231,6 +282,11 @@ class PollingService {
     return { success: true, message: `Polling iniciado cada ${intervalSeconds} segundos` };
   }
 
+  /**
+   * Detiene el proceso de polling para un usuario.
+   * @param {number} userId - ID del usuario.
+   * @returns {Object} Resultado de la operación.
+   */
   stopPolling(userId) {
     const poller = this.activePollers.get(userId);
     if (poller) {
@@ -254,6 +310,12 @@ class PollingService {
     return { success: false, error: 'No hay polling activo para este usuario' };
   }
 
+  /**
+   * Carga los mensajes de un contacto en el conjunto de procesados para evitar re-procesamiento.
+   * @param {number} userId - ID del usuario.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<void>}
+   */
   async preloadContactMessages(userId, contactId) {
     const poller = this.activePollers.get(userId);
     if (!poller) return;
@@ -280,6 +342,11 @@ class PollingService {
     }
   }
 
+  /**
+   * Obtiene el estado del polling para un usuario.
+   * @param {number} userId - ID del usuario.
+   * @returns {Object} Estado del polling.
+   */
   getPollingStatus(userId) {
     const poller = this.activePollers.get(userId);
     if (poller) {
@@ -293,6 +360,10 @@ class PollingService {
     return { active: false };
   }
 
+  /**
+   * Obtiene el estado de cualquier polling activo.
+   * @returns {Object} Estado del polling.
+   */
   getAnyActivePollingStatus() {
     for (const [userId, poller] of this.activePollers) {
       if (poller.isRunning) {
@@ -307,6 +378,10 @@ class PollingService {
     return { active: false };
   }
 
+  /**
+   * Detiene todos los procesos de polling activos.
+   * @returns {Object} Resultado de la operación.
+   */
   stopAllPolling() {
     if (this.activePollers.size === 0) {
       return { success: false, error: 'No hay polling activo' };
@@ -323,6 +398,13 @@ class PollingService {
     return { success: true, message: 'Polling detenido' };
   }
 
+  /**
+   * Consulta nuevos mensajes de Respond.io para todos los contactos relevantes.
+   * @param {number} userId - ID del usuario.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @param {Object} poller - Objeto del poller activo.
+   * @returns {Promise<void>}
+   */
   async pollForNewMessages(userId, apiToken, poller) {
     console.log(`[Polling] Conectando a Respond.io API...`);
     const respondio = this.getRespondioInstance(apiToken);
@@ -435,6 +517,13 @@ class PollingService {
     await this.checkFollowups(userId, apiToken, settings);
   }
 
+  /**
+   * Gestiona seguimientos automáticos para conversaciones sin respuesta.
+   * @param {number} userId - ID del usuario.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @param {Object} settings - Configuración global de mensajería.
+   * @returns {Promise<void>}
+   */
   async checkFollowups(userId, apiToken, settings) {
     if (!settings.followup_enabled || !settings.followup_timeout_minutes) {
       return;
@@ -512,6 +601,17 @@ class PollingService {
     }
   }
 
+  /**
+   * Procesa los mensajes de un contacto específico.
+   * @param {number} userId - ID del usuario.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @param {Object} contact - Datos del contacto de Respond.io.
+   * @param {Object} poller - Objeto del poller activo.
+   * @param {RespondioService} respondio - Instancia del servicio Respondio.
+   * @param {number} [messageLimit=50] - Límite de mensajes a procesar.
+   * @param {boolean} [isTestMode=false] - Indica si está en modo de prueba.
+   * @returns {Promise<void>}
+   */
   async processContactMessages(userId, apiToken, contact, poller, respondio, messageLimit = 50, isTestMode = false) {
     const messagesResult = await respondio.listMessages(contact.id, { limit: messageLimit });
     
@@ -734,6 +834,12 @@ class PollingService {
     }
   }
 
+  /**
+   * Inicializa el snapshot de conversaciones.
+   * @param {number} userId - ID del usuario.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @returns {Promise<void>}
+   */
   async initializeConversationSnapshot(userId, apiToken) {
     try {
       console.log(`[Polling] === SINCRONIZACION INICIAL: Escaneando TODAS las conversaciones ===`);
@@ -843,6 +949,12 @@ class PollingService {
     }
   }
 
+  /**
+   * Detecta si hubo un cierre y reapertura de conversación en los mensajes.
+   * @param {Array<Object>} messages - Lista de mensajes.
+   * @param {Date|number} lastAgentMessageAt - Fecha del último mensaje del agente.
+   * @returns {boolean} Verdadero si se detectó cierre y reapertura.
+   */
   detectCloseReopenInMessages(messages, lastAgentMessageAt) {
     try {
       const agentTime = lastAgentMessageAt ? new Date(lastAgentMessageAt).getTime() : 0;
@@ -887,6 +999,12 @@ class PollingService {
     }
   }
 
+  /**
+   * Detecta cambios de estado en las conversaciones (apertura/cierre).
+   * @param {number} userId - ID del usuario.
+   * @param {Array<Object>} openContacts - Lista de contactos con conversaciones abiertas.
+   * @returns {Promise<void>}
+   */
   async detectConversationStateChanges(userId, openContacts) {
     try {
       const openContactIds = new Set(openContacts.map(c => c.id.toString()));
@@ -934,6 +1052,12 @@ class PollingService {
     }
   }
 
+  /**
+   * Registra la actividad de un agente en una conversación.
+   * @param {number} userId - ID del usuario.
+   * @param {string|number} contactId - ID del contacto.
+   * @returns {Promise<void>}
+   */
   async markAgentActivity(userId, contactId) {
     try {
       const [state, created] = await ConversationState.findOrCreate({
@@ -988,6 +1112,16 @@ class PollingService {
     }
   }
 
+  /**
+   * Procesa un mensaje entrante.
+   * @param {number} userId - ID del usuario.
+   * @param {Object} contact - Datos del contacto de Respond.io.
+   * @param {Object} message - Datos del mensaje.
+   * @param {RespondioService} respondio - Instancia del servicio Respondio.
+   * @param {boolean} [useAutomaticMode=false] - Indica si usa el modo automático.
+   * @param {boolean} [isTestMode=false] - Indica si está en modo de prueba.
+   * @returns {Promise<void>}
+   */
   async processIncomingMessage(userId, contact, message, respondio, useAutomaticMode = false, isTestMode = false) {
     try {
       const settings = await getGlobalSettings();
@@ -1139,6 +1273,15 @@ class PollingService {
     }
   }
 
+  /**
+   * Extrae una dirección de los mensajes de un contacto y la guarda en la base de datos.
+   * Usa IA (OpenAI) para identificar la dirección dentro del historial de conversación.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {Object} contact - Objeto de contacto de Respond.io.
+   * @param {Object[]} messages - Lista de mensajes del historial de conversación.
+   * @param {RespondioService} respondio - Instancia del servicio de Respond.io.
+   * @returns {Promise<void>}
+   */
   async extractAndSaveAddressFromMessages(userId, contact, messages, respondio) {
     try {
       const extractor = new AddressExtractorService();
@@ -1361,6 +1504,14 @@ class PollingService {
     }
   }
 
+  /**
+   * Registra un mensaje saliente en el log de mensajes de la base de datos.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {Object} contact - Objeto de contacto destinatario.
+   * @param {string} text - Texto del mensaje enviado.
+   * @param {string} messageType - Tipo de mensaje (ej. 'auto_response', 'followup').
+   * @returns {Promise<void>}
+   */
   async logOutgoingMessage(userId, contact, text, messageType) {
     await MessageLog.create({
       user_id: userId,
@@ -1382,6 +1533,14 @@ class PollingService {
     } catch (_) {}
   }
 
+  /**
+   * Ejecuta un ciclo completo de escaneo de direcciones sobre todos los contactos activos.
+   * Identifica contactos sin dirección registrada y lanza el proceso de extracción por IA.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @param {Object} settings - Configuración global de mensajería.
+   * @returns {Promise<void>}
+   */
   async runAddressScanCycle(userId, apiToken, settings) {
     try {
       const respondio = this.getRespondioInstance(apiToken);
@@ -1468,6 +1627,13 @@ class PollingService {
     }
   }
 
+  /**
+   * Sincroniza los nombres de los contactos de Respond.io con las órdenes en la base de datos.
+   * Actualiza customer_name en MessagingOrder cuando difiere del nombre en Respond.io.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {Object[]} contacts - Lista de contactos de Respond.io con firstName y lastName.
+   * @returns {Promise<void>}
+   */
   async syncContactNames(userId, contacts) {
     try {
       let updatedCount = 0;
@@ -1623,6 +1789,17 @@ class PollingService {
     }
   }
 
+  /**
+   * Escanea las conversaciones de todos los contactos activos en busca de direcciones de entrega.
+   * Para cada contacto sin dirección válida, lee sus mensajes y aplica extracción por IA o regex.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @param {Object[]} allContacts - Lista de todos los contactos activos.
+   * @param {RespondioService} respondio - Instancia del servicio de Respond.io.
+   * @param {number} messageLimit - Límite de mensajes a leer por contacto.
+   * @param {Object} settings - Configuración global de mensajería.
+   * @returns {Promise<void>}
+   */
   async scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings) {
     try {
       const extractor = new AddressExtractorService();
@@ -2735,6 +2912,14 @@ class PollingService {
     }
   }
 
+  /**
+   * Sincroniza el lifecycle de conversaciones cerradas en Respond.io con el estado de órdenes en BD.
+   * Detecta órdenes activas cuyas conversaciones en Respond.io ya fueron cerradas y las archiva.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @param {Object[]} openContacts - Lista de contactos con conversaciones abiertas actualmente.
+   * @returns {Promise<void>}
+   */
   async syncClosedConversationLifecycles(userId, apiToken, openContacts) {
     try {
       const openContactIds = new Set(openContacts.map(c => c.id.toString()));
@@ -2823,6 +3008,12 @@ class PollingService {
     }
   }
 
+  /**
+   * Elimina direcciones validadas duplicadas para un usuario, conservando la más reciente por contacto.
+   * Evita que el escáner de direcciones procese el mismo contacto múltiples veces en ciclos repetidos.
+   * @param {number} userId - ID del usuario propietario.
+   * @returns {Promise<void>}
+   */
   async cleanupDuplicateAddresses(userId) {
     try {
       let totalCleaned = 0;
@@ -2965,6 +3156,11 @@ class PollingService {
     }
   }
 
+  /**
+   * Archiva órdenes entregadas que tienen más de 48 horas desde su entrega.
+   * Mueve las direcciones validadas entregadas a DeliveryHistory para liberar espacio en la tabla activa.
+   * @returns {Promise<void>}
+   */
   async cleanupDeliveredOrders() {
     try {
       const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -2996,6 +3192,12 @@ class PollingService {
     }
   }
 
+  /**
+   * Archiva un lote de órdenes entregadas moviéndolas a DeliveryHistory y eliminándolas de ValidatedAddress.
+   * Crea un archivo ZIP con la evidencia de entrega antes de eliminar los registros.
+   * @param {Object[]} orders - Lista de instancias de ValidatedAddress a archivar.
+   * @returns {Promise<boolean>} Verdadero si el archivado fue exitoso.
+   */
   async archiveDeliveredOrders(orders) {
     try {
       const fs = await import('fs');
@@ -3089,6 +3291,13 @@ class PollingService {
     }
   }
 
+  /**
+   * Determina si un estado de orden puede avanzar al nuevo estado propuesto.
+   * Previene retrocesos en el flujo de lifecycle (ej. de 'delivered' a 'pending').
+   * @param {string} currentStatus - Estado actual de la orden.
+   * @param {string} newStatus - Estado nuevo propuesto.
+   * @returns {boolean} Verdadero si la transición es válida (solo avance, no retroceso).
+   */
   statusCanAdvance(currentStatus, newStatus) {
     const STATUS_ORDER = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery', 'ups_shipped', 'delivered'];
     const currentIdx = STATUS_ORDER.indexOf(currentStatus);
@@ -3100,6 +3309,12 @@ class PollingService {
   // Campos a resetear cuando una orden entregada/ups_shipped se reactiva
   // por un nuevo ciclo (cliente vuelve a pedir, lifecycle en Respond es activo).
   // La entrega previa ya esta archivada en DeliveryHistory.
+  /**
+   * Construye los campos de reseteo para reactivar una orden que fue entregada o enviada por UPS.
+   * Se usa cuando un cliente realiza un nuevo pedido después de que su orden anterior fue completada.
+   * @param {string} newOrderStatus - Nuevo estado de la orden tras la reactivación.
+   * @returns {Object} Campos a actualizar en la orden para limpiar datos de la entrega previa.
+   */
   buildReactivationFields(newOrderStatus) {
     return {
       order_status: newOrderStatus,
@@ -3117,6 +3332,12 @@ class PollingService {
 
   // Archiva las ordenes en dispatch cuyo contacto en Respond este en
   // lifecycle "UPS Shipped". Ese flujo es paqueteria, no entrega local.
+  /**
+   * Archiva órdenes con estado 'ups_shipped' cuyos contactos ya no aparecen en Respond.io como activos.
+   * Detecta órdenes enviadas por UPS que están en la BD pero cuya conversación fue cerrada en Respond.
+   * @param {Object[]} contacts - Lista de contactos activos actualmente en Respond.io.
+   * @returns {Promise<void>}
+   */
   async archiveUpsShippedOrders(contacts) {
     try {
       const upsContactIds = contacts
@@ -3151,6 +3372,12 @@ class PollingService {
 
   // Archiva en dispatch los contactos cuyo lifecycle en Respond es excluido
   // (New Lead / Impropos / IprintPOS). Libera ruta tambien (Respond manda).
+  /**
+   * Archiva órdenes cuyo lifecycle en Respond.io las excluye del flujo activo (ej. 'Impropos', 'IprintPOS').
+   * Limpia la tabla de órdenes activas de registros que no deben procesarse por el bot.
+   * @param {Object[]} contacts - Lista de contactos con su lifecycle actual desde Respond.io.
+   * @returns {Promise<void>}
+   */
   async archiveExcludedLifecycleOrders(contacts) {
     try {
       const excluded = ['new lead', 'impropos', 'iprintpos'];
@@ -3192,6 +3419,12 @@ class PollingService {
   // lifecycle de forma confiable, pero el campo `lifecycle` viene incluido en
   // cada contacto. Asi que paginamos TODOS los contactos (open + closed) y
   // filtramos del lado nuestro por el campo lifecycle.
+  /**
+   * Obtiene todos los contactos de Respond.io que tienen un lifecycle activo relevante para el sistema.
+   * Pagina sobre todos los contactos y filtra por lifecycles conocidos (Pending, Approved, etc.).
+   * @param {RespondioService} respondio - Instancia del servicio de Respond.io.
+   * @returns {Promise<{contacts: Object[], complete: boolean}>} Contactos encontrados y si la paginación fue completa.
+   */
   async fetchAllActiveLifecycleContacts(respondio) {
     const targetLifecycles = new Set([
       'Pending', 'Approved', 'Ordered', 'Pickup Ready',
@@ -3265,6 +3498,12 @@ class PollingService {
   // dispatch no coincida. Se ejecuta al arrancar y luego cada 5 min via
   // setInterval, asegurando que las columnas del dispatcher reflejen Respond
   // EXACTAMENTE incluso si la conversacion del cliente esta cerrada.
+  /**
+   * Reconcilia los lifecycles de Respond.io con el estado de las órdenes en la base de datos al arrancar.
+   * Detecta discrepancias entre el estado en Respond y la BD, corrige avances de lifecycle y archiva
+   * órdenes huérfanas. También se ejecuta cada 5 minutos en segundo plano para mantener la sincronía.
+   * @returns {Promise<void>}
+   */
   async reconcileLifecyclesOnStartup() {
     try {
       const settings = await getGlobalSettings();
@@ -3520,6 +3759,11 @@ class PollingService {
     }
   }
 
+  /**
+   * Convierte un lifecycle de Respond.io a su estado equivalente de orden en la base de datos.
+   * @param {string} lifecycle - Nombre del lifecycle en Respond.io (ej. 'Pickup Ready', 'On Delivery').
+   * @returns {string|null} Estado de orden equivalente, o null si no hay mapeo definido.
+   */
   lifecycleToOrderStatus(lifecycle) {
     if (!lifecycle) return null;
     const lc = lifecycle.toLowerCase();
@@ -3535,6 +3779,18 @@ class PollingService {
     return map[lc] || null;
   }
 
+  /**
+   * Guarda o actualiza una dirección validada en la tabla ValidatedAddress.
+   * Si ya existe una dirección para el contacto, la actualiza con los datos geocodificados.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {Object} contact - Objeto de contacto de Respond.io.
+   * @param {string} finalAddress - Dirección normalizada y validada.
+   * @param {string} originalAddress - Texto original de la dirección extraída del mensaje.
+   * @param {string} finalZip - Código postal validado.
+   * @param {Object|null} geocoded - Resultado del geocoding (lat, lng, formatted_address).
+   * @param {string} [sourceOverride] - Fuente de la dirección (ej. 'ai', 'regex', 'field').
+   * @returns {Promise<void>}
+   */
   async saveValidatedAddress(userId, contact, finalAddress, originalAddress, finalZip, geocoded, sourceOverride) {
     try {
       const contactIdStr = contact.id.toString();
@@ -3688,6 +3944,13 @@ class PollingService {
     }
   }
 
+  /**
+   * Registra automáticamente como clientes mayoristas a los contactos cuyo nombre contiene el marcador 'MAY'.
+   * Crea o actualiza registros en WholesaleClient para cada contacto identificado como mayorista.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {Object[]} contacts - Lista de contactos de Respond.io.
+   * @returns {Promise<void>}
+   */
   async autoRegisterWholesaleClients(userId, contacts) {
     try {
       const mayContacts = contacts.filter(c => {
@@ -3749,6 +4012,14 @@ class PollingService {
     }
   }
 
+  /**
+   * Actualiza la dirección de entrega de un cliente mayorista en la tabla WholesaleClient.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {Object} contact - Objeto de contacto de Respond.io.
+   * @param {string} finalAddress - Dirección normalizada y validada.
+   * @param {Object|null} geocoded - Resultado del geocoding con lat, lng y formatted_address.
+   * @returns {Promise<void>}
+   */
   async updateWholesaleClientAddress(userId, contact, finalAddress, geocoded) {
     try {
       const contactIdStr = contact.id.toString();
@@ -3788,6 +4059,14 @@ class PollingService {
     }
   }
 
+  /**
+   * Escanea contactos con agente activo o actividad reciente en busca de solicitudes de reactivación del bot.
+   * Detecta mensajes que contienen la palabra "cierre" para iniciar el flujo de cierre de pedido automático.
+   * @param {number} userId - ID del usuario propietario.
+   * @param {string} apiToken - Token de API de Respond.io.
+   * @param {Object} settings - Configuración global de mensajería.
+   * @returns {Promise<void>}
+   */
   async checkBotReactivationFields(userId, apiToken, settings) {
     try {
       const respondio = this.getRespondioInstance(apiToken);

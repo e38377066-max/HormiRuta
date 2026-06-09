@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Rutas de administración del sistema.
+ * Proporciona endpoints para estadísticas globales, gestión de usuarios,
+ * visualización de logs y limpieza del sistema.
+ * Todas las rutas requieren privilegios de administrador.
+ */
+
 import express from 'express';
 import { Op } from 'sequelize';
 import { User, Route, Stop, ValidatedAddress, MessagingOrder } from '../models/index.js';
@@ -8,6 +15,12 @@ import fs from 'fs';
 
 const router = express.Router();
 
+/**
+ * @description Obtiene estadísticas globales del sistema (usuarios, rutas, órdenes).
+ * @route GET /api/admin/stats
+ * @access Private (Admin)
+ * @returns {Object} 200 - Estadísticas detalladas por rol y entidad.
+ */
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
     const totalUsers = await User.count();
@@ -35,6 +48,16 @@ router.get('/stats', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Lista usuarios con soporte para filtrado y paginación.
+ * @route GET /api/admin/users
+ * @access Private (Admin)
+ * @param {string} [req.query.role] - Filtrar por rol (admin, driver, client).
+ * @param {string} [req.query.search] - Buscar por nombre o email.
+ * @param {number} [req.query.limit=50] - Cantidad de registros por página.
+ * @param {number} [req.query.offset=0] - Desplazamiento para paginación.
+ * @returns {Object} 200 - Lista de usuarios y total de registros.
+ */
 router.get('/users', requireAdmin, async (req, res) => {
   try {
     const { role, search, limit = 50, offset = 0 } = req.query;
@@ -63,6 +86,13 @@ router.get('/users', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Obtiene el perfil detallado de un usuario específico.
+ * @route GET /api/admin/users/:id
+ * @access Private (Admin)
+ * @returns {Object} 200 - Datos completos del usuario.
+ * @returns {Object} 404 - Usuario no encontrado.
+ */
 router.get('/users/:id', requireAdmin, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
@@ -76,6 +106,14 @@ router.get('/users/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Actualiza los datos de un usuario específico.
+ * @route PUT /api/admin/users/:id
+ * @access Private (Admin)
+ * @param {Object} req.body - Campos permitidos: username, email, phone, role, active, subscription_type, commission_per_stop.
+ * @returns {Object} 200 - Usuario actualizado.
+ * @returns {Object} 404 - Usuario no encontrado.
+ */
 router.put('/users/:id', requireAdmin, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
@@ -98,6 +136,14 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Cambia el rol de un usuario.
+ * @route PUT /api/admin/users/:id/role
+ * @access Private (Admin)
+ * @param {string} req.body.role - Nuevo rol (admin, client, driver).
+ * @returns {Object} 200 - Usuario actualizado.
+ * @returns {Object} 400 - Rol inválido.
+ */
 router.put('/users/:id/role', requireAdmin, async (req, res) => {
   try {
     const { role } = req.body;
@@ -119,6 +165,12 @@ router.put('/users/:id/role', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Activa o desactiva la cuenta de un usuario.
+ * @route PUT /api/admin/users/:id/toggle-active
+ * @access Private (Admin)
+ * @returns {Object} 200 - Usuario actualizado con el nuevo estado.
+ */
 router.put('/users/:id/toggle-active', requireAdmin, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
@@ -135,6 +187,15 @@ router.put('/users/:id/toggle-active', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Elimina permanentemente a un usuario.
+ * No permite que un administrador se elimine a sí mismo.
+ * @route DELETE /api/admin/users/:id
+ * @access Private (Admin)
+ * @returns {Object} 200 - Mensaje de éxito.
+ * @returns {Object} 400 - Intento de auto-eliminación.
+ * @returns {Object} 404 - Usuario no encontrado.
+ */
 router.delete('/users/:id', requireAdmin, async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
@@ -154,6 +215,14 @@ router.delete('/users/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Obtiene los logs del sistema filtrados.
+ * @route GET /api/admin/logs
+ * @access Private (Admin)
+ * @param {string} [req.query.level] - Nivel de log (info, warn, error).
+ * @param {string} [req.query.search] - Búsqueda de texto en el contenido.
+ * @returns {Object} 200 - Lista de logs paginados.
+ */
 router.get('/logs', requireAdmin, async (req, res) => {
   try {
     const { level, search, limit = 100, offset = 0 } = req.query;
@@ -165,6 +234,12 @@ router.get('/logs', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Limpia el buffer de logs en memoria.
+ * @route DELETE /api/admin/logs
+ * @access Private (Admin)
+ * @returns {Object} 200 - Mensaje de éxito.
+ */
 router.delete('/logs', requireAdmin, async (req, res) => {
   try {
     logBuffer.clear();
@@ -175,6 +250,12 @@ router.delete('/logs', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Obtiene estadísticas sobre los archivos de logs en disco.
+ * @route GET /api/admin/logs/stats
+ * @access Private (Admin)
+ * @returns {Object} 200 - Tamaños de archivos y conteo de líneas.
+ */
 router.get('/logs/stats', requireAdmin, async (req, res) => {
   try {
     const stats = logBuffer.getFileStats();
@@ -184,6 +265,14 @@ router.get('/logs/stats', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Descarga un archivo de log específico (full o important).
+ * @route GET /api/admin/logs/download/:type
+ * @access Private (Admin)
+ * @returns {File} 200 - Contenido del archivo de log.
+ * @returns {Object} 400 - Tipo inválido.
+ * @returns {Object} 404 - No hay logs disponibles.
+ */
 router.get('/logs/download/:type', requireAdmin, async (req, res) => {
   try {
     const { type } = req.params;
@@ -206,6 +295,12 @@ router.get('/logs/download/:type', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Lista los archivos de log archivados.
+ * @route GET /api/admin/logs/archives
+ * @access Private (Admin)
+ * @returns {Object} 200 - Lista de nombres de archivos.
+ */
 router.get('/logs/archives', requireAdmin, async (req, res) => {
   try {
     const archives = logBuffer.getArchiveFiles();
@@ -215,6 +310,14 @@ router.get('/logs/archives', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Descarga un archivo de log archivado específico.
+ * @route GET /api/admin/logs/archives/:filename
+ * @access Private (Admin)
+ * @returns {File} 200 - Contenido del archivo.
+ * @returns {Object} 400 - Nombre de archivo inválido.
+ * @returns {Object} 404 - Archivo no encontrado.
+ */
 router.get('/logs/archives/:filename', requireAdmin, async (req, res) => {
   try {
     const { filename } = req.params;
@@ -233,6 +336,14 @@ router.get('/logs/archives/:filename', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Reinicia completamente el sistema de despacho.
+ * Elimina paradas, rutas, direcciones validadas, historial y fotos.
+ * OPERACIÓN CRÍTICA E IRREVERSIBLE.
+ * @route DELETE /api/admin/dispatch/reset
+ * @access Private (Admin)
+ * @returns {Object} 200 - Conteo de entidades eliminadas.
+ */
 router.delete('/dispatch/reset', requireAdmin, async (req, res) => {
   try {
     const stopsDeleted = await Stop.destroy({ where: {} });

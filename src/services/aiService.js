@@ -1,3 +1,11 @@
+/**
+ * @fileoverview Servicio de Integración con Inteligencia Artificial.
+ * Este servicio gestiona las interacciones con OpenAI (GPT-4o, Whisper, Vision)
+ * para transcripción de audio, análisis de imágenes, clasificación de mensajes
+ * y extracción de datos estructurados (direcciones, productos, ubicaciones).
+ * Incluye un sistema de aprendizaje automático (BotMemory) y base de conocimiento (BotKnowledge).
+ */
+
 import https from 'https';
 import axios from 'axios';
 import FormData from 'form-data';
@@ -5,6 +13,12 @@ import BotMemory from '../models/BotMemory.js';
 import BotKnowledge from '../models/BotKnowledge.js';
 
 class AIService {
+  /**
+   * Crea una instancia de AIService.
+   * @param {string} apiKey - Clave de API de OpenAI.
+   * @param {Object} settings - Configuraciones del sistema.
+   * @param {number|null} [userId=null] - ID del usuario propietario.
+   */
   constructor(apiKey, settings, userId = null) {
     this.apiKey = apiKey;
     this.settings = settings || {};
@@ -17,7 +31,12 @@ class AIService {
     this._knowledgeCacheAt = 0;
   }
 
-  // Carga las lecciones activas y aprobadas (con cache de 5 min para no abusar la DB)
+  /**
+   * Carga las lecciones activas y aprobadas del bot.
+   * @description Utiliza un sistema de caché de 5 minutos para evitar consultas excesivas a la base de datos.
+   * @param {number} userId - ID del usuario propietario de las memorias.
+   * @returns {Promise<Object[]>} Lista de memorias activas.
+   */
   async loadActiveMemories(userId) {
     const now = Date.now();
     if (this._memoriesCache && (now - this._memoriesCacheAt) < 5 * 60 * 1000) {
@@ -38,12 +57,20 @@ class AIService {
     }
   }
 
+  /**
+   * Invalida la caché de memorias del bot.
+   */
   invalidateMemoryCache() {
     this._memoriesCache = null;
     this._memoriesCacheAt = 0;
   }
 
-  // Carga documentos de conocimiento activos (cache 5 min)
+  /**
+   * Carga documentos de conocimiento activos del bot.
+   * @description Utiliza un sistema de caché de 5 minutos.
+   * @param {number} userId - ID del usuario propietario del conocimiento.
+   * @returns {Promise<Object[]>} Lista de documentos de conocimiento.
+   */
   async loadKnowledge(userId) {
     const now = Date.now();
     if (this._knowledgeCache && (now - this._knowledgeCacheAt) < 5 * 60 * 1000) {
@@ -61,7 +88,11 @@ class AIService {
     }
   }
 
-  // Transcribe audio de WhatsApp usando OpenAI Whisper
+  /**
+   * Transcribe un archivo de audio (WhatsApp) usando OpenAI Whisper.
+   * @param {string} audioUrl - URL pública del archivo de audio.
+   * @returns {Promise<string|null>} El texto transcrito o null si falla.
+   */
   async transcribeAudio(audioUrl) {
     if (!this.isAvailable) return null;
     try {
@@ -90,7 +121,11 @@ class AIService {
     }
   }
 
-  // Analiza una imagen enviada por el cliente usando GPT-4o vision
+  /**
+   * Describe una imagen usando GPT-4o Vision.
+   * @param {string} imageUrl - URL pública de la imagen.
+   * @returns {Promise<string|null>} Descripción breve de la imagen o null si falla.
+   */
   async describeImage(imageUrl) {
     if (!this.isAvailable) return null;
     try {
@@ -127,7 +162,15 @@ class AIService {
     }
   }
 
-  // Registra automáticamente una lección cuando el agente corrige al bot
+  /**
+   * Registra automáticamente una lección cuando el agente corrige al bot.
+   * @static
+   * @param {number} userId - ID del usuario propietario.
+   * @param {number|string} contactId - ID del contacto involucrado.
+   * @param {string} botMessage - El mensaje original enviado por el bot.
+   * @param {string} agentMessage - El mensaje correctivo enviado por el agente.
+   * @returns {Promise<void>}
+   */
   static async autoLearnFromCorrection(userId, contactId, botMessage, agentMessage) {
     try {
       if (!botMessage || !agentMessage) return;
@@ -149,6 +192,11 @@ class AIService {
     }
   }
 
+  /**
+   * Obtiene la lista formateada de productos del negocio.
+   * @description Consulta las configuraciones para obtener el catálogo de productos y los devuelve en formato Markdown.
+   * @returns {string} Lista de productos en formato markdown.
+   */
   getProductsList() {
     try {
       let products = this.settings?.products_list;
@@ -173,6 +221,14 @@ class AIService {
 - Diseño gráfico personalizado`;
   }
 
+  /**
+   * Construye el prompt del sistema para el asistente de IA.
+   * @description Incluye productos, precios, lecciones aprendidas, conocimiento del negocio, estilo del agente y perfil del cliente.
+   * @param {Object[]} [memories=[]] - Lista de memorias aplicables.
+   * @param {Object[]} [knowledge=[]] - Lista de documentos de conocimiento.
+   * @param {Object} [extras={}] - Datos extra (customerProfile, agentStyle).
+   * @returns {string} El prompt del sistema completo.
+   */
   getSystemPrompt(memories = [], knowledge = [], extras = {}) {
     const { customerProfile = null, agentStyle = null } = extras;
     const products = this.getProductsList();
@@ -249,6 +305,12 @@ Eres el primer punto de contacto con el cliente. Te comportas como un vendedor e
 - Si el cliente pregunta algo que NO sabes y NO está en la base de conocimiento, di "déjame confirmar eso con mi compañero del equipo y te conecto" — no inventes${knowledgeSection}${memoriesSection}${this._renderStyleSection(agentStyle)}${this._renderCustomerSection(customerProfile)}`;
   }
 
+  /**
+   * Renderiza la sección de estilo del agente para el prompt.
+   * @param {Object} style - Perfil de estilo del agente.
+   * @returns {string} Sección de estilo formateada.
+   * @private
+   */
   _renderStyleSection(style) {
     if (!style) return '';
     const phrases = Array.isArray(style.do_phrases) && style.do_phrases.length
@@ -263,6 +325,12 @@ Eres el primer punto de contacto con el cliente. Te comportas como un vendedor e
 ${style.style_summary || ''}${emojis}${closings}${phrases}${avoid}`;
   }
 
+  /**
+   * Renderiza la sección de datos del cliente para el prompt.
+   * @param {Object} profile - Perfil del cliente.
+   * @returns {string} Sección del cliente formateada.
+   * @private
+   */
   _renderCustomerSection(profile) {
     if (!profile) return '';
     const prefs = profile.preferences && Object.keys(profile.preferences).length
@@ -278,6 +346,13 @@ Conversaciones previas: ${profile.total_conversations || 0}
 ${profile.summary || 'Sin resumen aún.'}${loc}${past}${prefs}${notes}`;
   }
 
+  /**
+   * Realiza una llamada directa a la API de OpenAI Chat Completions.
+   * @param {Object[]} messages - Lista de mensajes de la conversación.
+   * @param {number} [maxTokens=300] - Límite de tokens en la respuesta.
+   * @param {string|null} [model=null] - Modelo a utilizar (por defecto gpt-4o-mini).
+   * @returns {Promise<Object>} Resultado de la llamada {success, content|error}.
+   */
   async callOpenAI(messages, maxTokens = 300, model = null) {
     if (!this.isAvailable) {
       return { success: false, error: 'No API key configured' };
@@ -337,6 +412,11 @@ ${profile.summary || 'Sin resumen aún.'}${loc}${past}${prefs}${notes}`;
     });
   }
 
+  /**
+   * Intenta parsear JSON de una respuesta de texto de la IA.
+   * @param {string} content - Contenido de texto de la respuesta.
+   * @returns {Object|null} Objeto parseado o null si falla.
+   */
   parseJsonFromResponse(content) {
     try {
       const clean = content
@@ -355,7 +435,11 @@ ${profile.summary || 'Sin resumen aún.'}${loc}${past}${prefs}${notes}`;
     }
   }
 
-  // Classify yes/no from a message
+  /**
+   * Clasifica un mensaje como afirmación (yes) o negación (no).
+   * @param {string} messageText - El texto del mensaje.
+   * @returns {Promise<string|null>} "yes", "no" o null si no está claro.
+   */
   async classifyYesNo(messageText) {
     if (!this.isAvailable) return null;
 
@@ -386,7 +470,11 @@ Responde SOLO con una palabra: "yes", "no", o "unknown".`
     }
   }
 
-  // Extract ZIP code or city from a message
+  /**
+   * Extrae un código ZIP o nombre de ciudad de un mensaje.
+   * @param {string} messageText - El texto del mensaje.
+   * @returns {Promise<string|null>} Código ZIP, ciudad o null.
+   */
   async extractLocationFromMessage(messageText) {
     if (!this.isAvailable) return null;
 
@@ -418,10 +506,12 @@ Responde SOLO con el ZIP, la ciudad, o la palabra null.`
     }
   }
 
-  // Extract a US delivery address from one or more recent customer messages.
-  // Returns { fullAddress, streetNumber, street, unit, city, state, zip, confidence } or null.
-  // Designed to handle Spanish prefixes like "Casa 8219 Elam Rd...", "Mi casa es...",
-  // typos, and pieces of address spread across multiple messages.
+  /**
+   * Extrae una dirección de entrega completa de una serie de mensajes.
+   * @description Maneja fragmentación, errores ortográficos y prefijos en español.
+   * @param {string|string[]} recentTexts - Mensajes recientes del cliente.
+   * @returns {Promise<Object|null>} Componentes de la dirección o null.
+   */
   async extractAddressFromMessages(recentTexts) {
     if (!this.isAvailable) return null;
     if (!Array.isArray(recentTexts)) recentTexts = [recentTexts];
@@ -492,9 +582,13 @@ o {"fullAddress":null,"confidence":"none"} si no hay dirección.`
     }
   }
 
-  // Extractor de dirección especializado para clientes mayoristas.
-  // Maneja pedidos multi-producto, referencias a "la misma dirección" y cambios de dirección
-  // en el mensaje más reciente.
+  /**
+   * Extrae una dirección de entrega para pedidos mayoristas.
+   * @description Especializado en manejar pedidos multi-producto y referencias de "la misma dirección".
+   * @param {string|string[]} recentTexts - Mensajes recientes.
+   * @param {string|null} [existingAddress=null] - Dirección previamente conocida.
+   * @returns {Promise<Object|null>} Componentes de la dirección o null.
+   */
   async extractAddressFromWholesaleMessages(recentTexts, existingAddress = null) {
     if (!this.isAvailable) return null;
     if (!Array.isArray(recentTexts)) recentTexts = [recentTexts];
@@ -572,7 +666,11 @@ o {"fullAddress":"${existingAddress || ''}","isSameReference":true,"confidence":
     }
   }
 
-  // Detect frustration in a message
+  /**
+   * Detecta si un mensaje expresa frustración.
+   * @param {string} messageText - El texto del mensaje.
+   * @returns {Promise<boolean>} True si se detecta frustración, false de lo contrario.
+   */
   async detectFrustration(messageText) {
     if (!this.isAvailable) return false;
 
@@ -599,7 +697,13 @@ o {"fullAddress":"${existingAddress || ''}","isSameReference":true,"confidence":
     }
   }
 
-  // Extract product selection from a message
+  /**
+   * Extrae la selección de producto de un cliente a partir de una lista de opciones.
+   * @description Analiza el mensaje para identificar si el cliente seleccionó una de las opciones numeradas o nombró un producto.
+   * @param {string} messageText - El texto del mensaje del cliente.
+   * @param {Object[]} productsList - Lista de productos disponibles.
+   * @returns {Promise<number|null>} El ID de la opción seleccionada o null.
+   */
   async extractProductSelection(messageText, productsList) {
     if (!this.isAvailable) return null;
 
@@ -647,7 +751,13 @@ REGLAS ESTRICTAS:
     }
   }
 
-  // Analyze a full message to understand intent
+  /**
+   * Analiza un mensaje completo para entender la intención del cliente.
+   * @param {string} messageText - El texto del mensaje.
+   * @param {Object} convState - Estado actual de la conversación.
+   * @param {boolean} isExistingCustomer - Indica si es un cliente existente.
+   * @returns {Promise<Object|null>} Análisis de intención o null si falla.
+   */
   async analyzeIntent(messageText, convState, isExistingCustomer) {
     if (!this.isAvailable) return null;
 
@@ -687,8 +797,14 @@ Estado actual: estado=${convState?.state || 'initial'}, cliente_existente=${isEx
     }
   }
 
-  // THE MOST IMPORTANT FUNCTION:
-  // Decide if the AI can/should intervene when an agent is active
+  /**
+   * Evalúa si la IA debe intervenir cuando un agente humano está activo.
+   * @description Decide basándose en la simplicidad de la pregunta y si interrumpe el flujo del agente.
+   * @param {string} messageText - El texto del mensaje.
+   * @param {Object[]} recentMessages - Mensajes recientes de la conversación.
+   * @param {Object} convState - Estado de la conversación.
+   * @returns {Promise<Object>} Decisión de intervención {shouldIntervene, reason, response}.
+   */
   async evaluateAgentIntervention(messageText, recentMessages, convState) {
     if (!this.isAvailable) return { shouldIntervene: false, reason: 'no_api_key' };
 
@@ -755,7 +871,14 @@ El cliente acaba de enviar: "${messageText}"
     }
   }
 
-  // Generate a smart response for any state in the flow
+  /**
+   * Genera una respuesta inteligente para cualquier estado del flujo.
+   * @param {string} messageText - El texto del mensaje.
+   * @param {Object} convState - Estado de la conversación.
+   * @param {Object} contact - Datos del contacto.
+   * @param {Object[]} recentMessages - Mensajes recientes.
+   * @returns {Promise<string|null>} La respuesta generada o null.
+   */
   async generateContextualResponse(messageText, convState, contact, recentMessages) {
     if (!this.isAvailable) return null;
 
@@ -800,8 +923,13 @@ Genera la respuesta más apropiada:`
     }
   }
 
-  // Generate a natural conversational message for a specific flow intent
-  // The AI speaks naturally but always achieves the required goal of each step
+  /**
+   * Genera un mensaje natural para una intención específica del flujo.
+   * @description El mensaje es generado por la IA para sonar humano mientras cumple el objetivo del paso.
+   * @param {string} intent - Intención del flujo (welcome_new, ask_zip, etc.).
+   * @param {Object} [params={}] - Parámetros para personalizar el mensaje.
+   * @returns {Promise<string|null>} El mensaje generado o null.
+   */
   async generateFlowMessage(intent, params = {}) {
     if (!this.isAvailable) return null;
 
@@ -967,7 +1095,11 @@ ${campaignNote ? `- ${campaignNote}` : '- NO menciones precios exactos'}
     }
   }
 
-  // Analyzes recent conversation to decide if this is a closing flow situation
+  /**
+   * Analiza el historial de conversación para decidir si es un proceso de cierre de venta.
+   * @param {Object[]} recentMessages - Mensajes recientes del historial.
+   * @returns {Promise<Object>} Análisis del contexto de cierre {isClosingFlow, product, hasPendingQuestion, ...}.
+   */
   async analyzeClosingContext(recentMessages) {
     if (!this.isAvailable) return { isClosingFlow: false, hasPendingQuestion: true, reason: 'no_api_key' };
 
@@ -1036,16 +1168,12 @@ Responde con JSON exacto:
     }
   }
 
-  // ============================================================================
-  // FASE 1 — Respuesta conversacional libre (vendedor humano)
-  // En vez de máquina de estados rígida, la IA genera respuesta natural usando:
-  //   - Historial completo de la conversación
-  //   - Lo que ya sabemos del cliente (perfil)
-  //   - Estilo de los agentes humanos
-  //   - Lecciones aprobadas + base de conocimiento
-  //   - Objetivo del flujo: conseguir ZIP, producto y manejar la venta
-  // Devuelve JSON con el texto a enviar y datos extraídos.
-  // ============================================================================
+  /**
+   * Genera una respuesta conversacional libre actuando como un vendedor humano.
+   * @description Fase 1: Genera respuestas naturales basadas en historial, perfil, estilo y conocimiento.
+   * @param {Object} options - Opciones que incluyen contact, messageText, recentMessages, convState, customerProfile y agentStyle.
+   * @returns {Promise<Object|null>} Respuesta generada y datos extraídos.
+   */
   async generateConversationalReply({ contact, messageText, recentMessages = [], convState = {}, customerProfile = null, agentStyle = null }) {
     if (!this.isAvailable) return null;
 
@@ -1147,6 +1275,11 @@ Responde con JSON exacto (sin markdown, sin explicaciones):
   // ============================================================================
   // FASE 2 — Análisis del estilo de los agentes humanos
   // ============================================================================
+  /**
+   * Analiza el estilo de comunicación de un agente a partir de una muestra de mensajes.
+   * @param {string} agentMessagesSample - Muestra de mensajes reales del agente.
+   * @returns {Promise<Object|null>} Perfil de estilo generado o null.
+   */
   async analyzeAgentStyle(agentMessagesSample) {
     if (!this.isAvailable) return null;
     try {
@@ -1182,6 +1315,13 @@ Devuelve JSON exacto:
   // ============================================================================
   // FASE 3 — Resumen del cliente para memoria persistente
   // ============================================================================
+  /**
+   * Genera un perfil resumido del cliente para memoria persistente.
+   * @param {Object} contact - Datos del contacto.
+   * @param {string} transcript - Historial de la conversación.
+   * @param {Object} [existing=null] - Perfil existente para actualizar.
+   * @returns {Promise<Object|null>} Perfil del cliente generado o null.
+   */
   async summarizeCustomer(contact, transcript, existing = null) {
     if (!this.isAvailable) return null;
     try {
@@ -1220,7 +1360,10 @@ Devuelve JSON exacto:
     }
   }
 
-  // Test if API key is valid
+  /**
+   * Prueba la conexión con la API de OpenAI.
+   * @returns {Promise<Object>} Resultado de la prueba {success, message|error}.
+   */
   async testConnection() {
     if (!this.isAvailable) {
       return { success: false, error: 'No API key provided' };

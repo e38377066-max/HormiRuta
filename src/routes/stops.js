@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Rutas para la gestión individual de paradas de una ruta.
+ */
+
 import { Router } from 'express';
 import { Op } from 'sequelize';
 import { Route, Stop, sequelize } from '../models/index.js';
@@ -5,6 +9,14 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
+/**
+ * @description Actualiza los datos de una parada específica.
+ * @route PUT /api/stops/:id
+ * @access Private (Requiere Auth)
+ * @param {Object} req.body - Campos: address, lat, lng, order, note, phone, customer_name, priority, status, signature_url, photo_url.
+ * @returns {Object} 200 - Parada actualizada.
+ * @returns {Object} 404 - Parada no encontrada.
+ */
 router.put('/:id', requireAuth, async (req, res) => {
   try {
     const stop = await Stop.findByPk(req.params.id, {
@@ -40,6 +52,12 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Elimina una parada y reordena las paradas restantes de la ruta.
+ * @route DELETE /api/stops/:id
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Mensaje de éxito.
+ */
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const stop = await Stop.findByPk(req.params.id, {
@@ -66,6 +84,16 @@ router.delete('/:id', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Marca una parada como completada, permitiendo adjuntar evidencias.
+ * @route POST /api/stops/:id/complete
+ * @access Private (Requiere Auth)
+ * @param {string} [req.body.recipient_name] - Nombre de quien recibe.
+ * @param {string} [req.body.signature_url] - URL de la firma.
+ * @param {string} [req.body.photo_url] - URL de la foto de entrega.
+ * @param {string} [req.body.delivery_notes] - Notas finales de la entrega.
+ * @returns {Object} 200 - Parada completada.
+ */
 router.post('/:id/complete', requireAuth, async (req, res) => {
   try {
     const stop = await Stop.findByPk(req.params.id, {
@@ -95,6 +123,14 @@ router.post('/:id/complete', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Marca una parada como fallida indicando el motivo.
+ * @route POST /api/stops/:id/fail
+ * @access Private (Requiere Auth)
+ * @param {string} req.body.reason - Razón del fallo.
+ * @param {string} [req.body.photo_url] - URL de la foto como evidencia del fallo.
+ * @returns {Object} 200 - Parada marcada como fallida.
+ */
 router.post('/:id/fail', requireAuth, async (req, res) => {
   try {
     const stop = await Stop.findByPk(req.params.id, {

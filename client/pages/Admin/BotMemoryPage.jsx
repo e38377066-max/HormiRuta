@@ -1,9 +1,21 @@
+/**
+ * @fileoverview Página de gestión de la memoria y conocimiento del Bot de IA.
+ * Permite administrar "lecciones" aprendidas, documentos de base de conocimiento (prompts, FAQs)
+ * e informa sobre las capacidades de procesamiento de audio e imágenes.
+ */
+
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
+/**
+ * Componente que muestra una etiqueta visual para el tipo de contexto del bot.
+ * @param {Object} props
+ * @param {string} props.type - Tipo de contexto (general, greeting, product, etc.)
+ * @returns {JSX.Element}
+ */
 function ContextBadge({ type }) {
   const { t } = useTranslation()
   const colors = {
@@ -39,14 +51,21 @@ function ContextBadge({ type }) {
   )
 }
 
+/**
+ * Componente principal para gestionar el "cerebro" del bot.
+ * @returns {JSX.Element}
+ */
 export default function BotMemoryPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  /** @type {[Array, Function]} Lista de lecciones aprendidas */
   const [memories, setMemories] = useState([])
+  /** @type {[Object, Function]} Estadísticas de lecciones y documentos */
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
 
+  /** Tipos de contexto permitidos para las lecciones */
   const CONTEXT_TYPES = [
     { value: 'general', label: t('admin.botMemory.docs.types.general') },
     { value: 'greeting', label: t('admin.botMemory.docs.types.greeting') },
@@ -58,6 +77,7 @@ export default function BotMemoryPage() {
     { value: 'pattern', label: t('admin.botMemory.docs.types.pattern') },
   ]
 
+  /** Tipos de conocimiento para los documentos base */
   const KNOWLEDGE_TYPES = [
     { value: 'document', label: t('admin.botMemory.docs.types.document'), icon: 'description', color: '#5b8def' },
     { value: 'prompt', label: t('admin.botMemory.docs.types.prompt'), icon: 'psychology', color: '#a855f7' },
@@ -65,10 +85,13 @@ export default function BotMemoryPage() {
     { value: 'product_info', label: t('admin.botMemory.docs.types.product_info'), icon: 'inventory_2', color: '#22c55e' },
     { value: 'faq', label: t('admin.botMemory.docs.types.faq'), icon: 'quiz', color: '#06b6d4' },
   ]
+
+  /** @type {[string, Function]} Sección activa (lessons, docs, media) */
   const [mainSection, setMainSection] = useState(() => {
     const tab = searchParams.get('tab')
     return ['lessons', 'docs', 'media'].includes(tab) ? tab : 'lessons'
   })
+  /** @type {[string, Function]} Pestaña de filtrado de lecciones (active, pending, all) */
   const [activeTab, setActiveTab] = useState('active')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -78,6 +101,8 @@ export default function BotMemoryPage() {
   const [analyzeResult, setAnalyzeResult] = useState(null)
   const [analyzeError, setAnalyzeError] = useState(null)
 
+  // --- Estados de Conocimiento (Knowledge) ---
+  /** @type {[Array, Function]} Lista de documentos de conocimiento */
   const [knowledge, setKnowledge] = useState([])
   const [kLoading, setKLoading] = useState(false)
   const [showKForm, setShowKForm] = useState(false)
@@ -87,11 +112,13 @@ export default function BotMemoryPage() {
   const [kUploading, setKUploading] = useState(false)
   const [kFileRef] = useState(() => ({ current: null }))
 
+  /** Carga los datos al iniciar la página */
   useEffect(() => {
     loadData()
     loadKnowledge()
   }, [])
 
+  /** Obtiene documentos de conocimiento del servidor */
   const loadKnowledge = async () => {
     setKLoading(true)
     try {
@@ -104,6 +131,7 @@ export default function BotMemoryPage() {
     }
   }
 
+  /** Guarda un documento de conocimiento (nuevo o editado) */
   const handleKSave = async () => {
     if (!kForm.title.trim()) return alert(t('admin.botMemory.lessons.titleLabel') + ' ' + t('common.required'))
     if (!kForm.content.trim()) return alert(t('admin.botMemory.docs.contentLabel') + ' ' + t('common.required'))
@@ -146,6 +174,7 @@ export default function BotMemoryPage() {
     } catch (e) { alert(t('common.error')) }
   }
 
+  /** Maneja la carga de archivos de texto para importar conocimiento */
   const handleKUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -167,6 +196,7 @@ export default function BotMemoryPage() {
     }
   }
 
+  /** Carga estadísticas y lecciones de memoria */
   const loadData = async () => {
     setLoading(true)
     try {
@@ -183,6 +213,7 @@ export default function BotMemoryPage() {
     }
   }
 
+  /** Aprueba una lección detectada automáticamente */
   const handleApprove = async (id) => {
     try {
       await api.put(`/api/bot-memory/${id}`, { is_approved: true })
@@ -211,6 +242,7 @@ export default function BotMemoryPage() {
     setShowForm(true)
   }
 
+  /** Guarda una lección (nueva o editada) */
   const handleSave = async () => {
     if (!form.lesson.trim()) return alert(t('admin.botMemory.lessons.emptyError'))
     setSaving(true)
@@ -231,6 +263,7 @@ export default function BotMemoryPage() {
     }
   }
 
+  /** Dispara el análisis por IA del historial de mensajes para detectar nuevas lecciones */
   const handleAnalyzeHistory = async () => {
     if (!confirm(t('admin.botMemory.lessons.analyzeConfirm'))) return
     setAnalyzing(true)
@@ -247,6 +280,7 @@ export default function BotMemoryPage() {
     }
   }
 
+  /** Lecciones filtradas según la pestaña seleccionada */
   const filteredMemories = memories.filter(m => {
     if (activeTab === 'pending') return m.source === 'auto_detected' && !m.is_approved
     if (activeTab === 'active') return m.is_approved && m.is_active

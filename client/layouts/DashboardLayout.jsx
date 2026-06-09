@@ -1,15 +1,29 @@
+/**
+ * @fileoverview Diseño de contenedor principal (Layout) para el panel de administración y despacho.
+ * Incluye cabecera, barra lateral de navegación (drawer) y contenedor para las páginas hijas.
+ */
+
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
 import './DashboardLayout.css'
 
+/**
+ * Componente de diseño para el Dashboard.
+ * @returns {JSX.Element}
+ */
 export default function DashboardLayout() {
+  /** @type {[boolean, Function]} Estado para controlar la apertura del menú lateral */
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { user, isAdmin, logout } = useAuth()
   const navigate = useNavigate()
   const { t } = useTranslation()
 
+  /**
+   * Ejecuta el cierre de sesión y redirige al usuario al login.
+   * @async
+   */
   const handleLogout = async () => {
     await logout()
     navigate('/login')

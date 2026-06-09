@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Servicio para la gestión y centralización de logs del sistema.
+ * Proporciona un buffer en memoria, persistencia en archivos y rotación/archivado de logs.
+ * Intercepta las llamadas a console.log, console.error, etc., para capturarlas.
+ */
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,6 +16,12 @@ if (!fs.existsSync(LOGS_DIR)) {
   fs.mkdirSync(LOGS_DIR, { recursive: true });
 }
 
+/**
+ * Formatea una fecha en formato DD.MM.YYYY.
+ * @description Formatea una instancia de Date para su uso en nombres de archivos de log.
+ * @param {Date} date - La fecha a formatear.
+ * @returns {string} La fecha formateada.
+ */
 function formatDate(date) {
   const d = String(date.getDate()).padStart(2, '0');
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -17,7 +29,15 @@ function formatDate(date) {
   return `${d}.${m}.${y}`;
 }
 
+/**
+ * Clase LogBuffer para capturar, almacenar y persistir logs del sistema.
+ * @description Maneja la interceptación de console, el filtrado de logs importantes y el mantenimiento de archivos.
+ */
 class LogBuffer {
+  /**
+   * Crea una instancia de LogBuffer.
+   * @param {number} [maxEntries=500] - Número máximo de entradas a mantener en el buffer de memoria.
+   */
   constructor(maxEntries = 500) {
     this.maxEntries = maxEntries;
     this.logs = [];
@@ -39,6 +59,11 @@ class LogBuffer {
     this._dailyArchive();
   }
 
+  /**
+   * Intercepta los métodos globales de console.
+   * @description Reemplaza console.log/error/warn/info para capturar sus salidas antes de pasarlas a la consola original.
+   * @private
+   */
   _intercept() {
     const self = this;
 
@@ -63,6 +88,13 @@ class LogBuffer {
     };
   }
 
+  /**
+   * Captura una entrada de log.
+   * @description Procesa los argumentos, detecta la fuente y almacena el log en memoria y disco.
+   * @param {string} level - Nivel de log (info, error, warn).
+   * @param {Array} args - Argumentos pasados al console.
+   * @private
+   */
   _capture(level, args) {
     const message = args.map(arg => {
       if (arg instanceof Error) {
@@ -95,6 +127,11 @@ class LogBuffer {
     this._writeToFile(entry);
   }
 
+  /**
+   * Escribe una entrada de log en los archivos correspondientes.
+   * @param {Object} entry - Objeto de entrada de log.
+   * @private
+   */
   _writeToFile(entry) {
     try {
       const line = JSON.stringify(entry) + '\n';
@@ -107,6 +144,13 @@ class LogBuffer {
     }
   }
 
+  /**
+   * Determina si una entrada de log es importante.
+   * @description Evalúa el nivel y el contenido del mensaje para decidir si debe guardarse en el log de importantes.
+   * @param {Object} entry - Entrada de log.
+   * @returns {boolean} True si es importante.
+   * @private
+   */
   _isImportant(entry) {
     if (entry.level === 'error' || entry.level === 'warn') return true;
     const msg = entry.message.toLowerCase();
@@ -125,6 +169,10 @@ class LogBuffer {
     return false;
   }
 
+  /**
+   * Limpia entradas antiguas de los archivos de log.
+   * @private
+   */
   _cleanOldEntries() {
     try {
       this._trimFile(this.fullLogFile, 3 * 24 * 60 * 60 * 1000);
@@ -133,6 +181,12 @@ class LogBuffer {
     }
   }
 
+  /**
+   * Recorta un archivo de log basado en la antigüedad de las entradas.
+   * @param {string} filePath - Ruta del archivo.
+   * @param {number} maxAgeMs - Edad máxima permitida en milisegundos.
+   * @private
+   */
   _trimFile(filePath, maxAgeMs) {
     if (!fs.existsSync(filePath)) return;
 
@@ -155,6 +209,10 @@ class LogBuffer {
     }
   }
 
+  /**
+   * Realiza un archivado diario de los logs importantes y completos.
+   * @private
+   */
   _dailyArchive() {
     try {
       const now = new Date();
@@ -195,6 +253,11 @@ class LogBuffer {
     }
   }
 
+  /**
+   * Elimina archivos de archivado más antiguos de 7 días.
+   * @param {string} archiveDir - Directorio de archivos.
+   * @private
+   */
   _cleanOldArchives(archiveDir) {
     try {
       const files = fs.readdirSync(archiveDir);
@@ -210,6 +273,12 @@ class LogBuffer {
     }
   }
 
+  /**
+   * Formatea un archivo de log JSONL a texto legible.
+   * @param {string} filePath - Ruta del archivo.
+   * @returns {string} Contenido formateado.
+   * @private
+   */
   _formatLogFile(filePath) {
     if (!fs.existsSync(filePath)) return '';
     const content = fs.readFileSync(filePath, 'utf8');
@@ -224,6 +293,12 @@ class LogBuffer {
     }).join('\n');
   }
 
+  /**
+   * Detecta el origen (fuente) de un mensaje de log.
+   * @param {string} message - El mensaje a analizar.
+   * @returns {string} El nombre de la fuente detectada.
+   * @private
+   */
   _detectSource(message) {
     if (message.includes('Database') || message.includes('sequelize') || message.includes('SQL')) return 'database';
     if (message.includes('/api/auth') || message.includes('auth') || message.includes('login')) return 'auth';
@@ -237,6 +312,15 @@ class LogBuffer {
     return 'system';
   }
 
+  /**
+   * Obtiene logs filtrados y paginados desde el buffer de memoria.
+   * @param {Object} options - Opciones de filtrado.
+   * @param {string} [options.level] - Filtrar por nivel.
+   * @param {string} [options.search] - Filtrar por texto.
+   * @param {number} [options.limit=100] - Límite de resultados.
+   * @param {number} [options.offset=0] - Desplazamiento para paginación.
+   * @returns {Object} Un objeto con los logs y el total.
+   */
   getLogs({ level, search, limit = 100, offset = 0 } = {}) {
     let filtered = [...this.logs];
 
@@ -260,6 +344,11 @@ class LogBuffer {
     return { logs: paged, total };
   }
 
+  /**
+   * Genera el nombre de archivo para descarga.
+   * @param {string} [type='full'] - Tipo de log (full o important).
+   * @returns {string} El nombre del archivo.
+   */
   getDownloadFileName(type = 'full') {
     const now = new Date();
     const today = formatDate(now);
@@ -279,11 +368,20 @@ class LogBuffer {
     return `${startDay}.${startMonth}_${endDay}.${endMonth}.${endYear}.txt`;
   }
 
+  /**
+   * Obtiene el contenido de un archivo de log formateado para lectura.
+   * @param {string} [type='full'] - Tipo de log (full o important).
+   * @returns {string} Contenido formateado.
+   */
   getFileContent(type = 'full') {
     const filePath = type === 'important' ? this.importantLogFile : this.fullLogFile;
     return this._formatLogFile(filePath);
   }
 
+  /**
+   * Obtiene estadísticas de los archivos de log.
+   * @returns {Object} Objeto con estadísticas de logs full e important.
+   */
   getFileStats() {
     const stats = {};
     for (const [name, filePath] of [['full', this.fullLogFile], ['important', this.importantLogFile]]) {
@@ -306,6 +404,10 @@ class LogBuffer {
     return stats;
   }
 
+  /**
+   * Obtiene la lista de archivos archivados.
+   * @returns {Array} Lista de archivos con su información.
+   */
   getArchiveFiles() {
     const archiveDir = path.join(LOGS_DIR, 'archive');
     if (!fs.existsSync(archiveDir)) return [];
@@ -326,6 +428,11 @@ class LogBuffer {
       });
   }
 
+  /**
+   * Obtiene el contenido de un archivo archivado específico.
+   * @param {string} filename - Nombre del archivo.
+   * @returns {string|null} Contenido del archivo o null si no existe.
+   */
   getArchiveContent(filename) {
     const archiveDir = path.join(LOGS_DIR, 'archive');
     const filePath = path.join(archiveDir, filename);
@@ -333,6 +440,9 @@ class LogBuffer {
     return fs.readFileSync(filePath, 'utf8');
   }
 
+  /**
+   * Limpia el buffer de logs en memoria.
+   */
   clear() {
     this.logs = [];
   }
@@ -341,3 +451,4 @@ class LogBuffer {
 const logBuffer = new LogBuffer(500);
 
 export default logBuffer;
+

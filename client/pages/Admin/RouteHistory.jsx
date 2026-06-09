@@ -1,23 +1,44 @@
+/**
+ * @fileoverview Historial de rutas para administradores.
+ * Permite visualizar el listado de rutas completadas o asignadas, ver el detalle de paradas
+ * y consultar las evidencias fotográficas de entrega.
+ */
+
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
+/**
+ * Componente RouteHistory que muestra las rutas pasadas y actuales.
+ * @returns {JSX.Element}
+ */
 export default function RouteHistory() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  /** @type {[Array, Function]} Lista resumida de rutas */
   const [routes, setRoutes] = useState([])
+  /** @type {[boolean, Function]} Indica si se están cargando las rutas */
   const [loading, setLoading] = useState(true)
+  /** @type {[number|null, Function]} ID de la ruta seleccionada para ver detalle */
   const [selectedRoute, setSelectedRoute] = useState(null)
+  /** @type {[Object|null, Function]} Detalle completo de la ruta seleccionada */
   const [routeDetail, setRouteDetail] = useState(null)
+  /** @type {[boolean, Function]} Indica si se está cargando el detalle */
   const [loadingDetail, setLoadingDetail] = useState(false)
+  /** @type {[string|null, Function]} URL de la foto que se está visualizando en pantalla completa */
   const [viewingPhoto, setViewingPhoto] = useState(null)
 
+  /** Carga inicial de rutas al montar el componente */
   useEffect(() => {
     fetchRoutes()
   }, [])
 
+  /**
+   * Obtiene la lista de rutas históricas del servidor.
+   * @async
+   */
   const fetchRoutes = async () => {
     try {
       const res = await api.get('/api/dispatch/routes/history')
@@ -29,6 +50,11 @@ export default function RouteHistory() {
     }
   }
 
+  /**
+   * Obtiene y muestra el detalle de una ruta específica.
+   * @async
+   * @param {Object} route - Objeto de la ruta seleccionada.
+   */
   const viewRouteDetail = async (route) => {
     setSelectedRoute(route.id)
     setLoadingDetail(true)
@@ -42,11 +68,13 @@ export default function RouteHistory() {
     }
   }
 
+  /** Formatea una fecha para su visualización */
   const formatDate = (d) => {
     if (!d) return '-'
     return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
+  /** Obtiene la etiqueta traducida del estado de la ruta */
   const getStatusLabel = (status) => {
     if (status === 'completed') return t('admin.routeHistory.completed')
     if (status === 'assigned') return t('admin.routeHistory.inProgress')

@@ -1,20 +1,40 @@
+/**
+ * @fileoverview Componente de la página de contabilidad del conductor.
+ * Proporciona una vista detallada de los ingresos, comisiones y entregas del conductor,
+ * permitiendo filtrar por meses y ver el historial de rutas completadas.
+ */
+
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './DriverAccountingPage.css'
 
+/**
+ * Formatea un valor numérico como moneda ($0.00).
+ * @param {number|string|null} val - El valor a formatear.
+ * @returns {string} El valor formateado o '-' si es nulo.
+ */
 const fmt = (val) => {
   if (val == null) return '-'
   const n = Number(val)
   return `$${n.toFixed(2)}`
 }
 
+/**
+ * Nombres de los meses en inglés y español.
+ */
 const monthNames = {
   en: ['January','February','March','April','May','June','July','August','September','October','November','December'],
   es: ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 }
 
+/**
+ * Obtiene la etiqueta legible de un mes y año (ej. "Enero 2024").
+ * @param {string} my - El mes y año en formato 'YYYY-MM'.
+ * @param {string} [lang='en'] - El idioma para la etiqueta.
+ * @returns {string} La etiqueta formateada.
+ */
 const monthLabel = (my, lang = 'en') => {
   if (!my) return '-'
   const [y, m] = my.split('-')
@@ -22,16 +42,31 @@ const monthLabel = (my, lang = 'en') => {
   return `${names[parseInt(m) - 1]} ${y}`
 }
 
+/**
+ * Formatea una fecha para mostrar solo día y mes abreviado.
+ * @param {string|Date} d - La fecha a formatear.
+ * @returns {string} La fecha formateada.
+ */
 const fmtDate = (d) => {
   if (!d) return '-'
   return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })
 }
 
+/**
+ * Formatea una fecha y hora.
+ * @param {string|Date} d - La fecha y hora a formatear.
+ * @returns {string} La fecha y hora formateada.
+ */
 const fmtDateTime = (d) => {
   if (!d) return '-'
   return new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+/**
+ * Componente principal de la página de contabilidad del conductor.
+ * Gestiona el estado de las pestañas, datos contables y rutas completadas.
+ * @returns {JSX.Element} El elemento JSX de la página.
+ */
 export default function DriverAccountingPage() {
   const navigate = useNavigate()
   const { t, i18n } = useTranslation()
@@ -46,6 +81,9 @@ export default function DriverAccountingPage() {
   const [completedRoutes, setCompletedRoutes] = useState([])
   const [loadingRoutes, setLoadingRoutes] = useState(false)
 
+  /**
+   * Configuración de métodos de pago con sus etiquetas, colores y fondos.
+   */
   const pmtConfig = {
     cash:     { label: t('planner.cash'),     color: '#22c55e', bg: 'rgba(34,197,94,0.12)'   },
     card:     { label: t('planner.card'),     color: '#5b8def', bg: 'rgba(91,141,239,0.12)'  },
@@ -54,6 +92,9 @@ export default function DriverAccountingPage() {
     zelle:    { label: t('planner.zelle'),    color: '#fb923c', bg: 'rgba(251,146,60,0.12)'  },
   }
 
+  /**
+   * Carga los datos de contabilidad desde la API.
+   */
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
@@ -71,6 +112,9 @@ export default function DriverAccountingPage() {
     }
   }, [selectedMonth])
 
+  /**
+   * Carga las rutas completadas del conductor.
+   */
   const fetchCompletedRoutes = useCallback(async () => {
     setLoadingRoutes(true)
     try {
@@ -83,9 +127,15 @@ export default function DriverAccountingPage() {
     }
   }, [])
 
+  // Efectos para cargar datos al montar el componente o cambiar el mes seleccionado
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { fetchCompletedRoutes() }, [fetchCompletedRoutes])
 
+  /**
+   * Obtiene la configuración visual de un método de pago.
+   * @param {string} method - El método de pago.
+   * @returns {Object} Configuración de etiqueta y color.
+   */
   const getPmt = (method) => pmtConfig[method] || { label: method, color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' }
   const lang = i18n.language?.startsWith('es') ? 'es' : 'en'
 
@@ -233,6 +283,12 @@ export default function DriverAccountingPage() {
   )
 }
 
+/**
+ * Componente para mostrar un estado vacío cuando no hay datos.
+ * @param {Object} props - Propiedades del componente.
+ * @param {string} props.text - Texto opcional para mostrar.
+ * @returns {JSX.Element} El elemento JSX.
+ */
 function EmptyState({ text }) {
   const { t } = useTranslation()
   return (
@@ -243,12 +299,25 @@ function EmptyState({ text }) {
   )
 }
 
+/**
+ * Tarjeta que muestra detalles de una ruta completada y permite marcar el pago como entregado.
+ * @param {Object} props - Propiedades del componente.
+ * @param {Object} props.r - Los datos de la ruta.
+ * @param {Function} props.onRefresh - Función para refrescar los datos después de una acción.
+ * @param {Function} props.t - Función de traducción.
+ * @param {Function} props.getPmt - Función para obtener configuración de pago.
+ * @param {string} props.lang - Idioma actual.
+ * @returns {JSX.Element} El elemento JSX.
+ */
 function CompletedRouteCard({ r, onRefresh, t, getPmt, lang }) {
   const [delivering, setDelivering] = useState(false)
   const [method, setMethod] = useState('')
   const [showPayForm, setShowPayForm] = useState(false)
   const [showStops, setShowStops] = useState(false)
 
+  /**
+   * Maneja el envío del formulario para marcar el pago como entregado al administrador.
+   */
   const handleDeliver = async () => {
     if (!method) return
     setDelivering(true)
@@ -264,6 +333,10 @@ function CompletedRouteCard({ r, onRefresh, t, getPmt, lang }) {
     }
   }
 
+  /**
+   * Determina el estado del pago y su representación visual.
+   * @returns {Object} Objeto con etiqueta, color, fondo e icono.
+   */
   const paymentStatus = () => {
     if (r.admin_confirmed) return { label: t('accounting.adminConfirmed'), color: '#22c55e', bg: 'rgba(34,197,94,0.12)', icon: 'verified' }
     if (r.payment_delivered) return { label: t('accounting.deliveredToAdmin'), color: '#5b8def', bg: 'rgba(91,141,239,0.12)', icon: 'check_circle' }
@@ -443,6 +516,17 @@ function CompletedRouteCard({ r, onRefresh, t, getPmt, lang }) {
   )
 }
 
+/**
+ * Tarjeta que muestra el resumen de contabilidad de un mes específico.
+ * @param {Object} props - Propiedades del componente.
+ * @param {Object} props.m - Datos del mes.
+ * @param {boolean} props.expanded - Si la tarjeta está expandida.
+ * @param {Function} props.onToggle - Función para alternar la expansión.
+ * @param {Function} props.getPmt - Función para obtener configuración de pago.
+ * @param {Function} props.t - Función de traducción.
+ * @param {string} props.lang - Idioma actual.
+ * @returns {JSX.Element} El elemento JSX.
+ */
 function MonthCard({ m, expanded, onToggle, getPmt, t, lang }) {
   return (
     <div className="dac-month-card">
@@ -516,6 +600,14 @@ function MonthCard({ m, expanded, onToggle, getPmt, t, lang }) {
   )
 }
 
+/**
+ * Tarjeta que muestra detalles de una entrega individual.
+ * @param {Object} props - Propiedades del componente.
+ * @param {Object} props.d - Datos de la entrega.
+ * @param {Function} props.getPmt - Función para obtener configuración de pago.
+ * @param {Function} props.t - Función de traducción.
+ * @returns {JSX.Element} El elemento JSX.
+ */
 function DeliveryCard({ d, getPmt, t }) {
   const pmt = d.payment_method ? getPmt(d.payment_method) : null
   const isCash = !d.payment_method || d.payment_method === 'cash'

@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Página de gestión de zonas de cobertura.
+ * Permite a los administradores agregar, editar, eliminar y buscar zonas de cobertura por código postal o dirección.
+ * Incluye funcionalidades para carga masiva y geocodificación de direcciones.
+ */
+
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMessaging } from '../../contexts/MessagingContext'
@@ -5,6 +11,10 @@ import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './MessagingPages.css'
 
+/**
+ * Componente CoveragePage que gestiona las zonas de cobertura del servicio.
+ * @returns {JSX.Element}
+ */
 export default function CoveragePage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -35,11 +45,21 @@ export default function CoveragePage() {
 
   useEffect(() => { loadZones() }, [])
 
+  /**
+   * Realiza la geocodificación de una dirección a través del API del backend.
+   * @async
+   * @param {string} address - La dirección a geocodificar.
+   * @returns {Promise<Object>} Datos de geocodificación (ZIP, ciudad, estado, etc.).
+   */
   const geocodeAddress = async (address) => {
     const response = await api.post('/api/messaging/geocode-address', { address })
     return response.data
   }
 
+  /**
+   * Maneja la búsqueda de una dirección individual para autocompletar el formulario.
+   * @async
+   */
   const handleAddressSearch = async () => {
     if (!addressSearch.trim()) return
     setAddressSearching(true)
@@ -55,6 +75,9 @@ export default function CoveragePage() {
     }
   }
 
+  /**
+   * Aplica los resultados de geocodificación al formulario de zona actual.
+   */
   const applyAddressResult = () => {
     if (!addressResult) return
     setZoneForm(prev => ({
@@ -68,6 +91,10 @@ export default function CoveragePage() {
     setAddressSearch('')
   }
 
+  /**
+   * Maneja la búsqueda de direcciones en el modo de carga masiva.
+   * @async
+   */
   const handleBulkAddressSearch = async () => {
     if (!bulkAddressSearch.trim()) return
     setBulkAddressSearching(true)
@@ -96,12 +123,21 @@ export default function CoveragePage() {
     }
   }
 
+  /**
+   * Elimina un resultado de búsqueda de la lista masiva.
+   * @param {string} zip - El código postal a eliminar.
+   */
   const removeBulkAddressResult = (zip) => {
     setBulkAddressResults(prev => prev.filter(r => r.zip !== zip))
     const currentZips = bulkZipCodes.split(/[,\n]/).map(z => z.trim()).filter(z => z.length > 0 && z !== zip)
     setBulkZipCodes(currentZips.join('\n'))
   }
 
+  /**
+   * Obtiene información demográfica de un código postal usando un servicio externo.
+   * @async
+   * @param {string} zipCode - El código postal de 5 dígitos.
+   */
   const fetchZipInfo = async (zipCode) => {
     if (!zipCode || zipCode.length !== 5 || !/^\d{5}$/.test(zipCode)) return
     setLoadingZipInfo(true)
@@ -126,23 +162,36 @@ export default function CoveragePage() {
     }
   }
 
+  /**
+   * Maneja el cambio en el input del código postal y dispara la búsqueda de info.
+   * @param {React.ChangeEvent<HTMLInputElement>} e
+   */
   const handleZipChange = (e) => {
     const value = e.target.value
     setZoneForm({ ...zoneForm, zip_code: value })
     if (value.length === 5 && /^\d{5}$/.test(value)) fetchZipInfo(value)
   }
 
+  /**
+   * Carga la lista de zonas de cobertura desde el servidor.
+   * @async
+   */
   const loadZones = async () => {
     setLoading(true)
     try { await fetchCoverageZones() }
     finally { setLoading(false) }
   }
 
+  /**
+   * Alterna el campo y dirección de ordenamiento de la tabla.
+   * @param {string} field - El nombre del campo por el cual ordenar.
+   */
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
   }
 
+  /** Lista filtrada y ordenada de zonas de cobertura */
   const filteredZones = coverageZones.filter(z => {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
@@ -164,12 +213,19 @@ export default function CoveragePage() {
     return sortDir === 'asc' ? cmp : -cmp
   })
 
+  /**
+   * Limpia el formulario de zona.
+   */
   const resetForm = () => {
     setEditingZone(null)
     setZoneForm({ zip_code: '', zone_name: '', city: '', state: '', delivery_fee: '', estimated_delivery_time: '', notes: '' })
     setAddressSearch(''); setAddressResult(null); setAddressError('')
   }
 
+  /**
+   * Prepara el formulario para editar una zona existente.
+   * @param {Object} zone - Objeto de la zona a editar.
+   */
   const editZone = (zone) => {
     setEditingZone(zone)
     setZoneForm({
@@ -183,6 +239,10 @@ export default function CoveragePage() {
     setShowAddDialog(true)
   }
 
+  /**
+   * Guarda los cambios en una zona (creación o actualización).
+   * @async
+   */
   const saveZone = async () => {
     if (!zoneForm.zip_code && !editingZone) { alert(t('coverage.zipRequired')); return }
     setSaving(true)
@@ -198,12 +258,21 @@ export default function CoveragePage() {
     }
   }
 
+  /**
+   * Maneja la eliminación de una zona de cobertura con confirmación previa.
+   * @async
+   * @param {Object} zone - La zona a eliminar.
+   */
   const handleDelete = async (zone) => {
     if (!confirm(`${t('coverage.confirmDelete')} ${zone.zip_code || zone.zipCode}?`)) return
     try { await deleteCoverageZone(zone.id) }
     catch (err) { alert(t('coverage.deleteError')) }
   }
 
+  /**
+   * Agrega múltiples zonas de cobertura de forma masiva.
+   * @async
+   */
   const addBulkZones = async () => {
     if (!bulkZipCodes.trim()) { alert(t('coverage.enterZip')); return }
     const zipCodes = bulkZipCodes.split(/[,\n]/).map(z => z.trim()).filter(z => z.length > 0)
@@ -221,6 +290,12 @@ export default function CoveragePage() {
     }
   }
 
+  /**
+   * Componente interno para mostrar el ícono de ordenamiento en las cabeceras de la tabla.
+   * @param {Object} props
+   * @param {string} props.field - Nombre del campo.
+   * @returns {JSX.Element|null}
+   */
   const SortIcon = ({ field }) => {
     if (sortField !== field) return null
     return <span className="material-icons" style={{ fontSize: '14px', verticalAlign: 'middle' }}>{sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>

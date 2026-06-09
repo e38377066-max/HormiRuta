@@ -1,9 +1,21 @@
+/**
+ * @fileoverview Página de configuración del sistema de mensajería.
+ * Permite configurar la integración con Respond.io, el comportamiento del chatbot,
+ * mensajes automáticos, inteligencia artificial (OpenAI), horarios de atención
+ * y gestión de agentes de servicio.
+ */
+
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMessaging } from '../../contexts/MessagingContext'
 import './MessagingPages.css'
 
+/**
+ * Parsea la cadena o array de productos para mostrarla como una lista separada por comas.
+ * @param {string|Array} products - Los productos a parsear.
+ * @returns {string} Cadena de productos separados por comas.
+ */
 const parseProducts = (products) => {
   if (!products) return 'Tarjetas,Magneticos,Post Cards,Playeras'
   if (typeof products === 'string') {
@@ -23,6 +35,10 @@ const parseProducts = (products) => {
   return 'Tarjetas,Magneticos,Post Cards,Playeras'
 }
 
+/**
+ * Componente de la página de configuración.
+ * @returns {JSX.Element} El componente de la página de configuración.
+ */
 export default function SettingsPage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -157,12 +173,16 @@ export default function SettingsPage() {
     { label: 'Uruguay - Montevideo (UYT)', value: 'America/Montevideo' }
   ]
 
+  // Efecto inicial para cargar configuraciones y estado
   useEffect(() => {
     loadSettings()
     loadPollingStatus()
     loadAgents()
   }, [])
 
+  /**
+   * Carga la lista de agentes de servicio desde la API.
+   */
   const loadAgents = async () => {
     try {
       const data = await fetchAgents()
@@ -172,6 +192,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Guarda un agente (nuevo o existente) enviando los datos a la API.
+   */
   const handleSaveAgent = async () => {
     try {
       const data = {
@@ -195,6 +218,10 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Prepara el formulario para editar un agente existente.
+   * @param {Object} agent - El agente a editar.
+   */
   const handleEditAgent = (agent) => {
     setEditingAgent(agent)
     setAgentForm({
@@ -208,6 +235,10 @@ export default function SettingsPage() {
     setShowAgentForm(true)
   }
 
+  /**
+   * Elimina un agente tras confirmación del usuario.
+   * @param {string} id - El ID del agente a eliminar.
+   */
   const handleDeleteAgent = async (id) => {
     if (!window.confirm(t('settings.agents.confirmDelete', '¿Eliminar este agente?'))) return
     try {
@@ -218,6 +249,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Carga las configuraciones generales desde el servidor.
+   */
   const loadSettings = async () => {
     try {
       const settings = await fetchSettings()
@@ -275,6 +309,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Carga el estado actual del servicio de polling.
+   */
   const loadPollingStatus = async () => {
     try {
       const status = await getPollingStatus()
@@ -286,6 +323,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Realiza una prueba de conexión con la API de Respond.io.
+   */
   const handleTestConnection = async () => {
     setTesting(true)
     setConnectionStatus(null)
@@ -302,6 +342,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Guarda todas las configuraciones actuales en el servidor.
+   */
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -329,6 +372,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Prueba la conexión con OpenAI usando la API Key proporcionada.
+   */
   const handleTestOpenAI = async () => {
     setTestingOpenAI(true)
     setOpenAIStatus(null)
@@ -342,6 +388,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Inicia el proceso de polling para sincronizar mensajes.
+   */
   const handleStartPolling = async () => {
     setPollingLoading(true)
     try {
@@ -354,6 +403,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Detiene el proceso de polling.
+   */
   const handleStopPolling = async () => {
     setPollingLoading(true)
     try {
@@ -366,6 +418,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Sincroniza los contactos manualmente de forma inmediata.
+   */
   const handleSyncNow = async () => {
     setSyncing(true)
     try {
@@ -378,10 +433,19 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Maneja el cambio en cualquier campo del formulario.
+   * @param {string} field - El nombre del campo.
+   * @param {any} value - El nuevo valor.
+   */
   const handleInputChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
+  /**
+   * Alterna la selección de un día en los días laborables.
+   * @param {string} dayValue - El valor del día ('0'-'6').
+   */
   const toggleDay = (dayValue) => {
     const businessDays = String(form.business_days || '')
     const currentDays = businessDays.split(',').filter(d => d)
@@ -392,11 +456,19 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Comprueba si un día está seleccionado como laborable.
+   * @param {string} dayValue - El valor del día a comprobar.
+   * @returns {boolean} Verdadero si está seleccionado.
+   */
   const isDaySelected = (dayValue) => {
     const businessDays = String(form.business_days || '')
     return businessDays.split(',').includes(dayValue)
   }
 
+  /**
+   * Valida un código postal o ciudad para verificar cobertura.
+   */
   const handleValidateZip = async () => {
     if (!zipInput.trim()) return
     
@@ -425,6 +497,10 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Copia un mensaje al portapapeles.
+   * @param {string} message - El mensaje a copiar.
+   */
   const handleCopyMessage = async (message) => {
     try {
       await navigator.clipboard.writeText(message)
@@ -435,6 +511,9 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Añade un nuevo precio de producto a la lista.
+   */
   const handleAddPrice = () => {
     if (!newPrice.product.trim() || !newPrice.price.trim()) return
     const entry = { ...newPrice, id: Date.now() }
@@ -443,10 +522,20 @@ export default function SettingsPage() {
     setAddingPrice(false)
   }
 
+  /**
+   * Elimina un precio de producto por su ID.
+   * @param {number} id - El ID de la entrada de precio.
+   */
   const handleDeletePrice = (id) => {
     setForm(prev => ({ ...prev, product_prices: (prev.product_prices || []).filter(p => p.id !== id) }))
   }
 
+  /**
+   * Actualiza un campo específico de una entrada de precio.
+   * @param {number} id - El ID de la entrada de precio.
+   * @param {string} field - El campo a actualizar.
+   * @param {any} value - El nuevo valor.
+   */
   const handleUpdatePrice = (id, field, value) => {
     setForm(prev => ({
       ...prev,

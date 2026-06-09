@@ -1,10 +1,25 @@
+/**
+ * @fileoverview Servicio para la gestión de perfiles de clientes.
+ * Proporciona funcionalidades para obtener perfiles existentes y actualizarlos o crearlos
+ * basándose en el análisis de conversaciones recientes mediante inteligencia artificial.
+ */
+
 import CustomerProfile from '../models/CustomerProfile.js';
 import MessageLog from '../models/MessageLog.js';
 import MessagingSettings from '../models/MessagingSettings.js';
 import AIService from './aiService.js';
 
+/**
+ * Clase CustomerProfileService para gestionar perfiles de clientes y su enriquecimiento con IA.
+ */
 class CustomerProfileService {
-  // Obtiene el perfil de un cliente, o null si no existe
+  /**
+   * Obtiene el perfil de un cliente.
+   * @description Busca un perfil de cliente específico por su userId y contactId.
+   * @param {number|string} userId - ID del usuario/empresa.
+   * @param {number|string} contactId - ID del contacto en Respond.io.
+   * @returns {Promise<Object|null>} El modelo CustomerProfile encontrado o null si no existe.
+   */
   static async get(userId, contactId) {
     if (!userId || !contactId) return null;
     try {
@@ -17,7 +32,14 @@ class CustomerProfileService {
     }
   }
 
-  // Crea o actualiza el perfil basado en la conversación reciente del cliente
+  /**
+   * Crea o actualiza el perfil basado en la conversación reciente del cliente.
+   * @description Analiza los últimos mensajes (hasta 60) usando OpenAI para generar un resumen,
+   * extraer preferencias, productos pasados y ubicación. Tiene un límite de re-análisis de 6 horas.
+   * @param {number|string} userId - ID del usuario/empresa.
+   * @param {Object} contact - Objeto del contacto con id, firstName y lastName.
+   * @returns {Promise<Object|null>} El perfil de cliente actualizado o creado, o null en caso de error.
+   */
   static async refreshFromConversation(userId, contact) {
     if (!userId || !contact?.id) return null;
     const contactId = contact.id.toString();
@@ -86,3 +108,4 @@ class CustomerProfileService {
 }
 
 export default CustomerProfileService;
+

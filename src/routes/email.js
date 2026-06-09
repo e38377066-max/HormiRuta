@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Rutas para la integración con Gmail.
+ * Permite verificar la conexión, enviar correos y sincronizar pedidos "Pickup Ready".
+ */
+
 import express from 'express';
 import { Op } from 'sequelize';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
@@ -21,6 +26,12 @@ import {
 
 const router = express.Router();
 
+/**
+ * @description Verifica si la conexión con Gmail es válida usando las credenciales configuradas.
+ * @route GET /api/email/verify
+ * @access Private (Admin)
+ * @returns {Object} 200 - Estado de la conexión.
+ */
 router.get('/verify', requireAdmin, async (req, res) => {
   try {
     await verifyGmailConnection();
@@ -31,6 +42,16 @@ router.get('/verify', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Envía un correo electrónico a través de Gmail.
+ * @route POST /api/email/send
+ * @access Private (Admin)
+ * @param {string} req.body.to - Destinatario.
+ * @param {string} req.body.subject - Asunto.
+ * @param {string} [req.body.text] - Cuerpo en texto plano.
+ * @param {string} [req.body.html] - Cuerpo en HTML.
+ * @returns {Object} 200 - Éxito con ID del mensaje.
+ */
 router.post('/send', requireAdmin, async (req, res) => {
   try {
     const { to, subject, text, html } = req.body;
@@ -45,6 +66,13 @@ router.post('/send', requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @description Obtiene la lista de pedidos marcados como "Pickup Ready" en Gmail.
+ * @route GET /api/email/pickup-ready
+ * @access Private (Requiere Auth)
+ * @param {boolean} [req.query.refresh=false] - Forzar actualización desde Gmail.
+ * @returns {Object} 200 - Lista de pedidos.
+ */
 router.get('/pickup-ready', requireAuth, async (req, res) => {
   try {
     const forceRefresh = req.query.refresh === 'true';
@@ -59,6 +87,12 @@ router.get('/pickup-ready', requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * @description Limpia la caché y refresca la lista de pedidos "Pickup Ready" desde Gmail.
+ * @route POST /api/email/pickup-ready/refresh
+ * @access Private (Admin)
+ * @returns {Object} 200 - Lista de pedidos actualizada.
+ */
 router.post('/pickup-ready/refresh', requireAdmin, async (req, res) => {
   try {
     clearPickupCache();
@@ -74,6 +108,12 @@ router.post('/pickup-ready/refresh', requireAdmin, async (req, res) => {
 });
 
 
+/**
+ * @description Sincroniza los pedidos "Pickup Ready" de Gmail con el sistema de despacho.
+ * @route POST /api/email/pickup-ready/sync
+ * @access Private (Admin)
+ * @returns {Object} 200 - Resultado de la sincronización.
+ */
 router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
   try {
     const result = await runPickupReadySync(true);
@@ -87,10 +127,13 @@ router.post('/pickup-ready/sync', requireAdmin, async (req, res) => {
   }
 });
 
-// Endpoint de diagnostico: lista los correos Pickup Ready de Gmail que NO
-// matchean ningun cliente del sistema, junto con las 3 sugerencias mas
-// parecidas (por similitud de palabras) tanto del despacho como de mayoristas.
-// Sirve para que el usuario alinee manualmente los nombres en Respond.io.
+/**
+ * @description Diagnostica pedidos de Gmail que no coinciden con clientes del sistema.
+ * Proporciona sugerencias basadas en similitud y razonamiento de IA.
+ * @route POST /api/email/pickup-ready/diagnose
+ * @access Private (Admin)
+ * @returns {Object} 200 - Lista de pedidos sin coincidencia y sus sugerencias.
+ */
 router.post('/pickup-ready/diagnose', requireAdmin, async (req, res) => {
   try {
     // No limpiamos cache: el diagnostico debe usar los mismos correos que ya

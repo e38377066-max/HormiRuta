@@ -1,27 +1,48 @@
+/**
+ * @fileoverview Página de registro de nuevos usuarios.
+ * Permite a los usuarios crear una cuenta proporcionando nombre, email y contraseña.
+ */
+
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
 import './AuthPages.css'
 
+/**
+ * Componente RegisterPage para la creación de cuentas de usuario.
+ * @returns {JSX.Element}
+ */
 export default function RegisterPage() {
+  /** @type {[Object, Function]} Estado de los datos del formulario */
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     confirmPassword: ''
   })
+  /** @type {[boolean, Function]} Controla la visibilidad de la contraseña */
   const [showPassword, setShowPassword] = useState(false)
+  /** @type {[string, Function]} Errores de validación local del formulario */
   const [formError, setFormError] = useState('')
   const { register, loading, error } = useAuth()
   const navigate = useNavigate()
   const { t } = useTranslation()
 
+  /**
+   * Actualiza el estado del formulario al escribir en los inputs.
+   * @param {React.ChangeEvent<HTMLInputElement>} e - Evento de cambio.
+   */
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
     setFormError('')
   }
 
+  /**
+   * Maneja el envío del formulario de registro con validaciones previas.
+   * @async
+   * @param {React.FormEvent} e - Evento de formulario.
+   */
   const handleSubmit = async (e) => {
     e.preventDefault()
     

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Página de gestión de cuenta del usuario.
+ * Muestra información personal, permite cambiar el idioma de la aplicación y eliminar la cuenta permanentemente.
+ */
+
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -5,17 +10,30 @@ import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n/index.js'
 import './AccountPage.css'
 
+/**
+ * Componente AccountPage para la gestión de perfil y preferencias.
+ * @returns {JSX.Element}
+ */
 export default function AccountPage() {
   const { user, deleteAccount } = useAuth()
   const navigate = useNavigate()
+  /** @type {[boolean, Function]} Controla la visibilidad del flujo de confirmación de eliminación */
   const [showConfirm, setShowConfirm] = useState(false)
+  /** @type {[string, Function]} Texto ingresado para confirmar la eliminación */
   const [confirmText, setConfirmText] = useState('')
+  /** @type {[boolean, Function]} Indica si la eliminación está en proceso */
   const [deleting, setDeleting] = useState(false)
+  /** @type {[string, Function]} Mensaje de error en la página */
   const [error, setError] = useState('')
   const { t } = useTranslation()
 
+  /** Palabra requerida para confirmar la acción destructiva */
   const confirmWord = t('account.confirmWord')
 
+  /**
+   * Maneja la eliminación definitiva de la cuenta del usuario.
+   * @async
+   */
   const handleDelete = async () => {
     if (confirmText.trim().toUpperCase() !== confirmWord.toUpperCase()) {
       setError(t('account.confirmError'))
@@ -32,6 +50,10 @@ export default function AccountPage() {
     }
   }
 
+  /**
+   * Cambia el idioma de la interfaz.
+   * @param {string} lang - Código de idioma ('en', 'es').
+   */
   const handleLanguageChange = (lang) => {
     i18n.changeLanguage(lang)
   }

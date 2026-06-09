@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Página de gestión de órdenes de mensajería.
+ * Permite a los administradores visualizar órdenes recientes, validar coberturas por código postal
+ * y gestionar el estado de las órdenes (confirmar, cancelar, completar).
+ */
+
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMessaging } from '../../contexts/MessagingContext'
@@ -5,6 +11,10 @@ import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './MessagingPages.css'
 
+/**
+ * Componente OrdersPage que muestra el centro de mando de mensajería.
+ * @returns {JSX.Element}
+ */
 export default function OrdersPage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -22,6 +32,7 @@ export default function OrdersPage() {
     platform: 'facebook' 
   })
 
+  /** Definición de plataformas de comunicación soportadas */
   const platforms = [
     { id: 'facebook', label: 'Facebook', icon: 'facebook', color: '#1877f2' },
     { id: 'instagram', label: 'Instagram', icon: 'photo_camera', color: '#e4405f' },
@@ -32,6 +43,11 @@ export default function OrdersPage() {
     { id: 'phone', label: t('common.phone'), icon: 'phone', color: '#34a853' }
   ]
 
+  /**
+   * Obtiene la información visual de una plataforma según su ID.
+   * @param {string} platformId - ID de la plataforma.
+   * @returns {Object} Datos de la plataforma (label, icon, color).
+   */
   const getPlatformInfo = (platformId) => {
     return platforms.find(p => p.id === platformId) || { label: platformId, icon: 'help', color: '#888' }
   }
@@ -42,9 +58,12 @@ export default function OrdersPage() {
     fetchSettings()
   }, [filter])
 
+  /** Órdenes que requieren atención inmediata */
   const pendingOrders = orders.filter(o => o.status === 'pending')
+  /** Órdenes que ya han sido procesadas o están en su etapa final */
   const processedOrders = orders.filter(o => ['confirmed', 'cancelled', 'completed'].includes(o.status))
 
+  /** Opciones de filtrado para la lista de órdenes */
   const statusOptions = [
     { label: t('orders.filters.all'), value: '' },
     { label: t('orders.filters.pending'), value: 'pending' },
@@ -54,16 +73,31 @@ export default function OrdersPage() {
     { label: t('orders.filters.cancelled'), value: 'cancelled' }
   ]
 
+  /**
+   * Determina la clase de color CSS según el estado de la orden.
+   * @param {string} status - Estado de la orden.
+   * @returns {string} Clase de color (warning, info, primary, success, danger).
+   */
   const getStatusColor = (status) => {
     const colors = { pending: 'warning', confirmed: 'info', in_transit: 'primary', completed: 'success', cancelled: 'danger' }
     return colors[status] || 'grey'
   }
 
+  /**
+   * Obtiene el ícono de Material Design correspondiente al estado.
+   * @param {string} status - Estado de la orden.
+   * @returns {string} Nombre del ícono.
+   */
   const getStatusIcon = (status) => {
     const icons = { pending: 'schedule', confirmed: 'check_circle', in_transit: 'local_shipping', completed: 'done_all', cancelled: 'cancel' }
     return icons[status] || 'help'
   }
 
+  /**
+   * Traduce el estado de la orden al idioma actual.
+   * @param {string} status - Estado de la orden.
+   * @returns {string} Etiqueta traducida.
+   */
   const getStatusLabel = (status) => {
     const map = {
       pending: t('orders.status.pending'),
@@ -75,11 +109,20 @@ export default function OrdersPage() {
     return map[status] || status
   }
 
+  /**
+   * Formatea una fecha para su visualización amigable.
+   * @param {string} dateStr - Cadena de fecha ISO.
+   * @returns {string} Fecha formateada.
+   */
   const formatDate = (dateStr) => {
     if (!dateStr) return ''
     return new Date(dateStr).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
 
+  /**
+   * Realiza la validación manual de un código postal.
+   * @async
+   */
   const handleValidateZip = async () => {
     if (!zipForm.zip_code) return
     setValidating(true)
@@ -127,6 +170,10 @@ export default function OrdersPage() {
     }
   }
 
+  /**
+   * Dispara el proceso de re-validación masiva de todas las órdenes pendientes.
+   * @async
+   */
   const handleRevalidate = async () => {
     setRevalidating(true)
     try {
@@ -141,6 +188,12 @@ export default function OrdersPage() {
     }
   }
 
+  /**
+   * Copia un mensaje al portapapeles.
+   * @async
+   * @param {string} message - El texto a copiar.
+   * @returns {Promise<boolean>} True si se copió con éxito.
+   */
   const handleCopyMessage = async (message) => {
     if (!message) return
     try {
@@ -154,6 +207,9 @@ export default function OrdersPage() {
     }
   }
 
+  /**
+   * Cierra el diálogo de validación de código postal y limpia el formulario.
+   */
   const handleCloseValidation = () => {
     setShowValidateZip(false)
     setZipForm({ zip_code: '', contact_name: '', platform: 'facebook' })
@@ -161,6 +217,9 @@ export default function OrdersPage() {
     setCopySuccess(false)
   }
 
+  /**
+   * Limpia el historial local de validaciones.
+   */
   const clearHistory = () => {
     setValidationHistory([])
     localStorage.removeItem('zipValidationHistory')

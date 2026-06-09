@@ -1,5 +1,19 @@
+/**
+ * @fileoverview Servicio para la optimización de rutas utilizando Google Maps Distance Matrix API.
+ * Proporciona funciones para calcular distancias, construir tablas de distancias y optimizar el orden de las paradas.
+ */
+
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
+/**
+ * Calcula la distancia de Haversine entre dos puntos geográficos.
+ * @description Utiliza la fórmula de Haversine para estimar la distancia en línea recta sobre la superficie terrestre.
+ * @param {number} lat1 - Latitud del punto 1.
+ * @param {number} lng1 - Longitud del punto 1.
+ * @param {number} lat2 - Latitud del punto 2.
+ * @param {number} lng2 - Longitud del punto 2.
+ * @returns {number} Distancia en kilómetros.
+ */
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -11,6 +25,13 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
   return R * c;
 }
 
+/**
+ * Obtiene la matriz de distancias desde la API de Google Maps.
+ * @description Realiza una petición a la API Distance Matrix para obtener distancias y tiempos de viaje reales.
+ * @param {Array<Object>} origins - Lista de puntos de origen {lat, lng}.
+ * @param {Array<Object>} destinations - Lista de puntos de destino {lat, lng}.
+ * @returns {Promise<Object|null>} El objeto de respuesta de la API o null si falla.
+ */
 async function getDistanceMatrix(origins, destinations) {
   if (!GOOGLE_MAPS_API_KEY) {
     console.warn('No Google Maps API key, falling back to haversine distances');
@@ -38,6 +59,12 @@ async function getDistanceMatrix(origins, destinations) {
   }
 }
 
+/**
+ * Construye tablas de distancia y duración entre todos los puntos.
+ * @description Genera matrices n x n con las distancias (km) y duraciones (min) entre cada par de puntos.
+ * @param {Array<Object>} points - Lista de puntos {lat, lng}.
+ * @returns {Promise<Object>} Objeto con distTable y durTable.
+ */
 async function buildDistanceTable(points) {
   const n = points.length;
   const distTable = Array.from({ length: n }, () => Array(n).fill(0));
@@ -83,6 +110,14 @@ async function buildDistanceTable(points) {
   return { distTable, durTable };
 }
 
+/**
+ * Optimiza el orden de las paradas en una ruta.
+ * @description Utiliza un algoritmo de "vecino más cercano" (Greedy) priorizando las paradas de alta prioridad.
+ * @param {Array<Object>} stops - Lista de paradas a optimizar.
+ * @param {Object} [startLocation=null] - Ubicación de inicio {lat, lng}.
+ * @param {boolean} [returnToStart=false] - Si la ruta debe regresar al punto de inicio.
+ * @returns {Promise<Object>} Objeto con optimizedStops, totalDistance y totalDuration.
+ */
 export async function optimizeRouteOrder(stops, startLocation = null, returnToStart = false) {
   if (stops.length < 2) {
     return {
@@ -208,6 +243,13 @@ export async function optimizeRouteOrder(stops, startLocation = null, returnToSt
   };
 }
 
+/**
+ * Calcula los ETAs estimados para cada parada.
+ * @description Suma las duraciones de viaje y de servicio a partir de un tiempo de inicio dado.
+ * @param {Array<Object>} stops - Paradas optimizadas con duration_from_prev.
+ * @param {Date|string} startTime - Hora de inicio de la ruta.
+ * @returns {Array<Object>} Paradas con el campo eta añadido.
+ */
 export function calculateEtas(stops, startTime) {
   let currentTime = new Date(startTime);
 
@@ -226,3 +268,4 @@ export function calculateEtas(stops, startTime) {
     };
   });
 }
+

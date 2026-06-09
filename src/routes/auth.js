@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Rutas de autenticación y gestión de usuarios.
+ * Proporciona endpoints para registro, inicio de sesión, cierre de sesión,
+ * obtención de perfil y eliminación de cuenta.
+ */
+
 import { Router } from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -12,6 +18,18 @@ const router = Router();
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * @description Registra un nuevo usuario en el sistema.
+ * @route POST /api/auth/register
+ * @access Public
+ * @param {string} req.body.email - Correo electrónico del usuario.
+ * @param {string} req.body.password - Contraseña del usuario (mínimo 6 caracteres).
+ * @param {string} req.body.username - Nombre de usuario.
+ * @param {string} [req.body.phone] - Teléfono opcional.
+ * @returns {Object} 201 - Éxito con token y datos del usuario.
+ * @returns {Object} 400 - Error de validación o usuario ya existente.
+ * @returns {Object} 500 - Error interno del servidor.
+ */
 router.post('/register', async (req, res) => {
   try {
     const { email, password, username, phone } = req.body;
@@ -59,6 +77,16 @@ router.post('/register', async (req, res) => {
   }
 });
 
+/**
+ * @description Inicia sesión para un usuario existente.
+ * @route POST /api/auth/login
+ * @access Public
+ * @param {string} req.body.email - Correo electrónico.
+ * @param {string} req.body.password - Contraseña.
+ * @returns {Object} 200 - Éxito con token y datos del usuario.
+ * @returns {Object} 401 - Credenciales inválidas o cuenta desactivada.
+ * @returns {Object} 500 - Error interno del servidor.
+ */
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -98,6 +126,12 @@ router.post('/login', async (req, res) => {
   }
 });
 
+/**
+ * @description Cierra la sesión del usuario actual revocando el token y destruyendo la sesión.
+ * @route POST /api/auth/logout
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Éxito.
+ */
 router.post('/logout', requireAuth, async (req, res) => {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
@@ -109,6 +143,14 @@ router.post('/logout', requireAuth, async (req, res) => {
   res.json({ success: true, message: 'Sesión cerrada' });
 });
 
+/**
+ * @description Obtiene la información del perfil del usuario autenticado.
+ * @route GET /api/auth/me
+ * @access Private (Requiere Auth)
+ * @returns {Object} 200 - Datos del usuario.
+ * @returns {Object} 404 - Usuario no encontrado.
+ * @returns {Object} 500 - Error interno del servidor.
+ */
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const userId = req.userId || req.session?.userId;
@@ -128,6 +170,16 @@ router.get('/me', requireAuth, async (req, res) => {
 // SEGURIDAD: este endpoint NO acepta sesión por cookie para evitar CSRF.
 // Requiere explícitamente un Bearer token en el header Authorization
 // (como hace el cliente móvil de Capacitor y la SPA web).
+/**
+ * @description Elimina permanentemente la cuenta del usuario autenticado y todos sus datos asociados.
+ * Requiere Bearer token explícito (no acepta cookies para prevenir CSRF).
+ * @route DELETE /api/auth/account
+ * @access Private (Requiere Auth por Token)
+ * @returns {Object} 200 - Mensaje de éxito.
+ * @returns {Object} 401 - No autenticado o token inválido.
+ * @returns {Object} 404 - Usuario no encontrado.
+ * @returns {Object} 500 - Error interno del servidor.
+ */
 router.delete('/account', async (req, res) => {
   try {
     // 1) Autenticación SOLO por Bearer token (no cookies) — anti-CSRF
@@ -203,6 +255,18 @@ router.delete('/account', async (req, res) => {
   }
 });
 
+/**
+ * @description Actualiza los datos del perfil del usuario autenticado.
+ * @route PUT /api/auth/update
+ * @access Private (Requiere Auth)
+ * @param {string} [req.body.username] - Nuevo nombre de usuario.
+ * @param {string} [req.body.phone] - Nuevo teléfono.
+ * @param {string} [req.body.document] - Nuevo documento de identidad.
+ * @param {string} [req.body.address] - Nueva dirección.
+ * @returns {Object} 200 - Éxito con los datos actualizados del usuario.
+ * @returns {Object} 404 - Usuario no encontrado.
+ * @returns {Object} 500 - Error interno del servidor.
+ */
 router.put('/update', requireAuth, async (req, res) => {
   try {
     const userId = req.userId || req.session?.userId;

@@ -1,10 +1,24 @@
+/**
+ * @fileoverview Proveedor de contexto para la autenticación de usuarios.
+ * Gestiona el estado de la sesión, persistencia en almacenamiento local y validación con el backend.
+ */
+
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { Capacitor } from '@capacitor/core'
 import api from '../api'
 import { storageGet, storageSet, storageRemove, StorageKeys } from '../utils/storage'
 
+/**
+ * Contexto de autenticación.
+ * @type {React.Context}
+ */
 const AuthContext = createContext(null)
 
+/**
+ * Intenta parsear una cadena JSON de forma segura.
+ * @param {string|null} raw - Cadena JSON a parsear.
+ * @returns {Object|null} Objeto parseado o null si falla.
+ */
 const tryParse = (raw) => {
   try { return raw ? JSON.parse(raw) : null } catch { return null }
 }
@@ -15,21 +29,39 @@ const tryParse = (raw) => {
 const cachedUser  = tryParse(storageGet(StorageKeys.USER))
 const cachedToken = storageGet(StorageKeys.AUTH_TOKEN)
 
+/**
+ * Proveedor que envuelve la aplicación para proveer el estado de autenticación.
+ * @param {Object} props - Propiedades del componente.
+ * @param {React.ReactNode} props.children - Componentes hijos.
+ * @returns {JSX.Element}
+ */
 export function AuthProvider({ children }) {
+  /** @type {[Object|null, Function]} Estado del usuario actual */
   const [user,         setUser]         = useState(cachedUser)
+  /** @type {[boolean, Function]} Indica si se está inicializando/validando la sesión */
   const [initializing, setInitializing] = useState(!cachedUser && !!cachedToken)
+  /** @type {[boolean, Function]} Indica si hay una operación de carga en curso (login/register) */
   const [loading,      setLoading]      = useState(false)
+  /** @type {[string|null, Function]} Mensaje de error de la última operación */
   const [error,        setError]        = useState(null)
 
+  /** @type {React.MutableRefObject<number>} Marca de tiempo de la última actividad del usuario */
   const lastActiveRef   = useRef(Date.now())
+  /** @type {React.MutableRefObject<boolean>} Indica si hay una validación de token en curso */
   const isValidatingRef = useRef(false)
+  /** @type {React.MutableRefObject<boolean>} Referencia mutable del estado de autenticación */
   const isLoggedInRef   = useRef(!!cachedUser)
 
+  /** @type {boolean} Indica si el usuario está autenticado */
   const isAuthenticated = !!user
+  /** @type {boolean} Indica si el usuario tiene rol de administrador */
   const isAdmin         = user?.role === 'admin'
+  /** @type {boolean} Indica si el usuario tiene rol de repartidor */
   const isDriver        = user?.role === 'driver'
 
-  // ─── Limpiar sesión ────────────────────────────────────────────────────
+  /**
+   * Limpia los datos de la sesión del estado y del almacenamiento local.
+   */
   const clearSession = useCallback(() => {
     setUser(null)
     isLoggedInRef.current = false
@@ -37,7 +69,11 @@ export function AuthProvider({ children }) {
     storageRemove(StorageKeys.AUTH_TOKEN)
   }, [])
 
-  // ─── Guardar sesión ────────────────────────────────────────────────────
+  /**
+   * Guarda los datos de la sesión en el estado y en el almacenamiento local.
+   * @param {Object} u - Datos del usuario.
+   * @param {string} [token] - Token JWT.
+   */
   const saveSession = useCallback((u, token) => {
     setUser(u)
     isLoggedInRef.current = true
@@ -45,7 +81,13 @@ export function AuthProvider({ children }) {
     if (token) storageSet(StorageKeys.AUTH_TOKEN, token)
   }, [])
 
-  // ─── Login ─────────────────────────────────────────────────────────────
+  /**
+   * Inicia sesión con correo y contraseña.
+   * @async
+   * @param {string} email
+   * @param {string} password
+   * @returns {Promise<{success: boolean, user?: Object, error?: string}>}
+   */
   const login = async (email, password) => {
     setLoading(true)
     setError(null)
@@ -65,7 +107,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─── Register ──────────────────────────────────────────────────────────
+  /**
+   * Registra un nuevo usuario.
+   * @async
+   * @param {Object} userData - Datos del usuario a registrar.
+   * @returns {Promise<{success: boolean, user?: Object, error?: string}>}
+   */
   const register = async (userData) => {
     setLoading(true)
     setError(null)
@@ -82,13 +129,20 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─── Logout ────────────────────────────────────────────────────────────
+  /**
+   * Cierra la sesión del usuario actual.
+   * @async
+   */
   const logout = async () => {
     try { await api.post('/api/auth/logout') } catch {}
     clearSession()
   }
 
-  // ─── Eliminar cuenta (Apple App Store guideline 5.1.1(v)) ─────────────
+  /**
+   * Elimina la cuenta del usuario autenticado.
+   * Cumple con las directrices de la Apple App Store 5.1.1(v).
+   * @async
+   */
   const deleteAccount = async () => {
     await api.delete('/api/auth/account')
     clearSession()
@@ -178,10 +232,6 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  // No hay interceptor de 401 global.
-  // La sesión solo se cierra con logout() explícito del usuario.
-  // Los errores 401 en rutas individuales no cierran la sesión.
-
   return (
     <AuthContext.Provider value={{
       user, loading, error, initializing,
@@ -193,6 +243,11 @@ export function AuthProvider({ children }) {
   )
 }
 
+/**
+ * Hook para acceder al contexto de autenticación.
+ * @returns {Object} Datos y funciones de autenticación.
+ * @throws {Error} Si se usa fuera de un AuthProvider.
+ */
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')

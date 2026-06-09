@@ -1,5 +1,16 @@
+/**
+ * @fileoverview Servicio de extracción de direcciones.
+ * Este servicio se encarga de identificar y extraer direcciones de envío en EE. UU. (Texas/DFW) 
+ * a partir de mensajes de texto, enlaces de Google Maps y coordenadas GPS.
+ * Utiliza patrones de expresiones regulares para validar y limpiar las direcciones.
+ */
+
 class AddressExtractorService {
   constructor() {
+    /**
+     * Sufijos comunes de calles para identificar direcciones.
+     * @type {string[]}
+     */
     this.streetSuffixes = [
       'street', 'st', 'avenue', 'ave', 'av', 'road', 'rd', 'drive', 'dr',
       'lane', 'ln', 'boulevard', 'blvd', 'way', 'court', 'ct',
@@ -8,12 +19,20 @@ class AddressExtractorService {
       'run', 'path', 'pass', 'pike', 'square', 'sq', 'crescent', 'cres'
     ];
 
+    /**
+     * Indicadores de unidades (apartamentos, suites, etc.).
+     * @type {string[]}
+     */
     this.unitIndicators = [
       'apt', 'apartment', 'unit', 'suite', 'ste', '#',
       'floor', 'fl', 'building', 'bldg', 'room', 'rm',
       'space', 'spc', 'lot', 'trlr', 'trailer'
     ];
 
+    /**
+     * Abreviaturas de estados de EE. UU.
+     * @type {Object<string, string>}
+     */
     this.stateAbbreviations = {
       'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
       'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
@@ -30,8 +49,16 @@ class AddressExtractorService {
       'wisconsin': 'WI', 'wyoming': 'WY'
     };
 
+    /**
+     * Set de abreviaturas de estados para búsqueda rápida.
+     * @type {Set<string>}
+     */
     this.stateAbbrSet = new Set(Object.values(this.stateAbbreviations));
 
+    /**
+     * Lista de ciudades conocidas, principalmente en Texas.
+     * @type {string[]}
+     */
     this.knownCities = [
       'dallas', 'fort worth', 'arlington', 'garland', 'irving', 'plano',
       'mesquite', 'richardson', 'carrollton', 'grand prairie', 'denton',
@@ -51,6 +78,10 @@ class AddressExtractorService {
     ];
 
     // Patrones que SIEMPRE descartan el mensaje (anclados — nunca contienen direcciones)
+    /**
+     * Patrones de rechazo estricto que descartan mensajes sin dirección.
+     * @type {RegExp[]}
+     */
     this.hardRejectPatterns = [
       /^(ok|si|no|yes|gracias|listo|perfecto|bueno|bien|hola|claro|que|como|cuando|donde|por|para|dale|va|genial|excelente|entendido)$/i,
       /^(quiero|necesito|tengo|puedo|puede|cuanto|cuesta|precio|pago|cobro|deposito|transferencia|zelle|venmo|cash|tarjeta)$/i,
@@ -81,6 +112,10 @@ class AddressExtractorService {
     // Patrones "suaves" — solo se aplican cuando NO hay señal clara de dirección
     // (número de calle + sufijo/ciudad). Un mensaje con "pedido" Y "219 curtiss st"
     // es una dirección válida y no debe descartarse.
+    /**
+     * Patrones de rechazo suave para mensajes que podrían contener direcciones.
+     * @type {RegExp[]}
+     */
     this.softRejectPatterns = [
       /orden|pedido|servicio|producto|cotizacion/i,
       /descuento|promocion|oferta|especial/i,
@@ -91,6 +126,10 @@ class AddressExtractorService {
     // Mantener nonAddressPatterns como alias para compatibilidad interna
     this.nonAddressPatterns = this.hardRejectPatterns;
 
+    /**
+     * Patrones conversacionales que indican mensajes comunes.
+     * @type {RegExp[]}
+     */
     this.conversationalPatterns = [
       /\bpero\b/i, /\baunque\b/i, /\bsin embargo\b/i,
       /\btrabajo cerca\b/i, /\btrabajo en\b/i, /\bvoy a\b/i,
@@ -99,6 +138,10 @@ class AddressExtractorService {
       /\bme queda\b/i, /\bcerca de\b/i, /\bcerca aqui\b/i
     ];
 
+    /**
+     * Patrones para identificar enlaces de Google Maps.
+     * @type {RegExp[]}
+     */
     this.googleMapsPatterns = [
       /maps\.app\.goo\.gl\/\S+/i,
       /maps\.google\.com\/\S+/i,
@@ -107,6 +150,12 @@ class AddressExtractorService {
     ];
   }
 
+  /**
+   * Extrae un enlace de Google Maps del texto del mensaje.
+   * @description Busca patrones conocidos de URLs de Google Maps.
+   * @param {string} messageText - El texto del mensaje.
+   * @returns {string|null} El enlace encontrado o null.
+   */
   extractGoogleMapsLink(messageText) {
     if (!messageText) return null;
     for (const pattern of this.googleMapsPatterns) {
@@ -116,6 +165,12 @@ class AddressExtractorService {
     return null;
   }
 
+  /**
+   * Determina si un mensaje es predominantemente conversacional.
+   * @description Evalúa la longitud y la presencia de patrones conversacionales.
+   * @param {string} text - El texto a evaluar.
+   * @returns {boolean} Verdadero si es conversacional.
+   */
   isConversationalMessage(text) {
     const wordCount = text.split(/\s+/).length;
     if (wordCount < 8) return false;
@@ -129,6 +184,12 @@ class AddressExtractorService {
     return false;
   }
 
+  /**
+   * Verifica si el texto contiene una dirección con una ciudad o estado conocido.
+   * @description Busca un número seguido de una ciudad de la lista o una abreviatura de estado.
+   * @param {string} text - El texto a evaluar.
+   * @returns {boolean} Verdadero si contiene ciudad o estado.
+   */
   hasAddressWithCity(text) {
     const lowerText = text.toLowerCase();
     // Acepta número al inicio O después de un prefijo de unidad (Apt X, Unit X, #X)
@@ -150,9 +211,13 @@ class AddressExtractorService {
     return hasCity || hasState;
   }
 
-  // Elimina prefijo de unidad al inicio si va antes del número de calle.
-  // Ej: "Apt 14 4608 Columbia av" → "4608 Columbia av, Apt 14"
-  // Devuelve el texto normalizado para que empiece con el número de calle.
+  /**
+   * Normaliza prefijos de unidad al inicio del texto.
+   * @description Reubica el prefijo de unidad al final si aparece antes del número de calle.
+   * @param {string} text - El texto a normalizar.
+   * @returns {string} El texto normalizado.
+   * @private
+   */
   _normalizeUnitPrefix(text) {
     // Patrón: (Apt|Unit|Suite|#) <identificador> <número_calle> <resto>
     const m = text.match(/^(apt|apartment|unit|suite|ste|#)\s*([\w\d]+)\s+(\d{2,5}\s+.+)/i);
@@ -164,6 +229,12 @@ class AddressExtractorService {
     return `${rest}, ${unitLabel} ${unitNum}`;
   }
 
+  /**
+   * Extrae una dirección de un mensaje individual.
+   * @description Aplica filtros de rechazo, normalización y validación de formato.
+   * @param {string} messageText - El texto del mensaje.
+   * @returns {string|null} La dirección extraída o null.
+   */
   extractAddressFromMessage(messageText) {
     if (!messageText || messageText.length < 8 || messageText.length > 300) return null;
 
@@ -213,10 +284,13 @@ class AddressExtractorService {
     return null;
   }
 
-  // Intenta extraer una dirección combinando mensajes consecutivos del mismo
-  // remitente en una ventana deslizante. Útil cuando el cliente envía la
-  // dirección en partes separadas (ej. "818 w centerville" / "Apt 140" / "Garland").
-  // Los mensajes se esperan en cualquier orden; se procesan en orden cronológico.
+  /**
+   * Extrae una dirección combinando mensajes consecutivos.
+   * @description Utiliza una ventana deslizante para encontrar direcciones fragmentadas.
+   * @param {Object[]} incomingMessages - Lista de mensajes entrantes.
+   * @param {number} [windowSize=4] - Tamaño de la ventana de mensajes.
+   * @returns {Object|null} Objeto con la dirección y los índices de los fragmentos, o null.
+   */
   extractAddressFromMessageSlices(incomingMessages, windowSize = 4) {
     // Respond.io devuelve mensajes más recientes primero — invertir para orden cronológico
     const chronological = [...incomingMessages].reverse();
@@ -239,14 +313,22 @@ class AddressExtractorService {
     return null;
   }
 
-  // Detecta frases como "la misma dirección", "misma dir", "same address as", etc.
+  /**
+   * Identifica referencias a "la misma dirección" en el texto.
+   * @param {string} text - El texto a evaluar.
+   * @returns {boolean} Verdadero si es una referencia a la misma dirección.
+   */
   isSameAddressReference(text) {
     if (!text) return false;
     return /\b(la misma|misma dir(?:eccion)?|same address|igual direcci[oó]n|la misma de|la misma que|same as|misma de las|misma que las|misma que antes|la de siempre|usa la misma|use the same)\b/i.test(text);
   }
 
-  // Como extractAddressFromMessage pero sin softRejectPatterns y con longitud mayor.
-  // Usado para clientes mayoristas cuyos mensajes mezclan listas de productos y dirección.
+  /**
+   * Extrae una dirección de mensajes de clientes mayoristas.
+   * @description Similar a extractAddressFromMessage pero permite mayor longitud y no usa filtros suaves.
+   * @param {string} text - El texto del mensaje.
+   * @returns {string|null} La dirección extraída o null.
+   */
   extractAddressFromWholesaleMessage(text) {
     if (!text || text.length < 8 || text.length > 600) return null;
 
@@ -284,9 +366,13 @@ class AddressExtractorService {
     return null;
   }
 
-  // Variante para mayoristas: escanea TODOS los mensajes en orden cronológico,
-  // devuelve la dirección MÁS RECIENTE (el último mensaje puede cambiarla),
-  // detecta referencias "la misma dirección" y las resuelve con existingAddress.
+  /**
+   * Escanea una conversación mayorista para extraer la dirección más reciente.
+   * @description Detecta referencias a "la misma dirección", ubicaciones GPS y enlaces de Google Maps.
+   * @param {Object[]} messages - Lista de mensajes de la conversación.
+   * @param {string} [existingAddress=null] - Dirección guardada previamente.
+   * @returns {Object|null} Objeto con la dirección o datos de ubicación encontrados, o null.
+   */
   extractAddressFromWholesaleConversation(messages, existingAddress = null) {
     const tsOf = (msg) => {
       const raw = msg.createdAt || msg.timestamp || 0;
@@ -359,16 +445,24 @@ class AddressExtractorService {
     return null;
   }
 
-  // Detecta si un texto describe la dirección PROPIA del negocio (ej. "La
-  // direccion de nuestro Negocio es: ...", "atendemos de 8am a 1pm"). Se usa
-  // para NO confundir la ubicación del local con la dirección de entrega del
-  // cliente cuando el agente la envía en un mensaje saliente.
+  /**
+   * Detecta si un texto describe la dirección propia del negocio.
+   * @description Evita confundir la ubicación del local con la dirección de entrega del cliente.
+   * @param {string} text - El texto a evaluar.
+   * @returns {boolean} Verdadero si es la dirección del negocio.
+   */
   isBusinessOwnAddress(text) {
     if (!text) return false;
     const businessAddressPattern = /(?:nuestro|nuestra)\s+(?:negocio|empresa|tienda|local|oficina|domicilio)|(?:estamos|somos|nos\s+encontramos)\s+ubicados?|de\s+nuestro|del\s+negocio|de\s+la\s+empresa|atendemos\s+de|nuestras?\s+instalaciones|direcci[oó]n\s+de\s+nuestro/i;
     return businessAddressPattern.test(text);
   }
 
+  /**
+   * Extrae una dirección de una conversación completa.
+   * @description Analiza mensajes entrantes y salientes para encontrar la dirección más reciente.
+   * @param {Object[]} messages - Lista de mensajes de la conversación.
+   * @returns {Object|null} Objeto con la dirección, messageId y timestamp, o null.
+   */
   extractAddressFromConversation(messages) {
     // Recoger todos los candidatos con su timestamp para que gane el más reciente.
     // Se analizan mensajes entrantes (cliente) Y salientes (agente confirmando
@@ -428,6 +522,11 @@ class AddressExtractorService {
     return null;
   }
 
+  /**
+   * Limpia el texto de la dirección eliminando prefijos comunes.
+   * @param {string} text - El texto de la dirección.
+   * @returns {string} La dirección limpia.
+   */
   cleanAddress(text) {
     let address = text.trim();
 
@@ -443,6 +542,12 @@ class AddressExtractorService {
     return address;
   }
 
+  /**
+   * Valida el formato de una dirección.
+   * @description Verifica la presencia de un número de calle y un sufijo válido.
+   * @param {string} address - La dirección a validar.
+   * @returns {boolean} Verdadero si el formato es válido.
+   */
   validateAddressFormat(address) {
     if (!address || address.length < 8) return false;
 
@@ -459,6 +564,11 @@ class AddressExtractorService {
     return true;
   }
 
+  /**
+   * Extrae el código ZIP de una dirección.
+   * @param {string} address - La dirección.
+   * @returns {string|null} El código ZIP de 5 dígitos o null.
+   */
   extractZipFromAddress(address) {
     if (!address) return null;
 
@@ -466,6 +576,11 @@ class AddressExtractorService {
     return zipMatch ? zipMatch[1] : null;
   }
 
+  /**
+   * Extrae los componentes completos de una dirección (ZIP, ciudad, estado).
+   * @param {string} address - La dirección completa.
+   * @returns {Object} Objeto con fullAddress, zip, city y state.
+   */
   extractFullAddressComponents(address) {
     const zip = this.extractZipFromAddress(address);
 
