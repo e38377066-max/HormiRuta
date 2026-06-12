@@ -11,6 +11,7 @@ import { Loader } from '@googlemaps/js-api-loader'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../api'
 import './DispatchMap.css'
+import RoutePrintView from './RoutePrintView'
 
 /**
  * Configuración visual de los estados de las órdenes.
@@ -178,6 +179,7 @@ export default function DispatchMap() {
   const [editOrderError, setEditOrderError] = useState('')
   const [driverCommissions, setDriverCommissions] = useState({})
   const [savingDriverCommission, setSavingDriverCommission] = useState(null)
+  const [printRouteData, setPrintRouteData] = useState(null)
   const [favorites, setFavorites] = useState([])
   const [loadingFavorites, setLoadingFavorites] = useState(false)
   const [showAddFav, setShowAddFav] = useState(false)
@@ -2194,6 +2196,26 @@ export default function DispatchMap() {
                     </span>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <span className={`dr-status ${route.status}`}>{route.status === 'assigned' ? 'Asignada' : route.status === 'draft' ? 'Borrador' : route.status}</span>
+                      <button
+                        className="dbtn outline small"
+                        style={{ padding: '2px 7px', fontSize: 12 }}
+                        title="Imprimir / Exportar ruta"
+                        onClick={async () => {
+                          let stops = routeStops[route.id]
+                          if (!stops || stops.length === 0) {
+                            try {
+                              const res = await api.get(`/api/dispatch/routes/${route.id}/detail`)
+                              stops = res.data.route?.stops || res.data.stops || route.route_stops || []
+                              setRouteStops(prev => ({ ...prev, [route.id]: stops }))
+                            } catch {
+                              stops = route.route_stops || []
+                            }
+                          }
+                          setPrintRouteData({ route, stops, driverName })
+                        }}
+                      >
+                        <span className="material-icons" style={{ fontSize: 14 }}>print</span>
+                      </button>
                       {isAdmin && (
                         <button
                           className="dbtn outline small"
@@ -3114,6 +3136,15 @@ export default function DispatchMap() {
             </div>
           </div>
         </div>
+      )}
+
+      {printRouteData && (
+        <RoutePrintView
+          route={printRouteData.route}
+          stops={printRouteData.stops}
+          driverName={printRouteData.driverName}
+          onClose={() => setPrintRouteData(null)}
+        />
       )}
     </div>
   )
