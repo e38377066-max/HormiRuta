@@ -1144,9 +1144,29 @@ class PollingService {
               mediaDescription = `[Audio transcrito]: ${transcription}`;
               console.log(`[Polling] Audio de ${contact.firstName} transcrito: "${transcription.substring(0, 60)}..."`);
             } else {
+              console.log(`[Polling] No se pudo transcribir audio de ${contact.firstName}`);
+              if (useAutomaticMode) {
+                try {
+                  const chatbot = new ChatbotService(userId, settings, isTestMode);
+                  await chatbot.sendMessage(contact.id, '🎤 Recibí tu nota de voz, pero no pude escucharla bien. ¿Puedes escribirme tu mensaje? 😊');
+                } catch (e) {
+                  console.error('[Polling] Error enviando respuesta a audio fallido:', e.message);
+                }
+                return;
+              }
               messageText = '[El cliente envió un mensaje de voz]';
             }
           } else {
+            console.log(`[Polling] Audio de ${contact.firstName} sin URL — sin transcripción`);
+            if (useAutomaticMode) {
+              try {
+                const chatbot = new ChatbotService(userId, settings, isTestMode);
+                await chatbot.sendMessage(contact.id, '🎤 Recibí tu nota de voz, pero no pude escucharla bien. ¿Puedes escribirme tu mensaje? 😊');
+              } catch (e) {
+                console.error('[Polling] Error enviando respuesta a audio sin URL:', e.message);
+              }
+              return;
+            }
             messageText = '[El cliente envió un mensaje de voz]';
           }
         }

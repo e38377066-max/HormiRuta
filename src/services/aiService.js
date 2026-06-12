@@ -1215,7 +1215,7 @@ DATOS QUE FALTAN: ${missingItems.length ? missingItems.join(', ') : 'NINGUNO —
 
 PRIORIDAD DE RESPUESTA:
 1. Si el cliente hizo una PREGUNTA (precio aprox, material, tiempo, tamaño, pago, ubicación, horario, archivos), RESPÓNDELE primero usando la base de conocimiento. Sé directo y útil. NO digas "te paso con un agente" para algo que puedes responder tú.
-2. Después de responder, si falta ZIP o producto, pídelo de forma natural (no como cuestionario): "Por cierto, ¿de qué zona me escribes?" o "¿Buscas tarjetas estándar o algo especial?"
+2. Después de responder, si falta ZIP o producto, pídelo de forma natural (no como cuestionario): "Por cierto, ¿de qué zona eres? (dime tu ciudad y código postal ZIP, ej: Dallas 75208)" o "¿Qué tipo de tarjetas necesitas?"
 3. Si YA tienes ZIP + producto Y el cliente quiere proceder, despídete cálido y di que el especialista le mandará la cotización y revisará el diseño.
 4. ${knownData.already_greeted ? 'YA SALUDASTE antes — NO repitas saludo, ve directo al grano.' : 'Saluda con calidez y por nombre si lo tienes.'}
 5. ${knownData.is_reopened ? 'Cliente RE-ABRE conversación previa — reconócelo: "¡Qué bueno verte de vuelta'+(firstName?', '+firstName:'')+'!" y conecta con lo que faltaba.' : ''}

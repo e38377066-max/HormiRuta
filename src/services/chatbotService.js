@@ -63,6 +63,68 @@ class ChatbotService {
     }
   }
 
+  // ==================== PRECIOS DINÁMICOS ====================
+
+  /**
+   * Devuelve los paquetes de tarjetas desde settings.product_prices.
+   * Si no hay precios configurados, usa los valores predeterminados.
+   * @returns {Object} Mapa qty → { price, deposit }
+   */
+  getCardPackages() {
+    const prices = this.settings?.product_prices;
+    if (Array.isArray(prices) && prices.length > 0) {
+      const packages = {};
+      for (const entry of prices) {
+        const match = (entry.product || '').match(/\b(\d{3,5})\b/);
+        if (match) {
+          const qty = parseInt(match[1], 10);
+          if (entry.price) {
+            packages[qty] = {
+              price: entry.price,
+              deposit: entry.deposit || null,
+            };
+          }
+        }
+      }
+      if (Object.keys(packages).length > 0) return packages;
+    }
+    return {
+      500:  { price: '$60',  deposit: null },
+      1000: { price: '$70',  deposit: null },
+      2500: { price: '$120', deposit: '$40' },
+      5000: { price: '$140', deposit: '$50' },
+    };
+  }
+
+  /**
+   * Genera el texto de menú de paquetes a partir del mapa de paquetes.
+   * @param {Object} packages
+   * @returns {string}
+   */
+  buildPackageMenuText(packages) {
+    return Object.entries(packages)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([qty, pkg]) => {
+        const icon = pkg.deposit ? '✨' : '🔹';
+        const depositNote = pkg.deposit ? ` (depósito ${pkg.deposit})` : '';
+        return `${icon} *${qty} tarjetas* — ${pkg.price}${depositNote}`;
+      }).join('\n');
+  }
+
+  /**
+   * Genera el texto de packageInfo para el prompt de IA.
+   * @returns {string}
+   */
+  buildPackageInfoText() {
+    const packages = this.getCardPackages();
+    return Object.entries(packages)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([qty, pkg]) => {
+        const depositNote = pkg.deposit ? ` con depósito de ${pkg.deposit}` : ' (pago en entrega)';
+        return `${qty} tarjetas = ${pkg.price}${depositNote}`;
+      }).join(', ');
+  }
+
   // ==================== UTILIDADES DE ENVÍO ====================
 
   /**
@@ -2379,7 +2441,8 @@ class ChatbotService {
     );
 
     if (approved) {
-      const msg1 = 'Me indica cuántas desea ordenar 🃏\n\n💳 Paquetes disponibles de Tarjetas:\n\n🔹 500 tarjetas — $60\n🔹 1000 tarjetas — $70\n✨ 2500 tarjetas — $120 (depósito $40)\n✨ 5000 tarjetas — $140 (depósito $50)';
+      const _pkgs = this.getCardPackages();
+      const msg1 = `Me indica cuántas desea ordenar 🃏\n\n💳 Paquetes disponibles de Tarjetas:\n\n${this.buildPackageMenuText(_pkgs)}`;
       await this.sendMessage(contact.id, msg1);
       await this.updateConversationState(contact.id, { state: 'closing_quantity' });
       await this.addComment(contact.id, `[Bot] Cliente aprobó pedido. Preguntando cantidad.`);
@@ -2414,7 +2477,7 @@ class ChatbotService {
 
     // Si el cliente se está corrigiendo pero no menciona cantidad, volver a preguntar
     if (this.isClosingCorrection(lower) && !/\d/.test(lower)) {
-      const remindMsg = 'Sin problema 😊 ¿Cuántas tarjetas desea ordenar?\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70\n✨ *2500 tarjetas* — $120 (depósito $40)\n✨ *5000 tarjetas* — $140 (depósito $50)';
+      const remindMsg = `Sin problema 😊 ¿Cuántas tarjetas desea ordenar?\n\n${this.buildPackageMenuText(this.getCardPackages())}`;
       await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'closing_quantity_correction_prompt' };
     }
@@ -2438,12 +2501,7 @@ class ChatbotService {
       }
     }
 
-    const PACKAGES = {
-      500:  { price: '$60',  deposit: null },
-      1000: { price: '$70',  deposit: null },
-      2500: { price: '$120', deposit: '$40' },
-      5000: { price: '$140', deposit: '$50' },
-    };
+    const PACKAGES = this.getCardPackages();
 
     if (PACKAGES[quantity]) {
       const pkg = PACKAGES[quantity];
@@ -2513,7 +2571,7 @@ class ChatbotService {
     } else {
       // Cantidad no estándar o pregunta de precio — usar IA para responder naturalmente
       try {
-        const packageInfo = '500 tarjetas = $60 (pago en entrega), 1000 tarjetas = $70 (pago en entrega), 2500 tarjetas = $120 con depósito de $40, 5000 tarjetas = $140 con depósito de $50';
+        const packageInfo = this.buildPackageInfoText();
         const aiMessages = [
           {
             role: 'system',
@@ -2544,7 +2602,7 @@ No repitas los precios en formato de lista — responde conversacionalmente.`
       }
 
       // Fallback si la IA falla
-      const remindMsg = 'Claro 😊 Contamos con estos paquetes:\n\n🔹 *500 tarjetas* — $60\n🔹 *1000 tarjetas* — $70\n✨ *2500 tarjetas* — $120 (depósito $40)\n✨ *5000 tarjetas* — $140 (depósito $50)\n\n¿Cuál le gustaría ordenar?';
+      const remindMsg = `Claro 😊 Contamos con estos paquetes:\n\n${this.buildPackageMenuText(this.getCardPackages())}\n\n¿Cuál le gustaría ordenar?`;
       await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'closing_quantity_remind' };
     }
