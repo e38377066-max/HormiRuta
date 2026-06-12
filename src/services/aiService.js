@@ -954,6 +954,11 @@ ${name ? `Su nombre es ${name}.` : ''}
 Mensaje del cliente: "${lastMessage || 'Hola'}"
 Hazle saber que es un placer volver a atenderlo y pregúntale en qué lo puedes ayudar hoy.`,
 
+      direct_order_ask_zip: `El cliente llegó directamente preguntando por ${product || 'un producto'}. Ya sabe lo que quiere.
+${name ? `Nombre: ${name}` : ''}
+${campaignNote || ''}
+Confirma brevemente que puedes ayudarlo con ${product || 'eso'} y pídele su ciudad y código postal (ZIP) para verificar cobertura. Ejemplo de ZIP: 75208. Sé breve y amable (2 líneas máx).`,
+
       ask_zip_no_info: `El cliente aún no tiene información sobre nuestros servicios. Dile de forma amigable que para ayudarlo necesitas verificar si tienen cobertura en su zona.
 Pídele su código postal (ZIP) de 5 dígitos. Menciona un ejemplo como 75208 para que sepa el formato.
 ${name ? `Nombre del cliente: ${name}` : ''}

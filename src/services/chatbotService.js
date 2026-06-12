@@ -1143,7 +1143,7 @@ class ChatbotService {
     // usando el perfil del cliente, el estilo de los agentes y las lecciones aprobadas.
     // Bypass de la máquina de estados rígida.
     // ====================================================================
-    if (this.settings?.conversational_mode && this.ai.isAvailable && convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && !convState.agent_active) {
+    if (this.settings?.conversational_mode && this.ai.isAvailable && convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && convState.state !== 'awaiting_prior_info' && !convState.agent_active) {
       const convResult = await this.handleConversational(contact, messageText, convState);
       if (convResult) return convResult;
       // Si falló (parsing, API), cae al state machine como respaldo
@@ -1388,12 +1388,8 @@ class ChatbotService {
           }
           if (foundReferral) break;
         }
-
-        // Escanear también el primer mensaje saliente (snippet de Respond.io)
-        if (isOutgoing && !campaignResult) {
-          const msgText = String(m.body?.text || m.text || m.body || '');
-          campaignResult = this._parseCampaignFromText(msgText);
-        }
+        // NO escanear mensajes salientes — el historial del bot puede contener precios
+        // de sesiones anteriores y contaminar la detección de la campaña actual.
       }
 
       let productResult = null;
@@ -1485,29 +1481,42 @@ class ChatbotService {
     // ─── DETECCIÓN TEMPRANA DE CAMPAÑA (anuncios FB) ─────────────────────────
     // Se extrae producto Y precio de campaña ANTES de cualquier routing para que
     // todos los handlers descendientes (handleDirectOrderRequest, etc.) accedan.
+    // IMPORTANTE: siempre re-detectar desde el mensaje entrante, nunca usar el
+    // valor guardado en context_data porque puede ser de una sesión anterior con
+    // un precio de campaña distinto (ej: sesión anterior $65, ahora $80).
     let adInfo = { product: null, campaign: null, price: null };
     if (isFromFacebookAd) {
-      if (convState.context_data?.ad_campaign) {
-        adInfo = { product: null, campaign: convState.context_data.ad_campaign, price: convState.context_data.ad_price };
-      } else {
-        adInfo = await this.extractAdInfo(contact);
-        if (adInfo.campaign || adInfo.product) {
-          const updatedCtx = { ...(convState.context_data || {}), ad_campaign: adInfo.campaign, ad_price: adInfo.price };
-          await this.updateConversationState(contact.id, { context_data: updatedCtx });
-          convState = { ...convState, context_data: updatedCtx };
-        }
+      adInfo = await this.extractAdInfo(contact);
+      if (adInfo.campaign || adInfo.product) {
+        const updatedCtx = { ...(convState.context_data || {}), ad_campaign: adInfo.campaign, ad_price: adInfo.price };
+        await this.updateConversationState(contact.id, { context_data: updatedCtx });
+        convState = { ...convState, context_data: updatedCtx };
       }
     }
 
     // ─── DETECCIÓN DE PEDIDO DIRECTO ─────────────────────────────────────────
     // Si el cliente ya menciona un producto específico desde el primer mensaje,
-    // no hay que hacerle el flujo completo — ya sabe lo que quiere.
-    // IMPORTANTE: en el estado inicial usamos solo palabras clave (sin IA) para
-    // evitar falsos positivos donde el AI alucina un producto en mensajes que
-    // en realidad son datos de contacto, saludos o información general.
+    // confirmar el producto y pedir ciudad + ZIP en vez de asignar de inmediato.
+    // Esto permite el flujo de cobertura antes de pasar al agente.
     const directProduct = await this.parseProductSelection(messageText, true);
     if (directProduct && !directProduct.isOther) {
-      return await this.handleDirectOrderRequest(contact, messageText, directProduct, customerName, convState);
+      const adParams = this.getAdCampaignParams(convState);
+      const confirmMsg = await this.getAIMsg(
+        'direct_order_ask_zip',
+        { customerName, product: directProduct.name, ...adParams },
+        `¡Perfecto! ${directProduct.name} 😊\n\nPara verificar si tenemos cobertura en tu zona, ¿me puedes dar tu ciudad y código postal (ZIP)? Por ejemplo: Dallas 75208 📍`
+      );
+      await this.sendMessage(contact.id, confirmMsg);
+      await this.updateConversationState(contact.id, {
+        state: 'awaiting_zip',
+        selected_product: directProduct.name,
+        has_prior_info: true,
+        greeting_sent: true,
+        awaiting_response: 'zip_code'
+      });
+      await this.addTrackingTag(contact.id, `Producto_${directProduct.name}`);
+      await this.addComment(contact.id, `[Bot] Cliente llegó con producto: ${directProduct.name}. Pidiendo ciudad+ZIP.`);
+      return { handled: true, action: 'direct_product_ask_zip', product: directProduct.name };
     }
     // ─────────────────────────────────────────────────────────────────────────
 
