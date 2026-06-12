@@ -23,7 +23,7 @@ class AIService {
     this.apiKey = apiKey;
     this.settings = settings || {};
     this.isAvailable = !!apiKey;
-    this.model = 'gpt-4o-mini';
+    this.model = 'gpt-4o';
     this.userId = userId;
     this._memoriesCache = null;
     this._memoriesCacheAt = 0;
@@ -130,7 +130,7 @@ class AIService {
     if (!this.isAvailable) return null;
     try {
       const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         max_tokens: 100,
         messages: [{
           role: 'user',
