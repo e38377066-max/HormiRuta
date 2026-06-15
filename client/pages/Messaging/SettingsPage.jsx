@@ -126,8 +126,7 @@ export default function SettingsPage() {
     product_prices: []
   })
   const [hasExistingToken, setHasExistingToken] = useState(false)
-  const [newPrice, setNewPrice] = useState({ product: '', description: '', price: '', deposit: '', notes: '' })
-  const [addingPrice, setAddingPrice] = useState(false)
+  const [priceImportError, setPriceImportError] = useState('')
 
   const attentionModes = [
     { label: t('settings.attention.modes.automatic'), value: 'automatic' },
@@ -512,35 +511,79 @@ export default function SettingsPage() {
   }
 
   /**
-   * Añade un nuevo precio de producto a la lista.
-   */
-  const handleAddPrice = () => {
-    if (!newPrice.product.trim() || !newPrice.price.trim()) return
-    const entry = { ...newPrice, id: Date.now() }
-    setForm(prev => ({ ...prev, product_prices: [...(prev.product_prices || []), entry] }))
-    setNewPrice({ product: '', description: '', price: '', deposit: '', notes: '' })
-    setAddingPrice(false)
-  }
-
-  /**
    * Elimina un precio de producto por su ID.
-   * @param {number} id - El ID de la entrada de precio.
    */
   const handleDeletePrice = (id) => {
     setForm(prev => ({ ...prev, product_prices: (prev.product_prices || []).filter(p => p.id !== id) }))
   }
 
-  /**
-   * Actualiza un campo específico de una entrada de precio.
-   * @param {number} id - El ID de la entrada de precio.
-   * @param {string} field - El campo a actualizar.
-   * @param {any} value - El nuevo valor.
-   */
-  const handleUpdatePrice = (id, field, value) => {
-    setForm(prev => ({
-      ...prev,
-      product_prices: (prev.product_prices || []).map(p => p.id === id ? { ...p, [field]: value } : p)
-    }))
+  const handleExportPricesCSV = () => {
+    const BOM = '\uFEFF'
+    const header = ['Producto', 'Descripcion', 'Precio', 'Deposito', 'Notas']
+    const rows = (form.product_prices || []).map(p => [
+      p.product || '', p.description || '', p.price || '', p.deposit || '', p.notes || ''
+    ])
+    const csv = BOM + [header, ...rows]
+      .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url
+    a.download = `lista-precios-bot-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportPricesCSV = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPriceImportError('')
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const text  = ev.target.result
+        const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+        if (lines.length < 2) { setPriceImportError('El archivo no tiene filas de datos.'); return }
+        const splitLine = (line) => {
+          const res = []; let cur = ''; let inQ = false
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i]
+            if (ch === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++ } else inQ = !inQ }
+            else if (ch === ',' && !inQ) { res.push(cur); cur = '' }
+            else cur += ch
+          }
+          res.push(cur); return res
+        }
+        const headers = splitLine(lines[0]).map(h =>
+          h.trim().toLowerCase()
+           .replace(/\s+/g,'_')
+           .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+        )
+        const COL = {
+          producto:'product', descripcion:'description', precio:'price',
+          deposito:'deposit', notas:'notes',
+          product:'product', description:'description', price:'price',
+          deposit:'deposit', notes:'notes'
+        }
+        const imported = []
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim(); if (!line) continue
+          const vals = splitLine(line)
+          const obj = { id: Date.now() + i }
+          headers.forEach((h, idx) => { const key = COL[h]; if (key) obj[key] = (vals[idx] || '').trim() })
+          if (!obj.product) continue
+          imported.push(obj)
+        }
+        if (!imported.length) { setPriceImportError('No se encontraron filas válidas con columna "Producto".'); return }
+        setForm(prev => ({ ...prev, product_prices: imported }))
+        setPriceImportError('')
+        e.target.value = ''
+      } catch (err) {
+        setPriceImportError('Error al leer el archivo: ' + err.message)
+      }
+    }
+    reader.readAsText(file, 'UTF-8')
   }
 
   const tabs = [
@@ -1579,173 +1622,97 @@ export default function SettingsPage() {
                 Precios de Productos
               </h3>
               <p className="description">
-                Configura los precios reales de tus productos. El bot los usará para responder a los clientes con información exacta cuando pregunten por precios.
+                Configura los precios que el bot usará para responder a los clientes. Edítalos en Excel y súbelos aquí — los cambios aplican al guardar la configuración.
               </p>
 
-              {(form.product_prices || []).length === 0 && !addingPrice && (
-                <div style={{textAlign: 'center', padding: '32px', color: '#666', background: '#1a1a1a', borderRadius: '8px', marginBottom: '16px'}}>
-                  <span className="material-icons" style={{fontSize: '48px', marginBottom: '8px', display: 'block', color: '#333'}}>price_change</span>
-                  <p style={{margin: 0}}>Todavía no hay precios configurados.</p>
-                  <p style={{margin: '4px 0 0', fontSize: '13px', color: '#555'}}>Agrega los paquetes que manejas para que el bot los comparta con los clientes.</p>
+              {/* Toolbar Excel */}
+              <div style={{display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap'}}>
+                <label
+                  style={{display: 'flex', alignItems: 'center', gap: '6px', background: '#1a3a2a', border: '1px solid #4ade80', borderRadius: '8px', padding: '9px 16px', color: '#4ade80', cursor: 'pointer', fontSize: '13px', fontWeight: 600}}
+                >
+                  <span className="material-icons" style={{fontSize: '18px'}}>upload_file</span>
+                  Importar desde Excel / CSV
+                  <input type="file" accept=".csv,.txt" onChange={handleImportPricesCSV} style={{display: 'none'}} />
+                </label>
+
+                {(form.product_prices || []).length > 0 && (
+                  <button
+                    onClick={handleExportPricesCSV}
+                    style={{display: 'flex', alignItems: 'center', gap: '6px', background: '#1a2a3a', border: '1px solid #60a5fa', borderRadius: '8px', padding: '9px 16px', color: '#60a5fa', cursor: 'pointer', fontSize: '13px', fontWeight: 600}}
+                  >
+                    <span className="material-icons" style={{fontSize: '18px'}}>download</span>
+                    Exportar / Editar en Excel
+                  </button>
+                )}
+
+                {(form.product_prices || []).length === 0 && (
+                  <span style={{fontSize: '12px', color: '#555'}}>
+                    Descarga la plantilla, llénala en Excel y súbela aquí.
+                  </span>
+                )}
+              </div>
+
+              {/* Error de importación */}
+              {priceImportError && (
+                <div style={{display: 'flex', alignItems: 'center', gap: '8px', background: '#2a1a1a', border: '1px solid #ef4444', borderRadius: '8px', padding: '10px 14px', color: '#ef4444', fontSize: '13px', marginBottom: '12px'}}>
+                  <span className="material-icons" style={{fontSize: '18px'}}>error_outline</span>
+                  {priceImportError}
                 </div>
               )}
 
+              {/* Estado vacío */}
+              {(form.product_prices || []).length === 0 && (
+                <div style={{textAlign: 'center', padding: '32px', color: '#666', background: '#1a1a1a', borderRadius: '8px', marginBottom: '16px'}}>
+                  <span className="material-icons" style={{fontSize: '48px', marginBottom: '8px', display: 'block', color: '#333'}}>price_change</span>
+                  <p style={{margin: 0}}>Todavía no hay precios configurados.</p>
+                  <p style={{margin: '4px 0 0', fontSize: '13px', color: '#555'}}>
+                    Crea tu lista en Excel con las columnas:<br/>
+                    <strong style={{color: '#aaa'}}>Producto, Descripcion, Precio, Deposito, Notas</strong>
+                  </p>
+                </div>
+              )}
+
+              {/* Tabla de precios (solo lectura) */}
               {(form.product_prices || []).length > 0 && (
-                <div style={{marginBottom: '16px', overflowX: 'auto'}}>
-                  <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '14px'}}>
+                <div style={{overflowX: 'auto', marginBottom: '8px'}}>
+                  <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '13.5px'}}>
                     <thead>
-                      <tr style={{borderBottom: '2px solid #333'}}>
-                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Producto</th>
-                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Descripción / Cantidad</th>
-                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Precio</th>
-                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Depósito</th>
-                        <th style={{textAlign: 'left', padding: '8px 10px', color: '#aaa', fontWeight: 600}}>Notas</th>
-                        <th style={{padding: '8px 10px'}}></th>
+                      <tr style={{background: '#111', borderBottom: '2px solid #333'}}>
+                        <th style={{textAlign: 'left', padding: '9px 12px', color: '#aaa', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.4px'}}>Producto</th>
+                        <th style={{textAlign: 'left', padding: '9px 12px', color: '#aaa', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.4px'}}>Descripción / Cant.</th>
+                        <th style={{textAlign: 'left', padding: '9px 12px', color: '#aaa', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.4px'}}>Precio</th>
+                        <th style={{textAlign: 'left', padding: '9px 12px', color: '#aaa', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.4px'}}>Depósito</th>
+                        <th style={{textAlign: 'left', padding: '9px 12px', color: '#aaa', fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.4px'}}>Notas</th>
+                        <th style={{padding: '9px 12px', width: '36px'}}></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(form.product_prices || []).map((item) => (
-                        <tr key={item.id} style={{borderBottom: '1px solid #222'}}>
-                          <td style={{padding: '8px 10px'}}>
-                            <input
-                              type="text"
-                              value={item.product}
-                              onChange={(e) => handleUpdatePrice(item.id, 'product', e.target.value)}
-                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#fff', padding: '4px 8px', width: '100%', minWidth: '100px'}}
-                            />
-                          </td>
-                          <td style={{padding: '8px 10px'}}>
-                            <input
-                              type="text"
-                              value={item.description}
-                              onChange={(e) => handleUpdatePrice(item.id, 'description', e.target.value)}
-                              placeholder="ej. 500 piezas"
-                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#fff', padding: '4px 8px', width: '100%', minWidth: '110px'}}
-                            />
-                          </td>
-                          <td style={{padding: '8px 10px'}}>
-                            <input
-                              type="text"
-                              value={item.price}
-                              onChange={(e) => handleUpdatePrice(item.id, 'price', e.target.value)}
-                              placeholder="ej. $60"
-                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#4ade80', fontWeight: 600, padding: '4px 8px', width: '100%', minWidth: '70px'}}
-                            />
-                          </td>
-                          <td style={{padding: '8px 10px'}}>
-                            <input
-                              type="text"
-                              value={item.deposit}
-                              onChange={(e) => handleUpdatePrice(item.id, 'deposit', e.target.value)}
-                              placeholder="ej. $30"
-                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#f59e0b', padding: '4px 8px', width: '100%', minWidth: '70px'}}
-                            />
-                          </td>
-                          <td style={{padding: '8px 10px'}}>
-                            <input
-                              type="text"
-                              value={item.notes}
-                              onChange={(e) => handleUpdatePrice(item.id, 'notes', e.target.value)}
-                              placeholder="opcional"
-                              style={{background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', color: '#aaa', padding: '4px 8px', width: '100%', minWidth: '100px'}}
-                            />
-                          </td>
-                          <td style={{padding: '8px 10px'}}>
+                      {(form.product_prices || []).map((item, idx) => (
+                        <tr key={item.id} style={{borderBottom: '1px solid #1e1e1e', background: idx % 2 === 0 ? '#151515' : '#111'}}>
+                          <td style={{padding: '9px 12px', color: '#fff', fontWeight: 600}}>{item.product}</td>
+                          <td style={{padding: '9px 12px', color: '#aaa'}}>{item.description || '—'}</td>
+                          <td style={{padding: '9px 12px', color: '#4ade80', fontWeight: 700}}>{item.price || '—'}</td>
+                          <td style={{padding: '9px 12px', color: '#f59e0b'}}>{item.deposit || '—'}</td>
+                          <td style={{padding: '9px 12px', color: '#64748b', fontSize: '12px'}}>{item.notes || ''}</td>
+                          <td style={{padding: '9px 12px'}}>
                             <button
                               onClick={() => handleDeletePrice(item.id)}
-                              style={{background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '4px'}}
+                              style={{background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px', opacity: .6, transition: 'opacity .15s'}}
+                              onMouseOver={e => e.currentTarget.style.opacity = 1}
+                              onMouseOut={e => e.currentTarget.style.opacity = .6}
+                              title="Eliminar fila"
                             >
-                              <span className="material-icons" style={{fontSize: '20px'}}>delete</span>
+                              <span className="material-icons" style={{fontSize: '18px'}}>delete</span>
                             </button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  <p style={{margin: '8px 0 0', fontSize: '12px', color: '#444'}}>
+                    {(form.product_prices || []).length} producto{(form.product_prices || []).length !== 1 ? 's' : ''} · Para editar, exporta a Excel, modifica y vuelve a importar.
+                  </p>
                 </div>
-              )}
-
-              {addingPrice && (
-                <div style={{background: '#1a2a1a', border: '1px solid #4ade80', borderRadius: '8px', padding: '16px', marginBottom: '16px'}}>
-                  <p style={{color: '#4ade80', fontWeight: 600, margin: '0 0 12px', fontSize: '14px'}}>Nuevo precio</p>
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 2fr', gap: '8px', marginBottom: '12px'}}>
-                    <div>
-                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Producto *</label>
-                      <input
-                        type="text"
-                        value={newPrice.product}
-                        onChange={(e) => setNewPrice(prev => ({...prev, product: e.target.value}))}
-                        placeholder="ej. Tarjetas"
-                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#fff', padding: '6px 10px', boxSizing: 'border-box'}}
-                      />
-                    </div>
-                    <div>
-                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Descripción / Cantidad</label>
-                      <input
-                        type="text"
-                        value={newPrice.description}
-                        onChange={(e) => setNewPrice(prev => ({...prev, description: e.target.value}))}
-                        placeholder="ej. 500 piezas"
-                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#fff', padding: '6px 10px', boxSizing: 'border-box'}}
-                      />
-                    </div>
-                    <div>
-                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Precio *</label>
-                      <input
-                        type="text"
-                        value={newPrice.price}
-                        onChange={(e) => setNewPrice(prev => ({...prev, price: e.target.value}))}
-                        placeholder="ej. $60"
-                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#4ade80', fontWeight: 600, padding: '6px 10px', boxSizing: 'border-box'}}
-                      />
-                    </div>
-                    <div>
-                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Depósito</label>
-                      <input
-                        type="text"
-                        value={newPrice.deposit}
-                        onChange={(e) => setNewPrice(prev => ({...prev, deposit: e.target.value}))}
-                        placeholder="ej. $30"
-                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#f59e0b', padding: '6px 10px', boxSizing: 'border-box'}}
-                      />
-                    </div>
-                    <div>
-                      <label style={{fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '4px'}}>Notas</label>
-                      <input
-                        type="text"
-                        value={newPrice.notes}
-                        onChange={(e) => setNewPrice(prev => ({...prev, notes: e.target.value}))}
-                        placeholder="opcional"
-                        style={{width: '100%', background: '#111', border: '1px solid #444', borderRadius: '6px', color: '#aaa', padding: '6px 10px', boxSizing: 'border-box'}}
-                      />
-                    </div>
-                  </div>
-                  <div style={{display: 'flex', gap: '8px'}}>
-                    <button
-                      onClick={handleAddPrice}
-                      disabled={!newPrice.product.trim() || !newPrice.price.trim()}
-                      style={{background: '#4ade80', color: '#000', border: 'none', borderRadius: '6px', padding: '8px 18px', fontWeight: 600, cursor: 'pointer', fontSize: '14px', opacity: (!newPrice.product.trim() || !newPrice.price.trim()) ? 0.5 : 1}}
-                    >
-                      Agregar
-                    </button>
-                    <button
-                      onClick={() => { setAddingPrice(false); setNewPrice({ product: '', description: '', price: '', deposit: '', notes: '' }) }}
-                      style={{background: '#333', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 18px', cursor: 'pointer', fontSize: '14px'}}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!addingPrice && (
-                <button
-                  onClick={() => setAddingPrice(true)}
-                  style={{display: 'flex', alignItems: 'center', gap: '6px', background: '#1a2a1a', border: '1px dashed #4ade80', borderRadius: '8px', padding: '10px 16px', color: '#4ade80', cursor: 'pointer', fontSize: '14px', fontWeight: 500}}
-                >
-                  <span className="material-icons" style={{fontSize: '18px'}}>add</span>
-                  Agregar precio
-                </button>
               )}
             </div>
 
