@@ -1101,68 +1101,6 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
 });
 
 /**
- * PUT /orders/bulk-billing
- * @description Actualiza precios (order_cost, deposit_amount) de múltiples órdenes en masa.
- * @route PUT /orders/bulk-billing
- * @access requireAdmin
- */
-router.put('/orders/bulk-billing', requireAdmin, async (req, res) => {
-  try {
-    const { updates } = req.body;
-    if (!Array.isArray(updates) || updates.length === 0) {
-      return res.status(400).json({ error: 'Se requiere un array de actualizaciones' });
-    }
-
-    const results = { updated: 0, skipped: 0, errors: [] };
-
-    for (const row of updates) {
-      const id = parseInt(row.id);
-      if (!id) { results.skipped++; continue; }
-
-      const order = await ValidatedAddress.findByPk(id);
-      if (!order) { results.skipped++; continue; }
-
-      const cost    = row.order_cost    != null && row.order_cost    !== '' ? parseFloat(row.order_cost)    : order.order_cost;
-      const deposit = row.deposit_amount != null && row.deposit_amount !== '' ? parseFloat(row.deposit_amount) : order.deposit_amount;
-
-      order.order_cost    = isNaN(cost)    ? null : cost;
-      order.deposit_amount = isNaN(deposit) ? null : deposit;
-
-      const c = order.order_cost    || 0;
-      const d = order.deposit_amount || 0;
-      order.total_to_collect = Math.max(0, c - d);
-
-      // Sync matching stop if the order belongs to a route
-      if (order.route_id) {
-        try {
-          const stops = await Stop.findAll({ where: { route_id: order.route_id } });
-          const matchStop = stops.find(s =>
-            s.unique_id === order.stop_unique_id ||
-            s.address   === order.validated_address
-          );
-          if (matchStop) {
-            matchStop.order_cost    = order.order_cost;
-            matchStop.deposit_amount = order.deposit_amount;
-            matchStop.total_to_collect = order.total_to_collect;
-            await matchStop.save();
-          }
-        } catch (stopErr) {
-          console.error('[bulk-billing] stop sync error:', stopErr.message);
-        }
-      }
-
-      await order.save();
-      results.updated++;
-    }
-
-    res.json({ success: true, ...results });
-  } catch (error) {
-    console.error('Error en bulk-billing:', error);
-    res.status(500).json({ error: 'Error al actualizar precios' });
-  }
-});
-
-/**
  * POST /routes
  * @description Crea una nueva ruta de despacho con órdenes y/o paradas favoritas asignadas.
  * @route POST /routes
