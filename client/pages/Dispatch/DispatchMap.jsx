@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import api from '../../api'
 import './DispatchMap.css'
 import RoutePrintView from './RoutePrintView'
+import BulkBillingModal from './BulkBillingModal'
 
 /**
  * Configuración visual de los estados de las órdenes.
@@ -180,6 +181,7 @@ export default function DispatchMap() {
   const [driverCommissions, setDriverCommissions] = useState({})
   const [savingDriverCommission, setSavingDriverCommission] = useState(null)
   const [printRouteData, setPrintRouteData] = useState(null)
+  const [showBulkBilling, setShowBulkBilling] = useState(false)
   const [favorites, setFavorites] = useState([])
   const [loadingFavorites, setLoadingFavorites] = useState(false)
   const [showAddFav, setShowAddFav] = useState(false)
@@ -1564,6 +1566,14 @@ export default function DispatchMap() {
                 <span className="material-icons" style={{ fontSize: 18 }}>
                   {diagnosingPickup ? 'hourglass_empty' : 'troubleshoot'}
                 </span>
+              </button>
+              <button
+                className="btn-add-manual-order"
+                onClick={() => setShowBulkBilling(true)}
+                title="Actualizar precios masivamente desde Excel"
+                style={{ background: '#16a34a' }}
+              >
+                <span className="material-icons" style={{ fontSize: 18 }}>table_chart</span>
               </button>
               <button className="btn-add-manual-order" onClick={openManualOrderModal} title={t('dispatch.audit.addManual')}>
                 <span className="material-icons">add</span>
@@ -3144,6 +3154,14 @@ export default function DispatchMap() {
           stops={printRouteData.stops}
           driverName={printRouteData.driverName}
           onClose={() => setPrintRouteData(null)}
+        />
+      )}
+
+      {showBulkBilling && (
+        <BulkBillingModal
+          orders={orders}
+          onClose={() => setShowBulkBilling(false)}
+          onSuccess={() => { fetchData(); setShowBulkBilling(false) }}
         />
       )}
     </div>
