@@ -442,6 +442,9 @@ class ChatbotService {
       }
 
       const messages = result.items;
+      // Mensajes de agente de más de 48 horas no silencian al bot — el cliente
+      // puede volver a escribir después de un ciclo de atención anterior.
+      const cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
       
       for (const msg of messages) {
         if (msg.traffic === 'outgoing' && msg.sender) {
@@ -449,13 +452,19 @@ class ChatbotService {
           const senderId = msg.sender.userId || '';
           
           if (senderSource === 'user') {
+            const msgTime = new Date(msg.createdAt || msg.timestamp || 0).getTime();
+
+            // Ignorar si es más viejo que 48h (ciclo anterior de atención)
+            if (msgTime < cutoff48h) {
+              continue;
+            }
+
             if (isReopened && cutoffTime) {
-              const msgTime = new Date(msg.createdAt || msg.timestamp || 0).getTime();
               if (msgTime < cutoffTime) {
                 continue;
               }
             }
-            console.log(`[Bot] Agente (userId: ${senderId}) ya respondio en conversacion ${contactId}`);
+            console.log(`[Bot] Agente (userId: ${senderId}) ya respondio en conversacion ${contactId} (hace ${Math.round((Date.now()-msgTime)/60000)} min)`);
             return { hasResponded: true, agentName: senderId };
           }
         }
@@ -482,12 +491,19 @@ class ChatbotService {
       }
 
       const messages = result.items;
-      
+      // Solo considerar interacciones del bot en las últimas 48 horas.
+      // Si el bot habló hace más tiempo, el cliente puede tener una nueva
+      // consulta y el bot debe responder normalmente.
+      const cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
+
       for (const msg of messages) {
         if (msg.traffic === 'outgoing' && msg.sender) {
           const senderSource = msg.sender.source || '';
           if (senderSource === 'bot' || senderSource === 'flow' || senderSource === 'automation') {
-            return true;
+            const msgTime = new Date(msg.createdAt || msg.timestamp || 0).getTime();
+            if (msgTime >= cutoff48h) {
+              return true;
+            }
           }
         }
       }
