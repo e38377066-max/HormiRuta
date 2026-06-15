@@ -186,8 +186,10 @@
 .rpv-col-pago   { width: 90px; }
 .rpv-col-status { width: 90px; }
 
-.rpv-highlight  { background: #eff6ff !important; }
-.rpv-to-collect { font-weight: 700; color: #1d4ed8; }
+.rpv-highlight                   { background: #eff6ff !important; }
+.rpv-table thead th.rpv-highlight { background: #1e3a8a !important; color: #fff; }
+.rpv-to-collect                  { font-weight: 700; color: #1d4ed8; }
+.rpv-table thead th.rpv-to-collect { color: #93c5fd; }
 .rpv-deposit    { color: #15803d; }
 
 .rpv-customer { font-weight: 600; color: #1e293b; }
