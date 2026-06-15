@@ -204,6 +204,21 @@ async function startServer() {
       } catch (e) {
         console.error('[Cleanup] Error inicial:', e.message);
       }
+
+      // Auto-arranque del bot al iniciar el servidor si está configurado y activo.
+      // Sin esto, cada reinicio del servidor apaga el bot hasta que alguien
+      // hace clic en "Iniciar" desde la UI.
+      // startPolling ya verifica internamente is_active y respond_api_token.
+      try {
+        const autoResult = await pollingService.startPolling(null, 30);
+        if (autoResult.success) {
+          console.log('[AutoStart] Bot iniciado correctamente al arrancar el servidor.');
+        } else {
+          console.log('[AutoStart] Bot no iniciado al arrancar:', autoResult.error);
+        }
+      } catch (e) {
+        console.error('[AutoStart] Error al intentar arrancar el bot:', e.message);
+      }
     })();
 
     // Inicia el aprendizaje periódico del estilo de los agentes (cada hora, primera vez a los 5 min)
