@@ -1176,12 +1176,19 @@ class ChatbotService {
       }
     }
 
+    // Determinar si estamos en el flujo de cierre estructurado.
+    // closing_approval → closing_quantity → closing_address → closing_deposit_verification → closing_complete
+    // Ningún modo libre (vendedor de imágenes ni conversacional) debe interferir aquí.
+    const isClosingState = convState.state?.startsWith('closing_');
+
     // ====================================================================
     // HANDLER DE IMAGEN CON INTELIGENCIA DE VENTAS
     // Si llegó una imagen analizada por IA, responder como vendedor:
     // mostrar catálogo filtrado, preguntar cantidad y siguiente paso.
+    // EXCLUIR flujo de cierre: en closing_deposit_verification la imagen
+    // es un comprobante Zelle y la maneja el state machine.
     // ====================================================================
-    if (imageAnalysis && convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && !convState.agent_active) {
+    if (imageAnalysis && !isClosingState && convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && !convState.agent_active) {
       const imgResult = await this.handleImageMessage(contact, messageText, imageAnalysis, convState);
       if (imgResult) return imgResult;
     }
@@ -1191,8 +1198,16 @@ class ChatbotService {
     // Si está activo, la IA conduce la conversación libremente como un vendedor humano,
     // usando el perfil del cliente, el estilo de los agentes y las lecciones aprobadas.
     // Bypass de la máquina de estados rígida.
+    //
+    // EXCLUIR estados del flujo de cierre: closing_* maneja el orden estructurado
+    // (cantidad → dirección → depósito → completado). La IA libre NO debe interferir.
     // ====================================================================
-    if (this.settings?.conversational_mode && this.ai.isAvailable && convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && convState.state !== 'awaiting_prior_info' && !convState.agent_active) {
+    if (this.settings?.conversational_mode && this.ai.isAvailable
+        && !isClosingState
+        && convState.state !== 'assigned'
+        && convState.state !== 'closed_no_coverage'
+        && convState.state !== 'awaiting_prior_info'
+        && !convState.agent_active) {
       const convResult = await this.handleConversational(contact, messageText, convState, imageUrl);
       if (convResult) return convResult;
       // Si falló (parsing, API), cae al state machine como respaldo
