@@ -1220,7 +1220,7 @@ Responde con JSON exacto:
    * @param {Object} options - Opciones que incluyen contact, messageText, recentMessages, convState, customerProfile y agentStyle.
    * @returns {Promise<Object|null>} Respuesta generada y datos extraídos.
    */
-  async generateConversationalReply({ contact, messageText, recentMessages = [], convState = {}, customerProfile = null, agentStyle = null }) {
+  async generateConversationalReply({ contact, messageText, recentMessages = [], convState = {}, customerProfile = null, agentStyle = null, imageUrl = null }) {
     if (!this.isAvailable) return null;
 
     try {
@@ -1312,10 +1312,22 @@ Responde con JSON exacto (sin markdown, sin explicaciones):
   "confidence": "alta|media|baja"
 }`;
 
+      // Si llegó imagen, usamos contenido multimodal para que GPT-4o la VEA directamente
+      const userContent = imageUrl
+        ? [
+            { type: 'text', text: userBlock },
+            { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } }
+          ]
+        : userBlock;
+
       const messages = [
         { role: 'system', content: sys },
-        { role: 'user', content: userBlock }
+        { role: 'user', content: userContent }
       ];
+
+      if (imageUrl) {
+        console.log(`[AI-Conv] Modo visión activado — imagen incluida en el prompt (${imageUrl.substring(0, 60)}...)`);
+      }
 
       const response = await this.callOpenAI(messages, 600);
       if (response.success) {

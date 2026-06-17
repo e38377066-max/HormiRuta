@@ -1193,7 +1193,7 @@ class ChatbotService {
     // Bypass de la máquina de estados rígida.
     // ====================================================================
     if (this.settings?.conversational_mode && this.ai.isAvailable && convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && convState.state !== 'awaiting_prior_info' && !convState.agent_active) {
-      const convResult = await this.handleConversational(contact, messageText, convState);
+      const convResult = await this.handleConversational(contact, messageText, convState, imageUrl);
       if (convResult) return convResult;
       // Si falló (parsing, API), cae al state machine como respaldo
       console.warn(`[Bot] Modo conversacional falló para ${contact.id}, usando state machine de respaldo`);
@@ -2507,7 +2507,7 @@ class ChatbotService {
    * @param {Object} convState - Estado de la conversación.
    * @returns {Promise<Object|null>} Resultado del procesamiento o null si falla.
    */
-  async handleConversational(contact, messageText, convState) {
+  async handleConversational(contact, messageText, convState, imageUrl = null) {
     try {
       // ── HANDOFF INMEDIATO: si ya tenemos ZIP + producto, asignar sin más preguntas ──
       if (convState.validated_zip && convState.selected_product) {
@@ -2549,14 +2549,15 @@ class ChatbotService {
       // el cliente lo menciona explícitamente y la IA lo extrae de su mensaje
       // (ver el bloque ext.product abajo).
 
-      // Llama a la IA conversacional
+      // Llama a la IA conversacional (con imagen si está disponible para visión real)
       const ai = await this.ai.generateConversationalReply({
         contact,
         messageText,
         recentMessages,
         convState,
         customerProfile,
-        agentStyle
+        agentStyle,
+        imageUrl
       });
 
       if (!ai || !ai.reply) return null;
