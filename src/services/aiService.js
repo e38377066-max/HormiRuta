@@ -93,14 +93,36 @@ class AIService {
    * @param {string} audioUrl - URL pública del archivo de audio.
    * @returns {Promise<string|null>} El texto transcrito o null si falla.
    */
-  async transcribeAudio(audioUrl) {
+  async transcribeAudio(audioUrl, respondToken = null) {
     if (!this.isAvailable) return null;
     try {
-      const audioResponse = await axios.get(audioUrl, { responseType: 'arraybuffer', timeout: 15000 });
+      // Descargar el audio. Si la URL pertenece a Respond.io, incluir el Bearer token.
+      const downloadHeaders = {};
+      if (respondToken && (audioUrl.includes('respond.io') || audioUrl.includes('storage.respond.io'))) {
+        downloadHeaders['Authorization'] = `Bearer ${respondToken}`;
+      }
+      const audioResponse = await axios.get(audioUrl, {
+        responseType: 'arraybuffer',
+        timeout: 20000,
+        headers: downloadHeaders
+      });
+
       const buffer = Buffer.from(audioResponse.data);
+      if (buffer.length < 100) {
+        console.warn('[AI-Audio] Buffer de audio demasiado pequeño — posible error de descarga');
+        return null;
+      }
+
+      // Determinar extensión y mimeType para Whisper
+      const contentType = audioResponse.headers['content-type'] || 'audio/ogg';
+      let filename = 'audio.ogg';
+      if (contentType.includes('mp4') || contentType.includes('m4a')) filename = 'audio.mp4';
+      else if (contentType.includes('mpeg') || contentType.includes('mp3')) filename = 'audio.mp3';
+      else if (contentType.includes('webm')) filename = 'audio.webm';
+      else if (contentType.includes('wav')) filename = 'audio.wav';
 
       const form = new FormData();
-      form.append('file', buffer, { filename: 'audio.ogg', contentType: audioResponse.headers['content-type'] || 'audio/ogg' });
+      form.append('file', buffer, { filename, contentType });
       form.append('model', 'whisper-1');
       form.append('language', 'es');
 
@@ -109,14 +131,15 @@ class AIService {
           ...form.getHeaders(),
           Authorization: `Bearer ${this.apiKey}`
         },
-        timeout: 30000
+        timeout: 40000
       });
 
       const transcription = response.data?.text?.trim();
-      console.log(`[AI-Audio] Transcripción: "${transcription?.substring(0, 80)}..."`);
+      console.log(`[AI-Audio] Transcripción exitosa (${buffer.length} bytes, ${filename}): "${transcription?.substring(0, 80)}..."`);
       return transcription || null;
     } catch (e) {
       console.error('[AI-Audio] Error transcribiendo audio:', e.message);
+      if (e.response?.data) console.error('[AI-Audio] Detalle:', JSON.stringify(e.response.data).substring(0, 200));
       return null;
     }
   }

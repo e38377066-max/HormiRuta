@@ -1132,19 +1132,33 @@ class PollingService {
       let mediaDescription = '';
 
       // --- Procesar audio (transcribir con Whisper) ---
-      if ((msgType === 'audio' || msgType === 'voice') && !messageText) {
-        const mediaUrl = message.message?.url || message.message?.attachment?.url;
+      // WhatsApp voz llega como 'audio', 'voice', o 'ptt' (push-to-talk).
+      // Respond.io también puede mandarlo como 'file' con mimeType de audio.
+      const mimeType = message.message?.mimeType || message.message?.attachment?.mimeType || '';
+      const isAudioType = msgType === 'audio' || msgType === 'voice' || msgType === 'ptt'
+        || (msgType === 'file' && mimeType.startsWith('audio/'));
+      if (isAudioType && !messageText) {
+        // Buscar la URL en todos los campos posibles del mensaje de Respond.io
+        const mediaUrl = message.message?.url
+          || message.message?.audioUrl
+          || message.message?.fileUrl
+          || message.message?.attachment?.url
+          || message.message?.file?.url
+          || null;
+        console.log(`[Polling] Audio de ${contact.firstName} detectado — tipo="${msgType}", mimeType="${mimeType}", url="${mediaUrl ? mediaUrl.substring(0, 60) + '...' : 'NO ENCONTRADA'}"`);
         if (mediaUrl) {
           const aiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
           if (aiKey) {
+            // Pasar el token de Respond.io para descargar el archivo por si la URL es privada
+            const respondToken = settings.respond_api_token || null;
             const ai = new AIService(aiKey, settings, userId);
-            const transcription = await ai.transcribeAudio(mediaUrl);
+            const transcription = await ai.transcribeAudio(mediaUrl, respondToken);
             if (transcription) {
               messageText = transcription;
               mediaDescription = `[Audio transcrito]: ${transcription}`;
-              console.log(`[Polling] Audio de ${contact.firstName} transcrito: "${transcription.substring(0, 60)}..."`);
+              console.log(`[Polling] Audio de ${contact.firstName} transcrito: "${transcription.substring(0, 80)}..."`);
             } else {
-              console.log(`[Polling] No se pudo transcribir audio de ${contact.firstName}`);
+              console.log(`[Polling] No se pudo transcribir audio de ${contact.firstName} — respondiendo para que escriba`);
               if (useAutomaticMode) {
                 try {
                   const chatbot = new ChatbotService(userId, settings, isTestMode);
@@ -1157,18 +1171,31 @@ class PollingService {
               messageText = '[El cliente envió un mensaje de voz]';
             }
           } else {
-            console.log(`[Polling] Audio de ${contact.firstName} sin URL — sin transcripción`);
+            console.log(`[Polling] Audio de ${contact.firstName}: sin clave OpenAI — no se puede transcribir`);
             if (useAutomaticMode) {
               try {
                 const chatbot = new ChatbotService(userId, settings, isTestMode);
                 await chatbot.sendMessage(contact.id, '🎤 Recibí tu nota de voz, pero no pude escucharla bien. ¿Puedes escribirme tu mensaje? 😊');
               } catch (e) {
-                console.error('[Polling] Error enviando respuesta a audio sin URL:', e.message);
+                console.error('[Polling] Error enviando respuesta a audio sin clave:', e.message);
               }
               return;
             }
             messageText = '[El cliente envió un mensaje de voz]';
           }
+        } else {
+          console.log(`[Polling] Audio de ${contact.firstName}: URL no encontrada en el mensaje — sin transcripción`);
+          console.log(`[Polling] Estructura del mensaje:`, JSON.stringify(message.message || {}).substring(0, 300));
+          if (useAutomaticMode) {
+            try {
+              const chatbot = new ChatbotService(userId, settings, isTestMode);
+              await chatbot.sendMessage(contact.id, '🎤 Recibí tu nota de voz, pero no pude escucharla bien. ¿Puedes escribirme tu mensaje? 😊');
+            } catch (e) {
+              console.error('[Polling] Error enviando respuesta a audio sin URL:', e.message);
+            }
+            return;
+          }
+          messageText = '[El cliente envió un mensaje de voz]';
         }
       }
 
