@@ -1575,29 +1575,32 @@ class ChatbotService {
       }
     }
 
-    // ─── DETECCIÓN DE LOGO / DISEÑO GRÁFICO ────────────────────────────────
-    // Si el cliente pide un logo, identidad visual o diseño gráfico, asignar
-    // directamente al agente sin empujar tarjetas u otros productos.
+    // ─── DETECCIÓN DE LOGO / BRANDING ──────────────────────────────────────
+    // Si el cliente pide un logo o imagen para su empresa, NO rechazar ni
+    // asignar de inmediato. Pivotar como vendedor: nuestros productos incluyen
+    // diseño personalizado (tarjetas, magnéticos, etc.) que sirven para
+    // establecer la identidad de su negocio.
     const logoKeywords = ['logo', 'logos', 'logotipo', 'logotipos', 'diseño de logo',
       'diseño empresarial', 'identidad visual', 'branding', 'isotipo', 'imagotipo'];
     const msgLower = messageText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (logoKeywords.some(k => msgLower.includes(k.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) {
-      const logoMsg = await this.getAIMsg(
-        'logo_design_request',
-        { customerName },
-        `¡Con gusto te ayudamos con tu logo${customerName ? ', ' + customerName : ''}! 🎨\n\n${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} que te atenderá con el diseño y todos los detalles 👨‍🎨`
+      const pivotMsg = await this.getAIMsg(
+        'logo_pivot_to_products',
+        { customerName, lastMessage: messageText },
+        `¡${customerName ? customerName + ', q' : 'Q'}ué buena idea darle imagen a tu negocio! 🎨\n\nAunque no hacemos logos por separado, en nuestras *tarjetas de presentación* y *magnéticos* el diseño va incluido — te creamos la imagen completa para tu empresa.\n\n¿Te gustaría ver algunas opciones?`
       );
-      await this.sendMessage(contact.id, logoMsg);
+      await this.sendMessage(contact.id, pivotMsg);
+      const productMenu = this.generateProductMenu();
+      await this.sendMessage(contact.id, productMenu);
       await this.updateConversationState(contact.id, {
-        state: 'assigned',
-        selected_product: 'Logo / Diseño',
+        state: 'awaiting_product_selection_with_info',
         has_prior_info: true,
-        greeting_sent: true
+        greeting_sent: true,
+        awaiting_response: 'product'
       });
-      await this.assignToDefaultAgent(contact.id);
-      await this.addTrackingTag(contact.id, 'Logo_Diseño');
-      await this.addComment(contact.id, `[Bot] Cliente solicitó diseño de logo. Asignado a agente. Mensaje: "${messageText}"`);
-      return { handled: true, action: 'logo_design_assigned' };
+      await this.addTrackingTag(contact.id, 'InteresLogo_Pivot');
+      await this.addComment(contact.id, `[Bot] Cliente pidió logo, bot pivotó a menú de productos con diseño incluido. Mensaje original: "${messageText}"`);
+      return { handled: true, action: 'logo_pivot_to_products' };
     }
     // ─────────────────────────────────────────────────────────────────────────
 

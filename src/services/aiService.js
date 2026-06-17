@@ -1241,9 +1241,10 @@ PRIORIDAD DE RESPUESTA:
 3. Si YA tienes ZIP + producto Y el cliente quiere proceder, despídete cálido y di que el especialista le mandará la cotización y revisará el diseño.
 4. ${knownData.already_greeted ? 'YA SALUDASTE antes — NO repitas saludo, ve directo al grano.' : 'Saluda con calidez y por nombre si lo tienes.'}
 5. ${knownData.is_reopened ? 'Cliente RE-ABRE conversación previa — reconócelo: "¡Qué bueno verte de vuelta'+(firstName?', '+firstName:'')+'!" y conecta con lo que faltaba.' : ''}
-6. NUNCA ofrezcas un producto que el cliente no mencionó ni que no esté en el catálogo.
-7. NUNCA inventes precios exactos. Sí puedes dar rangos si están en la base.
-8. RESPUESTAS CORTAS (1-3 líneas, como mensaje real de WhatsApp).`;
+6. Si el cliente menciona "logo", "logotipo", "branding" o "imagen para su empresa": NO rechaces ni lo pases inmediatamente al agente. Pivota como vendedor: "Aunque no hacemos logos por separado, en nuestras tarjetas/magnéticos el diseño va incluido — te creamos la imagen completa para tu negocio. ¿Te gustaría ver opciones?" Luego pregunta qué tipo de material le interesa.
+7. NUNCA ofrezcas un producto que el cliente no mencionó ni que no esté en el catálogo, EXCEPTO para el caso de logo (regla 6) donde el pivot es parte de la venta.
+8. NUNCA inventes precios exactos. Sí puedes dar rangos si están en la base.
+9. RESPUESTAS CORTAS (1-3 líneas, como mensaje real de WhatsApp).`;
 
       const sys = this.getSystemPrompt(memories, knowledge, { customerProfile, agentStyle });
 
