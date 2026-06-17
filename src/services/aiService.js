@@ -1197,15 +1197,27 @@ Responde con JSON exacto:
         })
         .join('\n');
 
-      const customerName = `${contact?.firstName || ''} ${contact?.lastName || ''}`.trim() || 'cliente';
-      const firstName = contact?.firstName?.trim() || null;
+      // Nombre limpio: solo primera palabra del firstName; si >12 chars es probablemente username
+      const rawFirst = (contact?.firstName || '').trim();
+      const firstWord = rawFirst.split(/\s+/)[0] || '';
+      const firstName = (firstWord.length > 0 && firstWord.length <= 12 && !/\d/.test(firstWord)) ? firstWord : null;
+      const customerName = firstName || 'cliente';
+
+      // Contexto del anuncio de Facebook (si aplica)
+      const adCampaign = convState?.context_data?.ad_campaign || null;
+      const adPrice = convState?.context_data?.ad_price || null;
+      const adDescription = convState?.context_data?.ad_product_description || null;
+
       const knownData = {
         zip: convState?.validated_zip || customerProfile?.zip_code || null,
         city: customerProfile?.city || null,
         product: convState?.selected_product || null,
         is_existing: !!convState?.is_existing_customer,
         is_reopened: !!convState?.is_reopened,
-        already_greeted: !!convState?.greeting_sent
+        already_greeted: !!convState?.greeting_sent,
+        ...(adCampaign ? { ad_campaign: adCampaign } : {}),
+        ...(adPrice ? { ad_price: adPrice } : {}),
+        ...(adDescription ? { ad_product_description: adDescription } : {})
       };
 
       // Lista explícita de qué falta y qué NO se debe preguntar
@@ -1215,6 +1227,8 @@ Responde con JSON exacto:
       const haveItems = [];
       if (knownData.zip) haveItems.push(`ZIP=${knownData.zip}`);
       if (knownData.product) haveItems.push(`producto=${knownData.product}`);
+      if (adPrice && adDescription) haveItems.push(`anuncio="${adDescription} por ${adPrice}" (cliente viene de este anuncio, NO preguntar tipo/cantidad — ya lo sabe)`);
+      else if (adPrice) haveItems.push(`precio_anuncio=${adPrice} (cliente viene de este anuncio, confirmar producto del anuncio)`);
 
       const objectivo = `OBJETIVO — actúa como vendedor humano de Area 862:
 

@@ -447,26 +447,34 @@ class ChatbotService {
       const cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
       
       for (const msg of messages) {
+        const msgTime = new Date(msg.createdAt || msg.timestamp || 0).getTime();
+
+        // Ignorar mensajes más viejos que 48h (ciclo anterior de atención)
+        if (msgTime < cutoff48h) continue;
+
+        if (isReopened && cutoffTime && msgTime < cutoffTime) continue;
+
         if (msg.traffic === 'outgoing' && msg.sender) {
           const senderSource = msg.sender.source || '';
           const senderId = msg.sender.userId || '';
           
           if (senderSource === 'user') {
-            const msgTime = new Date(msg.createdAt || msg.timestamp || 0).getTime();
-
-            // Ignorar si es más viejo que 48h (ciclo anterior de atención)
-            if (msgTime < cutoff48h) {
-              continue;
-            }
-
-            if (isReopened && cutoffTime) {
-              if (msgTime < cutoffTime) {
-                continue;
-              }
-            }
             console.log(`[Bot] Agente (userId: ${senderId}) ya respondio en conversacion ${contactId} (hace ${Math.round((Date.now()-msgTime)/60000)} min)`);
             return { hasResponded: true, agentName: senderId };
           }
+        }
+
+        // Detectar mensajes de actividad de asignación manual en Respond.io
+        // (cuando un agente asigna la conversación sin enviar un mensaje)
+        const activityText = msg.body?.text || msg.text || '';
+        if (
+          msgTime >= cutoff48h &&
+          activityText &&
+          /asign[oó]|assigned|reasign[oó]/i.test(activityText) &&
+          (!isReopened || !cutoffTime || msgTime >= cutoffTime)
+        ) {
+          console.log(`[Bot] Evento de asignación detectado en conversacion ${contactId}: "${activityText.substring(0, 80)}"`);
+          return { hasResponded: true, agentName: 'assignment_event' };
         }
       }
       
@@ -658,6 +666,21 @@ class ChatbotService {
     const sharedRatio = this.sharedLetterRatio(word, target);
     const combined = (levSimilarity + sharedRatio) / 2;
     return combined >= (threshold || 0.55);
+  }
+
+  /**
+   * Limpia el nombre del cliente para usarlo en mensajes.
+   * Usa solo la primera palabra del firstName. Si esa palabra tiene más de 12 caracteres
+   * o contiene dígitos (señales de que es un username/handle), devuelve null.
+   * @param {Object} contact - Contacto con firstName y lastName.
+   * @returns {string|null} Primer nombre limpio o null.
+   */
+  sanitizeCustomerName(contact) {
+    const raw = (contact?.firstName || '').trim();
+    if (!raw) return null;
+    const word = raw.split(/\s+/)[0];
+    if (word.length > 12 || /\d/.test(word)) return null;
+    return word;
   }
 
   /**
@@ -1119,7 +1142,7 @@ class ChatbotService {
 
     // Detectar frustración - pasar a agente inmediatamente
     if (await this.detectFrustration(messageText)) {
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       const frustMsg = await this.getAIMsg('frustrated', { customerName }, msgs.frustratedCustomer);
       await this.sendMessage(contact.id, frustMsg);
       await this.assignToDefaultAgent(contact.id);
@@ -1130,7 +1153,7 @@ class ChatbotService {
 
     // Verificar si conversación fue abandonada
     if (this.isConversationAbandoned(convState)) {
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       const abandonMsg = await this.getAIMsg('abandoned', { customerName, lastMessage: messageText }, msgs.abandonedConversation);
       await this.sendMessage(contact.id, abandonMsg);
       await this.updateConversationState(contact.id, { 
@@ -1529,7 +1552,7 @@ class ChatbotService {
     const isExistingFromDB = await this.checkIfExistingCustomer(contact);
     const isExisting = isExistingFromDB || convState.is_existing_customer || convState.is_reopened;
     const isFromFacebookAd = this.detectFacebookAdOrigin(contact);
-    const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+    const customerName = this.sanitizeCustomerName(contact);
 
     // ─── DETECCIÓN TEMPRANA DE CAMPAÑA (anuncios FB) ─────────────────────────
     // Se extrae producto Y precio de campaña ANTES de cualquier routing para que
@@ -1551,6 +1574,32 @@ class ChatbotService {
         convState = { ...convState, context_data: updatedCtx };
       }
     }
+
+    // ─── DETECCIÓN DE LOGO / DISEÑO GRÁFICO ────────────────────────────────
+    // Si el cliente pide un logo, identidad visual o diseño gráfico, asignar
+    // directamente al agente sin empujar tarjetas u otros productos.
+    const logoKeywords = ['logo', 'logos', 'logotipo', 'logotipos', 'diseño de logo',
+      'diseño empresarial', 'identidad visual', 'branding', 'isotipo', 'imagotipo'];
+    const msgLower = messageText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (logoKeywords.some(k => msgLower.includes(k.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) {
+      const logoMsg = await this.getAIMsg(
+        'logo_design_request',
+        { customerName },
+        `¡Con gusto te ayudamos con tu logo${customerName ? ', ' + customerName : ''}! 🎨\n\n${this.getHandoffText().charAt(0).toUpperCase() + this.getHandoffText().slice(1)} que te atenderá con el diseño y todos los detalles 👨‍🎨`
+      );
+      await this.sendMessage(contact.id, logoMsg);
+      await this.updateConversationState(contact.id, {
+        state: 'assigned',
+        selected_product: 'Logo / Diseño',
+        has_prior_info: true,
+        greeting_sent: true
+      });
+      await this.assignToDefaultAgent(contact.id);
+      await this.addTrackingTag(contact.id, 'Logo_Diseño');
+      await this.addComment(contact.id, `[Bot] Cliente solicitó diseño de logo. Asignado a agente. Mensaje: "${messageText}"`);
+      return { handled: true, action: 'logo_design_assigned' };
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ─── DETECCIÓN DE PEDIDO DIRECTO ─────────────────────────────────────────
     // Si el cliente ya menciona un producto específico desde el primer mensaje,
@@ -1579,9 +1628,23 @@ class ChatbotService {
     // ─────────────────────────────────────────────────────────────────────────
 
     // Si la conversación fue reabierta Y el cliente ya había elegido un
-    // producto en la sesión anterior, saltarse la selección de producto
-    // y pasar directo al flujo de cierre con ese producto.
+    // producto en la sesión anterior, verificar si un agente ya lo estaba
+    // atendiendo antes de lanzar el flujo de cierre automático.
     if (convState.is_reopened && convState.selected_product) {
+      // Comprobar si hay mensajes de agente recientes (sin límite de cutoff)
+      // para evitar que el bot dispare el flujo de cierre cuando el agente ya
+      // había tomado la conversación antes de que se cerrara/reabriera.
+      const agentWasActive = await this.hasAgentAlreadyResponded(contact.id, false, null);
+      if (agentWasActive.hasResponded) {
+        console.log(`[Bot] Conversacion reabierta pero agente ya atendio recientemente (${contact.id}). No se inicia flujo de cierre.`);
+        await this.updateConversationState(contact.id, {
+          agent_active: true,
+          last_agent_message_at: new Date(),
+          is_existing_customer: true,
+          state: 'assigned'
+        });
+        return { handled: false, reason: 'agent_handled_before_reopen' };
+      }
       console.log(`[Bot] Conversacion reabierta con producto ya elegido: "${convState.selected_product}" para ${contact.id}. Retomando flujo de cierre.`);
       return await this.startClosingFlow(contact, convState.selected_product);
     }
@@ -1710,7 +1773,7 @@ class ChatbotService {
 
   async handleAwaitingPriorInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
-    const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+    const customerName = this.sanitizeCustomerName(contact);
 
     // Si el cliente menciona un producto directamente, cortocircuitar el flujo
     const directProduct = await this.parseProductSelection(messageText);
@@ -1782,7 +1845,7 @@ class ChatbotService {
       }
       
       // Cliente YA tiene información - preguntar sobre diseño
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       const adParams = this.getAdCampaignParams(convState);
       const designQuestion = await this.getAIMsg(
         'product_selected_ask_design',
@@ -1802,7 +1865,7 @@ class ChatbotService {
       return { handled: true, action: 'product_selected_ask_design' };
     } else {
       // No entendió, mostrar menú de nuevo
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       const remindMsg = await this.getAIMsg('remind_product', { customerName, lastMessage: messageText }, msgs.remindProduct);
       await this.sendMessage(contact.id, remindMsg);
       const productMenu = this.generateProductMenu();
@@ -1821,7 +1884,7 @@ class ChatbotService {
   async handleAwaitingDesignInfo(contact, messageText, convState) {
     const msgs = this.getMessages();
     const hasDesign = this.parseDesignResponse(messageText);
-    const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+    const customerName = this.sanitizeCustomerName(contact);
 
     const ooh = !this.isWithinBusinessHours();
     const oohParams = ooh ? { outOfHours: true, businessHours: this.getBusinessHoursText() } : {};
@@ -1888,7 +1951,7 @@ class ChatbotService {
     if (isZipMessage || isCityMessage) {
       return await this.handleZipValidation(contact, messageText, convState);
     } else {
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       const remindMsg = await this.getAIMsg('remind_zip', { customerName, lastMessage: messageText }, msgs.remindZip);
       await this.sendMessage(contact.id, remindMsg);
       return { handled: true, action: 'remind_zip' };
@@ -1898,8 +1961,8 @@ class ChatbotService {
   async handleZipValidation(contact, messageText, convState) {
     const msgs = this.getMessages();
     const validation = await this.addressValidation.validateZipOrCity(messageText);
-    const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || 'Sin nombre';
-    const name = customerName !== 'Sin nombre' ? customerName : null;
+    const customerName = this.sanitizeCustomerName(contact);
+    const name = customerName || null;
     
     if (validation.valid) {
       const fallbackCoverage = msgs.hasCoverage
@@ -2016,7 +2079,7 @@ class ChatbotService {
     if (isZipMessage || isCityMessage) {
       return await this.handleZipValidation(contact, messageText, convState);
     } else {
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       const insistMsg = await this.getAIMsg(
         'remind_zip',
         { customerName, lastMessage: messageText },
@@ -2052,7 +2115,7 @@ class ChatbotService {
       
       // Obtener mensaje de información del producto
       const productInfo = this.getProductInfoMessage(product.name);
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       
       if (productInfo) {
         await this.sendMessage(contact.id, productInfo);
@@ -2074,7 +2137,7 @@ class ChatbotService {
       return { handled: true, action: 'product_info_sent' };
     } else {
       // No entendió - recordar menú
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       const remindMsg = await this.getAIMsg('remind_product', { customerName, lastMessage: messageText }, msgs.remindProduct);
       await this.sendMessage(contact.id, remindMsg);
       await this.sendMessage(contact.id, this.generateProductMenu());
@@ -2194,7 +2257,7 @@ class ChatbotService {
       
     } else {
       // No entendió, mostrar menú de nuevo
-      const customerName = `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || null;
+      const customerName = this.sanitizeCustomerName(contact);
       const remindMsg = await this.getAIMsg('remind_product', { customerName, lastMessage: messageText }, msgs.remindProduct);
       await this.sendMessage(contact.id, remindMsg);
       const productMenu = this.generateProductMenu();
@@ -2257,7 +2320,7 @@ class ChatbotService {
       // ── HANDOFF INMEDIATO: si ya tenemos ZIP + producto, asignar sin más preguntas ──
       if (convState.validated_zip && convState.selected_product) {
         console.log(`[Bot] Ya tiene ZIP (${convState.validated_zip}) y producto (${convState.selected_product}) — asignando directamente sin llamar IA`);
-        const customerName = `${contact.firstName || ''}`.trim() || null;
+        const customerName = this.sanitizeCustomerName(contact);
         const msgs = this.getMessages();
         const readyMsg = await this.getAIMsg('ready_to_assign', { customerName, product: convState.selected_product },
           `¡Perfecto${customerName ? ' ' + customerName : ''}! Te voy a conectar con nuestro especialista en ${convState.selected_product} para darte precios y ayudarte con el diseño. ¡En breve te atendemos! 😊`
