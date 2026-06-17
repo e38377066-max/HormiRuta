@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { usePlanner } from '../../layouts/PlannerLayout'
-import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking, openLocationSettings, requestLocationPermission } from '../../utils/capacitor'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 /**
@@ -38,7 +38,7 @@ export default function TripPlannerPage() {
   const lastEtaCalcRef = useRef(0)
   const lastEtaStopIdRef = useRef(null)
   const [userLocation, setUserLocation] = useState(null)
-  const [gpsError, setGpsError] = useState(null) // null | 'gps_disabled' | 'permission_denied'
+  const [gpsError, setGpsError] = useState(false)
   const [selectedPoint, setSelectedPoint] = useState(null)
   
   const [stops, setStops] = useState([])
@@ -382,20 +382,20 @@ export default function TripPlannerPage() {
       const pos = await getCurrentPosition()
       const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       setUserLocation(loc)
-      setGpsError(null)
+      setGpsError(false)
       mapInstanceRef.current?.setCenter(loc)
       reverseGeocode(loc)
       updateUserLocationMarker(loc)
     } catch (err) {
       console.error('Geolocation error:', err)
-      setGpsError(err.code === 'gps_disabled' ? 'gps_disabled' : 'permission_denied')
+      setGpsError(true)
     }
 
     const clearWatch = watchPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setUserLocation(loc)
-        setGpsError(null)
+        setGpsError(false)
         updateUserLocationMarker(loc, pos.coords.accuracy)
         if (pos.coords.speed != null && pos.coords.speed >= 0) {
           setCurrentSpeed(Math.round(pos.coords.speed * 3.6))
@@ -403,7 +403,7 @@ export default function TripPlannerPage() {
       },
       (err) => {
         console.error('Watch position error:', err)
-        setGpsError(err.code === 'gps_disabled' ? 'gps_disabled' : 'permission_denied')
+        setGpsError(true)
       },
       { maximumAge: 3000 }
     )
@@ -1657,23 +1657,10 @@ export default function TripPlannerPage() {
       <div className="map-section">
         <div id="trip-map" className="map-container" ref={mapRef}></div>
         
-        {gpsError === 'gps_disabled' && (
-          <div className="gps-error-banner" onClick={openLocationSettings}>
+        {gpsError && (
+          <div className="gps-error-banner" onClick={startLocationTracking}>
             <span className="material-icons">location_off</span>
-            <span>GPS apagado — toca para activarlo</span>
-          </div>
-        )}
-        {gpsError === 'permission_denied' && (
-          <div className="gps-error-banner" onClick={async () => {
-            const status = await requestLocationPermission()
-            if (status === 'granted') {
-              startLocationTracking()
-            } else {
-              openLocationSettings()
-            }
-          }}>
-            <span className="material-icons">location_off</span>
-            <span>Sin permiso de ubicación — toca para activar</span>
+            <span>GPS no disponible — toca para reintentar</span>
           </div>
         )}
 
