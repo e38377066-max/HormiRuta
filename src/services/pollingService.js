@@ -1172,20 +1172,22 @@ class PollingService {
         }
       }
 
-      // --- Procesar imágenes (describir con GPT-4o vision) ---
+      // --- Procesar imágenes (análisis de ventas con GPT-4o Vision) ---
       let incomingImageUrl = null;
+      let incomingImageAnalysis = null;
       if ((msgType === 'image' || msgType === 'sticker') && !messageText) {
         const mediaUrl = message.message?.url || message.message?.attachment?.url || message.message?.imageUrl;
         if (mediaUrl) {
-          incomingImageUrl = mediaUrl; // Guardamos la URL cruda para verificación de depósito
+          incomingImageUrl = mediaUrl;
           const aiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
           if (aiKey) {
             const ai = new AIService(aiKey, settings, userId);
-            const description = await ai.describeImage(mediaUrl);
-            if (description) {
-              messageText = `[El cliente envió una imagen: ${description}]`;
-              mediaDescription = `[Imagen analizada]: ${description}`;
-              console.log(`[Polling] Imagen de ${contact.firstName} descrita: "${description.substring(0, 60)}..."`);
+            const analysis = await ai.analyzeImageForSales(mediaUrl);
+            if (analysis) {
+              incomingImageAnalysis = analysis;
+              messageText = `[Imagen: ${analysis.description || 'sin descripción'}]`;
+              mediaDescription = `[Imagen analizada]: ${analysis.description || ''}${analysis.product ? ` | Producto: ${analysis.productLabel || analysis.product}` : ''}${analysis.businessType && analysis.businessType !== 'general' ? ` | Negocio: ${analysis.businessType}` : ''}`;
+              console.log(`[Polling] Imagen de ${contact.firstName} analizada: ref=${analysis.isDesignReference}, producto=${analysis.product}, negocio=${analysis.businessType}`);
             } else {
               messageText = '[El cliente envió una imagen]';
             }
@@ -1210,7 +1212,7 @@ class PollingService {
 
       if (useAutomaticMode) {
         const chatbot = new ChatbotService(userId, settings, isTestMode);
-        const result = await chatbot.processMessage(contact, messageText, incomingImageUrl);
+        const result = await chatbot.processMessage(contact, messageText, incomingImageUrl, incomingImageAnalysis);
         
         console.log(`[Chatbot] ${contact.firstName}: "${messageText.substring(0, 30)}..." -> ${result.action || result.reason || 'no_action'}`);
         

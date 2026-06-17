@@ -122,22 +122,38 @@ class AIService {
   }
 
   /**
-   * Describe una imagen usando GPT-4o Vision.
+   * Analiza una imagen con inteligencia de ventas usando GPT-4o Vision.
+   * Detecta si es un diseño de tarjeta/impreso de referencia, qué producto es,
+   * qué tipo de negocio se ve, y qué debería preguntar el vendedor a continuación.
    * @param {string} imageUrl - URL pública de la imagen.
-   * @returns {Promise<string|null>} Descripción breve de la imagen o null si falla.
+   * @returns {Promise<Object|null>} Objeto de análisis o null si falla.
    */
-  async describeImage(imageUrl) {
+  async analyzeImageForSales(imageUrl) {
     if (!this.isAvailable) return null;
     try {
       const response = await axios.post('https://api.openai.com/v1/chat/completions', {
         model: 'gpt-4o',
-        max_tokens: 100,
+        max_tokens: 300,
         messages: [{
           role: 'user',
           content: [
             {
               type: 'text',
-              text: 'Describe en 1-2 líneas en español qué muestra esta imagen para una imprenta: ¿diseño/logo, producto impreso, referencia visual u otro? Sé muy breve.'
+              text: `Eres el asistente de ventas de una imprenta (Area 862 Graphics). Analiza esta imagen y responde SOLO con JSON válido (sin markdown).
+
+Detecta:
+1. ¿Es un diseño de producto impreso que el cliente probablemente quiere pedir? (tarjeta de presentación, magnético para carro, post card, playera, sticker, flyer, u otro impreso)
+2. ¿Qué tipo de negocio se ve o se deduce? (cleaning, towing, landscaping, construction, electrical, restaurant, barber, auto, plumbing, painting, trucking, roofing, tax, insurance, church, daycare, photography, hvac, pest, notary, realestate, moving, general — si no se ve ninguno usa "general")
+3. ¿Es una referencia que el cliente quiere replicar o pedir algo similar?
+
+Devuelve SOLO este JSON:
+{
+  "isDesignReference": true/false,
+  "product": "tarjetas"|"magneticos"|"postcards"|"playeras"|"sticker"|"flyer"|"otro"|null,
+  "productLabel": "tarjetas de presentación"|"magnéticos"|"post cards"|"playeras"|"stickers"|"flyers"|"impreso"|null,
+  "businessType": "cleaning"|"towing"|etc (o "general" si no aplica, o null si la imagen no es de un negocio),
+  "description": "frase corta en español de qué muestra la imagen (máx 15 palabras)"
+}`
             },
             {
               type: 'image_url',
@@ -150,16 +166,38 @@ class AIService {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 20000
+        timeout: 25000
       });
 
-      const description = response.data?.choices?.[0]?.message?.content?.trim();
-      console.log(`[AI-Vision] Imagen descrita: "${description?.substring(0, 80)}..."`);
-      return description || null;
+      const raw = response.data?.choices?.[0]?.message?.content?.trim();
+      if (!raw) return null;
+
+      let parsed;
+      try {
+        const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch {
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (!m) return { isDesignReference: false, product: null, businessType: null, description: raw.slice(0, 80) };
+        try { parsed = JSON.parse(m[0]); } catch { return null; }
+      }
+
+      console.log(`[AI-Vision] Análisis: isRef=${parsed.isDesignReference}, product=${parsed.product}, biz=${parsed.businessType}`);
+      return parsed;
     } catch (e) {
-      console.error('[AI-Vision] Error describiendo imagen:', e.message);
+      console.error('[AI-Vision] Error analizando imagen:', e.message);
       return null;
     }
+  }
+
+  /**
+   * Compatibilidad: describe una imagen brevemente (usa analyzeImageForSales internamente).
+   * @param {string} imageUrl - URL pública de la imagen.
+   * @returns {Promise<string|null>}
+   */
+  async describeImage(imageUrl) {
+    const analysis = await this.analyzeImageForSales(imageUrl);
+    return analysis?.description || null;
   }
 
   /**

@@ -989,7 +989,7 @@ class ChatbotService {
    * @param {string|null} [imageUrl=null] - URL de imagen adjunta si existe.
    * @returns {Promise<Object>} Resultado del procesamiento {handled, reason|action}.
    */
-  async processMessage(contact, messageText, imageUrl = null) {
+  async processMessage(contact, messageText, imageUrl = null, imageAnalysis = null) {
     const msgs = this.getMessages();
     
     // Verificar tags excluidos
@@ -1174,6 +1174,16 @@ class ChatbotService {
           return await this.handleZipValidation(contact, messageText, convState);
         }
       }
+    }
+
+    // ====================================================================
+    // HANDLER DE IMAGEN CON INTELIGENCIA DE VENTAS
+    // Si llegó una imagen analizada por IA, responder como vendedor:
+    // mostrar catálogo filtrado, preguntar cantidad y siguiente paso.
+    // ====================================================================
+    if (imageAnalysis && convState.state !== 'assigned' && convState.state !== 'closed_no_coverage' && !convState.agent_active) {
+      const imgResult = await this.handleImageMessage(contact, messageText, imageAnalysis, convState);
+      if (imgResult) return imgResult;
     }
 
     // ====================================================================
@@ -2248,6 +2258,84 @@ class ChatbotService {
       console.error('Error getting product info:', e);
     }
     return null;
+  }
+
+  // ====================================================================
+  // HANDLER DE IMAGEN — responde como vendedor cuando el cliente manda foto
+  // ====================================================================
+  async handleImageMessage(contact, messageText, imageAnalysis, convState) {
+    try {
+      const customerName = this.sanitizeCustomerName(contact);
+      const name = customerName || '';
+      const catalogBase = (this.settings.catalog_link || 'https://mrtarjetas.com').replace(/\/$/, '');
+
+      // Caso 1: Es un diseño/impreso de referencia — el cliente quiere algo así
+      if (imageAnalysis.isDesignReference) {
+        const productLabel = imageAnalysis.productLabel || 'tarjetas de presentación';
+        const bizType = imageAnalysis.businessType && imageAnalysis.businessType !== 'general' ? imageAnalysis.businessType : null;
+        const bizLabel = bizType ? this.getBusinessLabel(bizType) : null;
+
+        // Construir la URL del catálogo (filtrada por negocio si lo detectamos)
+        const catalogUrl = bizType
+          ? `${catalogBase}/?s=${bizType}`
+          : catalogBase;
+
+        // Primer mensaje: reconocer la imagen y mostrar el catálogo
+        let catalogMsg;
+        if (bizLabel) {
+          catalogMsg = `¡${name ? name + '! ' : ''}Vi tu imagen 🎨 Parece que te interesan *${productLabel}* para tu negocio de *${bizLabel}*.\n\nAquí puede ver varios modelos similares 👇\n\n${catalogUrl}`;
+        } else {
+          catalogMsg = `¡${name ? name + '! ' : ''}Vi tu imagen 🎨 Parece que te interesan *${productLabel}*.\n\nAquí puede explorar nuestros diseños disponibles 👇\n\n${catalogUrl}`;
+        }
+        await this.sendMessage(contact.id, catalogMsg);
+
+        // Segundo mensaje: preguntar cantidad y si quiere ese diseño o uno del catálogo
+        await this.sendMessage(contact.id, `¿Le gustaría usar un diseño similar a ese o prefiere escoger uno de nuestros modelos? Y ¿cuántas unidades necesita aproximadamente? 😊`);
+
+        await this.updateConversationState(contact.id, {
+          state: 'awaiting_product_selection_with_info',
+          selected_product: imageAnalysis.product === 'magneticos' ? 'Magnéticos' :
+                            imageAnalysis.product === 'postcards' ? 'Post Cards' :
+                            imageAnalysis.product === 'playeras' ? 'Playeras' : 'Tarjetas',
+          has_prior_info: true,
+          greeting_sent: true,
+          awaiting_response: 'product',
+          context_data: {
+            ...((convState.context_data) || {}),
+            catalog_shown: true,
+            catalog_url: catalogUrl,
+            image_reference: true,
+            detected_product: imageAnalysis.product,
+            detected_biz: bizType
+          }
+        });
+
+        await this.addTrackingTag(contact.id, `Imagen_${imageAnalysis.product || 'diseño'}`);
+        if (bizType) await this.addTrackingTag(contact.id, `Negocio_${bizType}`);
+        await this.addComment(contact.id, `[Bot] Cliente envió imagen de referencia: ${productLabel}${bizLabel ? ` para ${bizLabel}` : ''}. Catálogo: ${catalogUrl}`);
+        return { handled: true, action: 'image_design_reference', product: imageAnalysis.product };
+      }
+
+      // Caso 2: Imagen sin contexto de diseño (foto general, screenshot, etc.)
+      // Responder amigablemente y preguntar qué necesita
+      if (!convState.greeting_sent) {
+        const welcomeMsg = `¡${name ? 'Hola ' + name + '! ' : 'Hola! '}Vi tu imagen 👀 ¿En qué te puedo ayudar? Si buscas tarjetas de presentación, magnéticos o cualquier impreso, con gusto te oriento 😊`;
+        await this.sendMessage(contact.id, welcomeMsg);
+        await this.updateConversationState(contact.id, {
+          state: 'awaiting_prior_info',
+          greeting_sent: true,
+          awaiting_response: 'yes_no'
+        });
+        await this.addComment(contact.id, `[Bot] Cliente envió imagen no relacionada a diseños (${imageAnalysis.description}). Se saluda y pregunta.`);
+        return { handled: true, action: 'image_generic_greeting' };
+      }
+
+      // Si ya estaba en conversación, dejar que el flujo normal continúe
+      return null;
+    } catch (e) {
+      console.error('[Bot] handleImageMessage error:', e.message);
+      return null;
+    }
   }
 
   // ─── DETECCIÓN DE TIPO DE NEGOCIO PARA CATÁLOGO ─────────────────────────
