@@ -151,10 +151,10 @@ const MessagingSettings = sequelize.define('MessagingSettings', {
     type: DataTypes.TEXT,
     defaultValue: 'Perfecto ✅ Por acá puede ver algunos diseños que tenemos disponibles 🎨'
   },
-  /** Enlace al catálogo de productos */
+  /** Enlace al catálogo de productos (mrtarjetas.com usa ?s= para buscar por rubro) */
   catalog_link: {
     type: DataTypes.TEXT,
-    defaultValue: ''
+    defaultValue: 'https://mrtarjetas.com'
   },
   /** Mensaje solicitando el código postal */
   request_zip_message: {

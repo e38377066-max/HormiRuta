@@ -1733,6 +1733,37 @@ class ChatbotService {
       return { handled: true, action: 'facebook_ad_direct_zip', product: adProduct?.name || null };
     }
 
+    // ─── DETECCIÓN DE TIPO DE NEGOCIO EN EL PRIMER MENSAJE ──────────────────
+    // Si el cliente ya menciona su tipo de negocio en el primer mensaje
+    // (ej: "tengo empresa de limpieza"), usar la técnica de Felipe:
+    // mostrar el catálogo filtrado por ese rubro y pedir ZIP directo.
+    const bizKeyword = this.getBusinessTypeKeyword(messageText);
+    if (bizKeyword) {
+      const catalogBase = (this.settings.catalog_link || 'https://mrtarjetas.com').replace(/\/$/, '');
+      const catalogUrl = `${catalogBase}/?s=${bizKeyword}`;
+      const bizLabel = this.getBusinessLabel(bizKeyword);
+      const name = customerName || '';
+
+      const greeting = await this.getAIMsg(
+        'welcome_with_catalog',
+        { customerName, bizLabel, catalogUrl, lastMessage: messageText },
+        `¡Hola${name ? ' ' + name : ''}! 👋 Bienvenido a Area 862 Graphics.\n\nAquí puede visualizar varios modelos para *${bizLabel}*, puede escoger si le gusta alguno 👇\n\n${catalogUrl}`
+      );
+      await this.sendMessage(contact.id, greeting);
+      await this.sendMessage(contact.id, msgs.noInfoRequestZip);
+      await this.updateConversationState(contact.id, {
+        state: 'awaiting_zip_no_info',
+        has_prior_info: false,
+        awaiting_response: 'zip_code',
+        greeting_sent: true,
+        context_data: { catalog_shown: true, catalog_url: catalogUrl, biz_keyword: bizKeyword }
+      });
+      await this.addTrackingTag(contact.id, `Negocio_${bizKeyword}`);
+      await this.addComment(contact.id, `[Bot] Primer mensaje → tipo de negocio "${bizLabel}" detectado. Catálogo: ${catalogUrl}`);
+      return { handled: true, action: 'welcome_with_catalog', bizKeyword };
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Para cualquier mensaje genérico: saludar y preguntar si ya tiene información previa
     const welcomeMsg = await this.getAIMsg('welcome_new', { customerName, lastMessage: messageText }, msgs.welcomeNew);
     await this.sendMessage(contact.id, welcomeMsg);
