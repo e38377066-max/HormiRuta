@@ -1353,11 +1353,34 @@ class ChatbotService {
   _parseCampaignFromText(text) {
     if (!text || typeof text !== 'string') return null;
     const t = text.toLowerCase();
+
+    // Dinámico: detectar cualquier precio que esté en product_prices
+    const productPrices = this.settings?.product_prices;
+    if (Array.isArray(productPrices) && productPrices.length > 0) {
+      for (const entry of productPrices) {
+        if (!entry.price) continue;
+        const rawPrice = String(entry.price).replace(/[$,\s]/g, '');
+        const num = parseFloat(rawPrice);
+        if (!num || isNaN(num)) continue;
+        const escaped = rawPrice.replace('.', '\\.');
+        const patterns = [
+          new RegExp(`\\$${escaped}\\b`),
+          new RegExp(`\\b${escaped}\\s*usd\\b`, 'i'),
+          new RegExp(`por\\s*\\$?${escaped}\\b`),
+          new RegExp(`x\\s*\\$?\\s*${escaped}\\b`),
+        ];
+        if (patterns.some(p => p.test(t))) {
+          return { campaign: `ad_${rawPrice}`, price: entry.price, product_entry: entry };
+        }
+      }
+    }
+
+    // Fallback hardcodeado para retrocompatibilidad
     if (/\$80\b/.test(t) || /\b80\s*usd\b/i.test(t) || /por\s*\$?80\b/.test(t) || /1000\s*x\s*\$?\s*80\b/.test(t)) {
-      return { campaign: 'bc80', price: '$80' };
+      return { campaign: 'bc80', price: '$80', product_entry: null };
     }
     if (/\$65\b/.test(t) || /\b65\s*usd\b/i.test(t) || /por\s*\$?65\b/.test(t) || /1000\s*x\s*\$?\s*65\b/.test(t)) {
-      return { campaign: 'bc65', price: '$65' };
+      return { campaign: 'bc65', price: '$65', product_entry: null };
     }
     return null;
   }
@@ -1414,14 +1437,24 @@ class ChatbotService {
         if (product && !product.isOther) { productResult = product; break; }
       }
 
+      // Si la campaña matcheó un entry específico de product_prices y no hubo
+      // match por nombre, usar ese entry como producto (cubre el caso donde
+      // todos los productos se llaman igual pero tienen precios distintos).
+      if (!productResult && campaignResult?.product_entry) {
+        const e = campaignResult.product_entry;
+        productResult = { name: e.product, description: e.description || null, price: e.price, isOther: false };
+      }
+
       if (campaignResult) {
-        console.log(`[Bot] Campaña publicitaria detectada: ${campaignResult.campaign} (${campaignResult.price})`);
+        const desc = campaignResult.product_entry?.description ? ` — "${campaignResult.product_entry.description}"` : '';
+        console.log(`[Bot] Campaña publicitaria detectada: ${campaignResult.campaign} (${campaignResult.price})${desc}`);
       }
 
       return {
         product: productResult,
         campaign: campaignResult?.campaign || null,
-        price: campaignResult?.price || null
+        price: campaignResult?.price || null,
+        product_description: campaignResult?.product_entry?.description || null,
       };
     } catch (e) {
       console.error('[Bot] extractAdInfo error:', e.message);
@@ -1437,7 +1470,11 @@ class ChatbotService {
   getAdCampaignParams(convState) {
     const ctx = convState?.context_data || {};
     if (!ctx.ad_campaign && !ctx.ad_price) return {};
-    return { adCampaign: ctx.ad_campaign, adPrice: ctx.ad_price };
+    return {
+      adCampaign: ctx.ad_campaign,
+      adPrice: ctx.ad_price,
+      adProductDescription: ctx.ad_product_description || null,
+    };
   }
 
   /**
@@ -1500,11 +1537,16 @@ class ChatbotService {
     // IMPORTANTE: siempre re-detectar desde el mensaje entrante, nunca usar el
     // valor guardado en context_data porque puede ser de una sesión anterior con
     // un precio de campaña distinto (ej: sesión anterior $65, ahora $80).
-    let adInfo = { product: null, campaign: null, price: null };
+    let adInfo = { product: null, campaign: null, price: null, product_description: null };
     if (isFromFacebookAd) {
       adInfo = await this.extractAdInfo(contact);
       if (adInfo.campaign || adInfo.product) {
-        const updatedCtx = { ...(convState.context_data || {}), ad_campaign: adInfo.campaign, ad_price: adInfo.price };
+        const updatedCtx = {
+          ...(convState.context_data || {}),
+          ad_campaign: adInfo.campaign,
+          ad_price: adInfo.price,
+          ad_product_description: adInfo.product_description || null,
+        };
         await this.updateConversationState(contact.id, { context_data: updatedCtx });
         convState = { ...convState, context_data: updatedCtx };
       }
@@ -1590,7 +1632,8 @@ class ChatbotService {
         context_data: {
           ...(convState.context_data || {}),
           ad_campaign: adCampaign || null,
-          ad_price: adPrice || null
+          ad_price: adPrice || null,
+          ad_product_description: adInfo.product_description || null,
         }
       });
       await this.addTrackingTag(contact.id, 'FacebookAd');

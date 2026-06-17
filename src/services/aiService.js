@@ -933,13 +933,16 @@ Genera la respuesta más apropiada:`
   async generateFlowMessage(intent, params = {}) {
     if (!this.isAvailable) return null;
 
-    const { customerName, zipCode, city, product, zone, lastMessage, outOfHours, businessHours, isExisting, adPrice, adCampaign } = params;
+    const { customerName, zipCode, city, product, zone, lastMessage, outOfHours, businessHours, isExisting, adPrice, adCampaign, adProductDescription } = params;
     const name = customerName && customerName !== 'Sin nombre' ? customerName.split(' ')[0] : null;
     const handoffNote = outOfHours && businessHours
       ? `IMPORTANTE: El cliente escribió fuera de horario. NO digas "un agente te atenderá en breve". En cambio, dile que ya tomaste su información y que en horario laboral (${businessHours}) un diseñador se comunicará con él para coordinar todos los detalles de su pedido.`
       : '';
+    const adPackageLabel = adProductDescription
+      ? `${product || 'tarjetas'} (${adProductDescription})`
+      : product || '1,000 tarjetas';
     const campaignNote = adPrice
-      ? `PRECIO DE CAMPAÑA OBLIGATORIO: Este cliente llegó por el anuncio de "1,000 tarjetas por ${adPrice}". Cuando menciones el precio, SIEMPRE usa ${adPrice} para 1,000 tarjetas. No uses ningún otro precio.`
+      ? `PRECIO DE CAMPAÑA OBLIGATORIO: Este cliente llegó por el anuncio de "${adPackageLabel} por ${adPrice}". Cuando menciones el precio, SIEMPRE usa ${adPrice} para ${adPackageLabel}. No uses ningún otro precio ni otra cantidad.`
       : '';
 
     const intentPrompts = {
@@ -1044,7 +1047,7 @@ Retoma la conversación de forma cálida. Pregunta si quiere continuar o necesit
 ${name ? `Nombre: ${name}` : ''}
 Mensaje del cliente: "${lastMessage || ''}"
 ${campaignNote ? campaignNote : ''}
-${product ? `Producto del anuncio: ${product}${adPrice ? ` a ${adPrice}` : ''} — MENCIÓNALO en el saludo para confirmar que ya sabes por qué te escribió ("vi que vienes por nuestras ${product} a ${adPrice || 'precio especial'}…" o similar). NO ofrezcas un producto distinto.` : ''}
+${product ? `Producto del anuncio: ${adPackageLabel}${adPrice ? ` a ${adPrice}` : ''} — MENCIÓNALO en el saludo para confirmar que ya sabes por qué te escribió ("vi que vienes por nuestras ${adPackageLabel} a ${adPrice || 'precio especial'}…" o similar). NO ofrezcas un producto distinto ni una cantidad diferente.` : ''}
 Salúdalo calurosamente, agradece su interés. Dile que para verificar si tienen cobertura en su zona necesitas su código postal (ZIP). Ejemplo: 75208.`,
 
       product_info_sent: `Se le envió información sobre el producto ${product} al cliente.
