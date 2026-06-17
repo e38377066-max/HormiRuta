@@ -1576,31 +1576,50 @@ class ChatbotService {
     }
 
     // ─── DETECCIÓN DE LOGO / BRANDING ──────────────────────────────────────
-    // Si el cliente pide un logo o imagen para su empresa, NO rechazar ni
-    // asignar de inmediato. Pivotar como vendedor: nuestros productos incluyen
-    // diseño personalizado (tarjetas, magnéticos, etc.) que sirven para
-    // establecer la identidad de su negocio.
+    // Técnica de Felipe: cuando el cliente pide un logo, NO decir "no hacemos logos".
+    // En su lugar, detectar el tipo de negocio y mandar el link del catálogo
+    // filtrado por ese rubro para que elija un diseño. Como hizo Felipe:
+    // "Aqui podra visualizar varios modelos de limpieza, puede escoger si le gusta alguno
+    //  mrtarjetas.com/?s=cleaning"
     const logoKeywords = ['logo', 'logos', 'logotipo', 'logotipos', 'diseño de logo',
       'diseño empresarial', 'identidad visual', 'branding', 'isotipo', 'imagotipo'];
     const msgLower = messageText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (logoKeywords.some(k => msgLower.includes(k.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) {
-      const pivotMsg = await this.getAIMsg(
-        'logo_pivot_to_products',
-        { customerName, lastMessage: messageText },
-        `¡${customerName ? customerName + ', q' : 'Q'}ué buena idea darle imagen a tu negocio! 🎨\n\nAunque no hacemos logos por separado, en nuestras *tarjetas de presentación* y *magnéticos* el diseño va incluido — te creamos la imagen completa para tu empresa.\n\n¿Te gustaría ver algunas opciones?`
-      );
-      await this.sendMessage(contact.id, pivotMsg);
-      const productMenu = this.generateProductMenu();
-      await this.sendMessage(contact.id, productMenu);
-      await this.updateConversationState(contact.id, {
-        state: 'awaiting_product_selection_with_info',
-        has_prior_info: true,
-        greeting_sent: true,
-        awaiting_response: 'product'
-      });
-      await this.addTrackingTag(contact.id, 'InteresLogo_Pivot');
-      await this.addComment(contact.id, `[Bot] Cliente pidió logo, bot pivotó a menú de productos con diseño incluido. Mensaje original: "${messageText}"`);
-      return { handled: true, action: 'logo_pivot_to_products' };
+      const bizKeyword = this.getBusinessTypeKeyword(messageText);
+      const catalogBase = (this.settings.catalog_link || 'https://mrtarjetas.com').replace(/\/$/, '');
+      const name = customerName || '';
+
+      if (bizKeyword) {
+        const catalogUrl = `${catalogBase}/?s=${bizKeyword}`;
+        const bizLabel = this.getBusinessLabel(bizKeyword);
+        const catalogMsg = `¡${name ? name + '! ' : ''}Aquí podrá visualizar varios modelos para *${bizLabel}*, puede escoger si le gusta alguno 👇\n\n${catalogUrl}`;
+        await this.sendMessage(contact.id, catalogMsg);
+        await this.sendMessage(contact.id, `Me deja saber si tiene dudas o si ya escogió alguno 😊`);
+        await this.updateConversationState(contact.id, {
+          state: 'awaiting_product_selection_with_info',
+          has_prior_info: true,
+          greeting_sent: true,
+          awaiting_response: 'product',
+          context_data: { ...((convState.context_data) || {}), catalog_shown: true, catalog_url: catalogUrl }
+        });
+        await this.addTrackingTag(contact.id, `InteresLogo_${bizKeyword}`);
+        await this.addComment(contact.id, `[Bot] Logo pivot → catálogo de ${bizLabel}: ${catalogUrl}. Mensaje original: "${messageText}"`);
+      } else {
+        // Sin tipo de negocio detectado → catálogo general
+        const catalogMsg = `¡${name ? name + '! ' : ''}Aquí puede explorar todos nuestros diseños disponibles 🎨\n\n${catalogBase}`;
+        await this.sendMessage(contact.id, catalogMsg);
+        await this.sendMessage(contact.id, `Tenemos diseños para todo tipo de negocio — tarjetas, magnéticos y más. ¿En qué giro está su empresa? 😊`);
+        await this.updateConversationState(contact.id, {
+          state: 'awaiting_product_selection_with_info',
+          has_prior_info: true,
+          greeting_sent: true,
+          awaiting_response: 'product',
+          context_data: { ...((convState.context_data) || {}), catalog_shown: true }
+        });
+        await this.addTrackingTag(contact.id, 'InteresLogo_Pivot');
+        await this.addComment(contact.id, `[Bot] Logo pivot → catálogo general (no se detectó tipo de negocio). Mensaje: "${messageText}"`);
+      }
+      return { handled: true, action: 'logo_pivot_catalog' };
     }
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -2199,6 +2218,57 @@ class ChatbotService {
     }
     return null;
   }
+
+  // ─── DETECCIÓN DE TIPO DE NEGOCIO PARA CATÁLOGO ─────────────────────────
+  // Devuelve la palabra clave en inglés para filtrar el catálogo mrtarjetas.com/?s=TERM
+  getBusinessTypeKeyword(text) {
+    const lower = (text || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const map = [
+      { terms: ['limpieza', 'cleaning', 'clean', 'aseo', 'maid', 'janitorial', 'janitor'], keyword: 'cleaning' },
+      { terms: ['towing', 'grua', 'gruas', 'remolque', 'wrecker', 'tow truck'], keyword: 'towing' },
+      { terms: ['landscap', 'jardin', 'lawn', 'poda', 'gras', 'grass', 'yard', 'corte de cesped', 'cesped'], keyword: 'landscaping' },
+      { terms: ['construc', 'contrat', 'remodel', 'obra', 'builder', 'handy', 'carpint', 'drywall', 'flooring', 'piso'], keyword: 'construction' },
+      { terms: ['electric', 'electricis', 'wiring', 'cableado'], keyword: 'electrical' },
+      { terms: ['restaur', 'taqueria', 'tacos', 'cocina', 'catering', 'comida', 'food', 'cafe', 'bakery', 'panaderia'], keyword: 'restaurant' },
+      { terms: ['barber', 'barberia', 'peluquer', 'beauty', 'nail', 'salon', 'spa', 'estet'], keyword: 'barber' },
+      { terms: ['mecanico', 'mechanic', 'detailing', 'taller', 'auto repair', 'automotriz'], keyword: 'auto' },
+      { terms: ['plomeria', 'plomer', 'plumb', 'fontanero', 'pipe'], keyword: 'plumbing' },
+      { terms: ['pintura', 'pintor', 'paint', 'painting'], keyword: 'painting' },
+      { terms: ['trucking', 'freight', 'logistic', 'transporte', 'transport'], keyword: 'trucking' },
+      { terms: ['roofing', 'techo', 'roof', 'tejado', 'goteras'], keyword: 'roofing' },
+      { terms: ['security', 'seguridad', 'guardia', 'guard'], keyword: 'security' },
+      { terms: ['tax', 'impuesto', 'contab', 'bookkeep', 'accounting', 'taxes'], keyword: 'tax' },
+      { terms: ['insurance', 'seguro', 'seguros'], keyword: 'insurance' },
+      { terms: ['church', 'iglesia', 'ministerio', 'pastor', 'ministerio'], keyword: 'church' },
+      { terms: ['daycare', 'childcare', 'guarderia', 'kinder', 'kids'], keyword: 'daycare' },
+      { terms: ['fotograf', 'photography', 'photo', 'foto'], keyword: 'photography' },
+      { terms: ['hvac', 'aire acondicionado', 'ac repair', 'calefaccion'], keyword: 'hvac' },
+      { terms: ['pest control', 'fumigac', 'plagas', 'exterminator'], keyword: 'pest' },
+      { terms: ['notary', 'notario', 'notaria'], keyword: 'notary' },
+      { terms: ['real estate', 'bienes raices', 'realtor', 'inmobili'], keyword: 'realestate' },
+      { terms: ['moving', 'mudanza', 'flete', 'mudanzas'], keyword: 'moving' },
+    ];
+    for (const entry of map) {
+      if (entry.terms.some(t => lower.includes(t))) return entry.keyword;
+    }
+    return null;
+  }
+
+  // Etiqueta en español del keyword para usarla en el mensaje al cliente
+  getBusinessLabel(keyword) {
+    const labels = {
+      cleaning: 'limpieza', towing: 'towing / grúas', landscaping: 'landscaping / jardinería',
+      construction: 'construcción', electrical: 'eléctrico', restaurant: 'restaurante / comida',
+      barber: 'barbería / salón', auto: 'taller automotriz', plumbing: 'plomería',
+      painting: 'pintura', trucking: 'transporte / trucking', roofing: 'roofing / techado',
+      security: 'seguridad', tax: 'taxes / contabilidad', insurance: 'seguros',
+      church: 'iglesia / ministerio', daycare: 'guardería / daycare', photography: 'fotografía',
+      hvac: 'HVAC / aire acondicionado', pest: 'control de plagas', notary: 'notaría',
+      realestate: 'bienes raíces', moving: 'mudanzas',
+    };
+    return labels[keyword] || keyword;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 
   /**
    * Genera el menú de productos disponibles basado en la configuración.
