@@ -9,6 +9,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { KeepAwake } from '@capacitor-community/keep-awake'
+import { App } from '@capacitor/app'
 
 /** @type {boolean} Indica si la aplicación se está ejecutando en una plataforma nativa (iOS/Android) */
 export const isNative = Capacitor.isNativePlatform()
@@ -48,20 +49,38 @@ export const initStatusBar = async () => {
 }
 
 /**
- * Solicita permisos de ubicación si es necesario.
+ * Abre la configuración de ubicación del dispositivo.
+ * En Android abre directamente la pantalla de ubicación; en iOS abre la configuración de la app.
+ */
+export const openLocationSettings = async () => {
+  if (!isNative) return
+  try {
+    if (platform === 'ios') {
+      await App.openUrl({ url: 'app-settings:' })
+    } else {
+      await App.openUrl({ url: 'android.settings.LOCATION_SOURCE_SETTINGS' })
+    }
+  } catch (e) {
+    console.error('No se pudo abrir configuración de ubicación:', e)
+  }
+}
+
+/**
+ * Solicita permisos de ubicación si aún no se han concedido.
  * @async
- * @returns {Promise<boolean>} True si se concedieron los permisos, false en caso contrario.
+ * @returns {Promise<'granted'|'denied'|'prompt'>} Estado del permiso.
  */
 export const requestLocationPermission = async () => {
-  if (!isNative) return true
+  if (!isNative) return 'granted'
   try {
     const permission = await Geolocation.checkPermissions()
-    if (permission.location === 'granted') return true
+    if (permission.location === 'granted') return 'granted'
+    if (permission.location === 'denied') return 'denied'
     const result = await Geolocation.requestPermissions()
-    return result.location === 'granted'
+    return result.location === 'granted' ? 'granted' : 'denied'
   } catch (e) {
     console.error('Permission error:', e)
-    return false
+    return 'denied'
   }
 }
 
@@ -70,13 +89,15 @@ export const requestLocationPermission = async () => {
  * @async
  * @param {Object} [options={}] - Opciones de geolocalización.
  * @returns {Promise<Object>} Objeto con las coordenadas de la posición.
- * @throws {Error} Si el permiso es denegado o el GPS está desactivado.
+ * @throws {Error} Con propiedad `code`: 'permission_denied' o 'gps_disabled'.
  */
 export const getCurrentPosition = async (options = {}) => {
   if (isNative) {
-    const granted = await requestLocationPermission()
-    if (!granted) {
-      throw new Error('Permiso de ubicación denegado. Actívalo en Configuración > Aplicaciones > Area 862 > Permisos')
+    const permStatus = await requestLocationPermission()
+    if (permStatus === 'denied') {
+      const err = new Error('Permiso de ubicación denegado')
+      err.code = 'permission_denied'
+      throw err
     }
     try {
       return await Geolocation.getCurrentPosition({
@@ -85,8 +106,15 @@ export const getCurrentPosition = async (options = {}) => {
         ...options
       })
     } catch (e) {
-      if (e.message?.includes('location disabled') || e.message?.includes('Location services')) {
-        throw new Error('GPS desactivado. Por favor activa la ubicación en tu dispositivo')
+      if (
+        e.message?.toLowerCase().includes('location disabled') ||
+        e.message?.toLowerCase().includes('location services') ||
+        e.message?.toLowerCase().includes('location unavailable') ||
+        e.code === 2
+      ) {
+        const err = new Error('GPS desactivado. Activa la ubicación en tu dispositivo')
+        err.code = 'gps_disabled'
+        throw err
       }
       throw e
     }
@@ -100,7 +128,19 @@ export const getCurrentPosition = async (options = {}) => {
             accuracy: pos.coords.accuracy
           }
         }),
-        reject,
+        (err) => {
+          if (err.code === 1) {
+            const e = new Error('Permiso de ubicación denegado')
+            e.code = 'permission_denied'
+            reject(e)
+          } else if (err.code === 2) {
+            const e = new Error('GPS no disponible')
+            e.code = 'gps_disabled'
+            reject(e)
+          } else {
+            reject(err)
+          }
+        },
         { enableHighAccuracy: true, timeout: 10000, ...options }
       )
     })
