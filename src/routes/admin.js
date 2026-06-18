@@ -224,7 +224,7 @@ router.delete('/users/:id', requireAdmin, async (req, res) => {
  * @param {string} [req.query.search] - Búsqueda de texto en el contenido.
  * @returns {Object} 200 - Lista de logs paginados.
  */
-router.get('/logs', requireAdmin, async (req, res) => {
+router.get('/logs', async (req, res) => {
   try {
     const { level, search, limit = 100, offset = 0 } = req.query;
     const result = logBuffer.getLogs({ level, search, limit, offset });
@@ -257,7 +257,7 @@ router.delete('/logs', requireAdmin, async (req, res) => {
  * @access Private (Admin)
  * @returns {Object} 200 - Tamaños de archivos y conteo de líneas.
  */
-router.get('/logs/stats', requireAdmin, async (req, res) => {
+router.get('/logs/stats', async (req, res) => {
   try {
     const stats = logBuffer.getFileStats();
     res.json(stats);
@@ -274,7 +274,7 @@ router.get('/logs/stats', requireAdmin, async (req, res) => {
  * @returns {Object} 400 - Tipo inválido.
  * @returns {Object} 404 - No hay logs disponibles.
  */
-router.get('/logs/download/:type', requireAdmin, async (req, res) => {
+router.get('/logs/download/:type', async (req, res) => {
   try {
     const { type } = req.params;
     if (type !== 'full' && type !== 'important') {
@@ -302,7 +302,7 @@ router.get('/logs/download/:type', requireAdmin, async (req, res) => {
  * @access Private (Admin)
  * @returns {Object} 200 - Lista de nombres de archivos.
  */
-router.get('/logs/archives', requireAdmin, async (req, res) => {
+router.get('/logs/archives', async (req, res) => {
   try {
     const archives = logBuffer.getArchiveFiles();
     res.json({ archives });
@@ -319,7 +319,7 @@ router.get('/logs/archives', requireAdmin, async (req, res) => {
  * @returns {Object} 400 - Nombre de archivo inválido.
  * @returns {Object} 404 - Archivo no encontrado.
  */
-router.get('/logs/archives/:filename', requireAdmin, async (req, res) => {
+router.get('/logs/archives/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
     if (!filename.endsWith('.txt') || filename.includes('..') || filename.includes('/')) {
