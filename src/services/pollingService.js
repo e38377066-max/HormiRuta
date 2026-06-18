@@ -1131,12 +1131,23 @@ class PollingService {
       let messageText = message.message?.text || '';
       let mediaDescription = '';
 
+      // Log breve de cada mensaje entrante para diagnóstico de tipos desconocidos
+      const mimeType = message.message?.mimeType || message.message?.attachment?.mimeType || '';
+      const hasAttachment = !!(message.message?.url || message.message?.audioUrl || message.message?.fileUrl
+        || message.message?.attachment?.url || message.message?.file?.url);
+      if (!messageText || hasAttachment) {
+        console.log(`[Polling] MSG tipo="${msgType}" mime="${mimeType}" texto="${messageText ? 'sí' : 'vacío'}" adjunto=${hasAttachment} contacto=${contact.firstName} — raw:`, JSON.stringify(message.message || {}).substring(0, 400));
+      }
+
       // --- Procesar audio (transcribir con Whisper) ---
       // WhatsApp voz llega como 'audio', 'voice', o 'ptt' (push-to-talk).
       // Respond.io también puede mandarlo como 'file' con mimeType de audio.
-      const mimeType = message.message?.mimeType || message.message?.attachment?.mimeType || '';
+      // NOTA: algunos canales mandan audio con type='text' y texto vacío + adjunto.
+      const looksLikeAudio = mimeType.startsWith('audio/') || mimeType.includes('opus') || mimeType.includes('ogg');
       const isAudioType = msgType === 'audio' || msgType === 'voice' || msgType === 'ptt'
-        || (msgType === 'file' && mimeType.startsWith('audio/'));
+        || (msgType === 'file' && looksLikeAudio)
+        || (looksLikeAudio && hasAttachment)   // audio con type incorrecto pero mimeType correcto
+        || (!messageText && hasAttachment && (msgType === 'text' || msgType === 'file')); // adjunto sin texto → probablemente audio/media
       if (isAudioType && !messageText) {
         // Buscar la URL en todos los campos posibles del mensaje de Respond.io
         const mediaUrl = message.message?.url
@@ -1237,6 +1248,22 @@ class PollingService {
         respond_message_id: message.messageId?.toString(),
         processed: false
       });
+
+      // Safeguard: si messageText sigue vacío y no hay imagen, no procesar con chatbot.
+      // Esto pasa cuando llega audio/media con un tipo no reconocido — evita que el bot
+      // responda con "Hola, ¿cómo te puedo ayudar?" a un mensaje de voz.
+      if (!messageText && !incomingImageUrl && !mediaDescription) {
+        console.log(`[Polling] Mensaje sin contenido de texto de ${contact.firstName} (tipo="${msgType}", mime="${mimeType}") — no se procesa con chatbot. Raw:`, JSON.stringify(message.message || {}).substring(0, 500));
+        if (useAutomaticMode) {
+          try {
+            const chatbot = new ChatbotService(userId, settings, isTestMode);
+            await chatbot.sendMessage(contact.id, '🎤 Recibí tu mensaje pero no pude leerlo. ¿Puedes escribirme lo que necesitas? 😊');
+          } catch (e) {
+            console.error('[Polling] Error respondiendo a mensaje sin contenido:', e.message);
+          }
+        }
+        return;
+      }
 
       if (useAutomaticMode) {
         const chatbot = new ChatbotService(userId, settings, isTestMode);
