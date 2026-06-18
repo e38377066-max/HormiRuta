@@ -96,11 +96,13 @@ class AIService {
   async transcribeAudio(audioUrl, respondToken = null) {
     if (!this.isAvailable) return null;
     try {
-      // Descargar el audio. Si la URL pertenece a Respond.io, incluir el Bearer token.
+      // Siempre intentar con Bearer token cuando esté disponible.
+      // No limitar por dominio — Respond.io puede usar CDNs externos.
       const downloadHeaders = {};
-      if (respondToken && (audioUrl.includes('respond.io') || audioUrl.includes('storage.respond.io'))) {
+      if (respondToken) {
         downloadHeaders['Authorization'] = `Bearer ${respondToken}`;
       }
+      console.log(`[AI-Audio] Descargando audio: ${audioUrl.substring(0, 80)}... (token=${respondToken ? 'sí' : 'no'})`);
       const audioResponse = await axios.get(audioUrl, {
         responseType: 'arraybuffer',
         timeout: 20000,
@@ -108,24 +110,43 @@ class AIService {
       });
 
       const buffer = Buffer.from(audioResponse.data);
+      const contentType = audioResponse.headers['content-type'] || '';
+      console.log(`[AI-Audio] Descarga OK — ${buffer.length} bytes, content-type="${contentType}"`);
       if (buffer.length < 100) {
         console.warn('[AI-Audio] Buffer de audio demasiado pequeño — posible error de descarga');
         return null;
       }
 
-      // Determinar extensión y mimeType para Whisper
-      const contentType = audioResponse.headers['content-type'] || 'audio/ogg';
+      // Determinar extensión y mimeType para Whisper.
+      // Whisper acepta: mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg.
       let filename = 'audio.ogg';
       if (contentType.includes('mp4') || contentType.includes('m4a')) filename = 'audio.mp4';
-      else if (contentType.includes('mpeg') || contentType.includes('mp3')) filename = 'audio.mp3';
+      else if (contentType.includes('mpeg') || contentType.includes('mp3') || contentType.includes('mpga')) filename = 'audio.mp3';
       else if (contentType.includes('webm')) filename = 'audio.webm';
       else if (contentType.includes('wav')) filename = 'audio.wav';
+      else if (contentType.includes('ogg') || contentType.includes('opus')) filename = 'audio.ogg';
+      // Si el content-type no indica nada útil, verificar si la URL tiene extensión
+      else {
+        const urlPath = audioUrl.split('?')[0].toLowerCase();
+        if (urlPath.endsWith('.mp4') || urlPath.endsWith('.m4a')) filename = 'audio.mp4';
+        else if (urlPath.endsWith('.mp3') || urlPath.endsWith('.mpeg')) filename = 'audio.mp3';
+        else if (urlPath.endsWith('.webm')) filename = 'audio.webm';
+        else if (urlPath.endsWith('.wav')) filename = 'audio.wav';
+        else if (urlPath.endsWith('.ogg') || urlPath.endsWith('.opus')) filename = 'audio.ogg';
+      }
+
+      const mimeForWhisper = filename === 'audio.mp4' ? 'audio/mp4'
+        : filename === 'audio.mp3' ? 'audio/mpeg'
+        : filename === 'audio.webm' ? 'audio/webm'
+        : filename === 'audio.wav' ? 'audio/wav'
+        : 'audio/ogg';
 
       const form = new FormData();
-      form.append('file', buffer, { filename, contentType });
+      form.append('file', buffer, { filename, contentType: mimeForWhisper });
       form.append('model', 'whisper-1');
       form.append('language', 'es');
 
+      console.log(`[AI-Audio] Enviando a Whisper: filename="${filename}", mime="${mimeForWhisper}"`);
       const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', form, {
         headers: {
           ...form.getHeaders(),
@@ -135,11 +156,11 @@ class AIService {
       });
 
       const transcription = response.data?.text?.trim();
-      console.log(`[AI-Audio] Transcripción exitosa (${buffer.length} bytes, ${filename}): "${transcription?.substring(0, 80)}..."`);
+      console.log(`[AI-Audio] Transcripción exitosa: "${transcription?.substring(0, 100)}"`);
       return transcription || null;
     } catch (e) {
       console.error('[AI-Audio] Error transcribiendo audio:', e.message);
-      if (e.response?.data) console.error('[AI-Audio] Detalle:', JSON.stringify(e.response.data).substring(0, 200));
+      if (e.response?.status) console.error(`[AI-Audio] HTTP ${e.response.status}:`, JSON.stringify(e.response.data).substring(0, 300));
       return null;
     }
   }

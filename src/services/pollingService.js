@@ -1145,7 +1145,8 @@ class PollingService {
           || message.message?.attachment?.url
           || message.message?.file?.url
           || null;
-        console.log(`[Polling] Audio de ${contact.firstName} detectado — tipo="${msgType}", mimeType="${mimeType}", url="${mediaUrl ? mediaUrl.substring(0, 60) + '...' : 'NO ENCONTRADA'}"`);
+        console.log(`[Polling] Audio de ${contact.firstName} detectado — tipo="${msgType}", mimeType="${mimeType}", url="${mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'NO ENCONTRADA'}"`);
+        console.log(`[Polling] Estructura mensaje audio:`, JSON.stringify(message.message || {}).substring(0, 500));
         if (mediaUrl) {
           const aiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
           if (aiKey) {
