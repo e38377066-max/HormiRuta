@@ -307,6 +307,36 @@ class RespondioService {
   }
 
   /**
+   * Verifica si la conversación de un contacto está abierta en Respond.io.
+   * Hace una consulta directa a la API en lugar de depender de listas cacheadas.
+   * @param {number|string} contactId - ID numérico del contacto.
+   * @returns {Promise<{success: boolean, isOpen: boolean, error?: string}>}
+   */
+  async getConversationStatus(contactId) {
+    try {
+      const body = {
+        search: String(contactId),
+        filter: {
+          $and: [{
+            category: 'contactField',
+            field: 'status',
+            operator: 'isEqualTo',
+            value: 'open'
+          }]
+        }
+      };
+      const response = await this.requestWithRetry('post', '/contact/list', body, { params: { limit: 5 } });
+      const items = response.data?.items || [];
+      const numericId = parseInt(String(contactId).replace(/^id:/, ''));
+      const isOpen = items.some(c => c.id === numericId || String(c.id) === String(contactId));
+      return { success: true, isOpen };
+    } catch (error) {
+      console.error('[Respond.io] getConversationStatus error:', error.response?.data || error.message);
+      return { success: false, isOpen: false, error: error.response?.data?.message || error.message };
+    }
+  }
+
+  /**
    * Lista contactos filtrando por etapa de ciclo de vida.
    * @description Prueba varios formatos de filtro debido a la variabilidad de la API de Respond.io.
    * @param {Object} [options={}] - Opciones de filtrado.

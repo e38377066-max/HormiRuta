@@ -475,8 +475,13 @@ class PollingService {
         });
         
         for (const contact of uniqueContacts) {
-          const isOpen = allContacts.some(c => c.id === contact.id);
-          console.log(`[Polling] MODO PRUEBA - Contacto encontrado: ${contact.firstName} ${contact.lastName} (ID: ${contact.id}, lifecycle: ${contact.lifecycle}, conversacion: ${isOpen ? 'ABIERTA' : 'CERRADA'})`);
+          // Verificar estado real de la conversación directamente en Respond.io
+          // (no depender de allContacts que solo tiene lifecycle New Lead)
+          const statusResult = await respondio.getConversationStatus(contact.id);
+          const isOpen = statusResult.success
+            ? statusResult.isOpen
+            : allContacts.some(c => c.id === contact.id); // fallback si falla la API
+          console.log(`[Polling] MODO PRUEBA - Contacto encontrado: ${contact.firstName} ${contact.lastName} (ID: ${contact.id}, lifecycle: ${contact.lifecycle}, conversacion: ${isOpen ? 'ABIERTA' : 'CERRADA'}${!statusResult.success ? ' [fallback]' : ''})`);
           
           // Rastrear estado abierto/cerrado del contacto de prueba en la BD
           const [convState] = await ConversationState.findOrCreate({
