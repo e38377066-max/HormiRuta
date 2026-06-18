@@ -1215,9 +1215,11 @@ class PollingService {
       }
 
       // --- Procesar imágenes (análisis de ventas con GPT-4o Vision) ---
+      // Responde también a type="attachment" con mimeType image/* (formato que usa WhatsApp Business en algunos canales)
       let incomingImageUrl = null;
       let incomingImageAnalysis = null;
-      if ((msgType === 'image' || msgType === 'sticker') && !messageText) {
+      const looksLikeImage = mimeType.startsWith('image/') && !mimeType.includes('webp');
+      if ((msgType === 'image' || msgType === 'sticker' || (msgType === 'attachment' && looksLikeImage)) && !messageText) {
         const mediaUrl = message.message?.url || message.message?.attachment?.url || message.message?.imageUrl;
         if (mediaUrl) {
           incomingImageUrl = mediaUrl;
@@ -1253,18 +1255,10 @@ class PollingService {
       });
 
       // Safeguard: si messageText sigue vacío y no hay imagen, no procesar con chatbot.
-      // Esto pasa cuando llega audio/media con un tipo no reconocido — evita que el bot
-      // responda con "Hola, ¿cómo te puedo ayudar?" a un mensaje de voz.
+      // Esto pasa cuando llega un sticker, documento, video u otro media con tipo no reconocido.
+      // El bot NO responde — ignorar silenciosamente para no confundir al cliente.
       if (!messageText && !incomingImageUrl && !mediaDescription) {
-        console.log(`[Polling] Mensaje sin contenido de texto de ${contact.firstName} (tipo="${msgType}", mime="${mimeType}") — no se procesa con chatbot. Raw:`, JSON.stringify(message.message || {}).substring(0, 500));
-        if (useAutomaticMode) {
-          try {
-            const chatbot = new ChatbotService(userId, settings, isTestMode);
-            await chatbot.sendMessage(contact.id, '🎤 Recibí tu mensaje pero no pude leerlo. ¿Puedes escribirme lo que necesitas? 😊');
-          } catch (e) {
-            console.error('[Polling] Error respondiendo a mensaje sin contenido:', e.message);
-          }
-        }
+        console.log(`[Polling] Mensaje sin contenido de texto de ${contact.firstName} (tipo="${msgType}", mime="${mimeType}") — omitido silenciosamente. Raw:`, JSON.stringify(message.message || {}).substring(0, 500));
         return;
       }
 
