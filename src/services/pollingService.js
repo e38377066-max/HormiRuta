@@ -484,10 +484,18 @@ class PollingService {
             defaults: { user_id: userId, state: 'initial' }
           });
           
-          if (!isOpen && !convState.conversation_closed_at) {
-            // Contacto CERRADO y sin registro de cierre -> marcar como cerrado
+          // Bot "activo" = ya envió saludo y la conversación aún no terminó.
+          // En ese caso NO re-marcar como cerrada, para no generar un "reopen" falso
+          // que reiniciaría el flujo mientras el cliente sigue respondiendo.
+          const terminalStates = ['assigned', 'closed_no_coverage', 'closed', 'closing_complete'];
+          const botIsActive = convState.greeting_sent && !terminalStates.includes(convState.state);
+
+          if (!isOpen && !convState.conversation_closed_at && !botIsActive) {
+            // Contacto CERRADO y bot no está en medio de un flujo -> marcar como cerrado
             await convState.update({ conversation_closed_at: new Date() });
             console.log(`[Polling] MODO PRUEBA - Conversacion de ${contact.id} marcada como CERRADA en BD`);
+          } else if (!isOpen && !convState.conversation_closed_at && botIsActive) {
+            console.log(`[Polling] MODO PRUEBA - Conversacion de ${contact.id} cerrada en Respond.io pero bot activo (state=${convState.state}) — no se re-marca para evitar reopen falso`);
           } else if (isOpen && convState.conversation_closed_at) {
             // Contacto ABIERTO pero tenia cierre registrado -> se detectara reapertura en processMessage
             console.log(`[Polling] MODO PRUEBA - Contacto ${contact.id} tiene conversation_closed_at, reapertura se detectara en processMessage`);
