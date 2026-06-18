@@ -1058,7 +1058,8 @@ button.section-item.danger-item:disabled {
 }
 
 .logs-terminal {
-  background: #1e1e1e;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 16px;
   font-family: 'Courier New', Courier, monospace;
@@ -1075,17 +1076,17 @@ button.section-item.danger-item:disabled {
 }
 
 .logs-terminal::-webkit-scrollbar-track {
-  background: #2d2d2d;
+  background: #f1f5f9;
   border-radius: 4px;
 }
 
 .logs-terminal::-webkit-scrollbar-thumb {
-  background: #555;
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
 .logs-empty {
-  color: #666;
+  color: #94a3b8;
   text-align: center;
   padding: 40px;
   font-size: 14px;
@@ -1100,7 +1101,7 @@ button.section-item.danger-item:disabled {
 }
 
 .log-time {
-  color: #888;
+  color: #94a3b8;
   flex-shrink: 0;
   font-size: 11px;
 }
@@ -1115,22 +1116,22 @@ button.section-item.danger-item:disabled {
 }
 
 .log-badge-error {
-  background: rgba(255, 82, 82, 0.2);
-  color: #ff5252;
+  background: #fee2e2;
+  color: #dc2626;
 }
 
 .log-badge-warn {
-  background: rgba(255, 215, 64, 0.2);
-  color: #ffd740;
+  background: #fef3c7;
+  color: #d97706;
 }
 
 .log-badge-info {
-  background: rgba(224, 224, 224, 0.15);
-  color: #aaa;
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .log-source {
-  color: #82aaff;
+  color: #3b82f6;
   flex-shrink: 0;
   font-size: 11px;
 }
@@ -1139,6 +1140,7 @@ button.section-item.danger-item:disabled {
   flex: 1;
   white-space: pre-wrap;
   word-break: break-word;
+  color: #1e293b;
 }
 
 .logs-download-bar {
@@ -1146,8 +1148,8 @@ button.section-item.danger-item:disabled {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   margin-bottom: 8px;
 }
@@ -1163,9 +1165,9 @@ button.section-item.danger-item:disabled {
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  background: #1e293b;
-  color: #94a3b8;
-  border: 1px solid #334155;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
@@ -1173,9 +1175,9 @@ button.section-item.danger-item:disabled {
 }
 
 .logs-download-btn:hover {
-  background: #334155;
-  color: #e2e8f0;
-  border-color: #5b8def;
+  background: #e2e8f0;
+  color: #1e293b;
+  border-color: #3b82f6;
 }
 
 .logs-download-btn .material-icons {
@@ -1193,7 +1195,7 @@ button.section-item.danger-item:disabled {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  border-top: 1px solid #334155;
+  border-top: 1px solid #e2e8f0;
   padding-top: 10px;
   margin-top: 8px;
   width: 100%;
@@ -1210,9 +1212,9 @@ button.section-item.danger-item:disabled {
   align-items: center;
   gap: 4px;
   padding: 5px 10px;
-  background: #1e293b;
-  color: #64748b;
-  border: 1px solid #334155;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
@@ -1220,8 +1222,8 @@ button.section-item.danger-item:disabled {
 }
 
 .logs-archive-btn:hover {
-  background: #334155;
-  color: #e2e8f0;
+  background: #e2e8f0;
+  color: #1e293b;
 }
 
 .logs-archive-btn .material-icons {
