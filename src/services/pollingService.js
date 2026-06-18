@@ -1135,20 +1135,23 @@ class PollingService {
       const mimeType = message.message?.mimeType || message.message?.attachment?.mimeType || '';
       const hasAttachment = !!(message.message?.url || message.message?.audioUrl || message.message?.fileUrl
         || message.message?.attachment?.url || message.message?.file?.url);
-      if (!messageText || hasAttachment) {
-        console.log(`[Polling] MSG tipo="${msgType}" mime="${mimeType}" texto="${messageText ? 'sí' : 'vacío'}" adjunto=${hasAttachment} contacto=${contact.firstName} — raw:`, JSON.stringify(message.message || {}).substring(0, 400));
-      }
 
       // --- Procesar audio (transcribir con Whisper) ---
       // WhatsApp voz llega como 'audio', 'voice', o 'ptt' (push-to-talk).
       // Respond.io también puede mandarlo como 'file' con mimeType de audio.
-      // NOTA: algunos canales mandan audio con type='text' y texto vacío + adjunto.
+      // NOTA: algunos canales mandan audio con type='text'/'audio' y texto placeholder ("...") + adjunto.
+      // El placeholder "..." es truthy → antes se saltaba la transcripción. Ahora isAudioType ignora messageText.
       const looksLikeAudio = mimeType.startsWith('audio/') || mimeType.includes('opus') || mimeType.includes('ogg');
       const isAudioType = msgType === 'audio' || msgType === 'voice' || msgType === 'ptt'
         || (msgType === 'file' && looksLikeAudio)
         || (looksLikeAudio && hasAttachment)   // audio con type incorrecto pero mimeType correcto
         || (!messageText && hasAttachment && (msgType === 'text' || msgType === 'file')); // adjunto sin texto → probablemente audio/media
-      if (isAudioType && !messageText) {
+
+      if (!messageText || hasAttachment || isAudioType) {
+        console.log(`[Polling] MSG tipo="${msgType}" mime="${mimeType}" texto="${messageText ? JSON.stringify(messageText.substring(0, 40)) : 'vacío'}" adjunto=${hasAttachment} isAudio=${isAudioType} contacto=${contact.firstName} — raw:`, JSON.stringify(message.message || {}).substring(0, 400));
+      }
+
+      if (isAudioType) {
         // Buscar la URL en todos los campos posibles del mensaje de Respond.io
         const mediaUrl = message.message?.url
           || message.message?.audioUrl
