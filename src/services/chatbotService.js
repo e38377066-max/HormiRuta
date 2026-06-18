@@ -2524,6 +2524,34 @@ class ChatbotService {
    */
   async handleConversational(contact, messageText, convState, imageUrl = null) {
     try {
+      // ── EXTRACCIÓN DE CONTEXTO DE ANUNCIO DE FACEBOOK ──────────────────────────
+      // En modo conversacional, handleInitialState es saltado, por lo que
+      // extractAdInfo nunca se llama automáticamente. Lo hacemos aquí la primera
+      // vez para que la IA sepa que el cliente viene de un anuncio específico.
+      if (!convState.context_data?.ad_campaign && !convState.context_data?.ad_price) {
+        const isFromFBAd = this.detectFacebookAdOrigin(contact);
+        if (isFromFBAd) {
+          const adInfo = await this.extractAdInfo(contact);
+          if (adInfo.campaign || adInfo.product) {
+            const updatedCtx = {
+              ...(convState.context_data || {}),
+              ad_campaign: adInfo.campaign || null,
+              ad_price: adInfo.price || null,
+              ad_product_description: adInfo.product_description || null,
+            };
+            const stateUpdates = { context_data: updatedCtx };
+            if (adInfo.product?.name && !convState.selected_product) {
+              stateUpdates.selected_product = adInfo.product.name;
+              convState = { ...convState, selected_product: adInfo.product.name };
+              await this.addTrackingTag(contact.id, `Producto_${adInfo.product.name}`);
+            }
+            await this.updateConversationState(contact.id, stateUpdates);
+            convState = { ...convState, context_data: updatedCtx };
+            console.log(`[Bot] Conversacional: contexto FB ad cargado — campaña=${adInfo.campaign}, precio=${adInfo.price}, producto=${adInfo.product?.name || 'sin detectar'}`);
+          }
+        }
+      }
+
       // ── HANDOFF INMEDIATO: si ya tenemos ZIP + producto, asignar sin más preguntas ──
       if (convState.validated_zip && convState.selected_product) {
         console.log(`[Bot] Ya tiene ZIP (${convState.validated_zip}) y producto (${convState.selected_product}) — asignando directamente sin llamar IA`);

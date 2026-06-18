@@ -1288,8 +1288,13 @@ Responde con JSON exacto:
       const haveItems = [];
       if (knownData.zip) haveItems.push(`ZIP=${knownData.zip}`);
       if (knownData.product) haveItems.push(`producto=${knownData.product}`);
-      if (adPrice && adDescription) haveItems.push(`anuncio="${adDescription} por ${adPrice}" (cliente viene de este anuncio, NO preguntar tipo/cantidad — ya lo sabe)`);
-      else if (adPrice) haveItems.push(`precio_anuncio=${adPrice} (cliente viene de este anuncio, confirmar producto del anuncio)`);
+      if (adPrice && knownData.product) {
+        haveItems.push(`anuncio: cliente llega de anuncio de "${knownData.product} por ${adPrice}" — producto y precio YA CONFIRMADOS, NO preguntes tipo ni cantidad, solo falta ZIP si no lo tienes`);
+      } else if (adPrice && adDescription) {
+        haveItems.push(`anuncio="${adDescription} por ${adPrice}" — NO preguntar tipo/cantidad, cliente ya lo sabe`);
+      } else if (adPrice) {
+        haveItems.push(`precio_anuncio=${adPrice} — cliente viene de anuncio, cuando confirme el producto NO preguntes más detalles, pide ZIP directo`);
+      }
 
       const objectivo = `OBJETIVO — actúa como vendedor humano de Area 862:
 
@@ -1298,7 +1303,7 @@ DATOS QUE FALTAN: ${missingItems.length ? missingItems.join(', ') : 'NINGUNO —
 
 PRIORIDAD DE RESPUESTA:
 1. Si el cliente hizo una PREGUNTA (precio aprox, material, tiempo, tamaño, pago, ubicación, horario, archivos), RESPÓNDELE primero usando la base de conocimiento. Sé directo y útil. NO digas "te paso con un agente" para algo que puedes responder tú.
-2. Después de responder, si falta ZIP o producto, pídelo de forma natural (no como cuestionario): "Por cierto, ¿de qué zona eres? (dime tu ciudad y código postal ZIP, ej: Dallas 75208)" o "¿Qué tipo de tarjetas necesitas?"
+2. Después de responder, si falta ZIP pídelo natural: "Por cierto, ¿de qué zona eres? (ciudad y código postal ZIP, ej: Dallas 75208)". Si falta producto y NO hay contexto de anuncio, pregunta qué necesita. Si HAY anuncio y el cliente acaba de confirmar el producto (aunque sea con una sola palabra como "Targetas"), NO repregunta — ve directo al ZIP.
 3. Si YA tienes ZIP + producto Y el cliente quiere proceder, despídete cálido y di que el especialista le mandará la cotización y revisará el diseño.
 4. ${knownData.already_greeted ? 'YA SALUDASTE antes — NO repitas saludo, ve directo al grano.' : 'Saluda con calidez y por nombre si lo tienes.'}
 5. ${knownData.is_reopened ? 'Cliente RE-ABRE conversación previa — reconócelo: "¡Qué bueno verte de vuelta'+(firstName?', '+firstName:'')+'!" y conecta con lo que faltaba.' : ''}
