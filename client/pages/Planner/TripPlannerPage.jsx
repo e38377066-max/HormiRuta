@@ -358,7 +358,7 @@ export default function TripPlannerPage() {
     directionsRendererRef.current = new google.maps.DirectionsRenderer({
       map: mapInstanceRef.current,
       suppressMarkers: true,
-      polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5, strokeOpacity: 0.8 }
+      suppressPolylines: true
     })
 
     mapInstanceRef.current.addListener('dragstart', () => {
@@ -475,23 +475,8 @@ export default function TripPlannerPage() {
       userToStopLineRef.current.setMap(null)
       userToStopLineRef.current = null
     }
-    if (!navigationMode && userLocation && stops.length > 0) {
-      const pending = stops.find(s => !s.completed && !s.skipped)
-      if (pending && pending.latitude && pending.longitude) {
-        userToStopLineRef.current = new window.google.maps.Polyline({
-          path: [userLocation, { lat: pending.latitude, lng: pending.longitude }],
-          map: mapInstanceRef.current,
-          strokeColor: '#4285F4',
-          strokeOpacity: 0,
-          strokeWeight: 3,
-          icons: [{
-            icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.7, scale: 3 },
-            offset: '0',
-            repeat: '12px'
-          }]
-        })
-      }
-    }
+    // Línea punteada al siguiente stop eliminada — solo se muestran los marcadores
+
   }, [userLocation, navigationMode, stops])
 
   useEffect(() => {
@@ -518,18 +503,10 @@ export default function TripPlannerPage() {
     if (userLocation) path.push(userLocation)
     pending.forEach(s => path.push({ lat: s.latitude, lng: s.longitude }))
 
+    // Polilínea de ruta completa eliminada — solo se muestran los marcadores numerados
     if (fullRouteFallbackRef.current) {
-      fullRouteFallbackRef.current.setPath(path)
-    } else {
-      fullRouteFallbackRef.current = new window.google.maps.Polyline({
-        path,
-        geodesic: true,
-        strokeColor: '#4285F4',
-        strokeOpacity: 0.55,
-        strokeWeight: 4,
-        map: mapInstanceRef.current,
-        zIndex: 1
-      })
+      fullRouteFallbackRef.current.setMap(null)
+      fullRouteFallbackRef.current = null
     }
   }, [navigationMode, userLocation, stops])
 
@@ -564,21 +541,14 @@ export default function TripPlannerPage() {
   }
 
   const drawFallbackLine = (from, to) => {
+    // Líneas de navegación eliminadas — solo se muestran los marcadores numerados
     if (navRendererRef.current) {
       navRendererRef.current.setMap(null)
       navRendererRef.current = null
     }
     if (navLineRef.current) {
-      navLineRef.current.setPath([from, to])
-    } else if (mapInstanceRef.current) {
-      navLineRef.current = new window.google.maps.Polyline({
-        path: [from, to],
-        geodesic: true,
-        strokeColor: '#4285F4',
-        strokeOpacity: 0.8,
-        strokeWeight: 4,
-        map: mapInstanceRef.current
-      })
+      navLineRef.current.setMap(null)
+      navLineRef.current = null
     }
   }
 
