@@ -1628,20 +1628,23 @@ export default function TripPlannerPage() {
       // Usar https://maps.apple.com/ en lugar de maps:// para que funcione
       // correctamente desde WebView/Capacitor en modo CarPlay. El esquema
       // maps:// a veces no se pasa al sistema cuando la app corre en CarPlay.
+      // Usamos coordenadas como destino (ya validadas por Google Maps) para evitar
+      // que Apple Maps regeocoda la dirección y la ponga en un punto no navegable,
+      // lo que causa "Turn-by-turn directions are not available to this destination".
       const baseAddr = (stop.address || '').trim()
-      const hasAddr = baseAddr.length > 0
-      const aptSuffix = (hasAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
-      const rawAddr = baseAddr + aptSuffix
+      const aptSuffix = (baseAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
+      const rawAddr = (baseAddr + aptSuffix).trim()
+      const label = rawAddr || stop.customer_name || stop.name || t('planner.stop')
 
       let url
-      if (hasAddr) {
-        // Dirección en texto: más confiable para CarPlay que coordenadas
-        const daddr = encodeURIComponent(rawAddr)
-        url = `https://maps.apple.com/?daddr=${daddr}&dirflg=d`
-      } else {
-        // Fallback a coordenadas con etiqueta legible
-        const label = stop.name || stop.customer_name || t('planner.stop')
+      if (lat && lng) {
+        // Coordenadas GPS como destino + dirección como etiqueta legible
         url = `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d&q=${encodeURIComponent(label)}`
+      } else if (rawAddr) {
+        // Fallback solo si no hay coordenadas
+        url = `https://maps.apple.com/?daddr=${encodeURIComponent(rawAddr)}&dirflg=d`
+      } else {
+        return
       }
       if (loc) url += `&saddr=${loc.lat},${loc.lng}`
       window.open(url, '_system')
