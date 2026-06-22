@@ -1638,7 +1638,9 @@ export default function TripPlannerPage() {
       // correcta si hay varias calles con el mismo nombre.
       const baseAddr = (stop.address || '').trim()
       const aptSuffix = (baseAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
-      const rawAddr = (baseAddr + aptSuffix).trim()
+      // Normalizar formato: quitar coma extra entre estado y ZIP ("TX, 76016" → "TX 76016")
+      // Direcciones antiguas en DB fueron guardadas con buildCleanAddress que usaba join(', ')
+      const rawAddr = (baseAddr + aptSuffix).trim().replace(/,(\s*)(\d{5}(?:-\d{4})?)/, ' $2')
 
       let url
       if (rawAddr) {

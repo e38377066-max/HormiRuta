@@ -225,13 +225,10 @@ class GeocodingService {
       parts.push(components.city);
     }
 
-    if (components.stateShort) {
-      parts.push(components.stateShort);
-    }
-
-    if (components.zip) {
-      parts.push(components.zip);
-    }
+    // Estado y ZIP juntos sin coma intermedia: "TX 76016" no "TX, 76016"
+    // El formato estándar de EE.UU. es "City, ST ZIP" — coma solo antes del estado.
+    const stateZip = [components.stateShort, components.zip].filter(Boolean).join(' ');
+    if (stateZip) parts.push(stateZip);
 
     return parts.join(', ');
   }
