@@ -1625,18 +1625,23 @@ export default function TripPlannerPage() {
       const url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes${loc ? `&from=${loc.lat},${loc.lng}` : ''}`
       window.open(url, '_system')
     } else if (app === 'apple') {
-      // Apple Maps / CarPlay funciona mejor con la dirección en texto que con coordenadas.
-      // Con solo coordenadas, CarPlay a veces reporta "dirección no encontrada".
+      // Usar https://maps.apple.com/ en lugar de maps:// para que funcione
+      // correctamente desde WebView/Capacitor en modo CarPlay. El esquema
+      // maps:// a veces no se pasa al sistema cuando la app corre en CarPlay.
       const baseAddr = (stop.address || '').trim()
       const hasAddr = baseAddr.length > 0
       const aptSuffix = (hasAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
       const rawAddr = baseAddr + aptSuffix
-      const daddr = hasAddr ? encodeURIComponent(rawAddr) : `${lat},${lng}`
-      let url = `maps://?daddr=${daddr}&dirflg=d`
-      // Si caemos a coordenadas, agregamos q= con el nombre para que CarPlay muestre una etiqueta legible
-      if (!hasAddr) {
+
+      let url
+      if (hasAddr) {
+        // Dirección en texto: más confiable para CarPlay que coordenadas
+        const daddr = encodeURIComponent(rawAddr)
+        url = `https://maps.apple.com/?daddr=${daddr}&dirflg=d`
+      } else {
+        // Fallback a coordenadas con etiqueta legible
         const label = stop.name || stop.customer_name || t('planner.stop')
-        url += `&q=${encodeURIComponent(label)}`
+        url = `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d&q=${encodeURIComponent(label)}`
       }
       if (loc) url += `&saddr=${loc.lat},${loc.lng}`
       window.open(url, '_system')
