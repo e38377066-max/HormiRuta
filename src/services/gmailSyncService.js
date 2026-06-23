@@ -32,7 +32,7 @@ export function normalizeForMatch(name) {
  * @type {Set<string>}
  */
 const PREFIX_LABELS = new Set([
-  'bc', 'pc', 'fl', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm',
+  'bc', 'pc', 'fl', 'fly', 'flyer', 'flyers', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm',
   'ys', 'dh', 'bann', 'sn'
 ]);
 
@@ -45,9 +45,9 @@ const PREFIX_LABELS = new Set([
 export function stripPrefixLabel(name) {
   if (!name) return '';
   let trimmed = String(name).trim();
-  const m = trimmed.match(/^([A-Za-z]{2,4})\s+(.+)$/);
+  const m = trimmed.match(/^([A-Za-z]{2,6})\s+(.+)$/);
   if (m && PREFIX_LABELS.has(m[1].toLowerCase())) return m[2].trim();
-  const m2 = trimmed.match(/^([a-z]{2,4})([A-Z].*)$/);
+  const m2 = trimmed.match(/^([a-z]{2,6})([A-Z].*)$/);
   if (m2 && PREFIX_LABELS.has(m2[1])) return m2[2].trim();
   return trimmed;
 }
@@ -61,9 +61,9 @@ const SUFFIX_WORDS = new Set([
   'llc', 'inc', 'corp', 'co', 'company', 'ltd',
   'motors', 'motor', 'auto', 'autos',
   'realtor', 'realty',
-  'mechanic', 'mechanics',
+  'mechanic', 'mechanics', 'mech',
   'esp',
-  'group', 'solutions',
+  'group', 'solutions', 'solution',
   'shop', 'store',
   'experts', 'expert',
   'taqueria', 'restaurant', 'pizza',
@@ -80,7 +80,11 @@ const SUFFIX_WORDS = new Set([
   'wash',
   'barber', 'salon', 'beauty',
   'tree', 'trees',
-  'iglesia', 'church'
+  'iglesia', 'church',
+  'diseno', 'design', 'designs',
+  'evento', 'events', 'event',
+  'productions', 'production',
+  'print', 'printing'
 ]);
 
 /**
@@ -601,7 +605,11 @@ export async function runPickupReadySync(forceRefresh = true) {
         skipped.push(`${gmailOrder.clientName} (MAY - no registrado)`);
       }
     } else {
-      console.log(`[Email Sync] Sin coincidencia para Gmail: "${gmailOrder.clientName}"`);
+      const topHints = topCandidatesByName(gmailOrder.clientName, candidates, c => c.customer_name, 3);
+      const hints = topHints.length
+        ? topHints.map(x => `"${x.c.customer_name}"(${Math.round(x.sim * 100)}%)`).join(', ')
+        : 'sin candidatos similares';
+      console.log(`[Email Sync] Sin coincidencia para Gmail: "${gmailOrder.clientName}" | Más cercanos: ${hints}`);
       skipped.push(gmailOrder.clientName);
     }
   }
