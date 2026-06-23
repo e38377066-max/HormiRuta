@@ -110,7 +110,7 @@ class AddressValidationService {
 
     if (!zone && this.userId) {
       zone = await CoverageZone.findOne({
-        where: { city: { [Op.iLike]: `%${cityName}%` }, is_active: true }
+        where: { city: { [Op.iLike]: `%${cityName}%` }, is_active: true, user_id: null }
       });
     }
     
@@ -203,7 +203,7 @@ class AddressValidationService {
       let zone = await CoverageZone.findOne({ where: zipWhere });
 
       if (!zone && this.userId) {
-        zone = await CoverageZone.findOne({ where: { zip_code: zipCode, is_active: true } });
+        zone = await CoverageZone.findOne({ where: { zip_code: zipCode, is_active: true, user_id: null } });
       }
       
       if (zone) {
@@ -324,7 +324,7 @@ class AddressValidationService {
     let zone = await CoverageZone.findOne({ where: coverageWhere });
 
     if (!zone && this.userId) {
-      zone = await CoverageZone.findOne({ where: { zip_code: zipCode, is_active: true } });
+      zone = await CoverageZone.findOne({ where: { zip_code: zipCode, is_active: true, user_id: null } });
     }
 
     if (zone) {

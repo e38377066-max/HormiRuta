@@ -515,44 +515,7 @@ export default function DispatchMap() {
         markersRef.current.push(marker)
       })
 
-      // Polilínea coloreada conectando todas las paradas en orden
-      if (validStops.length >= 2) {
-        const path = validStops.map(s => ({ lat: s.lat, lng: s.lng }))
-        const polyline = new window.google.maps.Polyline({
-          path,
-          map: mapInstance.current,
-          strokeColor: color,
-          strokeOpacity: 0.75,
-          strokeWeight: 4,
-          icons: [{
-            icon: {
-              path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-              scale: 3,
-              strokeColor: color,
-              strokeOpacity: 1,
-              fillColor: color,
-              fillOpacity: 1
-            },
-            offset: '100%',
-            repeat: '120px'
-          }],
-          zIndex: 40
-        })
-
-        const infoWindowLine = new window.google.maps.InfoWindow({
-          content: `<div style="font-family:sans-serif;padding:4px 2px">
-            <strong style="color:${color}">&#9632; ${route.name || t('dispatch.route')}</strong><br/>
-            ${driverName ? `<span style="color:#555">${t('dispatch.driver')} <strong>${driverName}</strong></span><br/>` : ''}
-            <span style="color:#888;font-size:12px">${validStops.length} ${t('dispatch.stops')}</span>
-          </div>`
-        })
-        polyline.addListener('click', (e) => {
-          infoWindowLine.setPosition(e.latLng)
-          infoWindowLine.open(mapInstance.current)
-        })
-
-        routePolylinesRef.current.push(polyline)
-      }
+      // Líneas entre paradas eliminadas — solo se muestran los marcadores numerados
     })
 
     window.__dispatchToggleFav = (favId) => {
