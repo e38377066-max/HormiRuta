@@ -824,7 +824,14 @@ class PollingService {
     this.addressScannedContacts.delete(contact.id.toString());
 
     const latestMessage = incomingMessages[incomingMessages.length - 1];
-    
+
+    // Si llegaron varios mensajes juntos, escanear los saltados por ZIP/ciudad
+    // para no perderlos cuando el último mensaje no los contiene.
+    if (incomingMessages.length > 1) {
+      const skippedMessages = incomingMessages.slice(0, -1);
+      await this.prescanSkippedForZip(userId, contact, skippedMessages).catch(() => {});
+    }
+
     for (const msg of incomingMessages) {
       poller.processedMessageIds.add(msg.messageId);
     }
@@ -1135,6 +1142,40 @@ class PollingService {
    * @param {boolean} [isTestMode=false] - Indica si está en modo de prueba.
    * @returns {Promise<void>}
    */
+
+  /**
+   * Escanea mensajes saltados (no-últimos) en busca de un ZIP o ciudad válido
+   * y lo pre-guarda en ConversationState para que el chatbot no lo pida de nuevo.
+   * Se llama cuando llegan múltiples mensajes en ráfaga y solo se procesa el último.
+   */
+  async prescanSkippedForZip(userId, contact, skippedMessages) {
+    const convState = await ConversationState.findOne({
+      where: { contact_id: contact.id.toString() }
+    });
+    if (convState?.validated_zip) return;
+
+    const addressValidation = new AddressValidationService(userId);
+
+    for (const msg of skippedMessages) {
+      const text = (msg.message?.text || '').trim();
+      if (!text) continue;
+
+      const isZip = addressValidation.isZipCodeMessage(text);
+      const isCity = addressValidation.isCityMessage(text);
+      if (!isZip && !isCity) continue;
+
+      const result = await addressValidation.validateZipOrCity(text);
+      if (result.valid && result.value) {
+        await ConversationState.update(
+          { validated_zip: result.value },
+          { where: { contact_id: contact.id.toString() } }
+        );
+        console.log(`[Polling] ZIP pre-guardado de mensaje anterior de ${contact.firstName}: "${text}" → ${result.value} (${result.zone?.zone_name || result.zone?.city || 'zona válida'})`);
+        break;
+      }
+    }
+  }
+
   async processIncomingMessage(userId, contact, message, respondio, useAutomaticMode = false, isTestMode = false) {
     try {
       const settings = await getGlobalSettings();

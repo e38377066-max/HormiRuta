@@ -1302,6 +1302,20 @@ Responde con JSON exacto:
         ...(adDescription ? { ad_product_description: adDescription } : {})
       };
 
+      // Si no hay validated_zip en estado, buscar en el historial reciente
+      // (por si el cliente lo envió antes y el polling lo saltó)
+      if (!knownData.zip && recentMessages.length > 0) {
+        for (const m of [...recentMessages].reverse()) {
+          if (m.isFromCustomer) {
+            const zipInHistory = (m.text || '').trim().match(/\b(\d{5})\b/);
+            if (zipInHistory) {
+              knownData.zip = zipInHistory[1];
+              break;
+            }
+          }
+        }
+      }
+
       // Lista explícita de qué falta y qué NO se debe preguntar
       const missingItems = [];
       if (!knownData.zip) missingItems.push('ZIP');
