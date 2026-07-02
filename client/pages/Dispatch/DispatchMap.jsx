@@ -606,16 +606,6 @@ export default function DispatchMap() {
 
     optimizeTimerRef.current = setTimeout(() => {
       const directionsService = new window.google.maps.DirectionsService()
-      const renderer = new window.google.maps.DirectionsRenderer({
-        map: mapInstance.current,
-        suppressMarkers: true,
-        polylineOptions: {
-          strokeColor: '#6200ea',
-          strokeOpacity: 0.85,
-          strokeWeight: 4
-        }
-      })
-      directionsRendererRef.current = renderer
 
       const origin = { lat: selectedData[0].address_lat, lng: selectedData[0].address_lng }
       const destination = { lat: selectedData[selectedData.length - 1].address_lat, lng: selectedData[selectedData.length - 1].address_lng }
@@ -637,8 +627,6 @@ export default function DispatchMap() {
       }, (result, status) => {
         setOptimizingLive(false)
         if (status === 'OK') {
-          renderer.setDirections(result)
-
           const route = result.routes[0]
           let totalDist = 0
           let totalDur = 0
