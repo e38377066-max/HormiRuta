@@ -89,6 +89,12 @@ class PollingService {
     // una llamada a OpenAI en cada ciclo del escáner).
     /** @type {Map<string, Object>} Firmas de escaneo de dirección por IA. */
     this.aiAddressScanSig = new Map();
+
+    // Textos que ya fueron geocodificados y devolvieron resultado vago (solo país/estado/ciudad).
+    // Clave: `${contactId}::${textNorm}`, valor: timestamp. TTL = 60 min.
+    // Evita re-geocodificar y re-loggear "Nueva dirección detectada" cada 3s para el mismo texto.
+    /** @type {Map<string, number>} Caché de textos con geocoding vago por contacto. */
+    this.vagueGeoCache = new Map();
   }
 
   /**
@@ -2791,15 +2797,33 @@ class PollingService {
             }
           } else if (result.address) {
             const existing = addressMap.get(contactIdStr);
+            const addrTextNorm = result.address.toLowerCase().replace(/[^a-z0-9]/g, '');
 
             if (existing) {
-              const newAddrNorm = result.address.toLowerCase().replace(/[^a-z0-9]/g, '');
               const existOrigNorm = (existing.original || '').toLowerCase().replace(/[^a-z0-9]/g, '');
               const existValidNorm = (existing.validated || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-              if (newAddrNorm === existOrigNorm || newAddrNorm === existValidNorm) {
+              if (addrTextNorm === existOrigNorm || addrTextNorm === existValidNorm) {
                 return;
               }
+            }
+
+            // Si este texto ya fue geocodificado y devolvió resultado vago, no repetir (TTL 60 min)
+            const vagueCacheKey = `${contact.id}::${addrTextNorm}`;
+            const VAGUE_TTL_MS = 60 * 60 * 1000;
+            const vagueTs = this.vagueGeoCache.get(vagueCacheKey);
+            if (vagueTs && (Date.now() - vagueTs) < VAGUE_TTL_MS) {
+              return;
+            }
+            // Limpiar entradas antiguas de la caché de vez en cuando
+            if (this.vagueGeoCache.size > 2000) {
+              const cutoff = Date.now() - VAGUE_TTL_MS;
+              for (const [k, v] of this.vagueGeoCache) {
+                if (v < cutoff) this.vagueGeoCache.delete(k);
+              }
+            }
+
+            if (existing) {
               console.log(`[AddressScan] Nueva direccion detectada para ${contactName} (${contact.id}): "${result.address}" (anterior: "${existing.validated}")`);
             }
 
@@ -2822,6 +2846,7 @@ class PollingService {
             } else if (geocoded.success && geocoded.confidence === 'low') {
               if (isVagueGeoResult(geocoded.fullAddress)) {
                 console.log(`[AddressScan] Geocoding baja confianza descartado (resultado vago): "${result.address}" -> "${geocoded.fullAddress}"`);
+                this.vagueGeoCache.set(vagueCacheKey, Date.now());
                 return;
               }
               finalAddress = geocoded.fullAddress;

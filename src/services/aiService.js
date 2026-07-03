@@ -469,7 +469,15 @@ ${profile.summary || 'Sin resumen aún.'}${loc}${past}${prefs}${notes}`;
             if (parsed.choices && parsed.choices[0]) {
               resolve({ success: true, content: parsed.choices[0].message.content.trim() });
             } else if (parsed.error) {
-              console.error('[AI] OpenAI error:', parsed.error.message);
+              const isQuota = parsed.error.code === 'insufficient_quota' || /exceeded.*quota/i.test(parsed.error.message || '');
+              if (isQuota) {
+                if (!AIService._quotaWarnedAt || (Date.now() - AIService._quotaWarnedAt) > 30 * 60 * 1000) {
+                  console.warn('[AI] Créditos de OpenAI agotados — recarga tu cuenta en platform.openai.com. El chatbot seguirá funcionando sin IA hasta que se recargue.');
+                  AIService._quotaWarnedAt = Date.now();
+                }
+              } else {
+                console.error('[AI] OpenAI error:', parsed.error.message);
+              }
               resolve({ success: false, error: parsed.error.message });
             } else {
               resolve({ success: false, error: 'Unexpected response format' });
