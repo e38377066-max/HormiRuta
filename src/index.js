@@ -27,6 +27,7 @@ console.log('===========================================');
 import { sequelize } from './models/index.js';
 
 import { requireAuth } from './middleware/auth.js';
+import { openaiQuotaState } from './services/aiService.js';
 import authRoutes from './routes/auth.js';
 import routesRoutes from './routes/routes.js';
 import stopsRoutes from './routes/stops.js';
@@ -106,7 +107,12 @@ app.use(session({
  * @route GET /api/health
  */
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Area 862 System API funcionando (Node.js)' });
+  res.json({
+    status: 'ok',
+    message: 'Area 862 System API funcionando (Node.js)',
+    openaiQuotaExhausted: openaiQuotaState.exhausted,
+    openaiQuotaDetectedAt: openaiQuotaState.detectedAt,
+  });
 });
 
 app.use('/api/auth', authRoutes);

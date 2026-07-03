@@ -12,6 +12,16 @@ import FormData from 'form-data';
 import BotMemory from '../models/BotMemory.js';
 import BotKnowledge from '../models/BotKnowledge.js';
 
+/**
+ * Estado global de quota de OpenAI — compartido entre instancias de AIService.
+ * Se actualiza cuando se detecta un error de créditos agotados o una respuesta exitosa.
+ */
+export const openaiQuotaState = {
+  exhausted: false,
+  detectedAt: null,
+  restoredAt: null,
+};
+
 class AIService {
   /**
    * Crea una instancia de AIService.
@@ -467,12 +477,20 @@ ${profile.summary || 'Sin resumen aún.'}${loc}${past}${prefs}${notes}`;
           try {
             const parsed = JSON.parse(data);
             if (parsed.choices && parsed.choices[0]) {
+              if (openaiQuotaState.exhausted) {
+                openaiQuotaState.exhausted = false;
+                openaiQuotaState.restoredAt = Date.now();
+                console.log('[AI] Créditos de OpenAI restaurados — el chatbot vuelve a funcionar con IA.');
+              }
               resolve({ success: true, content: parsed.choices[0].message.content.trim() });
             } else if (parsed.error) {
               const isQuota = parsed.error.code === 'insufficient_quota' || /exceeded.*quota/i.test(parsed.error.message || '');
               if (isQuota) {
-                if (!AIService._quotaWarnedAt || (Date.now() - AIService._quotaWarnedAt) > 30 * 60 * 1000) {
+                if (!openaiQuotaState.exhausted) {
+                  openaiQuotaState.exhausted = true;
+                  openaiQuotaState.detectedAt = Date.now();
                   console.warn('[AI] Créditos de OpenAI agotados — recarga tu cuenta en platform.openai.com. El chatbot seguirá funcionando sin IA hasta que se recargue.');
+                } else if (!AIService._quotaWarnedAt || (Date.now() - AIService._quotaWarnedAt) > 30 * 60 * 1000) {
                   AIService._quotaWarnedAt = Date.now();
                 }
               } else {

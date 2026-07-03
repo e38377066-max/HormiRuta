@@ -5,6 +5,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
+import OpenAIQuotaBanner from './components/OpenAIQuotaBanner'
 
 import DashboardLayout from './layouts/DashboardLayout'
 import PlannerLayout from './layouts/PlannerLayout'
@@ -116,7 +117,9 @@ export default function App() {
   const { user, isAuthenticated } = useAuth()
 
   return (
-    <Routes>
+    <>
+      <OpenAIQuotaBanner />
+      <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/privacy" element={<PrivacyPage />} />
@@ -151,5 +154,6 @@ export default function App() {
       
       <Route path="*" element={<Navigate to={isAuthenticated ? getDefaultRoute(user) : '/login'} replace />} />
     </Routes>
+    </>
   )
 }
