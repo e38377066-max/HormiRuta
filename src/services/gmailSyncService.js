@@ -21,6 +21,8 @@ import respondApiService from './respondApiService.js';
  */
 export function normalizeForMatch(name) {
   return String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')  // convierte á→a, é→e, ñ→n, etc.
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -33,7 +35,7 @@ export function normalizeForMatch(name) {
  */
 const PREFIX_LABELS = new Set([
   'bc', 'pc', 'fl', 'fly', 'flyer', 'flyers', 'ma', 'mc', 'st', 'sb', 'pr', 'pos', 'eddm', 'ddm',
-  'ys', 'dh', 'bann', 'sn'
+  'ys', 'dh', 'bann', 'sn', 'lab'
 ]);
 
 /**
@@ -330,43 +332,58 @@ Reglas:
 Responde SOLO con JSON valido en este formato:
 {"match": "NONE o el nombre EXACTO de un candidato copiado letra por letra", "razon": "explicacion breve"}`;
 
-  try {
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4o-mini',
-        temperature: 0,
-        max_tokens: 150,
-        response_format: { type: 'json_object' },
-        messages: [{ role: 'user', content: prompt }]
-      },
-      { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 20000 }
-    );
-    const content = response.data?.choices?.[0]?.message?.content;
-    if (!content) { aiMatchCache.set(cacheKey, { at: Date.now(), result: null }); return null; }
-    let parsed;
-    try { parsed = JSON.parse(content); } catch { parsed = null; }
-    if (!parsed) { aiMatchCache.set(cacheKey, { at: Date.now(), result: null }); return null; }
-    const matched = (parsed.match || '').toString().trim();
-    if (!matched || matched.toUpperCase() === 'NONE') {
-      console.log(`[Email Sync AI] "${gmailName}" -> NONE (${parsed.razon || ''})`);
-      aiMatchCache.set(cacheKey, { at: Date.now(), result: null });
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const MAX_RETRIES = 3;
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(1000 * Math.pow(2, attempt - 1)); // 1s, 2s backoff
+    try {
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: 'gpt-4o-mini',
+          temperature: 0,
+          max_tokens: 150,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'user', content: prompt }]
+        },
+        { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 20000 }
+      );
+      const content = response.data?.choices?.[0]?.message?.content;
+      if (!content) { aiMatchCache.set(cacheKey, { at: Date.now(), result: null }); return null; }
+      let parsed;
+      try { parsed = JSON.parse(content); } catch { parsed = null; }
+      if (!parsed) { aiMatchCache.set(cacheKey, { at: Date.now(), result: null }); return null; }
+      const matched = (parsed.match || '').toString().trim();
+      if (!matched || matched.toUpperCase() === 'NONE') {
+        console.log(`[Email Sync AI] "${gmailName}" -> NONE (${parsed.razon || ''})`);
+        aiMatchCache.set(cacheKey, { at: Date.now(), result: null });
+        return null;
+      }
+      const exact = candidateNames.find(n => n === matched)
+        || candidateNames.find(n => normalizeForMatch(n) === normalizeForMatch(matched));
+      if (!exact) {
+        console.warn(`[Email Sync AI] IA respondio "${matched}" pero no existe en lista, descartando.`);
+        aiMatchCache.set(cacheKey, { at: Date.now(), result: null });
+        return null;
+      }
+      console.log(`[Email Sync AI] "${gmailName}" -> "${exact}" (${parsed.razon || ''})`);
+      aiMatchCache.set(cacheKey, { at: Date.now(), result: exact });
+      return exact;
+    } catch (err) {
+      const is429 = err.response?.status === 429;
+      if (is429 && attempt < MAX_RETRIES - 1) {
+        const retryAfter = parseInt(err.response?.headers?.['retry-after'] || '0', 10);
+        const wait = retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1);
+        console.warn(`[Email Sync AI] 429 rate limit para "${gmailName}", reintentando en ${wait}ms...`);
+        await sleep(wait);
+        continue;
+      }
+      console.error('[Email Sync AI] Error consultando OpenAI:', err.message);
       return null;
     }
-    const exact = candidateNames.find(n => n === matched)
-      || candidateNames.find(n => normalizeForMatch(n) === normalizeForMatch(matched));
-    if (!exact) {
-      console.warn(`[Email Sync AI] IA respondio "${matched}" pero no existe en lista, descartando.`);
-      aiMatchCache.set(cacheKey, { at: Date.now(), result: null });
-      return null;
-    }
-    console.log(`[Email Sync AI] "${gmailName}" -> "${exact}" (${parsed.razon || ''})`);
-    aiMatchCache.set(cacheKey, { at: Date.now(), result: exact });
-    return exact;
-  } catch (err) {
-    console.error('[Email Sync AI] Error consultando OpenAI:', err.message);
-    return null;
   }
+  return null;
 }
 
 // ─── Lógica central del sync ──────────────────────────────────────────────────
@@ -494,6 +511,7 @@ export async function runPickupReadySync(forceRefresh = true) {
     if (aiKey) {
       const top = topCandidatesByName(gmailOrder.clientName, candidates, c => c.customer_name, 10);
       if (top.length > 0) {
+        await new Promise(r => setTimeout(r, 200)); // pausa para no saturar rate limit de OpenAI
         const aiName = await aiNameMatch(gmailOrder.clientName, top.map(x => x.c.customer_name), aiKey);
         if (aiName) {
           const aiMatchedRow = top.find(x => x.c.customer_name === aiName)?.c;
