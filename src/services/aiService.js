@@ -200,6 +200,12 @@ Detecta:
 2. ¿Qué tipo de negocio se ve o se deduce? (cleaning, towing, landscaping, construction, electrical, restaurant, barber, auto, plumbing, painting, trucking, roofing, tax, insurance, church, daycare, photography, hvac, pest, notary, realestate, moving, general — si no se ve ninguno usa "general")
 3. ¿Es una referencia que el cliente quiere replicar o pedir algo similar?
 
+CRITERIO PARA DIFERENCIAR "tarjetas" vs "magneticos" (muy importante, no los confundas):
+- "tarjetas": diseño rectangular pequeño tipo tarjeta de presentación (proporción ~2x3.5), normalmente muestra info de contacto (nombre, teléfono, servicios) en una tarjeta individual o par de tarjetas (frente/reverso) una debajo de la otra o lado a lado, SIN mostrarse montado en un vehículo.
+- "magneticos": el diseño se ve pegado o montado sobre la puerta o carrocería de un carro/van/camioneta real, o es un rectángulo grande tipo letrero (proporción ancha, tipo 12x24 o 18x24) pensado para ir en un vehículo.
+- Si la imagen muestra dos diseños rectangulares apilados con info de negocio pero NO hay ningún vehículo visible ni el diseño está montado en carrocería, es "tarjetas", NO "magneticos", aunque el negocio sea de servicio a domicilio (HVAC, plomería, towing, etc).
+- Si tienes duda razonable entre "tarjetas" y "magneticos" porque no se ve el contexto real de uso, prefiere "tarjetas" (es el producto más común) y baja tu confianza en isDesignReference.
+
 Devuelve SOLO este JSON:
 {
   "isDesignReference": true/false,
@@ -211,7 +217,7 @@ Devuelve SOLO este JSON:
             },
             {
               type: 'image_url',
-              image_url: { url: imageUrl, detail: 'low' }
+              image_url: { url: imageUrl, detail: 'high' }
             }
           ]
         }]

@@ -515,6 +515,24 @@
   background: #ede7f6;
 }
 
+.fav-orders-section {
+  margin-top: 12px;
+  border-top: 1px dashed #ddd;
+  padding-top: 8px;
+}
+
+.fav-orders-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 4px 6px 4px;
+}
+
 .do-status-dot {
   width: 8px;
   min-width: 8px;
