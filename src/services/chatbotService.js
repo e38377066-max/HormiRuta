@@ -1661,15 +1661,20 @@ class ChatbotService {
         `¡Perfecto! ${directProduct.name} 😊\n\nPara verificar si tenemos cobertura en tu zona, ¿me puedes dar tu ciudad y código postal (ZIP)? Por ejemplo: Dallas 75208 📍`
       );
       await this.sendMessage(contact.id, confirmMsg);
+      // Extraer cantidad si el cliente ya la mencionó (ej. "quería 1000 tarjetas")
+      const qtyRaw = messageText.replace(/,/g, '');
+      const qtyMatch = qtyRaw.match(/\b(500|1000|2500|5000)\b/);
+      const preferredQuantity = qtyMatch ? parseInt(qtyMatch[1], 10) : null;
       await this.updateConversationState(contact.id, {
         state: 'awaiting_zip',
         selected_product: directProduct.name,
         has_prior_info: true,
         greeting_sent: true,
-        awaiting_response: 'zip_code'
+        awaiting_response: 'zip_code',
+        ...(preferredQuantity ? { preferred_quantity: preferredQuantity } : {})
       });
       await this.addTrackingTag(contact.id, `Producto_${directProduct.name}`);
-      await this.addComment(contact.id, `[Bot] Cliente llegó con producto: ${directProduct.name}. Pidiendo ciudad+ZIP.`);
+      await this.addComment(contact.id, `[Bot] Cliente llegó con producto: ${directProduct.name}${preferredQuantity ? `, cantidad: ${preferredQuantity}` : ''}. Pidiendo ciudad+ZIP.`);
       return { handled: true, action: 'direct_product_ask_zip', product: directProduct.name };
     }
     // ─────────────────────────────────────────────────────────────────────────
@@ -2087,21 +2092,48 @@ class ChatbotService {
           return { handled: true, action: 'zip_validated_campaign_ask_design' };
         }
 
-        // Sin campaña: enviar info del producto configurada estáticamente
-        const productInfo = this.getProductInfoMessage(alreadySelectedProduct);
-        if (productInfo) {
-          await this.sendMessage(contact.id, productInfo);
+        // El cliente ya indicó el producto desde el primer mensaje.
+        // Si además mencionó una cantidad que coincide con un paquete → confirmar precio y preguntar diseño.
+        // Si solo indicó producto → preguntar diseño directamente.
+        // En ningún caso se muestra la lista de precios completa (ya eligieron producto).
+        const PACKAGES = this.getCardPackages();
+        const preferredQty = convState.preferred_quantity;
+
+        if (preferredQty && PACKAGES[preferredQty]) {
+          const pkg = PACKAGES[preferredQty];
+          const qtyConfirmMsg = await this.getAIMsg(
+            'product_selected_ask_design',
+            { customerName: name, product: alreadySelectedProduct, quantity: preferredQty, price: pkg.price },
+            `¡Perfecto! 🎉 Tenemos cobertura en tu área.\n\n${preferredQty} ${alreadySelectedProduct} por ${pkg.price} ✅ Diseño incluido, papel grueso con brillo, entrega a domicilio.\n\n¿Ya tienes un diseño listo o te ayudamos a crear uno desde cero? 🎨`
+          );
+          await this.sendMessage(contact.id, qtyConfirmMsg);
+          await this.updateConversationState(contact.id, {
+            state: 'awaiting_design_info',
+            validated_zip: validation.value,
+            has_prior_info: true,
+            selected_product: alreadySelectedProduct,
+            preferred_quantity: preferredQty,
+            awaiting_response: 'design_info'
+          });
+          await this.addComment(contact.id, `[Bot] Zona validada (${validation.value}), producto: ${alreadySelectedProduct}, cantidad: ${preferredQty} (${pkg.price}). Preguntando diseño.`);
+          return { handled: true, action: 'zip_validated_product_and_quantity_known' };
         }
 
+        // Producto conocido pero sin cantidad: preguntar diseño directamente, sin lista de precios
+        const askDesignMsg = await this.getAIMsg(
+          'product_selected_ask_design',
+          { customerName: name, product: alreadySelectedProduct },
+          `¡Perfecto! 🎉 Tenemos cobertura en tu área para tus ${alreadySelectedProduct}.\n\n¿Ya tienes un diseño listo o te ayudamos a crear uno desde cero? 🎨`
+        );
+        await this.sendMessage(contact.id, askDesignMsg);
         await this.updateConversationState(contact.id, {
-          state: 'awaiting_product_response',
+          state: 'awaiting_design_info',
           validated_zip: validation.value,
-          has_prior_info: false,
+          has_prior_info: true,
           selected_product: alreadySelectedProduct,
-          awaiting_response: 'product_response'
+          awaiting_response: 'design_info'
         });
-
-        await this.addComment(contact.id, `[Bot] Zona validada (${validation.value}) y producto ya conocido (${alreadySelectedProduct}). Saltando menú de productos.`);
+        await this.addComment(contact.id, `[Bot] Zona validada (${validation.value}) y producto ya conocido (${alreadySelectedProduct}). Preguntando diseño.`);
         return { handled: true, action: 'zip_validated_product_already_known' };
       }
 
