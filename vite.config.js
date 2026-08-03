@@ -48,6 +48,7 @@ export default defineConfig({
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
-    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || PRODUCTION_API_URL)
+    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || PRODUCTION_API_URL),
+    'import.meta.env.VITE_GOOGLE_MAPS_API_KEY': JSON.stringify(process.env.VITE_GOOGLE_MAPS_API_KEY || '')
   }
 })
