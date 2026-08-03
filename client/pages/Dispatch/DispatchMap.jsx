@@ -338,11 +338,7 @@ export default function DispatchMap() {
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
 
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-    if (!apiKey) {
-      console.warn('Google Maps API key not configured')
-      return
-    }
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyBLqGtCFZG3-c19oILRHE-1QOJATX-gm-4'
 
     const loader = new Loader({
       apiKey,
