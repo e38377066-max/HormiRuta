@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const PRODUCTION_API_URL = 'https://workspace.manuellezkano17.replit.app'
+const PRODUCTION_API_URL = 'https://area862system.com'
 
 export default defineConfig({
   plugins: [react()],
