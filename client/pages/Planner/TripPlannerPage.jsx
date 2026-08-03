@@ -111,7 +111,9 @@ export default function TripPlannerPage() {
 
   // Efecto inicial para inicializar el mapa y cargar rutas de despacho
   useEffect(() => {
-    initMap()
+    initMap().catch(err => {
+      console.error('[Map] initMap failed:', err?.message || err)
+    })
     loadDispatchRoutes()
   }, [])
 
@@ -337,8 +339,14 @@ export default function TripPlannerPage() {
    * Inicializa el mapa de Google Maps con las configuraciones por defecto.
    */
   const initMap = async () => {
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+    if (!apiKey) {
+      console.error('[Map] VITE_GOOGLE_MAPS_API_KEY está vacía en este bundle. Recompila con la key configurada.')
+      return
+    }
+    console.log('[Map] API key presente, cargando Google Maps...')
     const loader = new Loader({
-      apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+      apiKey,
       version: 'weekly',
       libraries: ['places', 'geometry']
     })
