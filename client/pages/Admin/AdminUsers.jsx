@@ -32,6 +32,10 @@ export default function AdminUsers() {
   const [editingUser, setEditingUser] = useState(null)
   /** @type {[boolean, Function]} Indica si se está guardando un cambio */
   const [saving, setSaving] = useState(false)
+  /** @type {[string, Function]} Nueva contraseña temporal para el usuario editado */
+  const [newPassword, setNewPassword] = useState('')
+  /** @type {[number|null, Function]} ID del usuario pendiente de eliminación */
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
 
   /** Recarga la lista cuando cambia el filtro de rol */
   useEffect(() => {
@@ -85,6 +89,7 @@ export default function AdminUsers() {
    */
   const openEditDialog = (user) => {
     setEditingUser({ ...user, commission_per_stop: user.commission_per_stop ?? '' })
+    setNewPassword('')
     setShowEditDialog(true)
   }
 
@@ -104,13 +109,27 @@ export default function AdminUsers() {
       if (editingUser.role === 'driver') {
         payload.commission_per_stop = editingUser.commission_per_stop !== '' ? parseFloat(editingUser.commission_per_stop) : null
       }
+      if (newPassword.trim().length >= 6) {
+        payload.password = newPassword.trim()
+      }
       await api.put(`/api/admin/users/${editingUser.id}`, payload)
       fetchUsers()
       setShowEditDialog(false)
+      setNewPassword('')
     } catch (error) {
       console.error('Error saving user:', error)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeleteUser = async (id) => {
+    try {
+      await api.delete(`/api/admin/users/${id}`)
+      setConfirmDeleteId(null)
+      fetchUsers()
+    } catch (error) {
+      console.error('Error deleting user:', error)
     }
   }
 
@@ -215,6 +234,13 @@ export default function AdminUsers() {
                     >
                       <span className="material-icons">{user.isActive !== false ? 'block' : 'check_circle'}</span>
                     </button>
+                    <button
+                      className="icon-btn danger"
+                      onClick={() => setConfirmDeleteId(user.id)}
+                      title="Eliminar usuario"
+                    >
+                      <span className="material-icons">delete</span>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -232,6 +258,26 @@ export default function AdminUsers() {
           </table>
         </div>
       </div>
+
+      {confirmDeleteId && (
+        <div className="modal-backdrop" onClick={() => setConfirmDeleteId(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:'380px'}}>
+            <div className="modal-header">
+              <h3>Eliminar usuario</h3>
+              <button className="modal-close" onClick={() => setConfirmDeleteId(null)}>
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>¿Estás seguro de que quieres eliminar este usuario? Esta acción no se puede deshacer.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={() => setConfirmDeleteId(null)}>Cancelar</button>
+              <button className="btn-danger" onClick={() => handleDeleteUser(confirmDeleteId)}>Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showEditDialog && editingUser && (
         <div className="modal-backdrop" onClick={() => setShowEditDialog(false)}>
@@ -293,6 +339,16 @@ export default function AdminUsers() {
                   />
                 </div>
               )}
+              <div className="field-group">
+                <label>Nueva contraseña <span style={{fontWeight:'normal',fontSize:'0.85em',color:'#888'}}>(dejar vacío para no cambiar)</span></label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  autoComplete="new-password"
+                />
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn-cancel" onClick={() => setShowEditDialog(false)}>{t('common.cancel')}</button>

@@ -129,6 +129,10 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
       }
     }
 
+    if (req.body.password && req.body.password.trim().length >= 6) {
+      await user.setPassword(req.body.password.trim());
+    }
+
     await user.save();
     res.json(user.toDict());
   } catch (error) {
