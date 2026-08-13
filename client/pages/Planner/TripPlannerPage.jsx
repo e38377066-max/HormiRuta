@@ -1598,35 +1598,23 @@ export default function TripPlannerPage() {
       const url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes${loc ? `&from=${loc.lat},${loc.lng}` : ''}`
       window.open(url, '_system')
     } else if (app === 'apple') {
-      // Usar https://maps.apple.com/ en lugar de maps:// para que funcione
-      // correctamente desde WebView/Capacitor en modo CarPlay. El esquema
-      // maps:// a veces no se pasa al sistema cuando la app corre en CarPlay;
-      // se usa https://maps.apple.com/ que siempre lo redirige correctamente.
+      // Use maps:// native scheme — Capacitor passes it directly to iOS URL handler
+      // which correctly launches Apple Maps with turn-by-turn. https://maps.apple.com/
+      // via universal link from a WebView drops query params intermittently.
       //
-      // IMPORTANTE: NO usar coordenadas en daddr= — Apple Maps tiene un bug
-      // conocido (desde ~2024) donde "snappea" las coords a una entidad
-      // cercana diferente causando "Turn-by-turn not available". El texto
-      // de dirección es más confiable según la documentación oficial de Apple.
-      // Se agrega ll= como pista geográfica para que geocodifique en la zona
-      // correcta si hay varias calles con el mismo nombre.
-      const baseAddr = (stop.address || '').trim()
-      const aptSuffix = (baseAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
-      // Normalizar formato: quitar coma extra entre estado y ZIP ("TX, 76016" → "TX 76016")
-      // Direcciones antiguas en DB fueron guardadas con buildCleanAddress que usaba join(', ')
-      const rawAddr = (baseAddr + aptSuffix).trim().replace(/,(\s*)(\d{5}(?:-\d{4})?)/, ' $2')
-
+      // Prefer coordinates in daddr= when available: the text geocoding path can
+      // open Apple Maps on the search screen if geocoding is slow. Coordinates
+      // launch navigation immediately and reliably.
       let url
-      if (rawAddr) {
-        // Dirección en texto como destino (recomendado por Apple para turn-by-turn)
-        url = `https://maps.apple.com/?daddr=${encodeURIComponent(rawAddr)}&dirflg=d&t=m`
-        // ll= centra el mapa en la zona correcta durante la geocodificación
-        if (lat && lng) url += `&ll=${lat},${lng}`
-      } else if (lat && lng) {
-        // Último recurso: coordenadas si no hay dirección en absoluto
-        const label = stop.customer_name || stop.name || t('planner.stop')
-        url = `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d&t=m&q=${encodeURIComponent(label)}`
+      if (lat && lng) {
+        const label = stop.customer_name || stop.name || stop.address?.split(',')[0] || 'Stop'
+        url = `maps://?daddr=${lat},${lng}&dirflg=d&t=m&q=${encodeURIComponent(label)}`
       } else {
-        return
+        const baseAddr = (stop.address || '').trim()
+        const aptSuffix = (baseAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
+        const rawAddr = (baseAddr + aptSuffix).trim().replace(/,(\s*)(\d{5}(?:-\d{4})?)/, ' $2')
+        if (!rawAddr) return
+        url = `maps://?daddr=${encodeURIComponent(rawAddr)}&dirflg=d&t=m`
       }
       if (loc) url += `&saddr=${loc.lat},${loc.lng}`
       window.open(url, '_system')
