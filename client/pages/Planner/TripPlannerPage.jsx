@@ -1598,23 +1598,28 @@ export default function TripPlannerPage() {
       const url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes${loc ? `&from=${loc.lat},${loc.lng}` : ''}`
       window.open(url, '_system')
     } else if (app === 'apple') {
-      // Use maps:// native scheme — Capacitor passes it directly to iOS URL handler
-      // which correctly launches Apple Maps with turn-by-turn. https://maps.apple.com/
-      // via universal link from a WebView drops query params intermittently.
+      // maps:// scheme — Capacitor entrega directo al handler iOS, sin perder parámetros.
       //
-      // Prefer coordinates in daddr= when available: the text geocoding path can
-      // open Apple Maps on the search screen if geocoding is slow. Coordinates
-      // launch navigation immediately and reliably.
+      // IMPORTANTE CarPlay: daddr= debe ser DIRECCIÓN DE TEXTO, no coordenadas.
+      // CarPlay muestra "Turn-by-turn directions not available" cuando daddr= son
+      // coordenadas puras (lat,lng). Las coordenadas van en ll= solo como pista de
+      // geocodificación para que Apple Maps ubique el lugar correcto rápidamente.
+      const baseAddr = (stop.address || '').trim()
+      const aptSuffix = (baseAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
+      // Quitar coma extra entre estado y ZIP ("TX, 76016" → "TX 76016")
+      const rawAddr = (baseAddr + aptSuffix).trim().replace(/,(\s*)(\d{5}(?:-\d{4})?)/, ' $2')
+
+      if (!rawAddr && !(lat && lng)) return
+
       let url
-      if (lat && lng) {
-        const label = stop.customer_name || stop.name || stop.address?.split(',')[0] || 'Stop'
-        url = `maps://?daddr=${lat},${lng}&dirflg=d&t=m&q=${encodeURIComponent(label)}`
-      } else {
-        const baseAddr = (stop.address || '').trim()
-        const aptSuffix = (baseAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
-        const rawAddr = (baseAddr + aptSuffix).trim().replace(/,(\s*)(\d{5}(?:-\d{4})?)/, ' $2')
-        if (!rawAddr) return
+      if (rawAddr) {
+        // Dirección texto como destino → CarPlay puede calcular ruta turn-by-turn
         url = `maps://?daddr=${encodeURIComponent(rawAddr)}&dirflg=d&t=m`
+        // ll= orienta la geocodificación a la zona correcta (evita ciudades homónimas)
+        if (lat && lng) url += `&ll=${lat},${lng}`
+      } else {
+        // Sin dirección: coordenadas como último recurso (no funciona en CarPlay)
+        url = `maps://?daddr=${lat},${lng}&dirflg=d&t=m`
       }
       if (loc) url += `&saddr=${loc.lat},${loc.lng}`
       window.open(url, '_system')
