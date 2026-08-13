@@ -386,20 +386,22 @@ let currentUtterance = null
  * Utiliza la síntesis de voz del navegador para leer un texto instructivo.
  * Limpia el texto de etiquetas HTML y entidades especiales antes de hablar.
  * @param {string} text - El texto a leer.
- * @param {string} [lang='es-MX'] - Idioma de la voz.
+ * @param {string} [lang='en-US'] - Voice language.
  */
-export const speakInstruction = (text, lang = 'es-MX') => {
+export const speakInstruction = (text, lang = 'en-US') => {
   if (!text) return
   if (!('speechSynthesis' in window)) return
   if (!speechSynth) speechSynth = window.speechSynthesis
 
   if (currentUtterance) {
+    // iOS requires pause() before cancel() to reliably stop speech
+    speechSynth.pause()
     speechSynth.cancel()
   }
 
   const cleanText = text
     .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, 'y')
+    .replace(/&amp;/g, 'and')
     .replace(/&nbsp;/g, ' ')
     .replace(/&lt;/g, '')
     .replace(/&gt;/g, '')
@@ -407,7 +409,7 @@ export const speakInstruction = (text, lang = 'es-MX') => {
     .replace(/&quot;/g, '')
     .replace(/&#\d+;/g, '')
     .replace(/[<>]/g, '')
-    .replace(/&/g, 'y')
+    .replace(/&/g, 'and')
     .replace(/\//g, ' ')
     .trim()
 
@@ -418,17 +420,20 @@ export const speakInstruction = (text, lang = 'es-MX') => {
   currentUtterance.volume = 1.0
 
   const voices = speechSynth.getVoices()
-  const spanishVoice = voices.find(v => v.lang.startsWith('es'))
-  if (spanishVoice) currentUtterance.voice = spanishVoice
+  const englishVoice = voices.find(v => v.lang === 'en-US') ||
+                       voices.find(v => v.lang.startsWith('en'))
+  if (englishVoice) currentUtterance.voice = englishVoice
 
   speechSynth.speak(currentUtterance)
 }
 
 /**
- * Detiene cualquier síntesis de voz en curso.
+ * Stops any ongoing speech synthesis.
  */
 export const stopSpeaking = () => {
   if (speechSynth) {
+    // iOS requires pause() before cancel() to reliably stop speech
+    speechSynth.pause()
     speechSynth.cancel()
     currentUtterance = null
   }

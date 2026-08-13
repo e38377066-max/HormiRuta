@@ -83,7 +83,7 @@ export default function TripPlannerPage() {
   const [navSteps, setNavSteps] = useState([])
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [currentSpeed, setCurrentSpeed] = useState(null)
-  const [voiceEnabled, setVoiceEnabled] = useState(true)
+  const [voiceEnabled, setVoiceEnabled] = useState(() => localStorage.getItem('voiceEnabled') !== 'false')
   const lastSpokenStepRef = useRef(-1)
   const [showEvidenceModal, setShowEvidenceModal] = useState(null)
   const [evidencePreview, setEvidencePreview] = useState(null)
@@ -1686,7 +1686,7 @@ export default function TripPlannerPage() {
               <div className="nav-bar-controls">
                 <button 
                   className={`nav-control-btn ${voiceEnabled ? 'active' : ''}`}
-                  onClick={() => { setVoiceEnabled(!voiceEnabled); if (voiceEnabled) stopSpeaking(); }}
+                  onClick={() => { const next = !voiceEnabled; setVoiceEnabled(next); localStorage.setItem('voiceEnabled', String(next)); if (!next) stopSpeaking(); }}
                 >
                   <span className="material-icons" style={{ fontSize: 20 }}>{voiceEnabled ? 'volume_up' : 'volume_off'}</span>
                 </button>
