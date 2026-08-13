@@ -2011,7 +2011,7 @@ export default function TripPlannerPage() {
                 )}
               </div>
             )
-          ) : isOptimized ? (
+          ) : (isOptimized || stops.length === 1) ? (
             <button className="btn-start-route" onClick={startRoute}>
               <span className="material-icons">navigation</span>
               Iniciar ruta
