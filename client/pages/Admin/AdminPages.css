@@ -1334,6 +1334,59 @@ button.section-item.danger-item:disabled {
   cursor: default;
 }
 
+/* ==================== RESIZABLE COLUMNS ==================== */
+.resizable-table {
+  border-collapse: collapse;
+}
+
+.resizable-th {
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  padding-right: 12px !important; /* room for handle */
+}
+
+.th-content {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The drag handle — visible strip at right edge of each header */
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.col-resize-handle:hover,
+.col-resize-handle:active {
+  background: rgba(98, 0, 234, 0.25);
+}
+
+/* Cells in a fixed-layout table must clip overflow */
+.resizable-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Exception: cells that wrap (driver badge, payment tags) */
+.resizable-table td.del-driver-cell-wrap,
+.resizable-table .del-driver-cell {
+  overflow: visible;
+  white-space: normal;
+}
+
+/* ==================== /RESIZABLE ==================== */
+
 .accounting-table {
   min-width: 820px;
 }

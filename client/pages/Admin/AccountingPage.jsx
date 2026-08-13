@@ -3,7 +3,7 @@
  * Proporciona un resumen de liquidaciones por chofer, reportes de entregas detallados y gestión de estados de pago de rutas.
  */
 
-import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
@@ -11,6 +11,49 @@ import './AdminPages.css'
 
 /** Formatea un valor numérico a moneda USD */
 const fmt = (val) => val != null ? `$${Number(val).toFixed(2)}` : '-'
+
+/**
+ * Hook para columnas de tabla redimensionables por drag.
+ * @param {number[]} initialWidths - Ancho inicial de cada columna en px
+ */
+function useColumnResize(initialWidths) {
+  const [widths, setWidths] = useState(initialWidths)
+  const widthsRef = useRef(initialWidths)
+  const activeRef = useRef(null)
+
+  const startResize = useCallback((colIndex, e) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = widthsRef.current[colIndex]
+    activeRef.current = { colIndex, startX, startWidth }
+
+    const onMove = (ev) => {
+      if (!activeRef.current) return
+      const delta = ev.clientX - activeRef.current.startX
+      const newW = Math.max(40, activeRef.current.startWidth + delta)
+      const next = [...widthsRef.current]
+      next[activeRef.current.colIndex] = newW
+      widthsRef.current = next
+      setWidths([...next])
+    }
+
+    const onUp = () => {
+      activeRef.current = null
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
+
+  const totalWidth = widthsRef.current.reduce((a, b) => a + b, 0)
+  return [widths, startResize, totalWidth]
+}
 
 /** Formatea una fecha para visualización */
 const fmtDate = (d) => {
@@ -71,6 +114,11 @@ export default function AccountingPage() {
   const [expandedPayRoute, setExpandedPayRoute] = useState(null)
   const [viewingPhoto, setViewingPhoto] = useState(null)
   const [wideMode, setWideMode] = useState(() => localStorage.getItem('accounting_wide') === '1')
+
+  // Anchos redimensionables — tabla Resumen (9 cols)
+  const [summaryWidths, startSummaryResize] = useColumnResize([180, 70, 100, 90, 100, 110, 110, 100, 50])
+  // Anchos redimensionables — tabla Entregas (12 cols)
+  const [delWidths, startDelResize] = useColumnResize([52, 165, 112, 185, 135, 72, 72, 82, 82, 72, 82, 130])
 
   /** Carga inicial de choferes y reporte base */
   useEffect(() => {
@@ -437,18 +485,31 @@ export default function AccountingPage() {
             </div>
           ) : (
             <div className="content-card" style={{ overflowX: 'auto' }}>
-              <table className="data-table accounting-table">
+              <table
+                className="data-table accounting-table resizable-table"
+                style={{ tableLayout: 'fixed', width: summaryWidths.reduce((a,b)=>a+b,0) }}
+              >
+                <colgroup>
+                  {summaryWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+                </colgroup>
                 <thead>
                   <tr>
-                    <th>{t('admin.accounting.driver')}</th>
-                    <th style={{ textAlign: 'center' }}>{t('admin.accounting.stops')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.orderCost')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.deposit')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.collected')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.commissionPerStop')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.totalCommission')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.driverBalance')}</th>
-                    <th></th>
+                    {[
+                      t('admin.accounting.driver'),
+                      t('admin.accounting.stops'),
+                      t('admin.accounting.orderCost'),
+                      t('admin.accounting.deposit'),
+                      t('admin.accounting.collected'),
+                      t('admin.accounting.commissionPerStop'),
+                      t('admin.accounting.totalCommission'),
+                      t('admin.accounting.driverBalance'),
+                      ''
+                    ].map((label, i) => (
+                      <th key={i} className="resizable-th">
+                        <span className="th-content">{label}</span>
+                        <div className="col-resize-handle" onMouseDown={e => startSummaryResize(i, e)} />
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -883,21 +944,34 @@ export default function AccountingPage() {
             </div>
           ) : (
             <div className="content-card" style={{ overflowX: 'auto' }}>
-              <table className="data-table deliveries-report-table">
+              <table
+                className="data-table deliveries-report-table resizable-table"
+                style={{ tableLayout: 'fixed', width: delWidths.reduce((a,b)=>a+b,0) }}
+              >
+                <colgroup>
+                  {delWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+                </colgroup>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>{t('admin.accounting.client')}</th>
-                    <th>{t('admin.accounting.phone')}</th>
-                    <th>{t('admin.accounting.address')}</th>
-                    <th>{t('admin.accounting.driver')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.cost')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.deposit')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.toCollect')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.collected')}</th>
-                    <th>{t('admin.accounting.method')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('admin.accounting.commission')}</th>
-                    <th>{t('admin.accounting.deliveryDate')}</th>
+                    {[
+                      '#',
+                      t('admin.accounting.client'),
+                      t('admin.accounting.phone'),
+                      t('admin.accounting.address'),
+                      t('admin.accounting.driver'),
+                      t('admin.accounting.cost'),
+                      t('admin.accounting.deposit'),
+                      t('admin.accounting.toCollect'),
+                      t('admin.accounting.collected'),
+                      t('admin.accounting.method'),
+                      t('admin.accounting.commission'),
+                      t('admin.accounting.deliveryDate'),
+                    ].map((label, i) => (
+                      <th key={i} className="resizable-th">
+                        <span className="th-content">{label}</span>
+                        <div className="col-resize-handle" onMouseDown={e => startDelResize(i, e)} />
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
