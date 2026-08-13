@@ -70,6 +70,7 @@ export default function AccountingPage() {
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [expandedPayRoute, setExpandedPayRoute] = useState(null)
   const [viewingPhoto, setViewingPhoto] = useState(null)
+  const [wideMode, setWideMode] = useState(() => localStorage.getItem('accounting_wide') === '1')
 
   /** Carga inicial de choferes y reporte base */
   useEffect(() => {
@@ -243,6 +244,12 @@ export default function AccountingPage() {
     return new Date(parseInt(y), parseInt(m) - 1, 1).toLocaleDateString(i18n.language, { month: 'long', year: 'numeric' })
   }
 
+  const toggleWideMode = () => {
+    const next = !wideMode
+    setWideMode(next)
+    localStorage.setItem('accounting_wide', next ? '1' : '0')
+  }
+
   const handleSummaryFilter = (e) => {
     e.preventDefault()
     fetchReport()
@@ -343,12 +350,20 @@ export default function AccountingPage() {
   const today = () => new Date().toISOString().split('T')[0]
 
   return (
-    <div className="page-container">
+    <div className={`page-container${wideMode ? ' wide-mode' : ''}`}>
       <div className="page-header">
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
         </button>
         <h1>{t('admin.accounting.title')}</h1>
+        <button
+          className="wide-mode-toggle"
+          onClick={toggleWideMode}
+          title={wideMode ? 'Modo normal' : 'Modo ancho (más columnas visibles)'}
+        >
+          <span className="material-icons">{wideMode ? 'zoom_in_map' : 'zoom_out_map'}</span>
+          <span className="wide-mode-label">{wideMode ? 'Normal' : 'Ancho'}</span>
+        </button>
       </div>
 
       <div className="accounting-tabs">
