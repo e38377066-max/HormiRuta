@@ -1091,6 +1091,7 @@ export default function TripPlannerPage() {
       await api.put(`/api/dispatch/routes/${currentRouteId}/complete`)
       exitNavigation()
       clearRoute()
+      setShowDispatchRoutes(true)   // mostrar rutas asignadas en tiempo real sin reiniciar app
       loadDispatchRoutes()
     } catch (err) {
       console.error('Error completing route:', err)
@@ -1650,8 +1651,6 @@ export default function TripPlannerPage() {
         <button
           className="menu-fab"
           onClick={onToggleDrawer}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onToggleDrawer(); }}
         >
           <span className="material-icons">menu</span>
         </button>
@@ -1670,7 +1669,10 @@ export default function TripPlannerPage() {
             <div className="nav-bar-stop">
               <span className="nav-bar-number">{navTargetIndex + 1}</span>
               <div className="nav-bar-info">
-                <div className="nav-bar-address">{navTarget.name || navTarget.address?.split(',')[0] || t('planner.nextStop')}</div>
+                <div className="nav-bar-address">
+                  {navTarget.name || navTarget.address?.split(',')[0] || t('planner.nextStop')}
+                  {navTarget.apartment_number && <span style={{ color: '#7eb3ff', fontWeight: 600 }}> Apt {navTarget.apartment_number}</span>}
+                </div>
                 <div className="nav-bar-eta">
                   {navDistance && <span>{navDistance}</span>}
                   {navEta && <span> · {navEta}</span>}
@@ -2461,7 +2463,8 @@ export default function TripPlannerPage() {
 
       {payDeliveryModal && (
         <div className="evidence-modal-overlay" onClick={() => setPayDeliveryModal(null)}>
-          <div className="evidence-modal" onClick={e => e.stopPropagation()}>
+          <div className="pay-delivery-modal" onClick={e => e.stopPropagation()}>
+            {/* Header */}
             <div className="evidence-modal-header">
               <h3 style={{ margin: 0, fontSize: 17 }}>{t('planner.deliverPayment')}</h3>
               <button className="evidence-close-btn" onClick={() => setPayDeliveryModal(null)}>
@@ -2469,39 +2472,40 @@ export default function TripPlannerPage() {
               </button>
             </div>
 
-            <div className="evidence-modal-body" style={{ paddingTop: 12 }}>
-              <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>{t('planner.route')}: {payDeliveryModal.name}</div>
-                <div style={{ fontSize: 26, fontWeight: 700, color: '#22c55e' }}>
-                  ${Number(payDeliveryModal.route_total_collected || 0).toFixed(2)}
-                </div>
-                <div style={{ fontSize: 12, color: '#666' }}>{t('planner.totalCollectedDeliver')}</div>
+            {/* Amount summary — compact */}
+            <div className="pay-delivery-amount-row">
+              <div style={{ fontSize: 12, color: '#888' }}>{payDeliveryModal.name}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#22c55e', lineHeight: 1.1 }}>
+                ${Number(payDeliveryModal.route_total_collected || 0).toFixed(2)}
               </div>
+              <div style={{ fontSize: 11, color: '#666' }}>{t('planner.totalCollectedDeliver')}</div>
+            </div>
 
-              <div className="evidence-payment-section">
-                <div className="payment-method-label">{t('planner.deliveryMethod')}</div>
-                <div className="payment-methods-grid">
-                  {[
-                    { key: 'cash', label: t('planner.cash'), icon: 'payments' },
-                    { key: 'card', label: t('planner.card'), icon: 'credit_card' },
-                    { key: 'transfer', label: t('planner.transfer'), icon: 'account_balance' },
-                    { key: 'check', label: t('planner.check'), icon: 'description' },
-                    { key: 'zelle', label: t('planner.zelle'), icon: 'send_to_mobile' }
-                  ].map(m => (
-                    <button
-                      key={m.key}
-                      className={`payment-method-btn${payDeliveryMethod === m.key ? ' selected' : ''}`}
-                      onClick={() => setPayDeliveryMethod(m.key)}
-                    >
-                      <span className="material-icons">{m.icon}</span>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
+            {/* Method selector — always visible, no scroll */}
+            <div className="pay-delivery-methods">
+              <div className="payment-method-label">{t('planner.deliveryMethod')}</div>
+              <div className="pay-delivery-methods-grid">
+                {[
+                  { key: 'cash', label: t('planner.cash'), icon: 'payments' },
+                  { key: 'card', label: t('planner.card'), icon: 'credit_card' },
+                  { key: 'transfer', label: t('planner.transfer'), icon: 'account_balance' },
+                  { key: 'check', label: t('planner.check'), icon: 'description' },
+                  { key: 'zelle', label: t('planner.zelle'), icon: 'send_to_mobile' }
+                ].map(m => (
+                  <button
+                    key={m.key}
+                    className={`payment-method-btn${payDeliveryMethod === m.key ? ' selected' : ''}`}
+                    onClick={() => setPayDeliveryMethod(m.key)}
+                  >
+                    <span className="material-icons">{m.icon}</span>
+                    {m.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="evidence-modal-footer">
+            {/* Confirm button — always at bottom, no scrolling needed */}
+            <div className="pay-delivery-footer">
               <button
                 className="btn-confirm-delivery"
                 disabled={!payDeliveryMethod || deliveringPay}

@@ -1744,6 +1744,47 @@
   font-size: 18px;
 }
 
+/* ===== PAY DELIVERY MODAL (compact, no scroll needed) ===== */
+.pay-delivery-modal {
+  background: #1e1e2e;
+  border-radius: 16px 16px 0 0;
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* No max-height — fits content, no scroll */
+}
+
+.pay-delivery-amount-row {
+  padding: 12px 16px 10px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.pay-delivery-methods {
+  padding: 10px 16px 6px;
+}
+
+.pay-delivery-methods-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* 5th button (zelle) spans on its own row centered */
+.pay-delivery-methods-grid .payment-method-btn:last-child:nth-child(3n+1) {
+  grid-column: 1 / -1;
+}
+
+.pay-delivery-footer {
+  padding: 10px 16px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+/* ===== /PAY DELIVERY MODAL ===== */
+
 .dispatch-route-pay-pending {
   display: flex;
   align-items: center;
