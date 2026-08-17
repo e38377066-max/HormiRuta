@@ -392,10 +392,14 @@
 }
 .pr-btn .material-icons { font-size: 16px; }
 .pr-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.pr-btn-receive { background: #2563eb; }
-.pr-btn-receive:hover:not(:disabled) { background: #1d4ed8; }
-.pr-btn-release { background: #059669; }
-.pr-btn-release:hover:not(:disabled) { background: #047857; }
+.pr-btn-receive  { background: #2563eb; }
+.pr-btn-receive:hover:not(:disabled)  { background: #1d4ed8; }
+.pr-btn-release  { background: #059669; }
+.pr-btn-release:hover:not(:disabled)  { background: #047857; }
+.pr-btn-success  { background: #059669; }
+.pr-btn-success:hover:not(:disabled)  { background: #047857; }
+.pr-btn-outline  { background: #6200ea; border: none; }
+.pr-btn-outline:hover:not(:disabled)  { background: #4a00b0; }
 .pr-hint {
   font-size: 12px;
   color: #6b7280;
