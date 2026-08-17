@@ -968,17 +968,42 @@ router.get('/deliveries-by-route', requireAdmin, async (req, res) => {
 
     const groupedRoutes = await Promise.all(routes.map(async (route) => {
       const driver = route.assigned_driver_id
-        ? await User.findByPk(route.assigned_driver_id, { attributes: ['id', 'username', 'email'] })
+        ? await User.findByPk(route.assigned_driver_id, { attributes: ['id', 'username', 'email', 'commission_per_stop'] })
         : null;
-      const stops = await ValidatedAddress.findAll({ where: { route_id: route.id }, attributes: ['id'] });
-      const stopIds = stops.map(s => s.id);
+      const driverCommission = Number(driver?.commission_per_stop) || 0;
 
-      let deliveries = stopIds.length > 0
-        ? await DeliveryHistory.findAll({
-            where: { original_order_id: { [Op.in]: stopIds } },
-            order: [['delivered_at', 'ASC']]
-          })
-        : [];
+      // Fuente de verdad: las paradas completadas de la ruta (incluye paradas
+      // sin orden asociada, p. ej. favoritas, y órdenes desvinculadas al saltar).
+      const routeStops = await Stop.findAll({
+        where: { route_id: route.id, status: 'completed' },
+        order: [['completed_at', 'ASC'], ['order', 'ASC']]
+      });
+
+      const monthOf = (dt) => {
+        const d = dt ? new Date(dt) : (route.completed_at ? new Date(route.completed_at) : null);
+        return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null;
+      };
+
+      let deliveries = routeStops.map(s => ({
+        id: `stop-${s.id}`,
+        original_order_id: null,
+        customer_name: s.customer_name,
+        customer_phone: s.phone,
+        address: s.address,
+        city: null,
+        state: null,
+        driver_name: driver?.username || driver?.email || null,
+        commission_per_stop: driverCommission,
+        order_cost: Number(s.order_cost) || 0,
+        deposit_amount: Number(s.deposit_amount) || 0,
+        total_to_collect: Number(s.total_to_collect) || 0,
+        amount_collected: Number(s.amount_collected) || 0,
+        payment_method: s.payment_method,
+        payment_status: s.payment_status,
+        delivered_at: s.completed_at || route.completed_at,
+        month_year: monthOf(s.completed_at),
+        archived: false
+      }));
 
       if (month_year) deliveries = deliveries.filter(d => d.month_year === month_year);
       if (search) {
@@ -992,11 +1017,11 @@ router.get('/deliveries-by-route', requireAdmin, async (req, res) => {
 
       if (deliveries.length === 0) return null;
 
-      const totalCollected = deliveries.reduce((s, d) => s + (Number(d.amount_collected) || 0), 0);
-      const totalCost     = deliveries.reduce((s, d) => s + (Number(d.order_cost) || 0), 0);
-      const totalDeposit  = deliveries.reduce((s, d) => s + (Number(d.deposit_amount) || 0), 0);
-      const totalToCollect= deliveries.reduce((s, d) => s + (Number(d.total_to_collect) || 0), 0);
-      const totalCommission= deliveries.reduce((s, d) => s + (Number(d.commission_per_stop) || 0), 0);
+      const totalCollected = deliveries.reduce((s, d) => s + d.amount_collected, 0);
+      const totalCost     = deliveries.reduce((s, d) => s + d.order_cost, 0);
+      const totalDeposit  = deliveries.reduce((s, d) => s + d.deposit_amount, 0);
+      const totalToCollect= deliveries.reduce((s, d) => s + d.total_to_collect, 0);
+      const totalCommission= deliveries.reduce((s, d) => s + d.commission_per_stop, 0);
 
       return {
         id: route.id,
@@ -1010,37 +1035,26 @@ router.get('/deliveries-by-route', requireAdmin, async (req, res) => {
         total_deposit: totalDeposit,
         total_to_collect: totalToCollect,
         total_commission: totalCommission,
-        deliveries: deliveries.map(d => ({
-          id: d.id,
-          original_order_id: d.original_order_id,
-          customer_name: d.customer_name,
-          customer_phone: d.customer_phone,
-          address: d.address,
-          city: d.city,
-          state: d.state,
-          driver_name: d.driver_name,
-          commission_per_stop: Number(d.commission_per_stop) || 0,
-          order_cost: Number(d.order_cost) || 0,
-          deposit_amount: Number(d.deposit_amount) || 0,
-          total_to_collect: Number(d.total_to_collect) || 0,
-          amount_collected: Number(d.amount_collected) || 0,
-          payment_method: d.payment_method,
-          payment_status: d.payment_status,
-          delivered_at: d.delivered_at,
-          month_year: d.month_year,
-          archived: d.archived
-        }))
+        deliveries
       };
     }));
 
     const filteredRoutes = groupedRoutes.filter(Boolean);
-    const availableMonths = await DeliveryHistory.findAll({
+    const monthsSet = new Set();
+    for (const r of routes) {
+      if (r.completed_at) {
+        const d = new Date(r.completed_at);
+        monthsSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+    }
+    const historyMonths = await DeliveryHistory.findAll({
       attributes: ['month_year'],
-      group: ['month_year'],
-      order: [['month_year', 'DESC']]
+      group: ['month_year']
     });
+    historyMonths.forEach(m => m.month_year && monthsSet.add(m.month_year));
+    const availableMonths = [...monthsSet].sort().reverse();
 
-    res.json({ success: true, routes: filteredRoutes, available_months: availableMonths.map(m => m.month_year) });
+    res.json({ success: true, routes: filteredRoutes, available_months: availableMonths });
   } catch (error) {
     console.error('Error fetching deliveries by route:', error);
     res.status(500).json({ error: 'Error al generar reporte por ruta' });
@@ -2239,7 +2253,12 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
             lng: va.address_lng,
             order: i,
             customer_name: va.customer_name || '',
-            phone: va.customer_phone || ''
+            phone: va.customer_phone || '',
+            note: va.notes,
+            order_cost: va.order_cost,
+            deposit_amount: va.deposit_amount,
+            total_to_collect: va.total_to_collect,
+            apartment_number: va.apartment_number
           });
         }
       }
