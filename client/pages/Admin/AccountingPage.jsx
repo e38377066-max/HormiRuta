@@ -556,7 +556,7 @@ export default function AccountingPage() {
             <div className="content-card" style={{ overflowX: 'auto' }}>
               <table
                 className="data-table accounting-table resizable-table"
-                style={{ tableLayout: 'fixed', width: summaryWidths.reduce((a,b)=>a+b,0) }}
+                style={{ tableLayout: 'fixed', width: '100%' }}
               >
                 <colgroup>
                   {summaryWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
@@ -1027,7 +1027,7 @@ export default function AccountingPage() {
             <div className="content-card" style={{ overflowX: 'auto' }}>
               <table
                 className="data-table deliveries-report-table resizable-table"
-                style={{ tableLayout: 'fixed', width: delWidths.reduce((a,b)=>a+b,0) }}
+                style={{ tableLayout: 'fixed', width: '100%' }}
               >
                 <colgroup>
                   {delWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
