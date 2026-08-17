@@ -2164,10 +2164,28 @@ router.put('/returns/:id/release', requireAdmin, async (req, res) => {
  */
 router.get('/pickup/pending', requireAdmin, async (req, res) => {
   try {
-    const routes = await Route.findAll({
+    const allRoutes = await Route.findAll({
       where: { status: 'assigned', pickup_admin_confirmed_at: null },
       order: [['updated_at', 'DESC']]
     });
+
+    // Rutas ya iniciadas (alguna parada avanzó): son anteriores a esta función o
+    // el chofer ya salió — se auto-confirman para no exigir una confirmación tardía
+    // que destruiría el progreso de entrega.
+    const routes = [];
+    for (const r of allRoutes) {
+      const startedCount = await Stop.count({
+        where: { route_id: r.id, status: { [Op.notIn]: ['pending'] } }
+      });
+      if (startedCount > 0) {
+        r.pickup_admin_confirmed_at = new Date();
+        r.pickup_driver_confirmed_at = r.pickup_driver_confirmed_at || new Date();
+        await r.save();
+      } else {
+        routes.push(r);
+      }
+    }
+
     const result = await Promise.all(routes.map(async (r) => {
       const driver = r.assigned_driver_id
         ? await User.findByPk(r.assigned_driver_id, { attributes: ['id', 'username', 'email'] })
@@ -2216,6 +2234,24 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
     const { confirmed = [], rejected = [] } = req.body;
     const savedDriverId = route.assigned_driver_id;
     const routeName = route.name || `Ruta #${route.id}`;
+
+    // Seguridad: si la ruta ya inició (alguna parada avanzó), confirmar aquí
+    // destruiría el progreso de entrega. Se auto-confirma sin tocar las paradas.
+    const startedCount = await Stop.count({
+      where: { route_id: route.id, status: { [Op.notIn]: ['pending'] } }
+    });
+    if (startedCount > 0) {
+      route.pickup_admin_confirmed_at = route.pickup_admin_confirmed_at || new Date();
+      route.pickup_admin_confirmed_by = route.pickup_admin_confirmed_by || req.userId;
+      route.pickup_driver_confirmed_at = route.pickup_driver_confirmed_at || new Date();
+      await route.save();
+      emitToAdmins('route:updated', { route_id: route.id });
+      return res.json({
+        success: true,
+        alreadyStarted: true,
+        message: 'La ruta ya está en curso: se confirmó sin modificar las paradas.'
+      });
+    }
 
     // 1. Devolver paradas rechazadas al dispatching (limpiar route_id en VA)
     if (rejected.length > 0) {
