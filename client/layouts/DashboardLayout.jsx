@@ -73,6 +73,19 @@ export default function DashboardLayout() {
           <NavItem to="/dispatch"  icon="local_shipping" label="Mapa de Despacho"   color="#6200ea" onClick={close} />
           <NavItem to="/planner"   icon="route"          label="Planear Ruta"        color="#3949ab" onClick={close} />
 
+          {isAdmin && (
+            <>
+              <div className="q-separator" />
+
+              {/* ── RUTAS Y ENTREGAS ── */}
+              <SectionLabel label="Rutas y Entregas" color="#2e7d32" />
+              <NavItem to="/admin/routes"        icon="history"         label="Historial de Rutas"      color="#388e3c" onClick={close} />
+              <NavItem to="/admin/wholesale"     icon="store"           label="Clientes Mayoristas"     color="#00695c" onClick={close} />
+              <NavItem to="/admin/accounting"    icon="receipt_long"    label="Contabilidad"            color="#2e7d32" onClick={close} />
+              <NavItem to="/admin/returns"       icon="assignment_return" label="Recepción de Paquetes" color="#558b2f" onClick={close} />
+            </>
+          )}
+
           <div className="q-separator" />
 
           {/* ── MENSAJERÍA ── */}
@@ -99,15 +112,6 @@ export default function DashboardLayout() {
               {/* ── GESTIÓN DE USUARIOS ── */}
               <SectionLabel label="Gestión de Usuarios" color="#1976d2" />
               <NavItem to="/admin/users"         icon="people"          label="Usuarios y Choferes"     color="#1976d2" onClick={close} />
-
-              <div className="q-separator" />
-
-              {/* ── RUTAS Y ENTREGAS ── */}
-              <SectionLabel label="Rutas y Entregas" color="#2e7d32" />
-              <NavItem to="/admin/routes"        icon="history"         label="Historial de Rutas"      color="#388e3c" onClick={close} />
-              <NavItem to="/admin/wholesale"     icon="store"           label="Clientes Mayoristas"     color="#00695c" onClick={close} />
-              <NavItem to="/admin/accounting"    icon="receipt_long"    label="Contabilidad"            color="#2e7d32" onClick={close} />
-              <NavItem to="/admin/returns"       icon="assignment_return" label="Recepción de Paquetes" color="#558b2f" onClick={close} />
 
               <div className="q-separator" />
 
