@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { Loader } from '@googlemaps/js-api-loader'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../api'
+import { getSocket } from '../../socket'
 import './DispatchMap.css'
 import RoutePrintView from './RoutePrintView'
 
@@ -135,6 +136,7 @@ export default function DispatchMap() {
   const [isAddingOrders, setIsAddingOrders] = useState(false)
   const [showCreateRoute, setShowCreateRoute] = useState(false)
   const [showAssignDriver, setShowAssignDriver] = useState(null)
+  const [assigningDriver, setAssigningDriver] = useState(null)
   const [routeName, setRouteName] = useState('')
   const [activeTab, setActiveTab] = useState('orders')
   const [editingNotes, setEditingNotes] = useState(null)
@@ -333,6 +335,21 @@ export default function DispatchMap() {
     const pickupInterval = setInterval(() => fetchPickupReady(), 5 * 60 * 1000)
     return () => { clearInterval(interval); clearInterval(pickupInterval) }
   }, [fetchData, fetchFavorites, fetchPickupReady])
+
+  // Socket.IO — actualización en tiempo real para el panel de admin
+  useEffect(() => {
+    const socket = getSocket()
+    socket.emit('join', { role: 'admin', userId: null })
+    const refresh = () => fetchData()
+    socket.on('route:assigned', refresh)
+    socket.on('route:updated', refresh)
+    socket.on('stop:updated', refresh)
+    return () => {
+      socket.off('route:assigned', refresh)
+      socket.off('route:updated', refresh)
+      socket.off('stop:updated', refresh)
+    }
+  }, [fetchData])
 
   // Inicialización del mapa de Google Maps
   useEffect(() => {
@@ -856,12 +873,15 @@ export default function DispatchMap() {
   }
 
   const handleAssignDriver = async (routeId, driverId) => {
+    setAssigningDriver(driverId)
     try {
       await api.put(`/api/dispatch/routes/${routeId}/assign`, { driver_id: driverId })
       setShowAssignDriver(null)
       fetchData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al asignar chofer')
+    } finally {
+      setAssigningDriver(null)
     }
   }
 
@@ -2848,13 +2868,21 @@ export default function DispatchMap() {
                 <p style={{ textAlign: 'center', color: '#888' }}>{t('dispatch.noDriversRegistered')}</p>
               ) : (
                 drivers.map(d => (
-                  <button key={d.id} className="dm-driver-option" onClick={() => handleAssignDriver(showAssignDriver, d.id)}>
-                    <span className="material-icons">person</span>
-                    <div>
-                      <strong>{d.username}</strong>
-                      <span>{d.email}</span>
-                    </div>
-                  </button>
+                  <button
+                      key={d.id}
+                      className="dm-driver-option"
+                      disabled={!!assigningDriver}
+                      style={{ opacity: assigningDriver && assigningDriver !== d.id ? 0.5 : 1 }}
+                      onClick={() => handleAssignDriver(showAssignDriver, d.id)}
+                    >
+                      <span className="material-icons" style={assigningDriver === d.id ? { animation: 'spin 0.8s linear infinite' } : {}}>
+                        {assigningDriver === d.id ? 'sync' : 'person'}
+                      </span>
+                      <div>
+                        <strong>{d.username}</strong>
+                        <span>{assigningDriver === d.id ? 'Asignando...' : d.email}</span>
+                      </div>
+                    </button>
                 ))
               )}
             </div>

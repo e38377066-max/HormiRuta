@@ -19,6 +19,7 @@ import respondApiService from '../services/respondApiService.js';
 import { optimizeRouteOrder } from '../services/optimization.js';
 import geocodingService from '../services/geocodingService.js';
 import AddressExtractorService from '../services/addressExtractorService.js';
+import { emitToDriver, emitToAdmins, emitToAll } from '../services/socketService.js';
 
 /**
  * Mapeo de estados de orden a nombres de ciclos de vida en Respond.io.
@@ -1697,6 +1698,13 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
       }
     }
 
+    // Socket.IO — notificar al chofer y refrescar el panel de admin
+    emitToDriver(driver_id, 'route:assigned', {
+      routeId: route.id,
+      message: `Tienes una nueva ruta asignada: ${route.name || 'Ruta #' + route.id}`
+    });
+    emitToAdmins('route:updated', { routeId: route.id });
+
     res.json({
       success: true,
       route: await route.toDict(),
@@ -1867,6 +1875,7 @@ router.post('/stops/:id/evidence', requireAuth, upload.single('photo'), async (r
       await matchOrder.save();
     }
 
+    emitToAll(route.assigned_driver_id, 'stop:updated', { stopId: stop.id, routeId: stop.route_id, status: stop.status });
     res.json({ success: true, stop: stop.toDict() });
   } catch (error) {
     console.error('Error uploading evidence:', error);
@@ -1917,6 +1926,7 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
       await orderMatch.save();
     }
 
+    emitToAll(route.assigned_driver_id, 'stop:updated', { stopId: stop.id, routeId: stop.route_id, status: 'skipped' });
     res.json({ success: true, stop: stop.toDict(), disposition: finalDisposition });
   } catch (error) {
     console.error('Error skipping stop:', error);
@@ -2083,6 +2093,7 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
       }
     }
 
+    emitToAll(route.assigned_driver_id, 'route:updated', { routeId: route.id, status: 'completed' });
     res.json({ success: true, route: await route.toDict() });
   } catch (error) {
     console.error('Error completing route:', error);

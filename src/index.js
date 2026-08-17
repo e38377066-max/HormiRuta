@@ -5,6 +5,9 @@
  */
 
 import 'dotenv/config';
+import { createServer } from 'node:http';
+import { Server as SocketIOServer } from 'socket.io';
+import { setIo } from './services/socketService.js';
 import logBuffer from './services/logService.js';
 import express from 'express';
 import cors from 'cors';
@@ -236,7 +239,22 @@ async function startServer() {
     startGmailSyncScheduler();
 
 
-    app.listen(PORT, '0.0.0.0', () => {
+    const httpServer = createServer(app);
+    const io = new SocketIOServer(httpServer, {
+      cors: { origin: '*', methods: ['GET', 'POST'] }
+    });
+    setIo(io);
+
+    io.on('connection', (socket) => {
+      socket.on('join', ({ role, userId } = {}) => {
+        if (role === 'admin') socket.join('admins');
+        if (userId) socket.join(`driver:${userId}`);
+        // Admins también se unen a su sala de driver para recibir actualizaciones si tienen rutas
+        if (role === 'admin' && userId) socket.join(`driver:${userId}`);
+      });
+    });
+
+    httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`Area 862 System API running on port ${PORT}`);
     });
   } catch (error) {

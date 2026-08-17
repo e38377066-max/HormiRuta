@@ -9,6 +9,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
+import { getSocket } from '../../socket'
 import { usePlanner } from '../../layouts/PlannerLayout'
 import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking } from '../../utils/capacitor'
 import './TripPlannerPage.css'
@@ -103,6 +104,7 @@ export default function TripPlannerPage() {
   const [navChooserStop, setNavChooserStop] = useState(null)
   const [skipDispositionModal, setSkipDispositionModal] = useState(null)
   const [skipReason, setSkipReason] = useState('')
+  const [newRouteNotif, setNewRouteNotif] = useState(null)
   const fileInputRef = useRef(null)
   const isDragging = useRef(false)
   const startY = useRef(0)
@@ -115,6 +117,30 @@ export default function TripPlannerPage() {
       console.error('[Map] initMap failed:', err?.message || err)
     })
     loadDispatchRoutes()
+  }, [])
+
+  // Socket.IO — actualización en tiempo real para el chofer
+  useEffect(() => {
+    const stored = localStorage.getItem('user')
+    const userId = stored ? JSON.parse(stored).id : null
+    if (!userId) return
+    const socket = getSocket()
+    socket.emit('join', { role: 'driver', userId })
+    const handleRouteAssigned = (data) => {
+      const msg = data?.message || 'Tienes una nueva ruta asignada'
+      setNewRouteNotif(msg)
+      loadDispatchRoutes()
+      setTimeout(() => setNewRouteNotif(null), 7000)
+    }
+    const handleRouteUpdated = () => loadDispatchRoutes()
+    socket.on('route:assigned', handleRouteAssigned)
+    socket.on('route:updated', handleRouteUpdated)
+    socket.on('stop:updated', handleRouteUpdated)
+    return () => {
+      socket.off('route:assigned', handleRouteAssigned)
+      socket.off('route:updated', handleRouteUpdated)
+      socket.off('stop:updated', handleRouteUpdated)
+    }
   }, [])
 
   // Sincroniza la referencia de modo de navegación para uso en callbacks
@@ -1641,6 +1667,13 @@ export default function TripPlannerPage() {
       <div className="map-section">
         <div id="trip-map" className="map-container" ref={mapRef}></div>
         
+        {newRouteNotif && (
+          <div className="new-route-notif" onClick={() => setNewRouteNotif(null)}>
+            <span className="material-icons">notifications_active</span>
+            <span>{newRouteNotif}</span>
+          </div>
+        )}
+
         {gpsError && (
           <div className="gps-error-banner" onClick={startLocationTracking}>
             <span className="material-icons">location_off</span>
