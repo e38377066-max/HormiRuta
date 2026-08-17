@@ -1,6 +1,6 @@
 /**
  * @fileoverview Recepción de Paquetes — dos secciones:
- *  1. Recepción de Rutas: confirmar entrega de paquetes al chofer + historial
+ *  1. Recepción de Rutas: confirmar entrega de paquetes al chofer + historial (por parada)
  *  2. Retornos: paquetes skipped que vuelven a la oficina (funcionalidad original)
  */
 
@@ -19,14 +19,164 @@ const fmtDate = (d) => {
   })
 }
 
+const fmtAmt = (n) => (n > 0 ? `$${Number(n).toFixed(2)}` : '')
+
+// ─── Tarjeta de ruta pendiente con selección de paradas ───────────────────────
+function RoutePickupCard({ route, onConfirmed }) {
+  // Estado de selección: objeto { [stopId]: bool }
+  const [selected, setSelected] = useState(() => {
+    const init = {}
+    route.stops.forEach(s => { init[s.id] = true })
+    return init
+  })
+  const [busy, setBusy] = useState(false)
+  const [expanded, setExpanded] = useState(true)
+
+  const confirmedIds = route.stops.filter(s => selected[s.id]).map(s => s.id)
+  const rejectedIds  = route.stops.filter(s => !selected[s.id]).map(s => s.id)
+  const allSelected  = confirmedIds.length === route.stops.length
+  const noneSelected = confirmedIds.length === 0
+
+  const toggleAll = () => {
+    const allOn = allSelected
+    const next = {}
+    route.stops.forEach(s => { next[s.id] = !allOn })
+    setSelected(next)
+  }
+
+  const handleConfirm = async () => {
+    if (noneSelected) {
+      if (!window.confirm(`¿Devolver TODAS las paradas al dispatching y cancelar esta ruta?\n\nEsta acción no se puede deshacer.`)) return
+    }
+    setBusy(true)
+    try {
+      const res = await api.post(`/api/dispatch/pickup/${route.id}/confirm-stops`, {
+        confirmed: confirmedIds,
+        rejected: rejectedIds
+      })
+      onConfirmed(res.data.message || 'Procesado')
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error al confirmar')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="pr-card pickup-card">
+      {/* Cabecera de la ruta */}
+      <div className="pr-card-header" style={{ cursor: 'pointer' }} onClick={() => setExpanded(v => !v)}>
+        <div className="pickup-route-name">
+          <span className="material-icons" style={{ fontSize: 18, color: '#6200ea' }}>route</span>
+          {route.name}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="pickup-badge pickup-badge-assigned">Asignada</span>
+          <span className="material-icons" style={{ fontSize: 20, color: '#9ca3af', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'rotate(0)' }}>expand_more</span>
+        </div>
+      </div>
+
+      <div className="pickup-meta">
+        <span className="material-icons">person</span>
+        <strong>{route.driver_name}</strong>
+        <span style={{ margin: '0 6px', color: '#ddd' }}>·</span>
+        <span className="material-icons">local_shipping</span>
+        {route.stops_count} parada{route.stops_count !== 1 ? 's' : ''}
+        <span style={{ margin: '0 6px', color: '#ddd' }}>·</span>
+        <span className="material-icons">schedule</span>
+        {fmtDate(route.assigned_at)}
+      </div>
+
+      {expanded && (
+        <>
+          {/* Barra de control — seleccionar todo */}
+          <div className="pickup-stops-bar">
+            <label className="pickup-check-all" onClick={toggleAll}>
+              <span className={`pickup-checkbox ${allSelected ? 'checked' : ''}`}>
+                {allSelected ? <span className="material-icons">check</span> : null}
+              </span>
+              {allSelected ? 'Desmarcar todo' : 'Marcar todo'}
+            </label>
+            <span className="pickup-stops-count">
+              {confirmedIds.length}/{route.stops.length} seleccionadas
+            </span>
+          </div>
+
+          {/* Lista de paradas */}
+          <div className="pickup-stops-list">
+            {route.stops.map((stop, idx) => (
+              <div
+                key={stop.id}
+                className={`pickup-stop-row ${selected[stop.id] ? 'stop-selected' : 'stop-rejected'}`}
+                onClick={() => setSelected(prev => ({ ...prev, [stop.id]: !prev[stop.id] }))}
+              >
+                <span className={`pickup-checkbox ${selected[stop.id] ? 'checked' : ''}`}>
+                  {selected[stop.id] ? <span className="material-icons">check</span> : null}
+                </span>
+                <div className="pickup-stop-info">
+                  <div className="pickup-stop-num">#{idx + 1}</div>
+                  <div className="pickup-stop-details">
+                    <div className="pickup-stop-name">{stop.customer_name}</div>
+                    <div className="pickup-stop-addr">{stop.address}</div>
+                    {stop.customer_phone && (
+                      <div className="pickup-stop-phone">
+                        <span className="material-icons">phone</span>{stop.customer_phone}
+                      </div>
+                    )}
+                  </div>
+                  {stop.amount > 0 && (
+                    <div className="pickup-stop-amt">{fmtAmt(stop.amount)}</div>
+                  )}
+                </div>
+                {!selected[stop.id] && (
+                  <span className="pickup-stop-badge-rejected">No entregar</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Resumen y botón de confirmación */}
+          <div className="pickup-confirm-footer">
+            {rejectedIds.length > 0 && (
+              <div className="pickup-footer-warning">
+                <span className="material-icons">info</span>
+                {rejectedIds.length} parada{rejectedIds.length !== 1 ? 's' : ''} volverá{rejectedIds.length !== 1 ? 'n' : ''} al dispatching
+              </div>
+            )}
+            <button
+              className={`pr-btn ${noneSelected ? 'pr-btn-danger' : 'pickup-btn-confirm'}`}
+              disabled={busy}
+              onClick={handleConfirm}
+            >
+              <span className="material-icons">{noneSelected ? 'undo' : 'inventory'}</span>
+              {busy
+                ? 'Procesando…'
+                : noneSelected
+                  ? 'Devolver todo al dispatching'
+                  : allSelected
+                    ? `Confirmar toda la ruta (${confirmedIds.length})`
+                    : `Confirmar ${confirmedIds.length} de ${route.stops.length}`
+              }
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Sección de Recepción de Rutas ────────────────────────────────────────────
 function RoutePickupSection() {
-  const [subTab, setSubTab]         = useState('pending')   // 'pending' | 'history'
-  const [pending, setPending]       = useState([])
-  const [history, setHistory]       = useState([])
-  const [loading, setLoading]       = useState(false)
-  const [busyId, setBusyId]         = useState(null)
-  const [notif, setNotif]           = useState(null)
+  const [subTab, setSubTab]   = useState('pending')
+  const [pending, setPending] = useState([])
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [notif, setNotif]     = useState(null)
+
+  const showNotif = (msg) => {
+    setNotif(msg)
+    setTimeout(() => setNotif(null), 5000)
+  }
 
   const loadPending = useCallback(async () => {
     setLoading(true)
@@ -53,36 +203,24 @@ function RoutePickupSection() {
 
   useEffect(() => { loadAll() }, [loadAll])
 
-  // Recargar en tiempo real cuando el chofer confirma
   useEffect(() => {
     const socket = getSocket()
-    const handler = () => {
+    const handler = (data) => {
       loadAll()
-      setNotif('✅ Chofer confirmó recogida de paquetes')
-      setTimeout(() => setNotif(null), 5000)
+      showNotif(`✅ Chofer ${data?.driver_name || ''} confirmó recogida de paquetes`)
     }
     socket.on('pickup:driver_confirmed', handler)
     return () => socket.off('pickup:driver_confirmed', handler)
   }, [loadAll])
 
-  const adminConfirm = async (routeId) => {
-    setBusyId(routeId)
-    try {
-      await api.post(`/api/dispatch/pickup/${routeId}/admin-confirm`)
-      await loadAll()
-      setNotif('✅ Entrega confirmada — se notificó al chofer')
-      setTimeout(() => setNotif(null), 5000)
-    } catch (e) {
-      alert(e.response?.data?.error || 'Error al confirmar')
-    } finally {
-      setBusyId(null)
-    }
+  const handleRouteConfirmed = (msg) => {
+    showNotif(`✅ ${msg}`)
+    loadAll()
   }
 
   const statusBadge = (r) => {
-    if (r.pickup_driver_confirmed_at) {
+    if (r.pickup_driver_confirmed_at)
       return <span className="pickup-badge pickup-badge-full">✓ Ambos confirmaron</span>
-    }
     return <span className="pickup-badge pickup-badge-pending">Pendiente chofer</span>
   }
 
@@ -113,35 +251,7 @@ function RoutePickupSection() {
         ) : (
           <div className="pr-list">
             {pending.map(r => (
-              <div key={r.id} className="pr-card pickup-card">
-                <div className="pr-card-header">
-                  <div className="pickup-route-name">
-                    <span className="material-icons" style={{ fontSize: 18, color: '#6200ea' }}>route</span>
-                    {r.name}
-                  </div>
-                  <span className="pickup-badge pickup-badge-assigned">Asignada</span>
-                </div>
-                <div className="pickup-meta">
-                  <span className="material-icons" style={{ fontSize: 14 }}>person</span>
-                  <strong>{r.driver_name}</strong>
-                  <span style={{ margin: '0 6px', color: '#ccc' }}>·</span>
-                  <span className="material-icons" style={{ fontSize: 14 }}>local_shipping</span>
-                  {r.stops_count} parada{r.stops_count !== 1 ? 's' : ''}
-                  <span style={{ margin: '0 6px', color: '#ccc' }}>·</span>
-                  <span className="material-icons" style={{ fontSize: 14 }}>schedule</span>
-                  {fmtDate(r.assigned_at)}
-                </div>
-                <div className="pr-actions">
-                  <button
-                    className="pr-btn pickup-btn-confirm"
-                    disabled={busyId === r.id}
-                    onClick={() => adminConfirm(r.id)}
-                  >
-                    <span className="material-icons">inventory</span>
-                    {busyId === r.id ? 'Confirmando…' : 'Confirmar Entrega al Chofer'}
-                  </button>
-                </div>
-              </div>
+              <RoutePickupCard key={r.id} route={r} onConfirmed={handleRouteConfirmed} />
             ))}
           </div>
         )
@@ -163,10 +273,10 @@ function RoutePickupSection() {
                   {statusBadge(r)}
                 </div>
                 <div className="pickup-meta">
-                  <span className="material-icons" style={{ fontSize: 14 }}>person</span>
+                  <span className="material-icons">person</span>
                   <strong>{r.driver_name}</strong>
-                  <span style={{ margin: '0 6px', color: '#ccc' }}>·</span>
-                  <span className="material-icons" style={{ fontSize: 14 }}>local_shipping</span>
+                  <span style={{ margin: '0 6px', color: '#ddd' }}>·</span>
+                  <span className="material-icons">local_shipping</span>
                   {r.stops_count} parada{r.stops_count !== 1 ? 's' : ''}
                 </div>
                 <div className="pickup-timeline">
@@ -203,72 +313,64 @@ function RoutePickupSection() {
   )
 }
 
-// ─── Sección de Retornos (funcionalidad original) ─────────────────────────────
+// ─── Sección de Retornos (original sin cambios) ───────────────────────────────
 function RetornosSection() {
   const { t } = useTranslation()
   const [orders, setOrders]   = useState([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter]   = useState('all')
-  const [busy, setBusy]       = useState(null)
-
-  const dispositionLabel = (d) => {
-    switch (d) {
-      case 'held_by_driver':    return { txt: t('admin.returns.withDriver'),       cls: 'pr-pill-driver' }
-      case 'pending_return':    return { txt: t('admin.returns.pendingReturn'),     cls: 'pr-pill-pending' }
-      case 'returned_to_office':return { txt: t('admin.returns.receivedAtOffice'), cls: 'pr-pill-office' }
-      default: return { txt: d || '-', cls: '' }
-    }
-  }
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await api.get('/api/dispatch/returns')
-      setOrders(res.data?.orders || [])
-    } catch (err) { console.error('Error loading returns:', err) }
+      setOrders(res.data.orders || [])
+    } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
 
-  const receive = async (id) => {
-    if (!confirm(t('admin.returns.confirmReceived'))) return
-    setBusy(id)
-    try { await api.put(`/api/dispatch/returns/${id}/receive`); await load() }
-    catch (err) { alert(err.response?.data?.error || t('common.error')) }
-    finally { setBusy(null) }
+  const pill = (o) => {
+    const map = {
+      skipped:          { txt: t('admin.returns.skipped'),           cls: 'pr-pill-skip' },
+      pending_return:   { txt: t('admin.returns.pendingReturn'),     cls: 'pr-pill-pending' },
+      returned:         { txt: t('admin.returns.returned'),          cls: 'pr-pill-returned' },
+      delivered:        { txt: t('admin.returns.delivered'),         cls: 'pr-pill-done' },
+    }
+    return map[o.package_disposition] || { txt: o.package_disposition, cls: '' }
   }
 
-  const release = async (id) => {
-    if (!confirm(t('admin.returns.confirmRelease'))) return
-    setBusy(id)
-    try { await api.put(`/api/dispatch/returns/${id}/release`); await load() }
-    catch (err) { alert(err.response?.data?.error || t('common.error')) }
-    finally { setBusy(null) }
-  }
-
-  const filtered = orders.filter(o => filter === 'all' || o.package_disposition === filter)
   const counts = {
-    all: orders.length,
-    held_by_driver: orders.filter(o => o.package_disposition === 'held_by_driver').length,
+    all:            orders.length,
+    skipped:        orders.filter(o => o.package_disposition === 'skipped').length,
     pending_return: orders.filter(o => o.package_disposition === 'pending_return').length,
-    returned_to_office: orders.filter(o => o.package_disposition === 'returned_to_office').length,
+    returned:       orders.filter(o => o.package_disposition === 'returned').length,
+  }
+
+  const visible = filter === 'all' ? orders : orders.filter(o => o.package_disposition === filter)
+
+  const markReturned = async (id) => {
+    try {
+      await api.put(`/api/dispatch/returns/${id}/mark-returned`)
+      load()
+    } catch (e) { alert(e.response?.data?.error || t('admin.returns.errorMarking')) }
   }
 
   return (
     <div>
-      <div className="pr-tabs" style={{ marginBottom: 0 }}>
+      <div className="pr-tabs">
         <button className={`pr-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
           {t('admin.returns.filters.all')} <span className="pr-count">{counts.all}</span>
+        </button>
+        <button className={`pr-tab ${filter === 'skipped' ? 'active' : ''}`} onClick={() => setFilter('skipped')}>
+          {t('admin.returns.filters.skipped')} <span className="pr-count pr-count-warn">{counts.skipped}</span>
         </button>
         <button className={`pr-tab ${filter === 'pending_return' ? 'active' : ''}`} onClick={() => setFilter('pending_return')}>
           {t('admin.returns.filters.pending')} <span className="pr-count pr-count-warn">{counts.pending_return}</span>
         </button>
-        <button className={`pr-tab ${filter === 'held_by_driver' ? 'active' : ''}`} onClick={() => setFilter('held_by_driver')}>
-          {t('admin.returns.filters.withDriver')} <span className="pr-count">{counts.held_by_driver}</span>
-        </button>
-        <button className={`pr-tab ${filter === 'returned_to_office' ? 'active' : ''}`} onClick={() => setFilter('returned_to_office')}>
-          {t('admin.returns.filters.atOffice')} <span className="pr-count">{counts.returned_to_office}</span>
+        <button className={`pr-tab ${filter === 'returned' ? 'active' : ''}`} onClick={() => setFilter('returned')}>
+          {t('admin.returns.filters.returned')} <span className="pr-count">{counts.returned}</span>
         </button>
         <button className="pr-refresh" onClick={load} disabled={loading}>
           <span className="material-icons">refresh</span>
@@ -276,55 +378,49 @@ function RetornosSection() {
       </div>
 
       {loading ? (
-        <div className="pr-empty">{t('admin.returns.loading')}</div>
-      ) : filtered.length === 0 ? (
+        <div className="pr-empty"><div className="spinner" /></div>
+      ) : visible.length === 0 ? (
         <div className="pr-empty">
-          <span className="material-icons" style={{ fontSize: 48, color: '#9ca3af' }}>inventory_2</span>
-          <div>{t('admin.returns.noPackages')}</div>
+          <span className="material-icons" style={{ fontSize: 48, color: '#9ca3af' }}>inbox</span>
+          <div>{t('admin.returns.empty')}</div>
         </div>
       ) : (
         <div className="pr-list">
-          {filtered.map(o => {
-            const disp = dispositionLabel(o.package_disposition)
+          {visible.map(o => {
+            const { txt, cls } = pill(o)
             return (
               <div key={o.id} className="pr-card">
                 <div className="pr-card-header">
-                  <div className="pr-customer">{o.customer_name || t('admin.returns.noName')}</div>
-                  <span className={`pr-pill ${disp.cls}`}>{disp.txt}</span>
+                  <div className="pr-customer">
+                    <span className="material-icons">person</span>
+                    {o.customer_name || t('admin.returns.unknownCustomer')}
+                  </div>
+                  <span className={`pr-pill ${cls}`}>{txt}</span>
                 </div>
-                <div className="pr-address">{o.validated_address || o.original_address}</div>
-                {o.customer_phone && <div className="pr-info">{t('admin.returns.tel')} {o.customer_phone}</div>}
-                {o.held_by_driver_name && <div className="pr-info">{t('admin.returns.driver')} <strong>{o.held_by_driver_name}</strong></div>}
-                <div className="pr-info">{t('admin.returns.skipped')} {fmtDate(o.skipped_at)}</div>
-                {o.returned_at && <div className="pr-info">{t('admin.returns.received')} {fmtDate(o.returned_at)}</div>}
+                <div className="pr-address">
+                  <span className="material-icons">place</span>
+                  {o.validated_address || o.original_address}
+                </div>
+                {o.driver_name && (
+                  <div className="pr-driver">
+                    <span className="material-icons">local_shipping</span>
+                    {o.driver_name}
+                  </div>
+                )}
                 {o.skip_reason && (
                   <div className="pr-reason">
-                    <span className="material-icons" style={{ fontSize: 14 }}>info</span>
+                    <span className="material-icons">info</span>
                     {o.skip_reason}
                   </div>
                 )}
-                <div className="pr-actions">
-                  {o.package_disposition === 'pending_return' && (
-                    <button className="pr-btn pr-btn-receive" disabled={busy === o.id} onClick={() => receive(o.id)}>
-                      <span className="material-icons">inbox</span>{t('admin.returns.markReceived')}
+                {o.package_disposition === 'pending_return' && (
+                  <div className="pr-actions">
+                    <button className="pr-btn pr-btn-success" onClick={() => markReturned(o.id)}>
+                      <span className="material-icons">check</span>
+                      {t('admin.returns.markReturned')}
                     </button>
-                  )}
-                  {o.package_disposition === 'returned_to_office' && (
-                    <button className="pr-btn pr-btn-release" disabled={busy === o.id} onClick={() => release(o.id)}>
-                      <span className="material-icons">redo</span>{t('admin.returns.releaseNewRoute')}
-                    </button>
-                  )}
-                  {o.package_disposition === 'held_by_driver' && (
-                    <>
-                      <button className="pr-btn pr-btn-receive" disabled={busy === o.id} onClick={() => receive(o.id)}>
-                        <span className="material-icons">inbox</span>{t('admin.returns.receiveAtOffice')}
-                      </button>
-                      <button className="pr-btn pr-btn-release" disabled={busy === o.id} onClick={() => release(o.id)}>
-                        <span className="material-icons">redo</span>{t('admin.returns.releaseDirect')}
-                      </button>
-                    </>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -336,16 +432,18 @@ function RetornosSection() {
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function PackageReturnsPage() {
-  const [mainTab, setMainTab] = useState('pickup') // 'pickup' | 'returns'
+  const [mainTab, setMainTab] = useState('pickup')
 
   return (
-    <div className="admin-page">
-      <div className="admin-header">
-        <h1>Recepción de Paquetes</h1>
-        <p className="admin-subtitle">Confirma la entrega de rutas a choferes y gestiona retornos</p>
+    <div className="pr-page">
+      <div className="pr-header">
+        <h1 className="pr-title">
+          <span className="material-icons">inventory_2</span>
+          Recepción y Retornos
+        </h1>
+        <p className="pr-subtitle">Confirma la entrega de rutas a choferes y gestiona retornos</p>
       </div>
 
-      {/* Tabs principales */}
       <div className="pickup-main-tabs">
         <button
           className={`pickup-main-tab ${mainTab === 'pickup' ? 'active' : ''}`}

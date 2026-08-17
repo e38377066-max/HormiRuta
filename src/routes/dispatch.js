@@ -2158,21 +2158,113 @@ router.get('/pickup/pending', requireAdmin, async (req, res) => {
       const driver = r.assigned_driver_id
         ? await User.findByPk(r.assigned_driver_id, { attributes: ['id', 'username', 'email'] })
         : null;
-      const stopsCount = await ValidatedAddress.count({ where: { route_id: r.id } });
+      const stops = await ValidatedAddress.findAll({
+        where: { route_id: r.id },
+        attributes: ['id', 'customer_name', 'customer_phone', 'validated_address', 'original_address', 'amount', 'order_cost'],
+        order: [['id', 'ASC']]
+      });
       return {
         id: r.id,
         name: r.name || `Ruta #${r.id}`,
         driver_name: driver?.username || driver?.email || 'Sin chofer',
         driver_id: r.assigned_driver_id,
-        stops_count: stopsCount,
+        stops_count: stops.length,
         assigned_at: r.updated_at,
-        status: r.status
+        status: r.status,
+        stops: stops.map(s => ({
+          id: s.id,
+          customer_name: s.customer_name || 'Cliente',
+          customer_phone: s.customer_phone || '',
+          address: s.validated_address || s.original_address || '—',
+          amount: s.amount || 0
+        }))
       };
     }));
     res.json({ success: true, routes: result });
   } catch (error) {
     console.error('Error fetching pending pickups:', error);
     res.status(500).json({ error: 'Error al cargar rutas pendientes' });
+  }
+});
+
+/**
+ * POST /pickup/:routeId/confirm-stops
+ * @description Admin confirma qué paradas se entregan al chofer.
+ *   confirmed: IDs de ValidatedAddress que SÍ van con el chofer.
+ *   rejected:  IDs que NO se entregan → vuelven a dispatching disponible.
+ */
+router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.routeId);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+    if (!route.assigned_driver_id) return res.status(400).json({ error: 'La ruta no tiene chofer asignado' });
+
+    const { confirmed = [], rejected = [] } = req.body;
+
+    // 1. Devolver paradas rechazadas al dispatching
+    if (rejected.length > 0) {
+      await ValidatedAddress.update(
+        { route_id: null, dispatch_status: 'available', assigned_driver_id: null, driver_name: null },
+        { where: { id: { [Op.in]: rejected }, route_id: route.id } }
+      );
+      // Reconstruir los Stop de la ruta solo con las paradas confirmadas
+      await Stop.destroy({ where: { route_id: route.id } });
+      if (confirmed.length > 0) {
+        const confirmedAddrs = await ValidatedAddress.findAll({
+          where: { id: { [Op.in]: confirmed } },
+          order: [['id', 'ASC']]
+        });
+        for (let i = 0; i < confirmedAddrs.length; i++) {
+          const va = confirmedAddrs[i];
+          if (va.address_lat && va.address_lng) {
+            await Stop.create({
+              route_id: route.id,
+              address: va.validated_address || va.original_address || '',
+              lat: va.address_lat,
+              lng: va.address_lng,
+              order: i,
+              customer_name: va.customer_name || '',
+              phone: va.customer_phone || ''
+            });
+          }
+        }
+      }
+    }
+
+    // 2. Si no quedaron paradas confirmadas, no confirmar la ruta
+    if (confirmed.length === 0) {
+      return res.json({ success: true, message: 'Todas las paradas devueltas al dispatching. Ruta sin confirmar.', allRejected: true });
+    }
+
+    // 3. Confirmar la ruta al chofer
+    route.pickup_admin_confirmed_at = new Date();
+    route.pickup_admin_confirmed_by = req.userId;
+    await route.save();
+
+    const driver = await User.findByPk(route.assigned_driver_id, { attributes: ['id', 'username', 'email'] });
+    const admin  = await User.findByPk(req.userId, { attributes: ['id', 'username', 'email'] });
+    const routeName = route.name || `Ruta #${route.id}`;
+
+    emitToDriver(route.assigned_driver_id, 'pickup:admin_confirmed', {
+      route_id: route.id,
+      route_name: routeName,
+      admin_name: admin?.username || admin?.email || 'Admin',
+      confirmed_stops: confirmed.length,
+      rejected_stops: rejected.length,
+      message: `✅ La oficina confirmó entrega de ${confirmed.length} paquete${confirmed.length !== 1 ? 's' : ''} para "${routeName}". ¡Confirma que los recogiste!`
+    });
+    emitToAdmins('pickup:admin_confirmed', {
+      route_id: route.id,
+      route_name: routeName,
+      driver_name: driver?.username || driver?.email || 'Chofer',
+      confirmed_stops: confirmed.length,
+      rejected_stops: rejected.length
+    });
+
+    res.json({ success: true, message: `Entrega confirmada: ${confirmed.length} parada(s). ${rejected.length} devuelta(s) al dispatching.` });
+  } catch (error) {
+    console.error('Error confirming stops:', error);
+    res.status(500).json({ error: 'Error al confirmar paradas' });
   }
 });
 
