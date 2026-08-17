@@ -127,31 +127,43 @@ export default function AccountingPage() {
     return saved ? Number(saved) : null
   })
   const tableContainerRef = useRef(null)
+  const pageContainerRef = useRef(null)
 
+  // Manipulación directa del DOM durante el arrastre — sin re-renders de React
   const startTableResize = useCallback((e) => {
     e.preventDefault()
+    e.stopPropagation()
     const startX = e.clientX
-    const startW = tableContainerRef.current
-      ? tableContainerRef.current.getBoundingClientRect().width
-      : (tableContainerWidth || 800)
+    const el = tableContainerRef.current
+    const pageEl = pageContainerRef.current
+    if (!el) return
+    const startW = el.getBoundingClientRect().width
+
     const onMove = (ev) => {
       const newW = Math.max(320, startW + (ev.clientX - startX))
-      setTableContainerWidth(newW)
+      // Manipulación directa del DOM — sin pasar por React
+      el.style.width = `${newW}px`
+      el.style.maxWidth = 'calc(100vw - 32px)'
+      // Expandir page-container si hace falta
+      if (pageEl && newW > 1160) pageEl.classList.add('wide-mode')
     }
+
     const onUp = (ev) => {
       const newW = Math.max(320, startW + (ev.clientX - startX))
+      // Ahora sí sincronizamos React state para persistencia
       setTableContainerWidth(newW)
-      localStorage.setItem('accounting_container_width', String(newW))
+      localStorage.setItem('accounting_container_width', String(Math.round(newW)))
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
+
     document.body.style.cursor = 'ew-resize'
     document.body.style.userSelect = 'none'
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [tableContainerWidth])
+  }, [])
 
   /** Carga inicial de choferes y reporte base */
   useEffect(() => {
@@ -450,7 +462,7 @@ export default function AccountingPage() {
   const today = () => new Date().toISOString().split('T')[0]
 
   return (
-    <div className={`page-container${(wideMode || tableContainerWidth) ? ' wide-mode' : ''}`}>
+    <div ref={pageContainerRef} className={`page-container${(wideMode || tableContainerWidth) ? ' wide-mode' : ''}`}>
       <div className="page-header">
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
