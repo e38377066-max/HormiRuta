@@ -929,7 +929,14 @@
       "viewEvidence": "View evidence",
       "noEvidence": "No evidence",
       "loadError": "Error loading details",
-      "evidence": "Evidence"
+      "evidence": "Evidence",
+      "cost": "Cost",
+      "deposit": "Deposit",
+      "collected": "Collected",
+      "toCollect": "To collect",
+      "totalCollected": "Total collected",
+      "totalPending": "Pending to collect",
+      "downloadExcel": "Download Excel"
     },
     "accounting": {
       "title": "Accounting",

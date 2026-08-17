@@ -51,6 +51,27 @@ export default function RouteHistory() {
   }
 
   /**
+   * Descarga el detalle financiero de la ruta en Excel.
+   * @async
+   */
+  const downloadExcel = async () => {
+    if (!routeDetail) return
+    try {
+      const res = await api.get(`/api/dispatch/routes/${routeDetail.id}/export-excel`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(routeDetail.name || 'ruta').replace(/\s+/g, '_')}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error downloading Excel:', err)
+    }
+  }
+
+  /**
    * Obtiene y muestra el detalle de una ruta específica.
    * @async
    * @param {Object} route - Objeto de la ruta seleccionada.
@@ -164,7 +185,35 @@ export default function RouteHistory() {
                 {routeDetail.completed_at && (
                   <div className="detail-date">{t('admin.routeHistory.finishedAt')} {formatDate(routeDetail.completed_at)}</div>
                 )}
+                <button
+                  type="button"
+                  onClick={downloadExcel}
+                  style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: '#16a34a', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  <span className="material-icons" style={{ fontSize: 18 }}>download</span>
+                  {t('admin.routeHistory.downloadExcel')}
+                </button>
               </div>
+
+              {(() => {
+                const stops = routeDetail.stops || []
+                const totalCollected = stops.reduce((s, st) => s + (Number(st.amount_collected) || 0), 0)
+                const totalPending = stops
+                  .filter(st => st.status !== 'completed' && st.status !== 'skipped')
+                  .reduce((s, st) => s + (Number(st.total_to_collect) || 0), 0)
+                return (
+                  <div className="detail-money-summary" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', margin: '12px 0' }}>
+                    <div style={{ flex: 1, minWidth: 140, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px' }}>
+                      <div style={{ fontSize: 12, color: '#166534' }}>{t('admin.routeHistory.totalCollected')}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>${totalCollected.toFixed(2)}</div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 140, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px' }}>
+                      <div style={{ fontSize: 12, color: '#92400e' }}>{t('admin.routeHistory.totalPending')}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: '#d97706' }}>${totalPending.toFixed(2)}</div>
+                    </div>
+                  </div>
+                )
+              })()}
 
               <div className="detail-stops-title">
                 <span className="material-icons">checklist</span>
@@ -189,6 +238,17 @@ export default function RouteHistory() {
                         {stop.status === 'completed' ? 'check_circle' : stop.status === 'skipped' ? 'cancel' : 'pending'}
                       </span>
                     </div>
+                    {(Number(stop.order_cost) > 0 || Number(stop.deposit_amount) > 0 || Number(stop.total_to_collect) > 0 || Number(stop.amount_collected) > 0) && (
+                      <div className="detail-stop-money" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', padding: '6px 0 2px 40px', fontSize: 13 }}>
+                        <span style={{ color: '#555' }}>{t('admin.routeHistory.cost')}: <strong>${(Number(stop.order_cost) || 0).toFixed(2)}</strong></span>
+                        <span style={{ color: '#555' }}>{t('admin.routeHistory.deposit')}: <strong>${(Number(stop.deposit_amount) || 0).toFixed(2)}</strong></span>
+                        {stop.status === 'completed' ? (
+                          <span style={{ color: '#16a34a' }}>{t('admin.routeHistory.collected')}: <strong>${(Number(stop.amount_collected) || 0).toFixed(2)}</strong>{stop.payment_method ? ` (${stop.payment_method})` : ''}</span>
+                        ) : (
+                          <span style={{ color: '#d97706' }}>{t('admin.routeHistory.toCollect')}: <strong>${(Number(stop.total_to_collect) || 0).toFixed(2)}</strong></span>
+                        )}
+                      </div>
+                    )}
                     {stop.photo_url ? (
                       <div className="detail-stop-evidence" onClick={() => setViewingPhoto(stop.photo_url)}>
                         <img src={stop.photo_url} alt={`Evidence stop ${i + 1}`} className="evidence-thumb" />

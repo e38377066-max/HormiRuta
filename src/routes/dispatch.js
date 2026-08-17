@@ -6,6 +6,7 @@
  */
 
 import { Router } from 'express';
+import XLSX from 'xlsx';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -2682,6 +2683,57 @@ router.get('/routes/:id/detail', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching route detail:', error);
     res.status(500).json({ error: 'Error al cargar detalle' });
+  }
+});
+
+/**
+ * GET /routes/:id/export-excel
+ * @description Descarga en Excel el detalle financiero de una ruta (paradas, montos, totales).
+ */
+router.get('/routes/:id/export-excel', requireAdmin, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    const driver = route.assigned_driver_id ? await User.findByPk(route.assigned_driver_id) : null;
+    const stops = await Stop.findAll({ where: { route_id: route.id }, order: [['order', 'ASC']] });
+
+    const statusLabel = (s) => s === 'completed' ? 'Entregada' : s === 'skipped' ? 'Saltada' : 'Pendiente';
+    const rows = stops.map((s, i) => ({
+      '#': i + 1,
+      'Cliente': s.customer_name || '',
+      'Teléfono': s.phone || '',
+      'Dirección': s.address || '',
+      'Estado': statusLabel(s.status),
+      'Costo': Number(s.order_cost) || 0,
+      'Depósito': Number(s.deposit_amount) || 0,
+      'Cobrado': s.status === 'completed' ? (Number(s.amount_collected) || 0) : 0,
+      'A cobrar': s.status === 'completed' || s.status === 'skipped' ? 0 : (Number(s.total_to_collect) || 0),
+      'Método de pago': s.payment_method || '',
+      'Fecha entrega': s.completed_at ? new Date(s.completed_at).toLocaleString('es-US', { timeZone: 'America/Chicago' }) : ''
+    }));
+
+    const totalCollected = rows.reduce((a, r) => a + r['Cobrado'], 0);
+    const totalPending = rows.reduce((a, r) => a + r['A cobrar'], 0);
+    rows.push({});
+    rows.push({ 'Cliente': 'TOTAL COBRADO', 'Cobrado': totalCollected });
+    rows.push({ 'Cliente': 'PENDIENTE POR COBRAR', 'A cobrar': totalPending });
+
+    const ws = XLSX.utils.json_to_sheet(rows, {
+      header: ['#', 'Cliente', 'Teléfono', 'Dirección', 'Estado', 'Costo', 'Depósito', 'Cobrado', 'A cobrar', 'Método de pago', 'Fecha entrega']
+    });
+    ws['!cols'] = [{ wch: 4 }, { wch: 26 }, { wch: 14 }, { wch: 40 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 20 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Ruta');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const safeName = (route.name || `ruta_${route.id}`).replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ _-]/g, '').trim().replace(/\s+/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName || 'ruta'}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error exporting route to Excel:', error);
+    res.status(500).json({ error: 'Error al exportar la ruta' });
   }
 });
 

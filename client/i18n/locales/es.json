@@ -929,7 +929,14 @@
       "viewEvidence": "Ver evidencia",
       "noEvidence": "Sin evidencia",
       "loadError": "Error al cargar detalles",
-      "evidence": "Evidencia"
+      "evidence": "Evidencia",
+      "cost": "Costo",
+      "deposit": "Depósito",
+      "collected": "Cobrado",
+      "toCollect": "A cobrar",
+      "totalCollected": "Total cobrado",
+      "totalPending": "Pendiente por cobrar",
+      "downloadExcel": "Descargar Excel"
     },
     "accounting": {
       "title": "Contabilidad",
