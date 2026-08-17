@@ -130,6 +130,27 @@
   letter-spacing: 0.5px;
 }
 
+/* Nueva cabecera de sección con indicador de color */
+.q-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 6px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.q-section-indicator {
+  display: inline-block;
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 .q-item {
   display: flex;
   align-items: center;

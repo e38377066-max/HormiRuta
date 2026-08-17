@@ -85,7 +85,8 @@ export default function AccountingPage() {
 
   // --- Estados para Reporte de Entregas ---
   /** @type {[Array, Function]} Lista de paradas/órdenes entregadas */
-  const [deliveries, setDeliveries] = useState([])
+  const [routeGroups, setRouteGroups] = useState([])
+  const [expandedRouteIds, setExpandedRouteIds] = useState(new Set())
   const [loadingDeliveries, setLoadingDeliveries] = useState(false)
   const [delDriver, setDelDriver] = useState('')
   const [delDateFrom, setDelDateFrom] = useState('')
@@ -251,8 +252,8 @@ export default function AccountingPage() {
         if (delDateTo) params.date_to = delDateTo
       }
       if (delSearch) params.search = delSearch
-      const res = await api.get('/api/dispatch/deliveries-report', { params })
-      setDeliveries(res.data.deliveries || [])
+      const res = await api.get('/api/dispatch/deliveries-by-route', { params })
+      setRouteGroups(res.data.routes || [])
       setAvailableMonths(res.data.available_months || [])
     } catch (e) {
       console.error('Error cargando entregas:', e)
@@ -385,6 +386,9 @@ export default function AccountingPage() {
     collected: acc.collected + row.total_collected,
     commission: acc.commission + row.total_commission
   }), { stops: 0, cost: 0, deposit: 0, collected: 0, commission: 0 })
+
+  /** Lista plana de entregas derivada de los grupos por ruta */
+  const deliveries = routeGroups.flatMap(r => r.deliveries)
 
   /** Calcula totales acumulados del reporte de entregas */
   const deliveryTotals = deliveries.reduce((acc, d) => ({
@@ -1011,7 +1015,7 @@ export default function AccountingPage() {
 
           {loadingDeliveries ? (
             <div className="loading-container"><div className="spinner"></div></div>
-          ) : deliveries.length === 0 ? (
+          ) : routeGroups.length === 0 ? (
             <div className="content-card">
               <div className="empty-state">
                 <span className="material-icons">local_shipping</span>
@@ -1019,99 +1023,154 @@ export default function AccountingPage() {
               </div>
             </div>
           ) : (
-            <div
-              ref={tableContainerRef}
-              className="table-resize-wrapper"
-              style={tableContainerWidth ? { width: tableContainerWidth, maxWidth: 'calc(100vw - 32px)' } : {}}
-            >
-            <div className="content-card" style={{ overflowX: 'auto' }}>
-              <table
-                className="data-table deliveries-report-table resizable-table"
-                style={{ tableLayout: 'fixed', width: '100%' }}
-              >
-                <colgroup>
-                  {delWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
-                </colgroup>
-                <thead>
-                  <tr>
-                    {[
-                      '#',
-                      t('admin.accounting.client'),
-                      t('admin.accounting.phone'),
-                      t('admin.accounting.address'),
-                      t('admin.accounting.driver'),
-                      t('admin.accounting.cost'),
-                      t('admin.accounting.deposit'),
-                      t('admin.accounting.toCollect'),
-                      t('admin.accounting.collected'),
-                      t('admin.accounting.method'),
-                      t('admin.accounting.commission'),
-                      t('admin.accounting.deliveryDate'),
-                    ].map((label, i) => (
-                      <th key={i} className="resizable-th">
-                        <span className="th-content">{label}</span>
-                        <div className="col-resize-handle" onMouseDown={e => startDelResize(i, e)} />
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {deliveries.map(d => (
-                    <tr key={d.id} className="delivery-report-row">
-                      <td className="del-id-cell">#{d.id}</td>
-                      <td className="del-customer-cell">
-                        <span className="del-customer-name">{d.customer_name || '—'}</span>
-                        {d.archived && <span className="archived-badge">{t('admin.accounting.archiveBadge')}</span>}
-                      </td>
-                      <td className="del-phone-cell">{d.customer_phone || '—'}</td>
-                      <td className="del-address-cell">
-                        <span title={d.address}>{d.address || '—'}</span>
-                      </td>
-                      <td>
-                        <div className="del-driver-cell">
-                          <div className="avatar-sm" style={{ background: '#6200ea', color: '#fff' }}>
-                            {(d.driver_name || '?')[0].toUpperCase()}
+            <>
+              {routeGroups.map(route => {
+                const isExpanded = expandedRouteIds.has(route.id)
+                const toggleRoute = () => setExpandedRouteIds(prev => {
+                  const next = new Set(prev)
+                  if (next.has(route.id)) next.delete(route.id)
+                  else next.add(route.id)
+                  return next
+                })
+                return (
+                  <div key={route.id} className="route-group-card">
+                    <div className="route-group-header" onClick={toggleRoute}>
+                      <div className="route-group-left">
+                        <span className="material-icons" style={{ color: '#6200ea', fontSize: 22 }}>route</span>
+                        <div>
+                          <div className="route-group-name">{route.name}</div>
+                          <div className="route-group-meta">
+                            <span className="material-icons" style={{ fontSize: 13 }}>person</span>
+                            {route.driver_name}
+                            <span style={{ margin: '0 6px', color: '#ccc' }}>·</span>
+                            <span className="material-icons" style={{ fontSize: 13 }}>schedule</span>
+                            {route.completed_at
+                              ? new Date(route.completed_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              : '—'}
                           </div>
-                          <span>{d.driver_name}</span>
                         </div>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>{fmt(d.order_cost)}</td>
-                      <td style={{ textAlign: 'right', color: '#888' }}>{fmt(d.deposit_amount)}</td>
-                      <td style={{ textAlign: 'right' }}>{fmt(d.total_to_collect)}</td>
-                      <td style={{ textAlign: 'right', color: '#2e7d32', fontWeight: 600 }}>{fmt(d.amount_collected)}</td>
-                      <td>
-                        {d.payment_method
-                          ? <span className={`payment-method-tag ${d.payment_method}`}>{d.payment_method}</span>
-                          : <span style={{ color: '#bbb' }}>—</span>}
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                        {d.commission_per_stop > 0 ? fmt(d.commission_per_stop) : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>}
-                      </td>
-                      <td className="del-date-cell">{fmtDate(d.delivered_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="accounting-totals">
-                    <td colSpan={5}><strong>{t('admin.accounting.totalDeliveries', {count: deliveryTotals.count})}</strong></td>
-                    <td style={{ textAlign: 'right' }}><strong>{fmt(deliveryTotals.cost)}</strong></td>
-                    <td style={{ textAlign: 'right', color: '#888' }}><strong>{fmt(deliveryTotals.deposit)}</strong></td>
-                    <td style={{ textAlign: 'right' }}><strong>{fmt(deliveryTotals.to_collect)}</strong></td>
-                    <td style={{ textAlign: 'right', color: '#2e7d32' }}><strong>{fmt(deliveryTotals.collected)}</strong></td>
-                    <td></td>
-                    <td style={{ textAlign: 'right' }}><strong>{fmt(deliveryTotals.commission)}</strong></td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-            <div
-              className="table-resize-handle"
-              onMouseDown={startTableResize}
-              onDoubleClick={() => { setTableContainerWidth(null); localStorage.removeItem('accounting_container_width') }}
-              title="Arrastra para ajustar el ancho · Doble clic para restablecer"
-            />
-            </div>
+                      </div>
+                      <div className="route-group-right">
+                        <span className="route-group-stat">
+                          <span className="material-icons" style={{ fontSize: 14 }}>local_shipping</span>
+                          {route.stops_count} parada{route.stops_count !== 1 ? 's' : ''}
+                        </span>
+                        <span className="route-group-stat route-group-collected">
+                          <span className="material-icons" style={{ fontSize: 14 }}>payments</span>
+                          {fmt(route.total_collected)}
+                        </span>
+                        <span className="material-icons route-group-chevron" style={{ transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                          expand_more
+                        </span>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div
+                        ref={tableContainerRef}
+                        className="table-resize-wrapper"
+                        style={tableContainerWidth ? { width: tableContainerWidth, maxWidth: 'calc(100vw - 32px)' } : {}}
+                      >
+                        <div className="content-card route-group-table-card">
+                          <table
+                            className="data-table deliveries-report-table resizable-table"
+                            style={{ tableLayout: 'fixed', width: '100%' }}
+                          >
+                            <colgroup>
+                              {delWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+                            </colgroup>
+                            <thead>
+                              <tr>
+                                {[
+                                  '#',
+                                  t('admin.accounting.client'),
+                                  t('admin.accounting.phone'),
+                                  t('admin.accounting.address'),
+                                  t('admin.accounting.driver'),
+                                  t('admin.accounting.cost'),
+                                  t('admin.accounting.deposit'),
+                                  t('admin.accounting.toCollect'),
+                                  t('admin.accounting.collected'),
+                                  t('admin.accounting.method'),
+                                  t('admin.accounting.commission'),
+                                  t('admin.accounting.deliveryDate'),
+                                ].map((label, i) => (
+                                  <th key={i} className="resizable-th">
+                                    <span className="th-content">{label}</span>
+                                    <div className="col-resize-handle" onMouseDown={e => startDelResize(i, e)} />
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {route.deliveries.map(d => (
+                                <tr key={d.id} className="delivery-report-row">
+                                  <td className="del-id-cell">#{d.id}</td>
+                                  <td className="del-customer-cell">
+                                    <span className="del-customer-name">{d.customer_name || '—'}</span>
+                                    {d.archived && <span className="archived-badge">{t('admin.accounting.archiveBadge')}</span>}
+                                  </td>
+                                  <td className="del-phone-cell">{d.customer_phone || '—'}</td>
+                                  <td className="del-address-cell">
+                                    <span title={d.address}>{d.address || '—'}</span>
+                                  </td>
+                                  <td>
+                                    <div className="del-driver-cell">
+                                      <div className="avatar-sm" style={{ background: '#6200ea', color: '#fff' }}>
+                                        {(d.driver_name || '?')[0].toUpperCase()}
+                                      </div>
+                                      <span>{d.driver_name}</span>
+                                    </div>
+                                  </td>
+                                  <td style={{ textAlign: 'right' }}>{fmt(d.order_cost)}</td>
+                                  <td style={{ textAlign: 'right', color: '#888' }}>{fmt(d.deposit_amount)}</td>
+                                  <td style={{ textAlign: 'right' }}>{fmt(d.total_to_collect)}</td>
+                                  <td style={{ textAlign: 'right', color: '#2e7d32', fontWeight: 600 }}>{fmt(d.amount_collected)}</td>
+                                  <td>
+                                    {d.payment_method
+                                      ? <span className={`payment-method-tag ${d.payment_method}`}>{d.payment_method}</span>
+                                      : <span style={{ color: '#bbb' }}>—</span>}
+                                  </td>
+                                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                    {d.commission_per_stop > 0 ? fmt(d.commission_per_stop) : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>}
+                                  </td>
+                                  <td className="del-date-cell">{fmtDate(d.delivered_at)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="accounting-totals">
+                                <td colSpan={5}>
+                                  <strong>{route.stops_count} parada{route.stops_count !== 1 ? 's' : ''}</strong>
+                                </td>
+                                <td style={{ textAlign: 'right' }}><strong>{fmt(route.total_cost)}</strong></td>
+                                <td style={{ textAlign: 'right', color: '#888' }}><strong>{fmt(route.total_deposit)}</strong></td>
+                                <td style={{ textAlign: 'right' }}><strong>{fmt(route.total_to_collect)}</strong></td>
+                                <td style={{ textAlign: 'right', color: '#2e7d32' }}><strong>{fmt(route.total_collected)}</strong></td>
+                                <td></td>
+                                <td style={{ textAlign: 'right' }}><strong>{fmt(route.total_commission)}</strong></td>
+                                <td></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                        <div
+                          className="table-resize-handle"
+                          onMouseDown={startTableResize}
+                          onDoubleClick={() => { setTableContainerWidth(null); localStorage.removeItem('accounting_container_width') }}
+                          title="Arrastra para ajustar el ancho · Doble clic para restablecer"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              <div className="route-groups-footer">
+                <span>{routeGroups.length} ruta{routeGroups.length !== 1 ? 's' : ''} · {deliveries.length} entrega{deliveries.length !== 1 ? 's' : ''}</span>
+                <span className="route-groups-footer-total">{fmt(deliveryTotals.collected)} cobrado en total</span>
+              </div>
+            </>
           )}
         </>
       )}

@@ -946,6 +946,108 @@ router.get('/deliveries-report', requireAdmin, async (req, res) => {
 });
 
 /**
+ * GET /deliveries-by-route
+ * @description Historial de entregas agrupado por ruta para la vista de contabilidad.
+ */
+router.get('/deliveries-by-route', requireAdmin, async (req, res) => {
+  try {
+    const { driver_id, date_from, date_to, month_year, search } = req.query;
+
+    const routeWhere = { status: 'completed' };
+    if (driver_id) routeWhere.assigned_driver_id = parseInt(driver_id);
+    if (date_from || date_to) {
+      routeWhere.completed_at = {};
+      if (date_from) routeWhere.completed_at[Op.gte] = new Date(date_from + 'T00:00:00');
+      if (date_to) routeWhere.completed_at[Op.lte] = new Date(date_to + 'T23:59:59');
+    }
+
+    const routes = await Route.findAll({
+      where: routeWhere,
+      order: [['completed_at', 'DESC'], ['created_at', 'DESC']]
+    });
+
+    const groupedRoutes = await Promise.all(routes.map(async (route) => {
+      const driver = route.assigned_driver_id
+        ? await User.findByPk(route.assigned_driver_id, { attributes: ['id', 'username', 'email'] })
+        : null;
+      const stops = await ValidatedAddress.findAll({ where: { route_id: route.id }, attributes: ['id'] });
+      const stopIds = stops.map(s => s.id);
+
+      let deliveries = stopIds.length > 0
+        ? await DeliveryHistory.findAll({
+            where: { original_order_id: { [Op.in]: stopIds } },
+            order: [['delivered_at', 'ASC']]
+          })
+        : [];
+
+      if (month_year) deliveries = deliveries.filter(d => d.month_year === month_year);
+      if (search) {
+        const q = search.toLowerCase();
+        deliveries = deliveries.filter(d =>
+          (d.customer_name && d.customer_name.toLowerCase().includes(q)) ||
+          (d.customer_phone && d.customer_phone.toLowerCase().includes(q)) ||
+          (d.address && d.address.toLowerCase().includes(q))
+        );
+      }
+
+      if (deliveries.length === 0) return null;
+
+      const totalCollected = deliveries.reduce((s, d) => s + (Number(d.amount_collected) || 0), 0);
+      const totalCost     = deliveries.reduce((s, d) => s + (Number(d.order_cost) || 0), 0);
+      const totalDeposit  = deliveries.reduce((s, d) => s + (Number(d.deposit_amount) || 0), 0);
+      const totalToCollect= deliveries.reduce((s, d) => s + (Number(d.total_to_collect) || 0), 0);
+      const totalCommission= deliveries.reduce((s, d) => s + (Number(d.commission_per_stop) || 0), 0);
+
+      return {
+        id: route.id,
+        name: route.name || `Ruta #${route.id}`,
+        driver_name: driver?.username || driver?.email || 'Sin chofer',
+        driver_id: route.assigned_driver_id,
+        completed_at: route.completed_at,
+        stops_count: deliveries.length,
+        total_collected: totalCollected,
+        total_cost: totalCost,
+        total_deposit: totalDeposit,
+        total_to_collect: totalToCollect,
+        total_commission: totalCommission,
+        deliveries: deliveries.map(d => ({
+          id: d.id,
+          original_order_id: d.original_order_id,
+          customer_name: d.customer_name,
+          customer_phone: d.customer_phone,
+          address: d.address,
+          city: d.city,
+          state: d.state,
+          driver_name: d.driver_name,
+          commission_per_stop: Number(d.commission_per_stop) || 0,
+          order_cost: Number(d.order_cost) || 0,
+          deposit_amount: Number(d.deposit_amount) || 0,
+          total_to_collect: Number(d.total_to_collect) || 0,
+          amount_collected: Number(d.amount_collected) || 0,
+          payment_method: d.payment_method,
+          payment_status: d.payment_status,
+          delivered_at: d.delivered_at,
+          month_year: d.month_year,
+          archived: d.archived
+        }))
+      };
+    }));
+
+    const filteredRoutes = groupedRoutes.filter(Boolean);
+    const availableMonths = await DeliveryHistory.findAll({
+      attributes: ['month_year'],
+      group: ['month_year'],
+      order: [['month_year', 'DESC']]
+    });
+
+    res.json({ success: true, routes: filteredRoutes, available_months: availableMonths.map(m => m.month_year) });
+  } catch (error) {
+    console.error('Error fetching deliveries by route:', error);
+    res.status(500).json({ error: 'Error al generar reporte por ruta' });
+  }
+});
+
+/**
  * POST /deliveries-report/archive-month
  * @description Archiva las entregas de un mes específico y genera un archivo Excel de respaldo.
  * @route POST /deliveries-report/archive-month

@@ -1,6 +1,5 @@
 /**
- * @fileoverview Diseño de contenedor principal (Layout) para el panel de administración y despacho.
- * Incluye cabecera, barra lateral de navegación (drawer) y contenedor para las páginas hijas.
+ * @fileoverview Layout principal del panel con sidebar reorganizado por categorías.
  */
 
 import { useState } from 'react'
@@ -9,21 +8,39 @@ import { useAuth } from '../contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
 import './DashboardLayout.css'
 
-/**
- * Componente de diseño para el Dashboard.
- * @returns {JSX.Element}
- */
+/** Elemento de navegación */
+function NavItem({ to, icon, label, color, end, onClick }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) => `q-item${isActive ? ' active' : ''}`}
+      onClick={onClick}
+    >
+      <span className="material-icons q-item-icon" style={{ color }}>{icon}</span>
+      <span>{label}</span>
+    </NavLink>
+  )
+}
+
+/** Cabecera de sección del sidebar */
+function SectionLabel({ icon, label, color }) {
+  return (
+    <div className="q-section-label">
+      <span className="q-section-indicator" style={{ background: color }} />
+      <span>{label}</span>
+    </div>
+  )
+}
+
 export default function DashboardLayout() {
-  /** @type {[boolean, Function]} Estado para controlar la apertura del menú lateral */
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { user, isAdmin, logout } = useAuth()
   const navigate = useNavigate()
   const { t } = useTranslation()
 
-  /**
-   * Ejecuta el cierre de sesión y redirige al usuario al login.
-   * @async
-   */
+  const close = () => setDrawerOpen(false)
+
   const handleLogout = async () => {
     await logout()
     navigate('/login')
@@ -48,84 +65,72 @@ export default function DashboardLayout() {
       </header>
 
       <aside className={`q-drawer ${drawerOpen ? 'open' : ''}`}>
-        <div className="q-drawer-backdrop" onClick={() => setDrawerOpen(false)}></div>
+        <div className="q-drawer-backdrop" onClick={close} />
         <nav className="q-drawer-content">
-          <div className="q-item-label">{t('nav.mainMenu')}</div>
-          
-          <NavLink to="/dispatch" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-            <span className="material-icons q-item-icon" style={{color: '#6200ea'}}>local_shipping</span>
-            <span>{t('nav.dispatch')}</span>
-          </NavLink>
 
-          <NavLink to="/planner" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-            <span className="material-icons q-item-icon" style={{color: '#1976d2'}}>map</span>
-            <span>{t('nav.planRoute')}</span>
-          </NavLink>
+          {/* ── OPERACIONES ── */}
+          <SectionLabel label="Operaciones" color="#6200ea" />
+          <NavItem to="/dispatch"  icon="local_shipping" label="Mapa de Despacho"   color="#6200ea" onClick={close} />
+          <NavItem to="/planner"   icon="route"          label="Planear Ruta"        color="#3949ab" onClick={close} />
 
-          <div className="q-separator"></div>
-          <div className="q-item-label">{t('nav.messagingCenter')}</div>
+          <div className="q-separator" />
 
-          <NavLink to="/messaging" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-            <span className="material-icons q-item-icon" style={{color: '#4caf50'}}>inbox</span>
-            <span>{t('nav.orders')}</span>
-          </NavLink>
-
-          <NavLink to="/messaging/coverage" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-            <span className="material-icons q-item-icon" style={{color: '#2196f3'}}>location_on</span>
-            <span>{t('nav.coverageZones')}</span>
-          </NavLink>
-
-          <NavLink to="/messaging/settings" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-            <span className="material-icons q-item-icon" style={{color: '#757575'}}>settings</span>
-            <span>{t('nav.respondSettings')}</span>
-          </NavLink>
+          {/* ── MENSAJERÍA ── */}
+          <SectionLabel label="Mensajería" color="#00897b" />
+          <NavItem to="/messaging" icon="inbox"           label="Pedidos"            color="#00897b" onClick={close} end />
 
           {isAdmin && (
             <>
-              <div className="q-separator"></div>
-              <div className="q-item-label">{t('nav.administration')}</div>
+              <div className="q-separator" />
 
-              <NavLink to="/admin" end className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-                <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>dashboard</span>
-                <span>{t('nav.adminPanel')}</span>
-              </NavLink>
+              {/* ── CEREBRO IA ── */}
+              <SectionLabel label="Cerebro IA del Bot" color="#e65100" />
+              <NavItem to="/admin/bot-memory"    icon="school"          label="Lecciones del Bot"       color="#e65100" onClick={close} />
 
-              <NavLink to="/admin/users" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-                <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>people</span>
-                <span>{t('nav.users')}</span>
-              </NavLink>
+              <div className="q-separator" />
 
-              <NavLink to="/admin/logs" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-                <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>terminal</span>
-                <span>{t('nav.systemLogs')}</span>
-              </NavLink>
-              <NavLink to="/admin/accounting" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-                <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>receipt_long</span>
-                <span>{t('nav.accounting')}</span>
-              </NavLink>
-              <NavLink to="/admin/returns" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-                <span className="material-icons q-item-icon" style={{color: '#673ab7'}}>assignment_return</span>
-                <span>{t('nav.packageReception')}</span>
-              </NavLink>
+              {/* ── CONFIGURACIÓN ── */}
+              <SectionLabel label="Configuración" color="#757575" />
+              <NavItem to="/messaging/settings"  icon="smart_toy"       label="Config. Bot e IA"        color="#757575" onClick={close} />
+              <NavItem to="/messaging/coverage"  icon="location_on"     label="Zonas de Cobertura"      color="#2196f3" onClick={close} />
+
+              <div className="q-separator" />
+
+              {/* ── GESTIÓN DE USUARIOS ── */}
+              <SectionLabel label="Gestión de Usuarios" color="#1976d2" />
+              <NavItem to="/admin/users"         icon="people"          label="Usuarios y Choferes"     color="#1976d2" onClick={close} />
+
+              <div className="q-separator" />
+
+              {/* ── RUTAS Y ENTREGAS ── */}
+              <SectionLabel label="Rutas y Entregas" color="#2e7d32" />
+              <NavItem to="/admin/routes"        icon="history"         label="Historial de Rutas"      color="#388e3c" onClick={close} />
+              <NavItem to="/admin/wholesale"     icon="store"           label="Clientes Mayoristas"     color="#00695c" onClick={close} />
+              <NavItem to="/admin/accounting"    icon="receipt_long"    label="Contabilidad"            color="#2e7d32" onClick={close} />
+              <NavItem to="/admin/returns"       icon="assignment_return" label="Recepción de Paquetes" color="#558b2f" onClick={close} />
+
+              <div className="q-separator" />
+
+              {/* ── SISTEMA ── */}
+              <SectionLabel label="Sistema" color="#5d4037" />
+              <NavItem to="/admin"               icon="dashboard"       label="Panel Admin"             color="#5d4037" end onClick={close} />
+              <NavItem to="/admin/logs"          icon="terminal"        label="Logs del Sistema"        color="#795548" onClick={close} />
+              <NavItem to="/admin/export"        icon="file_download"   label="Exportar Datos"          color="#8d6e63" onClick={close} />
             </>
           )}
 
-          <div className="q-separator"></div>
+          <div className="q-separator" />
 
-          <NavLink to="/account" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-            <span className="material-icons q-item-icon" style={{color: '#607d8b'}}>person</span>
-            <span>{t('nav.myAccount')}</span>
-          </NavLink>
-
-          <NavLink to="/soporte" className={({ isActive }) => `q-item ${isActive ? 'active' : ''}`} onClick={() => setDrawerOpen(false)}>
-            <span className="material-icons q-item-icon" style={{color: '#25d366'}}>support_agent</span>
-            <span>{t('nav.support')}</span>
-          </NavLink>
+          {/* ── MI CUENTA ── */}
+          <SectionLabel label="Mi Cuenta" color="#607d8b" />
+          <NavItem to="/account"  icon="person"         label="Mi Cuenta"           color="#607d8b" onClick={close} />
+          <NavItem to="/soporte"  icon="support_agent"  label="Soporte"             color="#25d366" onClick={close} />
 
           <button className="q-item logout" onClick={handleLogout}>
-            <span className="material-icons q-item-icon" style={{color: '#f44336'}}>logout</span>
-            <span>{t('nav.logout')}</span>
+            <span className="material-icons q-item-icon">logout</span>
+            <span>Cerrar Sesión</span>
           </button>
+
         </nav>
       </aside>
 
