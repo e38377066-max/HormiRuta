@@ -27,9 +27,9 @@ console.log('- PORT:', process.env.PORT || '5000');
 console.log('- SERVER_DOMAIN:', process.env.SERVER_DOMAIN || 'localhost');
 console.log('===========================================');
 
-import { sequelize } from './models/index.js';
+import { sequelize, User } from './models/index.js';
 
-import { requireAuth } from './middleware/auth.js';
+import { requireAuth, getUserIdFromToken } from './middleware/auth.js';
 import { openaiQuotaState } from './services/aiService.js';
 import authRoutes from './routes/auth.js';
 import routesRoutes from './routes/routes.js';
@@ -246,11 +246,20 @@ async function startServer() {
     setIo(io);
 
     io.on('connection', (socket) => {
-      socket.on('join', ({ role, userId } = {}) => {
-        if (role === 'admin') socket.join('admins');
-        if (userId) socket.join(`driver:${userId}`);
-        // Admins también se unen a su sala de driver para recibir actualizaciones si tienen rutas
-        if (role === 'admin' && userId) socket.join(`driver:${userId}`);
+      // El cliente debe autenticarse con su token; rol y salas se resuelven en servidor.
+      socket.on('join', async ({ token } = {}) => {
+        try {
+          if (!token || typeof token !== 'string') return;
+          const userId = await getUserIdFromToken(token);
+          if (!userId) return;
+          const user = await User.findByPk(userId);
+          if (!user || user.active === false) return;
+          if (user.role === 'admin') socket.join('admins');
+          // Todo usuario autenticado se une a su propia sala de driver
+          socket.join(`driver:${user.id}`);
+        } catch (err) {
+          console.error('Socket join auth error:', err.message);
+        }
       });
     });
 

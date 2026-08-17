@@ -2214,11 +2214,21 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
     // 2. Reconstruir Stop records: borrar todos los actuales y recrear solo los confirmados
     await Stop.destroy({ where: { route_id: route.id } });
 
-    if (confirmed.length > 0) {
-      const confirmedAddrs = await ValidatedAddress.findAll({
-        where: { id: { [Op.in]: confirmed } },
-        order: [['id', 'ASC']]
-      });
+    // Solo órdenes que realmente pertenecen a esta ruta pueden confirmarse (IDs ajenos se ignoran)
+    const confirmedAddrs = confirmed.length > 0
+      ? await ValidatedAddress.findAll({
+          where: { id: { [Op.in]: confirmed }, route_id: route.id },
+          order: [['id', 'ASC']]
+        })
+      : [];
+
+    if (confirmedAddrs.length > 0) {
+      // Órdenes de la ruta omitidas de ambos arrays vuelven al dispatching (sin parada = huérfanas)
+      const confirmedIds = confirmedAddrs.map(a => a.id);
+      await ValidatedAddress.update(
+        { route_id: null, dispatch_status: 'available', assigned_driver_id: null, driver_name: null },
+        { where: { route_id: route.id, id: { [Op.notIn]: confirmedIds } } }
+      );
       for (let i = 0; i < confirmedAddrs.length; i++) {
         const va = confirmedAddrs[i];
         if (va.address_lat && va.address_lng) {
@@ -2235,8 +2245,8 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
       }
     }
 
-    // 3. Si no quedaron paradas confirmadas → desasignar la ruta (vuelve a draft)
-    if (confirmed.length === 0) {
+    // 3. Si no quedó ninguna parada válida confirmada → desasignar la ruta (vuelve a draft)
+    if (confirmedAddrs.length === 0) {
       await ValidatedAddress.update(
         { route_id: null, dispatch_status: 'available', assigned_driver_id: null, driver_name: null },
         { where: { route_id: route.id } }
@@ -2267,15 +2277,15 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
       route_id: route.id,
       route_name: routeName,
       admin_name: admin?.username || admin?.email || 'Admin',
-      confirmed_stops: confirmed.length,
+      confirmed_stops: confirmedAddrs.length,
       rejected_stops: rejected.length,
-      message: `✅ La oficina confirmó entrega de ${confirmed.length} paquete${confirmed.length !== 1 ? 's' : ''} para "${routeName}". ¡Confirma que los recogiste!`
+      message: `✅ La oficina confirmó entrega de ${confirmedAddrs.length} paquete${confirmedAddrs.length !== 1 ? 's' : ''} para "${routeName}". ¡Confirma que los recogiste!`
     });
     emitToAdmins('pickup:admin_confirmed', {
       route_id: route.id,
       route_name: routeName,
       driver_name: driver?.username || driver?.email || 'Chofer',
-      confirmed_stops: confirmed.length,
+      confirmed_stops: confirmedAddrs.length,
       rejected_stops: rejected.length
     });
     // Refrescar DispatchMap en todos los admins
@@ -2283,7 +2293,7 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
 
     res.json({
       success: true,
-      message: `Entrega confirmada: ${confirmed.length} parada(s). ${rejected.length} devuelta(s) al dispatching.`
+      message: `Entrega confirmada: ${confirmedAddrs.length} parada(s). ${rejected.length} devuelta(s) al dispatching.`
     });
   } catch (error) {
     console.error('Error confirming stops:', error);
@@ -2605,6 +2615,9 @@ router.get('/routes/:id/detail', requireAuth, async (req, res) => {
     const routeDict = await route.toDict();
     const driver = route.assigned_driver_id ? await User.findByPk(route.assigned_driver_id) : null;
     routeDict.driver_name = driver?.username || null;
+
+    const stops = await Stop.findAll({ where: { route_id: route.id }, order: [['order', 'ASC']] });
+    routeDict.stops = stops.map(s => s.toDict());
 
     const orders = await ValidatedAddress.findAll({ where: { route_id: route.id } });
     routeDict.orders = orders.map(o => o.toDict());

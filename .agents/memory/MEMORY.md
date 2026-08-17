@@ -1,4 +1,5 @@
 - [Coverage zone lookup](coverage-zone-lookup.md) — user_id filter in validateZipOrCity/findZoneByCity/checkCoverage must have fallback without user_id.
 - [Address geocoding street number](address-geocoding.md) — geocoding can silently change street numbers (e.g. 4235→235); must validate before accepting geocoded result.
 - [AI address extraction validation](ai-address-extraction.md) — AI may change street number when parsing ambiguous text; validate AI streetNumber is present verbatim in source messages.
+- [Autorización y Socket.IO](security-authz-audit.md) — socket se autentica con token en join; requireAuth chequea user.active; toda ruta /api/admin lleva requireAdmin explícito.
 - [Vision classification: tarjetas vs magneticos](aiservice-vision-classification.md) — criterio para que el bot no confunda diseños de tarjeta con magnéticos de vehículo.

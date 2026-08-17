@@ -125,7 +125,6 @@ export default function App() {
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/soporte" element={<SupportPage />} />
-      <Route path="/admin/logs" element={<AdminLogs />} />
       
       <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to={isAuthenticated ? getDefaultRoute(user) : '/login'} replace />} />

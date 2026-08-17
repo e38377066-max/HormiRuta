@@ -74,9 +74,7 @@ export default function AdminUsers() {
    */
   const handleToggleActive = async (user) => {
     try {
-      await api.put(`/api/admin/users/${user.id}`, { 
-        isActive: !user.isActive 
-      })
+      await api.put(`/api/admin/users/${user.id}/toggle-active`)
       fetchUsers()
     } catch (error) {
       console.error('Error updating user:', error)
@@ -217,22 +215,22 @@ export default function AdminUsers() {
                     </span>
                   </td>
                   <td>
-                    <span className={`status-tag ${user.isActive !== false ? 'active' : 'inactive'}`}>
+                    <span className={`status-tag ${user.active !== false ? 'active' : 'inactive'}`}>
                       <span className="status-dot"></span>
-                      {user.isActive !== false ? t('admin.users.active') : t('admin.users.inactive')}
+                      {user.active !== false ? t('admin.users.active') : t('admin.users.inactive')}
                     </span>
                   </td>
-                  <td>{formatDate(user.createdAt)}</td>
+                  <td>{formatDate(user.created_at)}</td>
                   <td>
                     <button className="icon-btn" onClick={() => openEditDialog(user)} title={t('common.edit')}>
                       <span className="material-icons">edit</span>
                     </button>
                     <button 
-                      className={`icon-btn ${user.isActive !== false ? 'danger' : 'success'}`}
+                      className={`icon-btn ${user.active !== false ? 'danger' : 'success'}`}
                       onClick={() => handleToggleActive(user)}
-                      title={user.isActive !== false ? t('admin.users.deactivate') : t('admin.users.activate')}
+                      title={user.active !== false ? t('admin.users.deactivate') : t('admin.users.activate')}
                     >
-                      <span className="material-icons">{user.isActive !== false ? 'block' : 'check_circle'}</span>
+                      <span className="material-icons">{user.active !== false ? 'block' : 'check_circle'}</span>
                     </button>
                     <button
                       className="icon-btn danger"

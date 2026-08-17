@@ -7,7 +7,7 @@ import express from 'express';
 import { Op } from 'sequelize';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { sendEmail, verifyGmailConnection } from '../services/gmailService.js';
-import { getPickupReadyOrders, GmailScopeError } from '../services/gmailReadService.js';
+import { getPickupReadyOrders, GmailScopeError, clearPickupCache } from '../services/gmailReadService.js';
 import { ValidatedAddress, MessagingSettings, WholesaleClient } from '../models/index.js';
 import geocodingService from '../services/geocodingService.js';
 import {

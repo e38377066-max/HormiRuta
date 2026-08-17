@@ -83,8 +83,13 @@ export const requireAuth = async (req, res, next) => {
     if (!userId) {
       return res.status(401).json({ error: 'No autorizado' });
     }
+    const user = await User.findByPk(userId);
+    if (!user || user.active === false) {
+      return res.status(401).json({ error: 'Cuenta inactiva o no encontrada' });
+    }
     if (req.session) req.session.userId = userId;
     req.userId = userId;
+    req.user = user;
     next();
   } catch (error) {
     console.error('requireAuth error:', error);
@@ -110,6 +115,9 @@ export const requireRole = (...roles) => {
       const user = await User.findByPk(userId);
       if (!user) {
         return res.status(401).json({ error: 'Usuario no encontrado' });
+      }
+      if (user.active === false) {
+        return res.status(401).json({ error: 'Cuenta inactiva' });
       }
       if (!roles.includes(user.role)) {
         return res.status(403).json({ error: 'No tienes permisos para esta accion' });

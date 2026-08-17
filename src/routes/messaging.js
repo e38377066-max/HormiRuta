@@ -40,10 +40,17 @@ const isAdminUser = async (userId) => {
  * @returns {Promise<Object>} Objeto con settings e isAdmin.
  * @private
  */
-async function getSettingsForUser() {
+async function getSettingsForUser(userId = null) {
   let settings = await MessagingSettings.findOne({ order: [['created_at', 'ASC']] });
   if (!settings) {
-    settings = await MessagingSettings.create({});
+    // user_id es NOT NULL: usar el usuario indicado o el primer admin como dueño del registro global
+    let ownerId = userId;
+    if (!ownerId) {
+      const admin = await User.findOne({ where: { role: 'admin' }, order: [['id', 'ASC']] });
+      ownerId = admin?.id || null;
+    }
+    if (!ownerId) throw new Error('No hay usuario admin para crear la configuración de mensajería');
+    settings = await MessagingSettings.create({ user_id: ownerId });
   }
   return { settings, isAdmin: true };
 }
@@ -56,7 +63,7 @@ async function getSettingsForUser() {
  */
 router.get('/settings', requireAuth, async (req, res) => {
   try {
-    const { settings } = await getSettingsForUser();
+    const { settings } = await getSettingsForUser(req.userId);
     const dict = settings.toDict();
     dict.has_openai_env_key = !!process.env.OPENAI_API_KEY;
     res.json(dict);
@@ -1659,6 +1666,7 @@ router.delete('/agents/:id', requireAuth, async (req, res) => {
  */
 router.get('/agents/by-service/:serviceName', requireAuth, async (req, res) => {
   try {
+    const admin = await isAdminUser(req.userId);
     const where = admin
       ? { service_name: req.params.serviceName, is_active: true }
       : { user_id: req.userId, service_name: req.params.serviceName, is_active: true };
@@ -1684,6 +1692,7 @@ router.get('/agents/by-service/:serviceName', requireAuth, async (req, res) => {
  */
 router.get('/agents/by-product/:productName', requireAuth, async (req, res) => {
   try {
+    const admin = await isAdminUser(req.userId);
     const where = admin ? { is_active: true } : { user_id: req.userId, is_active: true };
     const agents = await ServiceAgent.findAll({ where });
 

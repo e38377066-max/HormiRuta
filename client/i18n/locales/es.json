@@ -1100,6 +1100,9 @@
         "autoLearnBullet5": "Con el tiempo, el bot se va puliendo solo basado en los patrones que van aprendiendo."
       },
       "docs": {
+        "usageLow": "Uso bajo",
+        "usageMed": "Uso medio",
+        "usageHigh": "Uso alto",
         "title": "Documentos y Prompts",
         "addText": "Agregar Texto / Prompt",
         "uploadFile": "Subir Archivo .txt",
