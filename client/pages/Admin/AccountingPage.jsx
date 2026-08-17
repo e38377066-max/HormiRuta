@@ -135,23 +135,25 @@ export default function AccountingPage() {
     e.preventDefault()
     e.stopPropagation()
     const startX = e.clientX
-    const el = tableContainerRef.current
     const pageEl = pageContainerRef.current
+    // El elemento a redimensionar es el wrapper padre del handle pulsado
+    // (funciona tanto para la tabla del tab de cobranza como para cada card de ruta)
+    const el = e.currentTarget.parentElement
     if (!el) return
     const startW = el.getBoundingClientRect().width
 
     const onMove = (ev) => {
       const newW = Math.max(320, startW + (ev.clientX - startX))
-      // Manipulación directa del DOM — sin pasar por React
-      el.style.width = `${newW}px`
-      el.style.maxWidth = 'calc(100vw - 32px)'
-      // Expandir page-container si hace falta
+      // Actualizar todos los table-resize-wrapper visibles para sincronía
+      document.querySelectorAll('.table-resize-wrapper').forEach(wrapper => {
+        wrapper.style.width = `${newW}px`
+        wrapper.style.maxWidth = 'calc(100vw - 32px)'
+      })
       if (pageEl && newW > 1160) pageEl.classList.add('wide-mode')
     }
 
     const onUp = (ev) => {
       const newW = Math.max(320, startW + (ev.clientX - startX))
-      // Ahora sí sincronizamos React state para persistencia
       setTableContainerWidth(newW)
       localStorage.setItem('accounting_container_width', String(Math.round(newW)))
       document.body.style.cursor = ''
