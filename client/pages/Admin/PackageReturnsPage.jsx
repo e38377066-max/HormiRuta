@@ -313,12 +313,13 @@ function RoutePickupSection() {
   )
 }
 
-// ─── Sección de Retornos (original sin cambios) ───────────────────────────────
+// ─── Sección de Retornos ──────────────────────────────────────────────────────
 function RetornosSection() {
   const { t } = useTranslation()
   const [orders, setOrders]   = useState([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter]   = useState('all')
+  const [busyId, setBusyId]   = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -331,30 +332,46 @@ function RetornosSection() {
 
   useEffect(() => { load() }, [load])
 
-  const pill = (o) => {
+  // package_disposition values: held_by_driver | pending_return | returned_to_office
+  const pill = (disposition) => {
     const map = {
-      skipped:          { txt: t('admin.returns.skipped'),           cls: 'pr-pill-skip' },
-      pending_return:   { txt: t('admin.returns.pendingReturn'),     cls: 'pr-pill-pending' },
-      returned:         { txt: t('admin.returns.returned'),          cls: 'pr-pill-returned' },
-      delivered:        { txt: t('admin.returns.delivered'),         cls: 'pr-pill-done' },
+      held_by_driver:     { txt: t('admin.returns.heldByDriver'),     cls: 'pr-pill-skip' },
+      pending_return:     { txt: t('admin.returns.pendingReturn'),     cls: 'pr-pill-pending' },
+      returned_to_office: { txt: t('admin.returns.returnedToOffice'), cls: 'pr-pill-returned' },
     }
-    return map[o.package_disposition] || { txt: o.package_disposition, cls: '' }
+    return map[disposition] || { txt: disposition, cls: '' }
   }
 
   const counts = {
-    all:            orders.length,
-    skipped:        orders.filter(o => o.package_disposition === 'skipped').length,
-    pending_return: orders.filter(o => o.package_disposition === 'pending_return').length,
-    returned:       orders.filter(o => o.package_disposition === 'returned').length,
+    all:                orders.length,
+    held_by_driver:     orders.filter(o => o.package_disposition === 'held_by_driver').length,
+    pending_return:     orders.filter(o => o.package_disposition === 'pending_return').length,
+    returned_to_office: orders.filter(o => o.package_disposition === 'returned_to_office').length,
   }
 
   const visible = filter === 'all' ? orders : orders.filter(o => o.package_disposition === filter)
 
-  const markReturned = async (id) => {
+  // Marcar como recibido en oficina (pending_return → returned_to_office)
+  const receiveAtOffice = async (id) => {
+    setBusyId(id)
     try {
-      await api.put(`/api/dispatch/returns/${id}/mark-returned`)
-      load()
-    } catch (e) { alert(e.response?.data?.error || t('admin.returns.errorMarking')) }
+      await api.put(`/api/dispatch/returns/${id}/receive`)
+      await load()
+    } catch (e) {
+      alert(e.response?.data?.error || t('admin.returns.errorMarking'))
+    } finally { setBusyId(null) }
+  }
+
+  // Liberar de vuelta al dispatching (returned_to_office → available)
+  const releaseToDispatch = async (id) => {
+    if (!window.confirm(t('admin.returns.confirmRelease'))) return
+    setBusyId(id)
+    try {
+      await api.put(`/api/dispatch/returns/${id}/release`)
+      await load()
+    } catch (e) {
+      alert(e.response?.data?.error || t('admin.returns.errorMarking'))
+    } finally { setBusyId(null) }
   }
 
   return (
@@ -363,14 +380,14 @@ function RetornosSection() {
         <button className={`pr-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
           {t('admin.returns.filters.all')} <span className="pr-count">{counts.all}</span>
         </button>
-        <button className={`pr-tab ${filter === 'skipped' ? 'active' : ''}`} onClick={() => setFilter('skipped')}>
-          {t('admin.returns.filters.skipped')} <span className="pr-count pr-count-warn">{counts.skipped}</span>
+        <button className={`pr-tab ${filter === 'held_by_driver' ? 'active' : ''}`} onClick={() => setFilter('held_by_driver')}>
+          {t('admin.returns.filters.withDriver')} <span className="pr-count pr-count-warn">{counts.held_by_driver}</span>
         </button>
         <button className={`pr-tab ${filter === 'pending_return' ? 'active' : ''}`} onClick={() => setFilter('pending_return')}>
           {t('admin.returns.filters.pending')} <span className="pr-count pr-count-warn">{counts.pending_return}</span>
         </button>
-        <button className={`pr-tab ${filter === 'returned' ? 'active' : ''}`} onClick={() => setFilter('returned')}>
-          {t('admin.returns.filters.returned')} <span className="pr-count">{counts.returned}</span>
+        <button className={`pr-tab ${filter === 'returned_to_office' ? 'active' : ''}`} onClick={() => setFilter('returned_to_office')}>
+          {t('admin.returns.filters.atOffice')} <span className="pr-count">{counts.returned_to_office}</span>
         </button>
         <button className="pr-refresh" onClick={load} disabled={loading}>
           <span className="material-icons">refresh</span>
@@ -382,12 +399,13 @@ function RetornosSection() {
       ) : visible.length === 0 ? (
         <div className="pr-empty">
           <span className="material-icons" style={{ fontSize: 48, color: '#9ca3af' }}>inbox</span>
-          <div>{t('admin.returns.empty')}</div>
+          <div>{t('admin.returns.noPackages')}</div>
         </div>
       ) : (
         <div className="pr-list">
           {visible.map(o => {
-            const { txt, cls } = pill(o)
+            const { txt, cls } = pill(o.package_disposition)
+            const isBusy = busyId === o.id
             return (
               <div key={o.id} className="pr-card">
                 <div className="pr-card-header">
@@ -401,10 +419,10 @@ function RetornosSection() {
                   <span className="material-icons">place</span>
                   {o.validated_address || o.original_address}
                 </div>
-                {o.driver_name && (
+                {(o.held_by_driver_name || o.driver_name) && (
                   <div className="pr-driver">
                     <span className="material-icons">local_shipping</span>
-                    {o.driver_name}
+                    {o.held_by_driver_name || o.driver_name}
                   </div>
                 )}
                 {o.skip_reason && (
@@ -413,14 +431,30 @@ function RetornosSection() {
                     {o.skip_reason}
                   </div>
                 )}
-                {o.package_disposition === 'pending_return' && (
-                  <div className="pr-actions">
-                    <button className="pr-btn pr-btn-success" onClick={() => markReturned(o.id)}>
-                      <span className="material-icons">check</span>
-                      {t('admin.returns.markReturned')}
+                <div className="pr-actions">
+                  {/* Recibir en oficina: aplica a held_by_driver y pending_return */}
+                  {(o.package_disposition === 'pending_return' || o.package_disposition === 'held_by_driver') && (
+                    <button
+                      className="pr-btn pr-btn-success"
+                      disabled={isBusy}
+                      onClick={() => receiveAtOffice(o.id)}
+                    >
+                      <span className="material-icons">move_to_inbox</span>
+                      {isBusy ? 'Procesando…' : t('admin.returns.receiveAtOffice')}
                     </button>
-                  </div>
-                )}
+                  )}
+                  {/* Liberar al dispatching: aplica a returned_to_office */}
+                  {o.package_disposition === 'returned_to_office' && (
+                    <button
+                      className="pr-btn pr-btn-outline"
+                      disabled={isBusy}
+                      onClick={() => releaseToDispatch(o.id)}
+                    >
+                      <span className="material-icons">redo</span>
+                      {isBusy ? 'Procesando…' : t('admin.returns.releaseNewRoute')}
+                    </button>
+                  )}
+                </div>
               </div>
             )
           })}
