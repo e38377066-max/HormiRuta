@@ -1711,7 +1711,7 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
 router.get('/drivers', requireAdmin, async (req, res) => {
   try {
     const drivers = await User.findAll({
-      where: { role: 'driver', active: true },
+      where: { role: ['driver', 'admin'], active: true },
       attributes: ['id', 'username', 'email', 'phone']
     });
     res.json({ drivers: drivers.map(d => d.toDict()) });
