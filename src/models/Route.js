@@ -153,6 +153,21 @@ const Route = sequelize.define('Route', {
   admin_payment_records: {
     type: DataTypes.JSON,
     defaultValue: []
+  },
+  /** Fecha y hora en que el admin confirmó la entrega de paquetes al chofer */
+  pickup_admin_confirmed_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  /** ID del admin que confirmó la entrega */
+  pickup_admin_confirmed_by: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  /** Fecha y hora en que el chofer confirmó haber recogido los paquetes */
+  pickup_driver_confirmed_at: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   tableName: 'routes',

@@ -1475,6 +1475,8 @@ router.get('/routes', requireAuth, async (req, res) => {
       routeDict.payment_delivered = r.payment_delivered || false;
       routeDict.payment_delivery_method = r.payment_delivery_method || null;
       routeDict.payment_delivered_at = r.payment_delivered_at || null;
+      routeDict.pickup_admin_confirmed_at = r.pickup_admin_confirmed_at || null;
+      routeDict.pickup_driver_confirmed_at = r.pickup_driver_confirmed_at || null;
       return routeDict;
     }));
 
@@ -2139,6 +2141,147 @@ router.put('/returns/:id/release', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error releasing return:', error);
     res.status(500).json({ error: 'Error al liberar paquete' });
+  }
+});
+
+/**
+ * GET /pickup/pending
+ * @description Rutas asignadas pendientes de confirmación de entrega al chofer por la oficina.
+ */
+router.get('/pickup/pending', requireAdmin, async (req, res) => {
+  try {
+    const routes = await Route.findAll({
+      where: { status: 'assigned', pickup_admin_confirmed_at: null },
+      order: [['updated_at', 'DESC']]
+    });
+    const result = await Promise.all(routes.map(async (r) => {
+      const driver = r.assigned_driver_id
+        ? await User.findByPk(r.assigned_driver_id, { attributes: ['id', 'username', 'email'] })
+        : null;
+      const stopsCount = await ValidatedAddress.count({ where: { route_id: r.id } });
+      return {
+        id: r.id,
+        name: r.name || `Ruta #${r.id}`,
+        driver_name: driver?.username || driver?.email || 'Sin chofer',
+        driver_id: r.assigned_driver_id,
+        stops_count: stopsCount,
+        assigned_at: r.updated_at,
+        status: r.status
+      };
+    }));
+    res.json({ success: true, routes: result });
+  } catch (error) {
+    console.error('Error fetching pending pickups:', error);
+    res.status(500).json({ error: 'Error al cargar rutas pendientes' });
+  }
+});
+
+/**
+ * GET /pickup/history
+ * @description Historial de recepciones — rutas donde la oficina ya confirmó entrega.
+ */
+router.get('/pickup/history', requireAdmin, async (req, res) => {
+  try {
+    const routes = await Route.findAll({
+      where: { pickup_admin_confirmed_at: { [Op.not]: null } },
+      order: [['pickup_admin_confirmed_at', 'DESC']]
+    });
+    const result = await Promise.all(routes.map(async (r) => {
+      const driver = r.assigned_driver_id
+        ? await User.findByPk(r.assigned_driver_id, { attributes: ['id', 'username', 'email'] })
+        : null;
+      const confirmedBy = r.pickup_admin_confirmed_by
+        ? await User.findByPk(r.pickup_admin_confirmed_by, { attributes: ['id', 'username', 'email'] })
+        : null;
+      const stopsCount = await ValidatedAddress.count({ where: { route_id: r.id } });
+      return {
+        id: r.id,
+        name: r.name || `Ruta #${r.id}`,
+        driver_name: driver?.username || driver?.email || 'Sin chofer',
+        driver_id: r.assigned_driver_id,
+        stops_count: stopsCount,
+        status: r.status,
+        pickup_admin_confirmed_at: r.pickup_admin_confirmed_at,
+        pickup_admin_confirmed_by_name: confirmedBy?.username || confirmedBy?.email || 'Admin',
+        pickup_driver_confirmed_at: r.pickup_driver_confirmed_at
+      };
+    }));
+    res.json({ success: true, routes: result });
+  } catch (error) {
+    console.error('Error fetching pickup history:', error);
+    res.status(500).json({ error: 'Error al cargar historial de recepciones' });
+  }
+});
+
+/**
+ * POST /pickup/:routeId/admin-confirm
+ * @description Admin confirma la entrega de paquetes de una ruta al chofer.
+ */
+router.post('/pickup/:routeId/admin-confirm', requireAdmin, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.routeId);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+    if (!route.assigned_driver_id) return res.status(400).json({ error: 'La ruta no tiene chofer asignado' });
+
+    route.pickup_admin_confirmed_at = new Date();
+    route.pickup_admin_confirmed_by = req.userId;
+    await route.save();
+
+    const driver = await User.findByPk(route.assigned_driver_id, { attributes: ['id', 'username', 'email'] });
+    const admin  = await User.findByPk(req.userId, { attributes: ['id', 'username', 'email'] });
+    const routeName = route.name || `Ruta #${route.id}`;
+
+    emitToDriver(route.assigned_driver_id, 'pickup:admin_confirmed', {
+      route_id: route.id,
+      route_name: routeName,
+      admin_name: admin?.username || admin?.email || 'Admin',
+      message: `✅ La oficina confirmó entrega de paquetes para "${routeName}". ¡Confirma que los recogiste!`
+    });
+    emitToAdmins('pickup:admin_confirmed', {
+      route_id: route.id,
+      route_name: routeName,
+      driver_name: driver?.username || driver?.email || 'Chofer'
+    });
+
+    res.json({ success: true, message: 'Entrega confirmada al chofer' });
+  } catch (error) {
+    console.error('Error confirming pickup (admin):', error);
+    res.status(500).json({ error: 'Error al confirmar entrega' });
+  }
+});
+
+/**
+ * POST /pickup/:routeId/driver-confirm
+ * @description Chofer confirma que recogió los paquetes de la ruta.
+ */
+router.post('/pickup/:routeId/driver-confirm', requireAuth, async (req, res) => {
+  try {
+    const route = await Route.findByPk(req.params.routeId);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+
+    const user = await User.findByPk(req.userId);
+    if (route.assigned_driver_id !== req.userId && user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Sin permisos' });
+    }
+    if (!route.pickup_admin_confirmed_at) {
+      return res.status(400).json({ error: 'La oficina aún no ha confirmado la entrega de paquetes' });
+    }
+
+    route.pickup_driver_confirmed_at = new Date();
+    await route.save();
+
+    const driver = await User.findByPk(route.assigned_driver_id, { attributes: ['id', 'username', 'email'] });
+    emitToAdmins('pickup:driver_confirmed', {
+      route_id: route.id,
+      route_name: route.name || `Ruta #${route.id}`,
+      driver_name: driver?.username || driver?.email || 'Chofer',
+      message: `El chofer confirmó recogida de "${route.name || `Ruta #${route.id}`}".`
+    });
+
+    res.json({ success: true, message: 'Recogida confirmada' });
+  } catch (error) {
+    console.error('Error confirming pickup (driver):', error);
+    res.status(500).json({ error: 'Error al confirmar recogida' });
   }
 });
 

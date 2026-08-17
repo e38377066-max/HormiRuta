@@ -1795,6 +1795,44 @@
   margin-top: 4px;
 }
 
+/* ── Driver pickup confirmation ── */
+.pickup-driver-confirm-banner {
+  margin-top: 10px;
+  background: #f3e8ff;
+  border: 1px solid #d8b4fe;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pickup-driver-confirm-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4c1d95;
+}
+.pickup-driver-confirm-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #6200ea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+}
+.pickup-driver-confirm-btn:active { background: #4a00b0; }
+.pickup-driver-confirm-btn .material-icons { font-size: 18px; }
+
 .btn-deliver-payment {
   display: flex;
   align-items: center;

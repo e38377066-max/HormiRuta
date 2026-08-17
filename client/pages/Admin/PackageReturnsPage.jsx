@@ -1,110 +1,253 @@
 /**
- * @fileoverview Página de gestión de retornos de paquetes.
- * Permite a los administradores registrar la recepción física de paquetes no entregados (skipped) 
- * y liberarlos para nuevos intentos de entrega o despacho manual.
+ * @fileoverview Recepción de Paquetes — dos secciones:
+ *  1. Recepción de Rutas: confirmar entrega de paquetes al chofer + historial
+ *  2. Retornos: paquetes skipped que vuelven a la oficina (funcionalidad original)
  */
 
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
+import { getSocket } from '../../socket'
 import './AdminPages.css'
 import './PackageReturnsPage.css'
 
-/** Formatea una fecha para visualización compacta */
 const fmtDate = (d) => {
-  if (!d) return '-'
+  if (!d) return '—'
   return new Date(d).toLocaleString(undefined, {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   })
 }
 
-/**
- * Componente PackageReturnsPage que gestiona el ciclo de vida de los paquetes devueltos.
- * @returns {JSX.Element}
- */
-export default function PackageReturnsPage() {
-  const { t } = useTranslation()
-  /** @type {[Array, Function]} Lista de órdenes con paquetes en retorno */
-  const [orders, setOrders] = useState([])
-  /** @type {[boolean, Function]} Indica si se está realizando la carga inicial */
-  const [loading, setLoading] = useState(false)
-  /** @type {[string, Function]} Filtro activo (all, pending_return, held_by_driver, returned_to_office) */
-  const [filter, setFilter] = useState('all')
-  /** @type {[number|null, Function]} ID de la orden que está siendo procesada */
-  const [busy, setBusy] = useState(null)
+// ─── Sección de Recepción de Rutas ────────────────────────────────────────────
+function RoutePickupSection() {
+  const [subTab, setSubTab]         = useState('pending')   // 'pending' | 'history'
+  const [pending, setPending]       = useState([])
+  const [history, setHistory]       = useState([])
+  const [loading, setLoading]       = useState(false)
+  const [busyId, setBusyId]         = useState(null)
+  const [notif, setNotif]           = useState(null)
 
-  /**
-   * Obtiene la etiqueta y clase CSS según la disposición del paquete.
-   * @param {string} d - Valor de package_disposition.
-   */
+  const loadPending = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/api/dispatch/pickup/pending')
+      setPending(res.data.routes || [])
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }, [])
+
+  const loadHistory = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/api/dispatch/pickup/history')
+      setHistory(res.data.routes || [])
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }, [])
+
+  const loadAll = useCallback(() => {
+    loadPending()
+    loadHistory()
+  }, [loadPending, loadHistory])
+
+  useEffect(() => { loadAll() }, [loadAll])
+
+  // Recargar en tiempo real cuando el chofer confirma
+  useEffect(() => {
+    const socket = getSocket()
+    const handler = () => {
+      loadAll()
+      setNotif('✅ Chofer confirmó recogida de paquetes')
+      setTimeout(() => setNotif(null), 5000)
+    }
+    socket.on('pickup:driver_confirmed', handler)
+    return () => socket.off('pickup:driver_confirmed', handler)
+  }, [loadAll])
+
+  const adminConfirm = async (routeId) => {
+    setBusyId(routeId)
+    try {
+      await api.post(`/api/dispatch/pickup/${routeId}/admin-confirm`)
+      await loadAll()
+      setNotif('✅ Entrega confirmada — se notificó al chofer')
+      setTimeout(() => setNotif(null), 5000)
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error al confirmar')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const statusBadge = (r) => {
+    if (r.pickup_driver_confirmed_at) {
+      return <span className="pickup-badge pickup-badge-full">✓ Ambos confirmaron</span>
+    }
+    return <span className="pickup-badge pickup-badge-pending">Pendiente chofer</span>
+  }
+
+  return (
+    <div>
+      {notif && <div className="pickup-notif">{notif}</div>}
+
+      <div className="pr-tabs" style={{ marginBottom: 0 }}>
+        <button className={`pr-tab ${subTab === 'pending' ? 'active' : ''}`} onClick={() => setSubTab('pending')}>
+          Pendientes <span className="pr-count pr-count-warn">{pending.length}</span>
+        </button>
+        <button className={`pr-tab ${subTab === 'history' ? 'active' : ''}`} onClick={() => setSubTab('history')}>
+          Historial <span className="pr-count">{history.length}</span>
+        </button>
+        <button className="pr-refresh" onClick={loadAll} disabled={loading}>
+          <span className="material-icons">refresh</span>
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="pr-empty"><div className="spinner" /></div>
+      ) : subTab === 'pending' ? (
+        pending.length === 0 ? (
+          <div className="pr-empty">
+            <span className="material-icons" style={{ fontSize: 48, color: '#9ca3af' }}>check_circle</span>
+            <div>No hay rutas pendientes de confirmación</div>
+          </div>
+        ) : (
+          <div className="pr-list">
+            {pending.map(r => (
+              <div key={r.id} className="pr-card pickup-card">
+                <div className="pr-card-header">
+                  <div className="pickup-route-name">
+                    <span className="material-icons" style={{ fontSize: 18, color: '#6200ea' }}>route</span>
+                    {r.name}
+                  </div>
+                  <span className="pickup-badge pickup-badge-assigned">Asignada</span>
+                </div>
+                <div className="pickup-meta">
+                  <span className="material-icons" style={{ fontSize: 14 }}>person</span>
+                  <strong>{r.driver_name}</strong>
+                  <span style={{ margin: '0 6px', color: '#ccc' }}>·</span>
+                  <span className="material-icons" style={{ fontSize: 14 }}>local_shipping</span>
+                  {r.stops_count} parada{r.stops_count !== 1 ? 's' : ''}
+                  <span style={{ margin: '0 6px', color: '#ccc' }}>·</span>
+                  <span className="material-icons" style={{ fontSize: 14 }}>schedule</span>
+                  {fmtDate(r.assigned_at)}
+                </div>
+                <div className="pr-actions">
+                  <button
+                    className="pr-btn pickup-btn-confirm"
+                    disabled={busyId === r.id}
+                    onClick={() => adminConfirm(r.id)}
+                  >
+                    <span className="material-icons">inventory</span>
+                    {busyId === r.id ? 'Confirmando…' : 'Confirmar Entrega al Chofer'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        history.length === 0 ? (
+          <div className="pr-empty">
+            <span className="material-icons" style={{ fontSize: 48, color: '#9ca3af' }}>history</span>
+            <div>No hay recepciones confirmadas aún</div>
+          </div>
+        ) : (
+          <div className="pr-list">
+            {history.map(r => (
+              <div key={r.id} className="pr-card pickup-card">
+                <div className="pr-card-header">
+                  <div className="pickup-route-name">
+                    <span className="material-icons" style={{ fontSize: 18, color: '#6200ea' }}>route</span>
+                    {r.name}
+                  </div>
+                  {statusBadge(r)}
+                </div>
+                <div className="pickup-meta">
+                  <span className="material-icons" style={{ fontSize: 14 }}>person</span>
+                  <strong>{r.driver_name}</strong>
+                  <span style={{ margin: '0 6px', color: '#ccc' }}>·</span>
+                  <span className="material-icons" style={{ fontSize: 14 }}>local_shipping</span>
+                  {r.stops_count} parada{r.stops_count !== 1 ? 's' : ''}
+                </div>
+                <div className="pickup-timeline">
+                  <div className="pickup-timeline-item pickup-timeline-admin">
+                    <span className="material-icons">admin_panel_settings</span>
+                    <div>
+                      <div className="pickup-tl-label">Oficina confirmó entrega</div>
+                      <div className="pickup-tl-sub">{r.pickup_admin_confirmed_by_name} · {fmtDate(r.pickup_admin_confirmed_at)}</div>
+                    </div>
+                  </div>
+                  {r.pickup_driver_confirmed_at ? (
+                    <div className="pickup-timeline-item pickup-timeline-driver">
+                      <span className="material-icons">local_shipping</span>
+                      <div>
+                        <div className="pickup-tl-label">Chofer confirmó recogida</div>
+                        <div className="pickup-tl-sub">{fmtDate(r.pickup_driver_confirmed_at)}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pickup-timeline-item pickup-timeline-waiting">
+                      <span className="material-icons">hourglass_top</span>
+                      <div>
+                        <div className="pickup-tl-label">Esperando confirmación del chofer…</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
+// ─── Sección de Retornos (funcionalidad original) ─────────────────────────────
+function RetornosSection() {
+  const { t } = useTranslation()
+  const [orders, setOrders]   = useState([])
+  const [loading, setLoading] = useState(false)
+  const [filter, setFilter]   = useState('all')
+  const [busy, setBusy]       = useState(null)
+
   const dispositionLabel = (d) => {
     switch (d) {
-      case 'held_by_driver': return { txt: t('admin.returns.withDriver'), cls: 'pr-pill-driver' }
-      case 'pending_return': return { txt: t('admin.returns.pendingReturn'), cls: 'pr-pill-pending' }
-      case 'returned_to_office': return { txt: t('admin.returns.receivedAtOffice'), cls: 'pr-pill-office' }
+      case 'held_by_driver':    return { txt: t('admin.returns.withDriver'),       cls: 'pr-pill-driver' }
+      case 'pending_return':    return { txt: t('admin.returns.pendingReturn'),     cls: 'pr-pill-pending' }
+      case 'returned_to_office':return { txt: t('admin.returns.receivedAtOffice'), cls: 'pr-pill-office' }
       default: return { txt: d || '-', cls: '' }
     }
   }
 
-  /**
-   * Carga la lista de retornos del servidor.
-   * @async
-   */
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await api.get('/api/dispatch/returns')
       setOrders(res.data?.orders || [])
-    } catch (err) {
-      console.error('Error loading returns:', err)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { console.error('Error loading returns:', err) }
+    finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])
 
-  /**
-   * Registra que el paquete ha sido recibido físicamente en la oficina.
-   * @async
-   * @param {number} id - ID de la orden.
-   */
   const receive = async (id) => {
     if (!confirm(t('admin.returns.confirmReceived'))) return
     setBusy(id)
-    try {
-      await api.put(`/api/dispatch/returns/${id}/receive`)
-      await load()
-    } catch (err) {
-      alert(err.response?.data?.error || t('common.error'))
-    } finally {
-      setBusy(null)
-    }
+    try { await api.put(`/api/dispatch/returns/${id}/receive`); await load() }
+    catch (err) { alert(err.response?.data?.error || t('common.error')) }
+    finally { setBusy(null) }
   }
 
-  /**
-   * Libera el paquete para que pueda ser re-asignado a una nueva ruta de despacho.
-   * @async
-   * @param {number} id - ID de la orden.
-   */
   const release = async (id) => {
     if (!confirm(t('admin.returns.confirmRelease'))) return
     setBusy(id)
-    try {
-      await api.put(`/api/dispatch/returns/${id}/release`)
-      await load()
-    } catch (err) {
-      alert(err.response?.data?.error || t('common.error'))
-    } finally {
-      setBusy(null)
-    }
+    try { await api.put(`/api/dispatch/returns/${id}/release`); await load() }
+    catch (err) { alert(err.response?.data?.error || t('common.error')) }
+    finally { setBusy(null) }
   }
 
-  /** Filtrado local de órdenes */
   const filtered = orders.filter(o => filter === 'all' || o.package_disposition === filter)
-
-  /** Contadores para los badges de las pestañas */
   const counts = {
     all: orders.length,
     held_by_driver: orders.filter(o => o.package_disposition === 'held_by_driver').length,
@@ -113,13 +256,8 @@ export default function PackageReturnsPage() {
   }
 
   return (
-    <div className="admin-page">
-      <div className="admin-header">
-        <h1>{t('admin.returns.title')}</h1>
-        <p className="admin-subtitle">{t('admin.returns.subtitle')}</p>
-      </div>
-
-      <div className="pr-tabs">
+    <div>
+      <div className="pr-tabs" style={{ marginBottom: 0 }}>
         <button className={`pr-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
           {t('admin.returns.filters.all')} <span className="pr-count">{counts.all}</span>
         </button>
@@ -156,9 +294,7 @@ export default function PackageReturnsPage() {
                 </div>
                 <div className="pr-address">{o.validated_address || o.original_address}</div>
                 {o.customer_phone && <div className="pr-info">{t('admin.returns.tel')} {o.customer_phone}</div>}
-                {o.held_by_driver_name && (
-                  <div className="pr-info">{t('admin.returns.driver')} <strong>{o.held_by_driver_name}</strong></div>
-                )}
+                {o.held_by_driver_name && <div className="pr-info">{t('admin.returns.driver')} <strong>{o.held_by_driver_name}</strong></div>}
                 <div className="pr-info">{t('admin.returns.skipped')} {fmtDate(o.skipped_at)}</div>
                 {o.returned_at && <div className="pr-info">{t('admin.returns.received')} {fmtDate(o.returned_at)}</div>}
                 {o.skip_reason && (
@@ -169,42 +305,22 @@ export default function PackageReturnsPage() {
                 )}
                 <div className="pr-actions">
                   {o.package_disposition === 'pending_return' && (
-                    <button
-                      className="pr-btn pr-btn-receive"
-                      disabled={busy === o.id}
-                      onClick={() => receive(o.id)}
-                    >
-                      <span className="material-icons">inbox</span>
-                      {t('admin.returns.markReceived')}
+                    <button className="pr-btn pr-btn-receive" disabled={busy === o.id} onClick={() => receive(o.id)}>
+                      <span className="material-icons">inbox</span>{t('admin.returns.markReceived')}
                     </button>
                   )}
                   {o.package_disposition === 'returned_to_office' && (
-                    <button
-                      className="pr-btn pr-btn-release"
-                      disabled={busy === o.id}
-                      onClick={() => release(o.id)}
-                    >
-                      <span className="material-icons">redo</span>
-                      {t('admin.returns.releaseNewRoute')}
+                    <button className="pr-btn pr-btn-release" disabled={busy === o.id} onClick={() => release(o.id)}>
+                      <span className="material-icons">redo</span>{t('admin.returns.releaseNewRoute')}
                     </button>
                   )}
                   {o.package_disposition === 'held_by_driver' && (
                     <>
-                      <button
-                        className="pr-btn pr-btn-receive"
-                        disabled={busy === o.id}
-                        onClick={() => receive(o.id)}
-                      >
-                        <span className="material-icons">inbox</span>
-                        {t('admin.returns.receiveAtOffice')}
+                      <button className="pr-btn pr-btn-receive" disabled={busy === o.id} onClick={() => receive(o.id)}>
+                        <span className="material-icons">inbox</span>{t('admin.returns.receiveAtOffice')}
                       </button>
-                      <button
-                        className="pr-btn pr-btn-release"
-                        disabled={busy === o.id}
-                        onClick={() => release(o.id)}
-                      >
-                        <span className="material-icons">redo</span>
-                        {t('admin.returns.releaseDirect')}
+                      <button className="pr-btn pr-btn-release" disabled={busy === o.id} onClick={() => release(o.id)}>
+                        <span className="material-icons">redo</span>{t('admin.returns.releaseDirect')}
                       </button>
                     </>
                   )}
@@ -214,6 +330,42 @@ export default function PackageReturnsPage() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
+export default function PackageReturnsPage() {
+  const [mainTab, setMainTab] = useState('pickup') // 'pickup' | 'returns'
+
+  return (
+    <div className="admin-page">
+      <div className="admin-header">
+        <h1>Recepción de Paquetes</h1>
+        <p className="admin-subtitle">Confirma la entrega de rutas a choferes y gestiona retornos</p>
+      </div>
+
+      {/* Tabs principales */}
+      <div className="pickup-main-tabs">
+        <button
+          className={`pickup-main-tab ${mainTab === 'pickup' ? 'active' : ''}`}
+          onClick={() => setMainTab('pickup')}
+        >
+          <span className="material-icons">inventory</span>
+          Recepción de Rutas
+        </button>
+        <button
+          className={`pickup-main-tab ${mainTab === 'returns' ? 'active' : ''}`}
+          onClick={() => setMainTab('returns')}
+        >
+          <span className="material-icons">assignment_return</span>
+          Retornos de Paquetes
+        </button>
+      </div>
+
+      <div className="pickup-section-body">
+        {mainTab === 'pickup' ? <RoutePickupSection /> : <RetornosSection />}
+      </div>
     </div>
   )
 }

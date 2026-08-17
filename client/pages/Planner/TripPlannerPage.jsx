@@ -133,13 +133,21 @@ export default function TripPlannerPage() {
       setTimeout(() => setNewRouteNotif(null), 7000)
     }
     const handleRouteUpdated = () => loadDispatchRoutes()
+    const handlePickupAdminConfirmed = (data) => {
+      const msg = data?.message || '✅ La oficina confirmó entrega de paquetes — confirma que los recogiste'
+      setNewRouteNotif(msg)
+      loadDispatchRoutes()
+      setTimeout(() => setNewRouteNotif(null), 10000)
+    }
     socket.on('route:assigned', handleRouteAssigned)
     socket.on('route:updated', handleRouteUpdated)
     socket.on('stop:updated', handleRouteUpdated)
+    socket.on('pickup:admin_confirmed', handlePickupAdminConfirmed)
     return () => {
       socket.off('route:assigned', handleRouteAssigned)
       socket.off('route:updated', handleRouteUpdated)
       socket.off('stop:updated', handleRouteUpdated)
+      socket.off('pickup:admin_confirmed', handlePickupAdminConfirmed)
     }
   }, [])
 
@@ -192,6 +200,18 @@ export default function TripPlannerPage() {
       alert(err.response?.data?.error || t('planner.errorDeliveringPayment'))
     } finally {
       setDeliveringPay(false)
+    }
+  }
+
+  /**
+   * Chofer confirma que recogió los paquetes de una ruta.
+   */
+  const confirmPickup = async (routeId) => {
+    try {
+      await api.post(`/api/dispatch/pickup/${routeId}/driver-confirm`)
+      await loadDispatchRoutes()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al confirmar recogida')
     }
   }
 
@@ -1818,6 +1838,22 @@ export default function TripPlannerPage() {
                         <span className="material-icons">local_atm</span>
                         Entregar Pago
                       </button>
+                    )}
+                    {/* Confirmación de recogida: aparece cuando la oficina confirmó pero el chofer aún no */}
+                    {!isCompleted && dr.pickup_admin_confirmed_at && !dr.pickup_driver_confirmed_at && (
+                      <div className="pickup-driver-confirm-banner" onClick={e => e.stopPropagation()}>
+                        <div className="pickup-driver-confirm-text">
+                          <span className="material-icons" style={{ fontSize: 18, color: '#6200ea' }}>inventory</span>
+                          <span>La oficina confirmó la entrega de paquetes</span>
+                        </div>
+                        <button
+                          className="pickup-driver-confirm-btn"
+                          onClick={e => { e.stopPropagation(); confirmPickup(dr.id) }}
+                        >
+                          <span className="material-icons">check_circle</span>
+                          Confirmar que recogí
+                        </button>
+                      </div>
                     )}
                   </div>
                   )
