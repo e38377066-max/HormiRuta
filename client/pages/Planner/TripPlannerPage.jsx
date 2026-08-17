@@ -1769,11 +1769,6 @@ export default function TripPlannerPage() {
         <div className="panel-header">
           <div className="panel-header-left">
             <span className="stops-count">{stops.length} {stops.length === 1 ? t('planner.stop') : t('planner.stops')}</span>
-            {routeCommission > 0 && (
-              <span className="route-commission-badge">
-                <span className="material-icons">paid</span> ${routeCommission.toFixed(2)}
-              </span>
-            )}
           </div>
           <div className="panel-header-right">
             <button className="header-btn" onClick={focusSearch}>
@@ -1815,17 +1810,6 @@ export default function TripPlannerPage() {
                       <span>{dr.stops_count} {dr.stops_count === 1 ? t('planner.stop') : t('planner.stops')}</span>
                       {dr.total_distance > 0 && <span> - {dr.total_distance} km</span>}
                     </div>
-                    {isCompleted && dr.route_total_collected > 0 && (
-                      <div className="dispatch-route-pay-pending">
-                        <span className="material-icons" style={{ fontSize: 15 }}>payments</span>
-                        Total cobrado: <strong>${Number(dr.route_total_collected).toFixed(2)}</strong>
-                      </div>
-                    )}
-                    {!isCompleted && dr.driver_commission_total > 0 && (
-                      <div className="dispatch-route-commission">
-                        <span className="material-icons">paid</span> Tu comisión: ${dr.driver_commission_total.toFixed(2)}
-                      </div>
-                    )}
                     {isCompleted && (
                       <button
                         className="btn-deliver-payment"

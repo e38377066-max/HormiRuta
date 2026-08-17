@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
+import { getSocket } from '../../socket'
 import './AdminPages.css'
 
 /** Formatea un valor numérico a moneda USD */
@@ -140,6 +141,25 @@ export default function AccountingPage() {
     }, 90000)
     return () => clearInterval(interval)
   }, [activeTab, selectedDriver, dateFrom, dateTo])
+
+  /** Socket.IO — actualización en tiempo real de contabilidad admin */
+  useEffect(() => {
+    const socket = getSocket()
+    socket.emit('join', { role: 'admin', userId: null })
+    const refresh = () => {
+      fetchReport()
+      if (activeTab === 'deliveries') fetchDeliveries()
+      if (activeTab === 'payments') fetchRoutePayments()
+    }
+    socket.on('stop:updated', refresh)
+    socket.on('route:updated', refresh)
+    socket.on('route:assigned', refresh)
+    return () => {
+      socket.off('stop:updated', refresh)
+      socket.off('route:updated', refresh)
+      socket.off('route:assigned', refresh)
+    }
+  }, [activeTab])
 
   /** Obtiene la lista de usuarios con rol 'driver' */
   const fetchDrivers = async () => {

@@ -8,6 +8,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import api from '../../api'
+import { getSocket } from '../../socket'
 import './DriverAccountingPage.css'
 
 /**
@@ -131,6 +132,24 @@ export default function DriverAccountingPage() {
   useEffect(() => { fetchData() }, [fetchData])
   useEffect(() => { fetchCompletedRoutes() }, [fetchCompletedRoutes])
 
+  // Socket.IO — actualización en tiempo real de contabilidad
+  useEffect(() => {
+    const stored = localStorage.getItem('user')
+    const userId = stored ? JSON.parse(stored).id : null
+    if (!userId) return
+    const socket = getSocket()
+    socket.emit('join', { role: 'driver', userId })
+    const refresh = () => { fetchData(); fetchCompletedRoutes() }
+    socket.on('stop:updated', refresh)
+    socket.on('route:updated', refresh)
+    socket.on('route:assigned', refresh)
+    return () => {
+      socket.off('stop:updated', refresh)
+      socket.off('route:updated', refresh)
+      socket.off('route:assigned', refresh)
+    }
+  }, [fetchData, fetchCompletedRoutes])
+
   /**
    * Obtiene la configuración visual de un método de pago.
    * @param {string} method - El método de pago.
@@ -164,31 +183,6 @@ export default function DriverAccountingPage() {
           )}
         </div>
 
-        <div className="dac-stats-row">
-          <div className="dac-stat dac-stat-green">
-            <span className="material-icons">payments</span>
-            <div className="dac-stat-val">{fmt(totals.collected)}</div>
-            <div className="dac-stat-lbl">{t('accounting.grossCollected')}</div>
-          </div>
-          <div className="dac-stat-divider" />
-          <div className="dac-stat dac-stat-orange">
-            <span className="material-icons">account_balance_wallet</span>
-            <div className="dac-stat-val">{fmt((Number(totals.collected) || 0) - (Number(totals.commission) || 0))}</div>
-            <div className="dac-stat-lbl">{t('accounting.netAmount')}</div>
-          </div>
-          <div className="dac-stat-divider" />
-          <div className="dac-stat dac-stat-blue">
-            <span className="material-icons">star_rate</span>
-            <div className="dac-stat-val">{fmt(totals.commission)}</div>
-            <div className="dac-stat-lbl">{t('accounting.myCommission')}</div>
-          </div>
-          <div className="dac-stat-divider" />
-          <div className="dac-stat dac-stat-gray">
-            <span className="material-icons">local_shipping</span>
-            <div className="dac-stat-val">{totals.stops}</div>
-            <div className="dac-stat-lbl">{t('accounting.deliveries')}</div>
-          </div>
-        </div>
 
         {activeTab !== 'routes' && availableMonths.length > 0 && (
           <div className="dac-filter">
