@@ -1723,3 +1723,37 @@ button.section-item.danger-item:disabled {
     font-size: 1.2rem;
   }
 }
+
+/* ==================== TABLE CONTAINER RESIZE ==================== */
+.table-resize-wrapper {
+  position: relative;
+  display: block;
+}
+
+.table-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  width: 12px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-resize-handle::before {
+  content: '';
+  width: 4px;
+  height: 48px;
+  border-radius: 3px;
+  background: #c4b5fd;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.table-resize-handle:hover::before {
+  background: #7c3aed;
+  transform: scaleX(1.5);
+}
+/* ==================== /TABLE CONTAINER RESIZE ==================== */

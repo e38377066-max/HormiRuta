@@ -121,6 +121,38 @@ export default function AccountingPage() {
   // Anchos redimensionables — tabla Entregas (12 cols)
   const [delWidths, startDelResize] = useColumnResize([52, 165, 112, 185, 135, 72, 72, 82, 82, 72, 82, 130])
 
+  // Ancho libre del contenedor de tabla (arrastrable desde el borde derecho)
+  const [tableContainerWidth, setTableContainerWidth] = useState(() => {
+    const saved = localStorage.getItem('accounting_container_width')
+    return saved ? Number(saved) : null
+  })
+  const tableContainerRef = useRef(null)
+
+  const startTableResize = useCallback((e) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = tableContainerRef.current
+      ? tableContainerRef.current.getBoundingClientRect().width
+      : (tableContainerWidth || 800)
+    const onMove = (ev) => {
+      const newW = Math.max(320, startW + (ev.clientX - startX))
+      setTableContainerWidth(newW)
+    }
+    const onUp = (ev) => {
+      const newW = Math.max(320, startW + (ev.clientX - startX))
+      setTableContainerWidth(newW)
+      localStorage.setItem('accounting_container_width', String(newW))
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.body.style.cursor = 'ew-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [tableContainerWidth])
+
   /** Carga inicial de choferes y reporte base */
   useEffect(() => {
     fetchDrivers()
@@ -418,7 +450,7 @@ export default function AccountingPage() {
   const today = () => new Date().toISOString().split('T')[0]
 
   return (
-    <div className={`page-container${wideMode ? ' wide-mode' : ''}`}>
+    <div className={`page-container${(wideMode || tableContainerWidth) ? ' wide-mode' : ''}`}>
       <div className="page-header">
         <button className="back-button" onClick={() => navigate(-1)}>
           <span className="material-icons">arrow_back</span>
@@ -504,6 +536,11 @@ export default function AccountingPage() {
               </div>
             </div>
           ) : (
+            <div
+              ref={tableContainerRef}
+              className="table-resize-wrapper"
+              style={tableContainerWidth ? { width: tableContainerWidth, maxWidth: 'calc(100vw - 32px)' } : {}}
+            >
             <div className="content-card" style={{ overflowX: 'auto' }}>
               <table
                 className="data-table accounting-table resizable-table"
@@ -628,6 +665,13 @@ export default function AccountingPage() {
                   </tr>
                 </tfoot>
               </table>
+            </div>
+            <div
+              className="table-resize-handle"
+              onMouseDown={startTableResize}
+              onDoubleClick={() => { setTableContainerWidth(null); localStorage.removeItem('accounting_container_width') }}
+              title="Arrastra para ajustar el ancho · Doble clic para restablecer"
+            />
             </div>
           )}
         </>
@@ -963,6 +1007,11 @@ export default function AccountingPage() {
               </div>
             </div>
           ) : (
+            <div
+              ref={tableContainerRef}
+              className="table-resize-wrapper"
+              style={tableContainerWidth ? { width: tableContainerWidth, maxWidth: 'calc(100vw - 32px)' } : {}}
+            >
             <div className="content-card" style={{ overflowX: 'auto' }}>
               <table
                 className="data-table deliveries-report-table resizable-table"
@@ -1043,6 +1092,13 @@ export default function AccountingPage() {
                   </tr>
                 </tfoot>
               </table>
+            </div>
+            <div
+              className="table-resize-handle"
+              onMouseDown={startTableResize}
+              onDoubleClick={() => { setTableContainerWidth(null); localStorage.removeItem('accounting_container_width') }}
+              title="Arrastra para ajustar el ancho · Doble clic para restablecer"
+            />
             </div>
           )}
         </>
