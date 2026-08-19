@@ -66,12 +66,6 @@ export default function PlannerLayout() {
     drawerOpen
   }
 
-  const bottomItems = [
-    { icon: 'map', labelKey: 'nav.myRoute', path: '/planner', exact: true },
-    { icon: 'account_balance_wallet', labelKey: 'nav.myAccounting', path: '/planner/accounting' },
-    { icon: 'person', labelKey: 'nav.myAccount', path: '/planner/account' }
-  ]
-
   return (
     <PlannerContext.Provider value={contextValue}>
       <div className="planner-layout">
@@ -124,19 +118,6 @@ export default function PlannerLayout() {
           <Outlet />
         </main>
 
-        <nav className="planner-bottom-nav" aria-label="Navegación principal">
-          {bottomItems.map(item => (
-            <button
-              key={item.path}
-              className={`planner-bottom-item${location.pathname === item.path ? ' active' : ''}`}
-              onClick={() => navigate(item.path)}
-              type="button"
-            >
-              <span className="material-icons">{item.icon}</span>
-              <span>{t(item.labelKey)}</span>
-            </button>
-          ))}
-        </nav>
       </div>
     </PlannerContext.Provider>
   )

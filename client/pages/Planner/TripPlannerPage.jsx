@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { getSocket } from '../../socket'
@@ -20,6 +21,7 @@ import './TripPlannerPage.css'
  */
 export default function TripPlannerPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const plannerContext = usePlanner()
   const onToggleDrawer = plannerContext?.toggleDrawer || (() => {})
   const mapRef = useRef(null)
@@ -1985,6 +1987,19 @@ export default function TripPlannerPage() {
       {showRouteMenu && (
         <div className="modal-overlay" onClick={() => setShowRouteMenu(false)}>
           <div className="modal-bottom" onClick={e => e.stopPropagation()}>
+            <div className="menu-item" onClick={() => { navigate('/planner'); setShowRouteMenu(false) }}>
+              <span className="material-icons">map</span>
+              <span>{t('nav.myRoute')}</span>
+            </div>
+            <div className="menu-item" onClick={() => { navigate('/planner/accounting'); setShowRouteMenu(false) }}>
+              <span className="material-icons">account_balance_wallet</span>
+              <span>{t('nav.myAccounting')}</span>
+            </div>
+            <div className="menu-item" onClick={() => { navigate('/planner/account'); setShowRouteMenu(false) }}>
+              <span className="material-icons">person</span>
+              <span>{t('nav.myAccount')}</span>
+            </div>
+            <div className="menu-divider"></div>
             <div className="menu-item" onClick={() => { setShowConfigModal('settings'); setShowRouteMenu(false) }}>
               <span className="material-icons">settings</span>
               <span>{t('planner.routeSettings')}</span>
