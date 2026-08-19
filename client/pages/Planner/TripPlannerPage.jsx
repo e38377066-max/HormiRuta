@@ -26,7 +26,6 @@ export default function TripPlannerPage() {
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
   const directionsRendererRef = useRef(null)
-  const searchInputRef = useRef(null)
   const userLocationMarkerRef = useRef(null)
   const watchIdRef = useRef(null)
   const selectedMarkerRef = useRef(null)
@@ -43,9 +42,6 @@ export default function TripPlannerPage() {
   const [selectedPoint, setSelectedPoint] = useState(null)
   
   const [stops, setStops] = useState([])
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchSuggestions, setSearchSuggestions] = useState([])
-  const [showSearch, setShowSearch] = useState(false)
   const [panelExpanded, setPanelExpanded] = useState(true)
   const [isOptimized, setIsOptimized] = useState(false)
   const [navigationMode, setNavigationMode] = useState(false)
@@ -840,40 +836,6 @@ export default function TripPlannerPage() {
     }
   }
 
-  const searchAddress = async (query) => {
-    setSearchQuery(query)
-    if (!query || query.length < 3) {
-      setSearchSuggestions([])
-      return
-    }
-
-    const service = new window.google.maps.places.AutocompleteService()
-    service.getPlacePredictions({ input: query, componentRestrictions: { country: 'mx' } }, (predictions) => {
-      setSearchSuggestions(predictions || [])
-    })
-  }
-
-  const selectSearchSuggestion = async (suggestion) => {
-    setShowSearch(false)
-    setSearchQuery('')
-    setSearchSuggestions([])
-
-    const geocoder = new window.google.maps.Geocoder()
-    try {
-      const result = await geocoder.geocode({ placeId: suggestion.place_id })
-      if (result.results[0]) {
-        const location = result.results[0].geometry.location
-        addStop({
-          address: suggestion.description,
-          latitude: location.lat(),
-          longitude: location.lng()
-        })
-      }
-    } catch (err) {
-      console.error('Geocode error:', err)
-    }
-  }
-
   const addStop = async (stopData) => {
     vibrate('medium')
     
@@ -1606,11 +1568,6 @@ export default function TripPlannerPage() {
     }
   }
 
-  const focusSearch = () => {
-    searchInputRef.current?.focus()
-    setShowSearch(true)
-  }
-
   const formatDuration = (minutes) => {
     if (minutes < 60) return `${Math.round(minutes)} min`
     const hrs = Math.floor(minutes / 60)
@@ -1692,41 +1649,6 @@ export default function TripPlannerPage() {
           <span className="material-icons">menu</span>
         </button>
 
-        {navigationMode && navTarget && (
-          <div className="nav-bar">
-            {navSteps.length > 0 && navSteps[currentStepIndex] && (
-              <div className="nav-step-banner">
-                <span className="material-icons nav-step-icon">{navSteps[currentStepIndex].icon}</span>
-                <div className="nav-step-info">
-                  <div className="nav-step-instruction">{navSteps[currentStepIndex].instruction || 'Continua recto'}</div>
-                  <div className="nav-step-distance">{navSteps[currentStepIndex].distance}</div>
-                </div>
-              </div>
-            )}
-            <div className="nav-bar-stop">
-              <span className="nav-bar-number">{navTargetIndex + 1}</span>
-              <div className="nav-bar-info">
-                <div className="nav-bar-address">
-                  {navTarget.name || navTarget.address?.split(',')[0] || t('planner.nextStop')}
-                  {navTarget.apartment_number && <span style={{ color: '#7eb3ff', fontWeight: 600 }}> Apt {navTarget.apartment_number}</span>}
-                </div>
-                <div className="nav-bar-eta">
-                  {navDistance && <span>{navDistance}</span>}
-                  {navEta && <span> · {navEta}</span>}
-                </div>
-              </div>
-              <div className="nav-bar-controls">
-                <button 
-                  className={`nav-control-btn ${voiceEnabled ? 'active' : ''}`}
-                  onClick={() => { const next = !voiceEnabled; setVoiceEnabled(next); localStorage.setItem('voiceEnabled', String(next)); if (!next) stopSpeaking(); }}
-                >
-                  <span className="material-icons" style={{ fontSize: 20 }}>{voiceEnabled ? 'volume_up' : 'volume_off'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {navigationMode && currentSpeed != null && (
           <div className="speed-indicator">
             <span className="speed-value">{currentSpeed}</span>
@@ -1771,13 +1693,7 @@ export default function TripPlannerPage() {
         </div>
         
         <div className="panel-header">
-          <div className="panel-header-left">
-            <span className="stops-count">{stops.length} {stops.length === 1 ? t('planner.stop') : t('planner.stops')}</span>
-          </div>
           <div className="panel-header-right">
-            <button className="header-btn" onClick={focusSearch}>
-              <span className="material-icons">search</span>
-            </button>
             <button className="header-btn" onClick={() => setShowRouteMenu(true)}>
               <span className="material-icons">more_vert</span>
             </button>
@@ -2065,33 +1981,6 @@ export default function TripPlannerPage() {
           )}
         </div>
       </div>
-      
-      {showSearch && (
-        <div className="search-overlay">
-          <div className="search-header">
-            <button className="search-back" onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchSuggestions([]); }}>
-              <span className="material-icons">arrow_back</span>
-            </button>
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="search-input-full"
-              value={searchQuery}
-              onChange={(e) => searchAddress(e.target.value)}
-              placeholder={t('planner.searchAddMore')}
-              autoFocus
-            />
-          </div>
-          <div className="search-results">
-            {searchSuggestions.map((sug, i) => (
-              <div key={i} className="search-result-item" onClick={() => selectSearchSuggestion(sug)}>
-                <span className="material-icons">place</span>
-                <span className="search-result-text">{sug.description}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       
       {showRouteMenu && (
         <div className="modal-overlay" onClick={() => setShowRouteMenu(false)}>
