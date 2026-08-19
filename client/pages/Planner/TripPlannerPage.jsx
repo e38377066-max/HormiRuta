@@ -11,7 +11,7 @@ import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { getSocket } from '../../socket'
 import { usePlanner } from '../../layouts/PlannerLayout'
-import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking } from '../../utils/capacitor'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking, openNativeNavigation } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 /**
@@ -1645,31 +1645,15 @@ export default function TripPlannerPage() {
       const url = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes${loc ? `&from=${loc.lat},${loc.lng}` : ''}`
       window.open(url, '_system')
     } else if (app === 'apple') {
-      // maps:// scheme — Capacitor entrega directo al handler iOS, sin perder parámetros.
-      //
-      // IMPORTANTE CarPlay: daddr= debe ser DIRECCIÓN DE TEXTO, no coordenadas.
-      // CarPlay muestra "Turn-by-turn directions not available" cuando daddr= son
-      // coordenadas puras (lat,lng). Las coordenadas van en ll= solo como pista de
-      // geocodificación para que Apple Maps ubique el lugar correcto rápidamente.
-      const baseAddr = (stop.address || '').trim()
-      const aptSuffix = (baseAddr && stop.apartment_number) ? ` Apt ${stop.apartment_number}` : ''
-      // Quitar coma extra entre estado y ZIP ("TX, 76016" → "TX 76016")
-      const rawAddr = (baseAddr + aptSuffix).trim().replace(/,(\s*)(\d{5}(?:-\d{4})?)/, ' $2')
-
-      if (!rawAddr && !(lat && lng)) return
-
-      let url
-      if (rawAddr) {
-        // Dirección texto como destino → CarPlay puede calcular ruta turn-by-turn
-        url = `maps://?daddr=${encodeURIComponent(rawAddr)}&dirflg=d&t=m`
-        // ll= orienta la geocodificación a la zona correcta (evita ciudades homónimas)
-        if (lat && lng) url += `&ll=${lat},${lng}`
-      } else {
-        // Sin dirección: coordenadas como último recurso (no funciona en CarPlay)
-        url = `maps://?daddr=${lat},${lng}&dirflg=d&t=m`
-      }
-      if (loc) url += `&saddr=${loc.lat},${loc.lng}`
-      window.open(url, '_system')
+      // La URL https de Apple Maps es más fiable desde WKWebView/Capacitor
+      // que el esquema maps://, especialmente cuando se usa CarPlay.
+      openNativeNavigation([{
+        address: stop.address,
+        apartment_number: stop.apartment_number,
+        lat,
+        lng,
+        customer_name: stop.name || stop.customer_name
+      }], loc)
     }
   }
 

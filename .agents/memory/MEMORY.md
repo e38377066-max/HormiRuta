@@ -3,3 +3,4 @@
 - [AI address extraction validation](ai-address-extraction.md) — AI may change street number when parsing ambiguous text; validate AI streetNumber is present verbatim in source messages.
 - [Autorización y Socket.IO](security-authz-audit.md) — socket se autentica con token en join; requireAuth chequea user.active; toda ruta /api/admin lleva requireAdmin explícito.
 - [Vision classification: tarjetas vs magneticos](aiservice-vision-classification.md) — criterio para que el bot no confunda diseños de tarjeta con magnéticos de vehículo.
+- [Mobile build synchronization](mobile-build-sync.md) — la app nativa usa una copia de dist y Capacitor 8 requiere Node 22 para sincronizarla.

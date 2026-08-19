@@ -152,6 +152,10 @@
   position: relative;
 }
 
+.planner-bottom-nav {
+  display: none;
+}
+
 @media (min-width: 769px) {
   .planner-drawer {
     position: relative;
@@ -160,5 +164,58 @@
   
   .drawer-overlay {
     display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .planner-layout {
+    height: 100dvh;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .planner-drawer {
+    display: none;
+  }
+
+  .menu-fab {
+    display: none !important;
+  }
+
+  .planner-bottom-nav {
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    height: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #111827;
+    border-top: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.28);
+  }
+
+  .planner-bottom-item {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    color: #94a3b8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .planner-bottom-item .material-icons {
+    font-size: 23px;
+  }
+
+  .planner-bottom-item.active {
+    color: #60a5fa;
   }
 }
