@@ -4,3 +4,4 @@
 - [Autorización y Socket.IO](security-authz-audit.md) — socket se autentica con token en join; requireAuth chequea user.active; toda ruta /api/admin lleva requireAdmin explícito.
 - [Vision classification: tarjetas vs magneticos](aiservice-vision-classification.md) — criterio para que el bot no confunda diseños de tarjeta con magnéticos de vehículo.
 - [Mobile build synchronization](mobile-build-sync.md) — la app nativa usa una copia de dist y Capacitor 8 requiere Node 22 para sincronizarla.
+- [Apple Maps y CarPlay](apple-carplay-navigation.md) — CarPlay funciona con destino por coordenadas y sin saddr, waypoints ni parámetros to; Apple Maps usa la ubicación actual.
