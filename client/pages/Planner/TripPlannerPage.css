@@ -531,6 +531,20 @@
   border-left: 3px solid #1976d2;
 }
 
+.stop-row-selected .stop-name {
+  color: #172033;
+}
+
+.stop-row-selected .stop-address-detail,
+.stop-row-selected .stop-phone,
+.stop-row-selected .stop-num-inline {
+  color: #40516d;
+}
+
+.stop-row-selected .stop-note {
+  color: #9a6500;
+}
+
 .nav-footer-actions {
   display: flex;
   align-items: center;
