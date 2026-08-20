@@ -10,6 +10,8 @@ import { useTranslation } from 'react-i18next'
 import api from '../../api'
 import './AdminPages.css'
 
+const KM_TO_MILES = 0.621371
+
 /**
  * Componente RouteHistory que muestra las rutas pasadas y actuales.
  * @returns {JSX.Element}
@@ -180,7 +182,7 @@ export default function RouteHistory() {
                     {getStatusLabel(routeDetail.status)}
                   </span>
                   <span>{routeDetail.driver_name || t('admin.routeHistory.noDriver')}</span>
-                  {routeDetail.total_distance > 0 && <span>{routeDetail.total_distance.toFixed(1)} km</span>}
+                  {routeDetail.total_distance > 0 && <span>{(Number(routeDetail.total_distance) * KM_TO_MILES).toFixed(1)} mi</span>}
                 </div>
                 {routeDetail.completed_at && (
                   <div className="detail-date">{t('admin.routeHistory.finishedAt')} {formatDate(routeDetail.completed_at)}</div>

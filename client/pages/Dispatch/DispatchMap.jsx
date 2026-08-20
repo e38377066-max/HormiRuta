@@ -14,6 +14,8 @@ import { getSocket } from '../../socket'
 import './DispatchMap.css'
 import RoutePrintView from './RoutePrintView'
 
+const KM_TO_MILES = 0.621371
+
 /**
  * Configuración visual de los estados de las órdenes.
  */
@@ -863,7 +865,7 @@ export default function DispatchMap() {
     try {
       setOptimizing(routeId)
       const res = await api.post(`/api/dispatch/routes/${routeId}/optimize`)
-      alert(`Ruta optimizada: ${res.data.total_distance} km, ~${res.data.total_duration} min`)
+      alert(`Ruta optimizada: ${(Number(res.data.total_distance) * KM_TO_MILES).toFixed(1)} mi, ~${res.data.total_duration} min`)
       fetchData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al optimizar ruta')
@@ -1694,7 +1696,7 @@ export default function DispatchMap() {
                 {routeInfo && !optimizingLive && (
                   <span className="route-info-inline">
                     <span className="material-icons">directions_car</span>
-                    {routeInfo.distance} km - {routeInfo.duration} min
+                    {(Number(routeInfo.distance) * KM_TO_MILES).toFixed(1)} mi - {routeInfo.duration} min
                   </span>
                 )}
               </div>
@@ -2407,7 +2409,7 @@ export default function DispatchMap() {
                   {route.is_optimized && (
                     <div className="dr-optimized">
                       <span className="material-icons">check_circle</span> Optimizada
-                      {route.total_distance > 0 && <span> - {route.total_distance} km</span>}
+                      {route.total_distance > 0 && <span> - {(Number(route.total_distance) * KM_TO_MILES).toFixed(1)} mi</span>}
                       {route.total_duration > 0 && <span> - ~{route.total_duration} min</span>}
                     </div>
                   )}
