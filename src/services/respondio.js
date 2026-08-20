@@ -11,6 +11,7 @@ const REQUEST_DELAY_MS = 2000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 5000;
 let cloudFrontCooldown = 0;
+const unavailableCustomFields = new Set();
 
 /**
  * Función de utilidad para pausar la ejecución.
@@ -112,9 +113,10 @@ class RespondioService {
           throw error;
         }
 
-        if ((status === 429) && attempt < MAX_RETRIES) {
+        const retryableReadError = method === 'get' && [502, 503, 504].includes(status);
+        if ((status === 429 || retryableReadError) && attempt < MAX_RETRIES) {
           const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-          console.log(`[Respond.io] Rate limited (${status}), reintentando en ${delay/1000}s (intento ${attempt + 1}/${MAX_RETRIES})...`);
+          console.log(`[Respond.io] Error temporal (${status}), reintentando en ${delay/1000}s (intento ${attempt + 1}/${MAX_RETRIES})...`);
           await sleep(delay);
           continue;
         }
@@ -483,19 +485,32 @@ class RespondioService {
       return err?.response?.status === 400 && /not found in the workspace/i.test(msg);
     };
 
-    const custom_fields = Object.entries(customFields).map(([name, value]) => ({
+    const custom_fields = Object.entries(customFields)
+      .filter(([name]) => !unavailableCustomFields.has(name))
+      .map(([name, value]) => ({
       name,
       value: value != null ? String(value) : null
-    }));
+      }));
+
+    if (custom_fields.length === 0) {
+      return { success: false, skippedFields: Object.keys(customFields), error: 'No hay campos personalizados disponibles' };
+    }
 
     // Try batch update first
     try {
       const response = await this.requestWithRetry('put', `/contact/${identifier}`, { custom_fields });
       return { success: true, data: response.data };
     } catch (batchError) {
+      if (isFieldNotFound(batchError)) {
+        custom_fields.forEach(cf => unavailableCustomFields.add(cf.name));
+      }
       if (!isFieldNotFound(batchError) || custom_fields.length <= 1) {
         console.error('Respond.io update custom fields error:', batchError.response?.data || batchError.message);
-        return { success: false, error: batchError.response?.data?.message || batchError.message };
+        return {
+          success: false,
+          skippedFields: isFieldNotFound(batchError) ? custom_fields.map(cf => cf.name) : undefined,
+          error: batchError.response?.data?.message || batchError.message
+        };
       }
     }
 
@@ -509,6 +524,7 @@ class RespondioService {
       } catch (fieldError) {
         if (isFieldNotFound(fieldError)) {
           skipped.push(cf.name);
+          unavailableCustomFields.add(cf.name);
           console.warn(`[Respond.io] Campo personalizado no encontrado en workspace, omitido: "${cf.name}"`);
         } else {
           console.error(`[Respond.io] Error actualizando campo "${cf.name}":`, fieldError.response?.data || fieldError.message);

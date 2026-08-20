@@ -172,7 +172,7 @@ class RespondApiService {
         return response.data;
       } catch (error) {
         const status = error.response?.status;
-        if ((status === 403 || status === 429) && attempt < MAX_RETRIES) {
+        if ((status === 403 || status === 429 || status === 502 || status === 503 || status === 504) && attempt < MAX_RETRIES) {
           const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
           console.log(`[Respond.io API] Rate limited (${status}) on ${method} ${endpoint}, reintentando en ${delay/1000}s (intento ${attempt + 1}/${MAX_RETRIES})...`);
           await sleep(delay);
@@ -481,9 +481,17 @@ class RespondApiService {
    */
   async assignConversation(identifier, assignee) {
     const formattedId = String(identifier).includes(':') ? identifier : `id:${identifier}`;
-    return this.request('POST', `/contact/${formattedId}/conversation/assignee`, {
-      assignee: assignee
-    });
+    try {
+      return await this.request('POST', `/contact/${formattedId}/conversation/assignee`, {
+        assignee: assignee
+      });
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || '';
+      if (/already assigned to this user/i.test(message)) {
+        return { success: true, alreadyAssigned: true };
+      }
+      throw error;
+    }
   }
 
   /**

@@ -2853,9 +2853,9 @@ class PollingService {
               finalZip = geocoded.zip;
               console.log(`[AddressScan] Geocoding (baja confianza): "${result.address}" -> "${finalAddress}"`);
             } else {
-              const components = extractor.extractFullAddressComponents(result.address);
-              finalZip = components.zip;
-              console.log(`[AddressScan] Geocoding no disponible, usando dirección original: "${result.address}"`);
+              this.vagueGeoCache.set(vagueCacheKey, Date.now());
+              console.log(`[AddressScan] Geocoding no disponible, dirección pendiente de validación: "${result.address}"`);
+              return;
             }
           } else {
             return;

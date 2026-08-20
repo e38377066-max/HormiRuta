@@ -10,7 +10,7 @@ import XLSX from 'xlsx';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress } from '../models/index.js';
+import { sequelize, ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress } from '../models/index.js';
 import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
 import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
 import { Op, literal } from 'sequelize';
@@ -1228,6 +1228,7 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
  * @returns {Object} Ruta creada.
  */
 router.post('/routes', requireAdmin, async (req, res) => {
+  let transaction;
   try {
     const { name, order_ids, pre_optimized, favorite_stops } = req.body;
     const hasOrders = Array.isArray(order_ids) && order_ids.length > 0;
@@ -1245,13 +1246,41 @@ router.post('/routes', requireAdmin, async (req, res) => {
       dbOrders.forEach(o => ordersMap.set(o.id, o));
     }
 
+    const missingOrderIds = hasOrders
+      ? order_ids.filter(id => !ordersMap.has(id))
+      : [];
+    const invalidOrders = [...ordersMap.values()].filter(order =>
+      !String(order.validated_address || '').trim() ||
+      !Number.isFinite(Number(order.address_lat)) ||
+      !Number.isFinite(Number(order.address_lng))
+    );
+    const invalidFavorites = hasFavs
+      ? favorite_stops
+        .map((fav, index) => ({ fav, index }))
+        .filter(({ fav }) =>
+          !String(fav.address || fav.name || '').trim() ||
+          !Number.isFinite(Number(fav.lat)) ||
+          !Number.isFinite(Number(fav.lng))
+        )
+      : [];
+
+    if (missingOrderIds.length || invalidOrders.length || invalidFavorites.length) {
+      return res.status(400).json({
+        error: 'Hay paradas sin dirección o coordenadas válidas',
+        missing_order_ids: missingOrderIds,
+        invalid_order_ids: invalidOrders.map(order => order.id),
+        invalid_favorite_indexes: invalidFavorites.map(({ index }) => index)
+      });
+    }
+
     const totalStops = ordersMap.size + (hasFavs ? favorite_stops.length : 0);
+    transaction = await sequelize.transaction();
     const route = await Route.create({
       user_id: req.userId,
       name: name || `Ruta ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'short' })} - ${totalStops} paradas`,
       status: 'draft',
       is_optimized: !!pre_optimized
-    });
+    }, { transaction });
 
     let stopOrder = 0;
     if (hasOrders) {
@@ -1271,9 +1300,9 @@ router.post('/routes', requireAdmin, async (req, res) => {
           deposit_amount: order.deposit_amount,
           total_to_collect: order.total_to_collect,
           apartment_number: order.apartment_number
-        });
+        }, { transaction });
         order.route_id = route.id;
-        await order.save();
+        await order.save({ transaction });
       }
     }
 
@@ -1288,15 +1317,21 @@ router.post('/routes', requireAdmin, async (req, res) => {
           customer_name: fav.name,
           phone: fav.customer_phone || '',
           note: fav.notes || ''
-        });
+        }, { transaction });
       }
     }
 
+    await transaction.commit();
     res.status(201).json({
       success: true,
       route: await route.toDict()
     });
   } catch (error) {
+    if (transaction) {
+      await transaction.rollback().catch(rollbackError => {
+        console.error('Error rolling back dispatch route transaction:', rollbackError);
+      });
+    }
     console.error('Error creating dispatch route:', error);
     res.status(500).json({ error: 'Error al crear ruta' });
   }

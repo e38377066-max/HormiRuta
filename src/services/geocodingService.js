@@ -5,6 +5,19 @@
 
 import axios from 'axios';
 
+function hasUsableStreetAddress(result) {
+  const components = result?.address_components || [];
+  const hasType = type => components.some(component => component.types?.includes(type));
+  return Boolean(
+    hasType('street_number') &&
+    hasType('route') &&
+    (hasType('locality') || hasType('postal_town')) &&
+    hasType('administrative_area_level_1') &&
+    result.geometry?.location?.lat != null &&
+    result.geometry?.location?.lng != null
+  );
+}
+
 /**
  * Clase GeocodingService para interactuar con Google Maps Geocoding API.
  */
@@ -67,6 +80,11 @@ class GeocodingService {
 
       if (data.status === 'OK' && data.results && data.results.length > 0) {
         const bestResult = data.results[0];
+        if (!hasUsableStreetAddress(bestResult)) {
+          const result = { success: false, error: 'Insufficient address detail', original: rawAddress };
+          this.addToCache(cacheKey, result, true);
+          return result;
+        }
         const components = this.parseAddressComponents(bestResult.address_components);
         const formatted = bestResult.formatted_address;
         const cleanFormatted = formatted.replace(/,\s*USA?\s*$/i, '').trim();
@@ -110,6 +128,11 @@ class GeocodingService {
           const retryData = retryResp.data;
           if (retryData.status === 'OK' && retryData.results?.length > 0) {
             const best = retryData.results[0];
+            if (!hasUsableStreetAddress(best)) {
+              const result = { success: false, error: 'Insufficient address detail', original: rawAddress };
+              this.addToCache(cacheKey, result, true);
+              return result;
+            }
             const comps = this.parseAddressComponents(best.address_components);
             const fmt = best.formatted_address.replace(/,\s*USA?\s*$/i, '').trim();
             const locType = best.geometry?.location_type;
