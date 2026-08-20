@@ -1797,6 +1797,8 @@ export default function TripPlannerPage() {
                     {isCompleted && (
                       <button
                         className="btn-deliver-payment"
+                        disabled={!!payDeliveryModal}
+                        aria-disabled={!!payDeliveryModal}
                         onClick={e => { e.stopPropagation(); setPayDeliveryModal(dr); setPayDeliveryMethod('') }}
                       >
                         <span className="material-icons">local_atm</span>

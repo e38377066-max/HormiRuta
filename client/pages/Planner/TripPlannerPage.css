@@ -1756,6 +1756,12 @@
   opacity: 0.85;
 }
 
+.btn-deliver-payment:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .completed-pending-pay {
   border-left: 4px solid #f59e0b !important;
   background: #2a2a3e;
