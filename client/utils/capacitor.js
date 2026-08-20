@@ -320,33 +320,14 @@ export const openNativeNavigation = (stops, userLocation = null) => {
 
   if (plt === 'ios') {
     // Apple Maps / CarPlay:
-    // 1. Usar https://maps.apple.com/ en lugar de maps:// — el esquema maps:// no
-    //    siempre se pasa al sistema desde un WebView en modo CarPlay.
-    // 2. Normalizar dirección: quitar coma extra entre estado y ZIP
-    //    ("TX, 76016" → "TX 76016") que causaba "Directions Not Available".
-    // 3. Usar texto de dirección como daddr (más confiable que coordenadas por
-    //    bug de snapping en Apple Maps ~2024).
-    const normalizeAddr = (raw) => raw.replace(/,(\s*)(\d{5}(?:-\d{4})?)/, ' $2')
-    const encAddr = (w) => {
-      const addr = normalizeAddr((w.address || '').trim())
-      return addr ? encodeURIComponent(addr) : `${w.lat},${w.lng}`
-    }
-    const destHasAddr = !!(destination.address && destination.address.trim())
-
-    let url
-    if (intermediates.length > 0) {
-      const waypointStr = intermediates.map(encAddr).join('+to:')
-      url = `https://maps.apple.com/?daddr=${waypointStr}+to:${encAddr(destination)}&dirflg=d&t=m`
-    } else {
-      url = `https://maps.apple.com/?daddr=${encAddr(destination)}&dirflg=d&t=m`
-    }
-    // Si el destino cae a coordenadas, añadimos q= con el nombre para que CarPlay muestre etiqueta legible
-    if (!destHasAddr) {
-      url += `&q=${encodeURIComponent(destination.label || 'Destino')}`
-    }
-    if (userLocation) {
-      url += `&saddr=${userLocation.lat},${userLocation.lng}`
-    }
+    // Usamos un único destino por coordenadas y dejamos que Apple Maps tome
+    // automáticamente la ubicación actual del teléfono como origen. CarPlay
+    // rechaza algunas combinaciones de daddr textual + saddr + "to:" como
+    // "Directions Not Available", aunque la app del teléfono sí las resuelva.
+    // Las coordenadas ya fueron validadas por Google Maps antes de llegar aquí.
+    const destinationCoords = `${destination.lat},${destination.lng}`
+    const label = destination.label || destination.address || 'Destino'
+    const url = `https://maps.apple.com/?daddr=${encodeURIComponent(destinationCoords)}&dirflg=d&q=${encodeURIComponent(label)}`
     window.open(url, '_system')
     return
   }
