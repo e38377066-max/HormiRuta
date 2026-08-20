@@ -1132,15 +1132,17 @@ export default function TripPlannerPage() {
 
     setOptimizing(true)
     try {
-      let origin = userLocation
-      if (!origin) {
-        try {
-          const position = await getCurrentPosition()
-          origin = { lat: position.coords.latitude, lng: position.coords.longitude }
-          setUserLocation(origin)
-        } catch (gpsError) {
-          console.warn('[Route] No se pudo obtener GPS al completar parada:', gpsError?.message || gpsError)
-        }
+      // La ubicación guardada puede tener varios segundos de antigüedad.
+      // Siempre pedimos una lectura nueva al completar para que el ETA
+      // empiece desde donde realmente está el chofer.
+      let origin = null
+      try {
+        const position = await getCurrentPosition()
+        origin = { lat: position.coords.latitude, lng: position.coords.longitude }
+        setUserLocation(origin)
+      } catch (gpsError) {
+        origin = userLocation
+        console.warn('[Route] GPS actual no disponible al completar parada; usando última ubicación conocida:', gpsError?.message || gpsError)
       }
 
       if (!origin) {
