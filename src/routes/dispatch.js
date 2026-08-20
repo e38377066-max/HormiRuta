@@ -1744,6 +1744,14 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
         const existingStops = await Stop.count({ where: { route_id: route.id }, transaction: t });
         let stopOrder = existingStops;
         for (const held of heldOrders) {
+          if (
+            !String(held.validated_address || '').trim() ||
+            !Number.isFinite(Number(held.address_lat)) ||
+            !Number.isFinite(Number(held.address_lng))
+          ) {
+            console.warn(`[Dispatch] Paquete retenido ${held.id} omitido al asignar ruta ${route.id}: dirección o coordenadas inválidas`);
+            continue;
+          }
           await Stop.create({
             route_id: route.id,
             address: held.validated_address,

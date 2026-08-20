@@ -486,7 +486,10 @@ class RespondApiService {
         assignee: assignee
       });
     } catch (error) {
-      const message = error.response?.data?.message || error.message || '';
+      const responseData = error.response?.data;
+      const message = responseData?.message || (
+        typeof responseData === 'string' ? responseData : ''
+      ) || error.message || '';
       if (/already assigned to this user/i.test(message)) {
         return { success: true, alreadyAssigned: true };
       }
