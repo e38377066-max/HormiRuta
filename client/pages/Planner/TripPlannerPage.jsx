@@ -15,6 +15,8 @@ import { usePlanner } from '../../layouts/PlannerLayout'
 import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking, openNativeNavigation } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
+const KM_TO_MILES = 0.621371
+
 /**
  * Componente principal de la página de planificación de viajes.
  * @returns {JSX.Element} El elemento JSX de la página.
@@ -445,7 +447,7 @@ export default function TripPlannerPage() {
         setGpsError(false)
         updateUserLocationMarker(loc, pos.coords.accuracy)
         if (pos.coords.speed != null && pos.coords.speed >= 0) {
-          setCurrentSpeed(Math.round(pos.coords.speed * 3.6))
+          setCurrentSpeed(Math.round(pos.coords.speed * 2.236936))
         }
       },
       (err) => {
@@ -643,7 +645,8 @@ export default function TripPlannerPage() {
       const result = await directionsService.route({
         origin: from,
         destination: to,
-        travelMode: window.google.maps.TravelMode[travelMode]
+        travelMode: window.google.maps.TravelMode[travelMode],
+        unitSystem: window.google.maps.UnitSystem.IMPERIAL
       })
 
       if (!result.routes || !result.routes[0]) {
@@ -976,6 +979,7 @@ export default function TripPlannerPage() {
         )
         setStops(updatedStops)
         updateMapMarkers(updatedStops)
+        await reoptimizeAfterCompletion(updatedStops)
       }
     } catch (err) {
       console.error('Error uploading evidence:', err)
@@ -1118,6 +1122,44 @@ export default function TripPlannerPage() {
     }).map((s, i) => ({ ...s, id: i + 1 }))
   }
 
+  const reoptimizeAfterCompletion = async (completedStops) => {
+    const pendingStops = completedStops.filter(stop => !stop.completed && !stop.skipped)
+    if (pendingStops.length === 0) {
+      setTotalDistance(0)
+      setTotalDuration(0)
+      return
+    }
+
+    setOptimizing(true)
+    try {
+      let origin = userLocation
+      if (!origin) {
+        try {
+          const position = await getCurrentPosition()
+          origin = { lat: position.coords.latitude, lng: position.coords.longitude }
+          setUserLocation(origin)
+        } catch (gpsError) {
+          console.warn('[Route] No se pudo obtener GPS al completar parada:', gpsError?.message || gpsError)
+        }
+      }
+
+      if (!origin) {
+        await calculateRoute(pendingStops)
+        return
+      }
+
+      const result = await calculateRoute(pendingStops, origin, true)
+      const reorderedPending = result?.orderedStops || sortByGpsDistance(pendingStops, origin)
+      const completed = completedStops.filter(stop => stop.completed || stop.skipped)
+      const reordered = [...completed, ...reorderedPending].map((stop, index) => ({ ...stop, id: index + 1 }))
+      setStops(reordered)
+      updateMapMarkers(reordered)
+      setIsOptimized(true)
+    } finally {
+      setOptimizing(false)
+    }
+  }
+
   const optimizeRoute = async () => {
     if (stops.length < 2) return
     setOptimizing(true)
@@ -1256,6 +1298,7 @@ export default function TripPlannerPage() {
         waypoints,
         optimizeWaypoints: true,
         travelMode: window.google.maps.TravelMode[travelMode],
+        unitSystem: window.google.maps.UnitSystem.IMPERIAL,
         avoidHighways,
         avoidTolls,
         drivingOptions: travelMode === 'DRIVING' ? {
@@ -1417,7 +1460,7 @@ export default function TripPlannerPage() {
     }
   }
 
-  const calculateRoute = async (stopsList, gpsOrigin = null) => {
+  const calculateRoute = async (stopsList, gpsOrigin = null, optimizeWaypoints = false) => {
     if (stopsList.length < 1) return
     if (!gpsOrigin && stopsList.length < 2) return
 
@@ -1437,6 +1480,8 @@ export default function TripPlannerPage() {
         destination,
         waypoints,
         travelMode: window.google.maps.TravelMode[travelMode],
+        optimizeWaypoints,
+        unitSystem: window.google.maps.UnitSystem.IMPERIAL,
         avoidHighways,
         avoidTolls,
         drivingOptions: travelMode === 'DRIVING' ? {
@@ -1454,8 +1499,23 @@ export default function TripPlannerPage() {
       })
       setTotalDistance(distance / 1000)
       setTotalDuration(duration / 60)
+      let orderedStops = stopsList
+      if (optimizeWaypoints && result.routes[0].waypoint_order?.length) {
+        const lastStop = stopsList[stopsList.length - 1]
+        const waypointStops = stopsList.slice(0, -1)
+        orderedStops = [
+          ...result.routes[0].waypoint_order.map(index => waypointStops[index]),
+          lastStop
+        ]
+      }
+      return {
+        orderedStops,
+        distanceKm: distance / 1000,
+        durationMin: duration / 60
+      }
     } catch (err) {
       console.error('Route calculation error:', err)
+      return null
     }
   }
 
@@ -1654,7 +1714,7 @@ export default function TripPlannerPage() {
         {navigationMode && currentSpeed != null && (
           <div className="speed-indicator">
             <span className="speed-value">{currentSpeed}</span>
-            <span className="speed-unit">km/h</span>
+            <span className="speed-unit">mph</span>
           </div>
         )}
 
@@ -1668,7 +1728,7 @@ export default function TripPlannerPage() {
         {savedDistance > 0 && (
           <div className="savings-banner">
             <span className="material-icons text-positive">check_circle</span>
-            <span>{savedDistance.toFixed(1)} km, {Math.round(savedDuration)} min ahorrados</span>
+            <span>{(savedDistance * KM_TO_MILES).toFixed(1)} mi, {Math.round(savedDuration)} min ahorrados</span>
             <button className="close-btn" onClick={() => setSavedDistance(0)}>
               <span className="material-icons">close</span>
             </button>
@@ -1730,7 +1790,7 @@ export default function TripPlannerPage() {
                     </div>
                     <div className="dispatch-route-meta">
                       <span>{dr.stops_count} {dr.stops_count === 1 ? t('planner.stop') : t('planner.stops')}</span>
-                      {dr.total_distance > 0 && <span> - {dr.total_distance} km</span>}
+                      {dr.total_distance > 0 && <span> - {(Number(dr.total_distance) * KM_TO_MILES).toFixed(1)} mi</span>}
                     </div>
                     {isCompleted && (
                       <button
@@ -1772,7 +1832,7 @@ export default function TripPlannerPage() {
             <div className="route-stats">
               <div className="route-stat">
                 <span className="material-icons">straighten</span>
-                <span>{totalDistance.toFixed(1)} km</span>
+                <span>{(totalDistance * KM_TO_MILES).toFixed(1)} mi</span>
               </div>
               <div className="route-stat">
                 <span className="material-icons">schedule</span>
