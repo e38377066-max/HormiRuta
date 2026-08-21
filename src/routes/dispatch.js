@@ -1777,6 +1777,31 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
         }
         console.log(`[Dispatch] ${heldOrders.length} paquete(s) recargados del chofer ${driver.username} agregados a ruta ${route.id}`);
       }
+      const heldFavoriteStops = await Stop.findAll({
+        where: {
+          held_by_driver_id: driver_id,
+          package_disposition: 'held_by_driver',
+          favorite_address_id: { [Op.ne]: null },
+          route_id: { [Op.ne]: route.id }
+        },
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+      if (heldFavoriteStops.length > 0) {
+        const existingStopCount = await Stop.count({ where: { route_id: route.id }, transaction: t });
+        let stopOrder = existingStopCount;
+        for (const heldStop of heldFavoriteStops) {
+          heldStop.route_id = route.id;
+          heldStop.order = stopOrder++;
+          heldStop.status = 'pending';
+          heldStop.package_disposition = 'normal';
+          heldStop.held_by_driver_id = null;
+          heldStop.skip_reason = null;
+          heldStop.skipped_at = null;
+          await heldStop.save({ transaction: t });
+        }
+        console.log(`[Dispatch] ${heldFavoriteStops.length} favorita(s) recargada(s) del chofer ${driver.username} agregada(s) a ruta ${route.id}`);
+      }
     });
 
     const orders = await ValidatedAddress.findAll({
@@ -2132,6 +2157,15 @@ router.get('/returns', requireAuth, async (req, res) => {
       where,
       order: [['skipped_at', 'DESC']]
     });
+    const favoriteWhere = {
+      package_disposition: { [Op.in]: ['held_by_driver', 'pending_return', 'returned_to_office'] },
+      favorite_address_id: { [Op.ne]: null }
+    };
+    if (user.role === 'driver') favoriteWhere.held_by_driver_id = user.id;
+    const favoriteStops = await Stop.findAll({
+      where: favoriteWhere,
+      order: [['skipped_at', 'DESC']]
+    });
 
     const driverIds = [...new Set(orders.map(o => o.held_by_driver_id).filter(Boolean))];
     const drivers = driverIds.length
@@ -2144,8 +2178,23 @@ router.get('/returns', requireAuth, async (req, res) => {
       dict.held_by_driver_name = o.held_by_driver_id ? (driverMap.get(o.held_by_driver_id) || null) : null;
       return dict;
     });
+    const favoriteResult = favoriteStops.map(stop => ({
+      id: `stop:${stop.id}`,
+      customer_name: stop.customer_name,
+      customer_phone: stop.phone,
+      validated_address: stop.address,
+      original_address: stop.address,
+      package_disposition: stop.package_disposition,
+      held_by_driver_id: stop.held_by_driver_id,
+      held_by_driver_name: stop.held_by_driver_id ? (driverMap.get(stop.held_by_driver_id) || null) : null,
+      skip_reason: stop.skip_reason,
+      skipped_at: stop.skipped_at,
+      returned_at: stop.returned_at,
+      favorite_address_id: stop.favorite_address_id,
+      is_favorite: true
+    }));
 
-    res.json({ orders: result });
+    res.json({ orders: [...result, ...favoriteResult] });
   } catch (error) {
     console.error('Error fetching returns:', error);
     res.status(500).json({ error: 'Error al cargar devoluciones' });
@@ -2163,6 +2212,19 @@ router.get('/returns', requireAuth, async (req, res) => {
  */
 router.put('/returns/:id/receive', requireAdmin, async (req, res) => {
   try {
+    const rawId = String(req.params.id);
+    if (rawId.startsWith('stop:')) {
+      const stop = await Stop.findByPk(Number(rawId.slice(5)));
+      if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+      if (!['pending_return', 'held_by_driver'].includes(stop.package_disposition)) {
+        return res.status(400).json({ error: 'Esta parada no esta pendiente de devolucion' });
+      }
+      stop.package_disposition = 'returned_to_office';
+      stop.returned_at = new Date();
+      stop.held_by_driver_id = null;
+      await stop.save();
+      return res.json({ success: true, order: stop.toDict() });
+    }
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
     if (!['pending_return', 'held_by_driver'].includes(order.package_disposition)) {
@@ -2190,6 +2252,16 @@ router.put('/returns/:id/receive', requireAdmin, async (req, res) => {
  */
 router.put('/returns/:id/release', requireAdmin, async (req, res) => {
   try {
+    const rawId = String(req.params.id);
+    if (rawId.startsWith('stop:')) {
+      const stop = await Stop.findByPk(Number(rawId.slice(5)));
+      if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+      if (!['returned_to_office', 'pending_return', 'held_by_driver'].includes(stop.package_disposition)) {
+        return res.status(400).json({ error: 'Esta parada no esta marcada como devolucion' });
+      }
+      await stop.destroy();
+      return res.json({ success: true, order: { id: rawId, favorite_address_id: stop.favorite_address_id } });
+    }
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
     if (!['returned_to_office', 'pending_return', 'held_by_driver'].includes(order.package_disposition)) {
@@ -2246,7 +2318,7 @@ router.get('/pickup/pending', requireAdmin, async (req, res) => {
         : null;
       const orders = await ValidatedAddress.findAll({
         where: { route_id: r.id },
-        attributes: ['id', 'customer_name', 'customer_phone', 'validated_address', 'original_address', 'amount', 'order_cost'],
+        attributes: ['id', 'customer_name', 'customer_phone', 'validated_address', 'original_address', 'address_lat', 'address_lng', 'amount', 'order_cost'],
         order: [['id', 'ASC']]
       });
       const routeStops = await Stop.findAll({
@@ -2281,7 +2353,7 @@ router.get('/pickup/pending', requireAdmin, async (req, res) => {
           address: stop.address || order?.validated_address || order?.original_address || '—',
           amount: order?.amount || stop.total_to_collect || 0
           };
-        }))
+        })
       };
     }));
     res.json({ success: true, routes: result });

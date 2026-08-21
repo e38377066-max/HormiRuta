@@ -66,6 +66,10 @@ const Stop = sequelize.define('Stop', {
     type: DataTypes.DATE,
     allowNull: true
   },
+  returned_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   /** Dirección completa de la parada */
   address: {
     type: DataTypes.STRING(300),
@@ -285,7 +289,8 @@ Stop.prototype.toDict = function() {
     package_disposition: this.package_disposition,
     held_by_driver_id: this.held_by_driver_id,
     skip_reason: this.skip_reason,
-    skipped_at: this.skipped_at
+    skipped_at: this.skipped_at,
+    returned_at: this.returned_at
   };
 };
 
