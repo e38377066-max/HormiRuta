@@ -2167,7 +2167,10 @@ router.get('/returns', requireAuth, async (req, res) => {
       order: [['skipped_at', 'DESC']]
     });
 
-    const driverIds = [...new Set(orders.map(o => o.held_by_driver_id).filter(Boolean))];
+    const driverIds = [...new Set([
+      ...orders.map(o => o.held_by_driver_id),
+      ...favoriteStops.map(stop => stop.held_by_driver_id)
+    ].filter(Boolean))];
     const drivers = driverIds.length
       ? await User.findAll({ where: { id: { [Op.in]: driverIds } }, attributes: ['id', 'username'] })
       : [];
