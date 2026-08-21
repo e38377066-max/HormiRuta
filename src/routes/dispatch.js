@@ -1310,6 +1310,7 @@ router.post('/routes', requireAdmin, async (req, res) => {
       for (const fav of favorite_stops) {
         await Stop.create({
           route_id: route.id,
+          favorite_address_id: fav.id || null,
           address: fav.address || fav.name,
           lat: fav.lat,
           lng: fav.lng,
@@ -1431,6 +1432,7 @@ router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
       for (const fav of favorite_stops) {
         await Stop.create({
           route_id: route.id,
+          favorite_address_id: fav.id || null,
           address: fav.address || fav.name,
           lat: fav.lat,
           lng: fav.lng,
@@ -2234,25 +2236,43 @@ router.get('/pickup/pending', requireAdmin, async (req, res) => {
       const driver = r.assigned_driver_id
         ? await User.findByPk(r.assigned_driver_id, { attributes: ['id', 'username', 'email'] })
         : null;
-      const stops = await ValidatedAddress.findAll({
+      const orders = await ValidatedAddress.findAll({
         where: { route_id: r.id },
         attributes: ['id', 'customer_name', 'customer_phone', 'validated_address', 'original_address', 'amount', 'order_cost'],
         order: [['id', 'ASC']]
       });
+      const routeStops = await Stop.findAll({
+        where: { route_id: r.id },
+        order: [['order', 'ASC'], ['id', 'ASC']]
+      });
+      const orderByStop = routeStops.reduce((map, stop) => {
+        if (stop.favorite_address_id) return map;
+        const match = orders.find(order =>
+          (Number.isFinite(Number(stop.lat)) && Math.abs(Number(order.address_lat) - Number(stop.lat)) < 0.0001 &&
+            Math.abs(Number(order.address_lng) - Number(stop.lng)) < 0.0001) ||
+          order.validated_address === stop.address
+        );
+        if (match) map.set(stop.id, match);
+        return map;
+      }, new Map());
       return {
         id: r.id,
         name: r.name || `Ruta #${r.id}`,
         driver_name: driver?.username || driver?.email || 'Sin chofer',
         driver_id: r.assigned_driver_id,
-        stops_count: stops.length,
+        stops_count: routeStops.length,
         assigned_at: r.updated_at,
         status: r.status,
-        stops: stops.map(s => ({
-          id: s.id,
-          customer_name: s.customer_name || 'Cliente',
-          customer_phone: s.customer_phone || '',
-          address: s.validated_address || s.original_address || '—',
-          amount: s.amount || 0
+        stops: routeStops.map(stop => {
+          const order = orderByStop.get(stop.id);
+          return {
+          id: order ? `order:${order.id}` : `stop:${stop.id}`,
+          source: order ? 'order' : 'favorite',
+          customer_name: stop.customer_name || order?.customer_name || 'Cliente',
+          customer_phone: stop.phone || order?.customer_phone || '',
+          address: stop.address || order?.validated_address || order?.original_address || '—',
+          amount: order?.amount || stop.total_to_collect || 0
+          };
         }))
       };
     }));
@@ -2278,6 +2298,23 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
     const { confirmed = [], rejected = [] } = req.body;
     const savedDriverId = route.assigned_driver_id;
     const routeName = route.name || `Ruta #${route.id}`;
+    const confirmedTokens = new Set(confirmed.map(String));
+    const rejectedTokens = new Set(rejected.map(String));
+    const confirmedOrderIds = [...confirmedTokens]
+      .filter(id => id.startsWith('order:'))
+      .map(id => Number(id.slice(6)))
+      .filter(Number.isInteger);
+    const rejectedOrderIds = [...rejectedTokens]
+      .filter(id => id.startsWith('order:'))
+      .map(id => Number(id.slice(6)))
+      .filter(Number.isInteger);
+    const currentRouteStops = await Stop.findAll({
+      where: { route_id: route.id },
+      order: [['order', 'ASC'], ['id', 'ASC']]
+    });
+    const confirmedFavoriteStops = currentRouteStops.filter(stop =>
+      stop.favorite_address_id && confirmedTokens.has(`stop:${stop.id}`)
+    );
 
     // Seguridad: si la ruta ya inició (alguna parada avanzó), confirmar aquí
     // destruiría el progreso de entrega. Se auto-confirma sin tocar las paradas.
@@ -2298,10 +2335,10 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
     }
 
     // 1. Devolver paradas rechazadas al dispatching (limpiar route_id en VA)
-    if (rejected.length > 0) {
+    if (rejectedOrderIds.length > 0) {
       await ValidatedAddress.update(
         { route_id: null, dispatch_status: 'available', assigned_driver_id: null, driver_name: null },
-        { where: { id: { [Op.in]: rejected }, route_id: route.id } }
+        { where: { id: { [Op.in]: rejectedOrderIds }, route_id: route.id } }
       );
     }
 
@@ -2309,14 +2346,15 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
     await Stop.destroy({ where: { route_id: route.id } });
 
     // Solo órdenes que realmente pertenecen a esta ruta pueden confirmarse (IDs ajenos se ignoran)
-    const confirmedAddrs = confirmed.length > 0
+    const confirmedAddrs = confirmedOrderIds.length > 0
       ? await ValidatedAddress.findAll({
-          where: { id: { [Op.in]: confirmed }, route_id: route.id },
+          where: { id: { [Op.in]: confirmedOrderIds }, route_id: route.id },
           order: [['id', 'ASC']]
         })
       : [];
 
-    if (confirmedAddrs.length > 0) {
+    const confirmedCount = confirmedAddrs.length + confirmedFavoriteStops.length;
+    if (confirmedCount > 0) {
       // Órdenes de la ruta omitidas de ambos arrays vuelven al dispatching (sin parada = huérfanas)
       const confirmedIds = confirmedAddrs.map(a => a.id);
       await ValidatedAddress.update(
@@ -2342,10 +2380,20 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
           });
         }
       }
+      for (let i = 0; i < confirmedFavoriteStops.length; i++) {
+        const favoriteStop = confirmedFavoriteStops[i];
+        favoriteStop.order = confirmedAddrs.length + i;
+        favoriteStop.status = 'pending';
+        favoriteStop.package_disposition = 'normal';
+        favoriteStop.held_by_driver_id = null;
+        favoriteStop.skip_reason = null;
+        favoriteStop.skipped_at = null;
+        await favoriteStop.save();
+      }
     }
 
     // 3. Si no quedó ninguna parada válida confirmada → desasignar la ruta (vuelve a draft)
-    if (confirmedAddrs.length === 0) {
+    if (confirmedCount === 0) {
       await ValidatedAddress.update(
         { route_id: null, dispatch_status: 'available', assigned_driver_id: null, driver_name: null },
         { where: { route_id: route.id } }
@@ -2376,15 +2424,15 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
       route_id: route.id,
       route_name: routeName,
       admin_name: admin?.username || admin?.email || 'Admin',
-      confirmed_stops: confirmedAddrs.length,
+      confirmed_stops: confirmedCount,
       rejected_stops: rejected.length,
-      message: `✅ La oficina confirmó entrega de ${confirmedAddrs.length} paquete${confirmedAddrs.length !== 1 ? 's' : ''} para "${routeName}". ¡Confirma que los recogiste!`
+      message: `✅ La oficina confirmó entrega de ${confirmedCount} paquete${confirmedCount !== 1 ? 's' : ''} para "${routeName}". ¡Confirma que los recogiste!`
     });
     emitToAdmins('pickup:admin_confirmed', {
       route_id: route.id,
       route_name: routeName,
       driver_name: driver?.username || driver?.email || 'Chofer',
-      confirmed_stops: confirmedAddrs.length,
+      confirmed_stops: confirmedCount,
       rejected_stops: rejected.length
     });
     // Refrescar DispatchMap en todos los admins
@@ -2392,7 +2440,7 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
 
     res.json({
       success: true,
-      message: `Entrega confirmada: ${confirmedAddrs.length} parada(s). ${rejected.length} devuelta(s) al dispatching.`
+      message: `Entrega confirmada: ${confirmedCount} parada(s). ${rejectedOrderIds.length} devuelta(s) al dispatching.`
     });
   } catch (error) {
     console.error('Error confirming stops:', error);

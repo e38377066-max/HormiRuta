@@ -281,8 +281,7 @@ Stop.prototype.toDict = function() {
     payment_method: this.payment_method,
     amount_collected: this.amount_collected,
     payment_status: this.payment_status,
-    apartment_number: this.apartment_number
-    ,
+    apartment_number: this.apartment_number,
     package_disposition: this.package_disposition,
     held_by_driver_id: this.held_by_driver_id,
     skip_reason: this.skip_reason,
