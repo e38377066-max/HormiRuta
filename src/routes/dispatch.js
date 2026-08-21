@@ -2088,6 +2088,14 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
         orderMatch.held_by_driver_id = null;
       }
       await orderMatch.save();
+    } else if (stop.favorite_address_id) {
+      stop.package_disposition = finalDisposition;
+      stop.skip_reason = reason || null;
+      stop.skipped_at = new Date();
+      stop.held_by_driver_id = finalDisposition === 'held_by_driver'
+        ? (route.assigned_driver_id || req.userId)
+        : null;
+      await stop.save();
     }
 
     emitToAll(route.assigned_driver_id, 'stop:updated', { stopId: stop.id, routeId: stop.route_id, status: 'skipped' });

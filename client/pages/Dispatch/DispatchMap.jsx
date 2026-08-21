@@ -27,6 +27,7 @@ const STATUS_CONFIG = {
   on_delivery: { label: 'En Entrega', color: '#ffffff', icon: 'delivery_dining' },
   ups_shipped: { label: 'UPS Shipped', color: '#9c27b0', icon: 'local_shipping' },
   delivered: { label: 'Entregada', color: '#ff6d00', icon: 'done_all' }
+  ,held_by_driver: { label: 'En el chofer', color: '#f59e0b', icon: 'local_shipping' }
 }
 
 /**
@@ -2391,9 +2392,13 @@ export default function DispatchMap() {
                       <div className="dr-orders-scroll">
                         {(route.route_stops?.length > 0 ? route.route_stops : route.orders).map((s, i) => {
                           const name = s.customer_name || s.name || t('common.noName')
-                          const statusKey = s.status || s.order_status || 'pending'
+                            const statusKey = s.package_disposition === 'held_by_driver'
+                              ? 'held_by_driver'
+                              : (s.status || s.order_status || 'pending')
                           const dotColor = getStopStatusColor(statusKey)
-                          const statusLabel = STATUS_CONFIG[statusKey] ? t(`dispatch.statuses.${statusKey}`) : ''
+                            const statusLabel = statusKey === 'held_by_driver'
+                              ? 'En el chofer'
+                              : (STATUS_CONFIG[statusKey] ? t(`dispatch.statuses.${statusKey}`) : '')
                           return (
                             <div key={s.id || i} className="dr-order-mini">
                               <span className="dr-stop-num">{i + 1}</span>
