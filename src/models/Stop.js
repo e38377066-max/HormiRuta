@@ -32,6 +32,40 @@ const Stop = sequelize.define('Stop', {
       key: 'id'
     }
   },
+  /** ID del favorito que originó esta parada, cuando no es una orden */
+  favorite_address_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'favorite_addresses',
+      key: 'id'
+    }
+  },
+  /** Disposición del paquete asociado a esta parada */
+  package_disposition: {
+    type: DataTypes.STRING(30),
+    allowNull: false,
+    defaultValue: 'normal'
+  },
+  /** Chofer que conserva el paquete cuando se salta la parada */
+  held_by_driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  /** Motivo de la parada saltada */
+  skip_reason: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  /** Fecha en que se marcó la parada como saltada */
+  skipped_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
   /** Dirección completa de la parada */
   address: {
     type: DataTypes.STRING(300),
@@ -215,6 +249,7 @@ Stop.prototype.toDict = function() {
     id: this.id,
     unique_id: this.unique_id,
     route_id: this.route_id,
+    favorite_address_id: this.favorite_address_id,
     address: this.address,
     lat: this.lat,
     lng: this.lng,
@@ -247,6 +282,11 @@ Stop.prototype.toDict = function() {
     amount_collected: this.amount_collected,
     payment_status: this.payment_status,
     apartment_number: this.apartment_number
+    ,
+    package_disposition: this.package_disposition,
+    held_by_driver_id: this.held_by_driver_id,
+    skip_reason: this.skip_reason,
+    skipped_at: this.skipped_at
   };
 };
 
