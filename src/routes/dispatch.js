@@ -2342,8 +2342,17 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
       );
     }
 
-    // 2. Reconstruir Stop records: borrar todos los actuales y recrear solo los confirmados
-    await Stop.destroy({ where: { route_id: route.id } });
+    // 2. Reconstruir las órdenes normales. Las favoritas se conservan como
+    // Stop porque no tienen un ValidatedAddress equivalente.
+    await Stop.destroy({
+      where: { route_id: route.id, favorite_address_id: null }
+    });
+    const rejectedFavoriteStops = currentRouteStops.filter(stop =>
+      stop.favorite_address_id && !confirmedTokens.has(`stop:${stop.id}`)
+    );
+    if (rejectedFavoriteStops.length > 0) {
+      await Stop.destroy({ where: { id: { [Op.in]: rejectedFavoriteStops.map(stop => stop.id) } } });
+    }
 
     // Solo órdenes que realmente pertenecen a esta ruta pueden confirmarse (IDs ajenos se ignoran)
     const confirmedAddrs = confirmedOrderIds.length > 0
