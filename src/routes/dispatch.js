@@ -1353,7 +1353,27 @@ router.delete('/routes/:id', requireAdmin, async (req, res) => {
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
 
     await ValidatedAddress.update({ route_id: null }, { where: { route_id: route.id } });
-    await Stop.destroy({ where: { route_id: route.id } });
+    const heldFavoriteStops = await Stop.findAll({
+      where: {
+        route_id: route.id,
+        favorite_address_id: { [Op.ne]: null },
+        package_disposition: 'held_by_driver'
+      }
+    });
+    if (heldFavoriteStops.length > 0) {
+      await Stop.update(
+        { route_id: null },
+        { where: { id: { [Op.in]: heldFavoriteStops.map(stop => stop.id) } } }
+      );
+    }
+    await Stop.destroy({
+      where: {
+        route_id: route.id,
+        ...(heldFavoriteStops.length > 0
+          ? { id: { [Op.notIn]: heldFavoriteStops.map(stop => stop.id) } }
+          : {})
+      }
+    });
     await route.destroy();
 
     res.json({ success: true });
@@ -1378,7 +1398,12 @@ router.delete('/routes/:id/stops/:stopId', requireAdmin, async (req, res) => {
     if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
 
     await ValidatedAddress.update({ route_id: null }, { where: { route_id: req.params.id, validated_address: stop.address } });
-    await stop.destroy();
+    if (stop.favorite_address_id && stop.package_disposition === 'held_by_driver') {
+      stop.route_id = null;
+      await stop.save();
+    } else {
+      await stop.destroy();
+    }
 
     res.json({ success: true });
   } catch (error) {
@@ -1782,7 +1807,10 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
           held_by_driver_id: driver_id,
           package_disposition: 'held_by_driver',
           favorite_address_id: { [Op.ne]: null },
-          route_id: { [Op.ne]: route.id }
+          [Op.or]: [
+            { route_id: null },
+            { route_id: { [Op.ne]: route.id } }
+          ]
         },
         lock: t.LOCK.UPDATE,
         transaction: t

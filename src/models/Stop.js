@@ -26,7 +26,9 @@ const Stop = sequelize.define('Stop', {
   /** ID de la ruta a la que pertenece esta parada */
   route_id: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    // Las favoritas retenidas pueden quedar temporalmente sin ruta
+    // cuando se elimina o edita la ruta original.
+    allowNull: true,
     references: {
       model: 'routes',
       key: 'id'
