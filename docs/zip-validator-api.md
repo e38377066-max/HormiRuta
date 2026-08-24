@@ -10,30 +10,17 @@ La respuesta se basa en las zonas activas almacenadas en la base de datos.
 Acepta un ZIP, una ciudad, un nombre de zona o una dirección que contenga un
 ZIP de cinco dígitos.
 
-## Autenticación
+## Acceso
 
-Enviar la API key en uno de estos encabezados:
-
-```http
-X-API-Key: TU_API_KEY
-```
-
-o:
-
-```http
-Authorization: Bearer TU_API_KEY
-```
-
-La API key se configura como el secreto `ZIP_VALIDATOR_API_KEY`. Nunca debe
-incluirse directamente en código público del navegador. Para una integración
-frontend, lo más seguro es llamar al endpoint desde el backend del otro sitio.
+El endpoint no requiere autenticación ni API key. Puede llamarse desde el
+backend del otro sitio o directamente desde su navegador si el origen está
+incluido en `ZIP_VALIDATOR_ALLOWED_ORIGINS`.
 
 ## Solicitud
 
 ```bash
 curl -X POST https://TU-DOMINIO.com/api/messaging/public/validate-zip \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: TU_API_KEY" \
   -d '{"zipOrCity":"75201"}'
 ```
 
@@ -66,8 +53,7 @@ También se aceptan `zip_code`, `city` o `query` como nombre del campo.
 ```
 
 Cuando no existe cobertura, `valid` y `covered` son `false` y `zone` es
-`null`. Una API key ausente o incorrecta devuelve `401`; más de 60 solicitudes
-por minuto desde la misma IP devuelve `429`.
+`null`. Más de 60 solicitudes por minuto desde la misma IP devuelve `429`.
 
 ## CORS para una web externa
 

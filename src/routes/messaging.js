@@ -27,13 +27,7 @@ const router = express.Router();
 // API pública de validación: se mantiene una ventana sencilla por IP para
 // evitar abusos accidentales sin introducir una dependencia adicional.
 const publicZipRateLimits = new Map();
-const publicZipApiKey = (req, res, next) => {
-  const configuredKey = process.env.ZIP_VALIDATOR_API_KEY;
-  const providedKey = req.get('X-API-Key') || req.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  if (!configuredKey || !providedKey || providedKey !== configuredKey) {
-    return res.status(401).json({ success: false, error: 'API key inválida o no configurada' });
-  }
-
+const publicZipRateLimit = (req, res, next) => {
   const now = Date.now();
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const current = publicZipRateLimits.get(ip);
@@ -1127,7 +1121,7 @@ router.post('/validate-zip', requireAuth, async (req, res) => {
  * las zonas activas almacenadas en la base de datos.
  * @access API key (X-API-Key o Authorization: Bearer)
  */
-router.post('/public/validate-zip', publicZipApiKey, async (req, res) => {
+router.post('/public/validate-zip', publicZipRateLimit, async (req, res) => {
   try {
     const rawInput = req.body?.zipOrCity ?? req.body?.zip_code ?? req.body?.city ?? req.body?.query;
     if (typeof rawInput !== 'string' || !rawInput.trim()) {
