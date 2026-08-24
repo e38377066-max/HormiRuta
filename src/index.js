@@ -62,6 +62,11 @@ const allowedOrigins = [
   'capacitor://localhost',
   'http://localhost'
 ];
+const publicZipOrigins = (process.env.ZIP_VALIDATOR_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+allowedOrigins.push(...publicZipOrigins);
 
 /**
  * Opciones de configuración para CORS.

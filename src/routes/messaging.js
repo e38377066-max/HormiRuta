@@ -24,6 +24,33 @@ import pollingService from '../services/pollingService.js';
 
 const router = express.Router();
 
+// API pública de validación: se mantiene una ventana sencilla por IP para
+// evitar abusos accidentales sin introducir una dependencia adicional.
+const publicZipRateLimits = new Map();
+const publicZipApiKey = (req, res, next) => {
+  const configuredKey = process.env.ZIP_VALIDATOR_API_KEY;
+  const providedKey = req.get('X-API-Key') || req.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!configuredKey || !providedKey || providedKey !== configuredKey) {
+    return res.status(401).json({ success: false, error: 'API key inválida o no configurada' });
+  }
+
+  const now = Date.now();
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const current = publicZipRateLimits.get(ip);
+  if (!current || now - current.startedAt >= 60_000) {
+    publicZipRateLimits.set(ip, { startedAt: now, count: 1 });
+  } else {
+    current.count += 1;
+    if (current.count > 60) {
+      return res.status(429).json({
+        success: false,
+        error: 'Demasiadas solicitudes. Intenta nuevamente en un minuto.'
+      });
+    }
+  }
+  next();
+};
+
 /**
  * Verifica si un usuario tiene el rol de administrador.
  * @param {number|string} userId - ID del usuario.
@@ -1091,6 +1118,108 @@ router.post('/validate-zip', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Validate ZIP error:', error);
     res.status(500).json({ error: 'Error al validar' });
+  }
+});
+
+/**
+ * POST /public/validate-zip
+ * @description API externa para validar ZIP, ciudad o nombre de zona contra
+ * las zonas activas almacenadas en la base de datos.
+ * @access API key (X-API-Key o Authorization: Bearer)
+ */
+router.post('/public/validate-zip', publicZipApiKey, async (req, res) => {
+  try {
+    const rawInput = req.body?.zipOrCity ?? req.body?.zip_code ?? req.body?.city ?? req.body?.query;
+    if (typeof rawInput !== 'string' || !rawInput.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Envía zipOrCity, zip_code, city o query'
+      });
+    }
+
+    const originalInput = rawInput.trim().slice(0, 100);
+    const escapeLike = value => value.replace(/[\\%_]/g, '\\$&');
+    const likeInput = escapeLike(originalInput);
+    let zone = null;
+    let type = 'unknown';
+    let value = originalInput;
+
+    const zipMatch = originalInput.match(/\b(\d{5})\b/);
+    if (zipMatch) {
+      value = zipMatch[1];
+      zone = await CoverageZone.findOne({
+        where: { zip_code: value, is_active: true },
+        order: [['id', 'ASC']]
+      });
+      if (zone) type = 'zip';
+    }
+
+    if (!zone) {
+      zone = await CoverageZone.findOne({
+        where: { city: { [Op.iLike]: likeInput }, is_active: true },
+        order: [['id', 'ASC']]
+      });
+      if (zone) {
+        type = 'city';
+        value = zone.city || originalInput;
+      }
+    }
+
+    if (!zone) {
+      zone = await CoverageZone.findOne({
+        where: { city: { [Op.iLike]: `%${likeInput}%` }, is_active: true },
+        order: [['id', 'ASC']]
+      });
+      if (zone) {
+        type = 'city';
+        value = zone.city || originalInput;
+      }
+    }
+
+    if (!zone) {
+      zone = await CoverageZone.findOne({
+        where: { zone_name: { [Op.iLike]: `%${likeInput}%` }, is_active: true },
+        order: [['id', 'ASC']]
+      });
+      if (zone) {
+        type = 'zone';
+        value = zone.zone_name || zone.city || originalInput;
+      }
+    }
+
+    const valid = Boolean(zone);
+    const publicZone = zone ? {
+      id: zone.id,
+      zip_code: zone.zip_code,
+      zone_name: zone.zone_name,
+      city: zone.city,
+      state: zone.state,
+      country: zone.country,
+      delivery_fee: zone.delivery_fee,
+      min_order_amount: zone.min_order_amount,
+      estimated_delivery_time: zone.estimated_delivery_time
+    } : null;
+
+    res.json({
+      success: true,
+      valid,
+      covered: valid,
+      type,
+      value,
+      originalInput,
+      zone: publicZone,
+      message: valid
+        ? type === 'zip'
+          ? `ZIP ${value} validado - ${zone.city || zone.zone_name || 'Zona con cobertura'}`
+          : type === 'city'
+            ? `Ciudad ${zone.city} validada - ZIP ${zone.zip_code}`
+            : `Zona ${value} validada - ${zone.city || ''}, ZIP ${zone.zip_code}`
+        : `No hay cobertura para "${originalInput}"`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Public ZIP validation error:', error);
+    res.status(500).json({ success: false, error: 'Error al validar el código postal' });
   }
 });
 
