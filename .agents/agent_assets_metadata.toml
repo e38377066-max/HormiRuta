@@ -11,69 +11,95 @@ id = "skKcyWDmLpJW6Qu3Ll7zf"
 uri = "file://attached_assets/area862-icon-1024.png"
 type = "image"
 title = "Ícono Area 862 — 1024×1024"
+logical_id = "bb9e789b-7eaf-420e-8a5d-1e8292392504"
 
 [[outputs]]
 id = "7rI63AS3GNIV2QlQs5TuZ"
 uri = "file://screenshots/appstore/01-login.png"
 type = "image"
 title = "1. Login — 1242×2688px ✓"
+logical_id = "c60fd0fb-b2a6-47a9-a16f-a652fc32909b"
 
 [[outputs]]
 id = "3bmWDj8okJq9sLrU__rwk"
 uri = "file://screenshots/appstore/02-dispatch-map.png"
 type = "image"
 title = "2. Mapa de Despacho — 1320×2868"
+logical_id = "543b1332-5db5-4e15-ae3e-bd39ff925b3a"
 
 [[outputs]]
 id = "fzgFNUwiVS3GzBO7puq7b"
 uri = "file://screenshots/appstore/03-route-planner.png"
 type = "image"
 title = "3. Planificador de Rutas — 1320×2868"
+logical_id = "a7b2bf92-3adf-4d3a-b2e0-c9faf8f5fa07"
 
 [[outputs]]
 id = "n6eygLXo0r2h01yQi_5Pt"
 uri = "file://screenshots/appstore/04-delivery-detail.png"
 type = "image"
 title = "4. Detalle de Entrega — 1320×2868"
+logical_id = "913680c6-131c-4dd6-90be-a3a04ec0538b"
 
 [[outputs]]
 id = "L21apkZebAlh121wtGQnE"
 uri = "file://screenshots/appstore/02-messaging.png"
 type = "image"
 title = "2. Mensajería — 1242×2688px ✓"
+logical_id = "5dac6330-0c19-48f3-9568-793bf26c0f34"
 
 [[outputs]]
 id = "wCxCByHNyDcT86qivJXtD"
 uri = "file://screenshots/appstore/03-planner.png"
 type = "image"
 title = "3. Planeador — 1242×2688px ✓"
+logical_id = "528f300c-a9ef-4437-9afe-b478ec858853"
 
 [[outputs]]
 id = "zUgrqOe8BLm08s6YlUtsF"
 uri = "file://screenshots/appstore/04-dispatch.png"
 type = "image"
 title = "4. Despacho — 1242×2688px ✓"
+logical_id = "69bf94b1-57c6-4b32-a256-dcbfca76ba1c"
 
 [[outputs]]
 id = "EjxAxro0smz3P8zbpQtpO"
 uri = "file://screenshots/appstore/ipad/01-login.png"
 type = "image"
 title = "iPad 1. Login — 2048×2732px ✓"
+logical_id = "8fc987f7-e276-4ac9-9cf9-079526054914"
 
 [[outputs]]
 id = "uwF0wl6wn4Df_x0NTbftQ"
 uri = "file://screenshots/appstore/ipad/02-messaging.png"
 type = "image"
 title = "iPad 2. Mensajería — 2048×2732px ✓"
+logical_id = "cd999f8e-2959-4991-9905-9ca5a0f511de"
 
 [[outputs]]
 id = "7pvYEuZmY_AcIBaUpeH7v"
 uri = "file://screenshots/appstore/ipad/03-planner.png"
 type = "image"
 title = "iPad 3. Planeador — 2048×2732px ✓"
+logical_id = "e1e109fd-2cc3-4b4e-a070-c0c63130b91f"
 
 [[outputs]]
 id = "8ZsH0aMMMoZEzhc3mIVUx"
 uri = "file://screenshots/appstore/ipad/04-dispatch.png"
 type = "image"
 title = "iPad 4. Despacho — 2048×2732px ✓"
+logical_id = "d9b29889-0004-4189-915b-4baa410773bb"
+
+[[outputs]]
+id = "Y6aGOB92CO7A9MJew0T1F"
+uri = "file://docs/zip-validator-api.md"
+type = "text"
+title = "Documentación completa de la API del validador SMS"
+description = "Guía de integración para el sitio externo: opciones, contactos, plataformas, validación, guardado, historial, errores, CORS y ejemplos JavaScript/React."
+logical_id = "23121b2c-da39-4161-afcc-2c180aa76ead"
+content_hash = "sha256:ee1019dea271600b945d5cfc606a6d097c1fe7a5828257632f918389dc3613e1"
+size = 9500
+mtime_ms = 1787585156366
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:34edb702-dbbd-4166-89d7-575dc181bfe6/23121b2c-da39-4161-afcc-2c180aa76ead/01dbfee8-7b7c-47cf-b13c-3fbfaf35614f"
+storage_version_token = "1787585162855700"
+content_type = "text/markdown"
