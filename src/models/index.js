@@ -23,6 +23,7 @@ import BotMemory from './BotMemory.js';
 import BotKnowledge from './BotKnowledge.js';
 import CustomerProfile from './CustomerProfile.js';
 import AgentStyleProfile from './AgentStyleProfile.js';
+import ZipValidation from './ZipValidation.js';
 
 // Relaciones de Usuario y Ruta
 User.hasMany(Route, { foreignKey: 'user_id', as: 'routes', onDelete: 'CASCADE' });
@@ -135,6 +136,9 @@ CustomerProfile.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 User.hasOne(AgentStyleProfile, { foreignKey: 'user_id', as: 'agentStyle', onDelete: 'CASCADE' });
 AgentStyleProfile.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+User.hasMany(ZipValidation, { foreignKey: 'user_id', as: 'zipValidations', onDelete: 'SET NULL' });
+ZipValidation.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
 export { 
   sequelize, 
   User, 
@@ -155,5 +159,6 @@ export {
   BotMemory,
   BotKnowledge,
   CustomerProfile,
-  AgentStyleProfile
+  AgentStyleProfile,
+  ZipValidation
 };

@@ -13,7 +13,8 @@ import {
   MessagingSettings,
   ConversationState,
   ServiceAgent,
-  User
+  User,
+  ZipValidation
 } from '../models/index.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import RespondioService from '../services/respondio.js';
@@ -1115,105 +1116,242 @@ router.post('/validate-zip', requireAuth, async (req, res) => {
   }
 });
 
+const publicValidatorPlatforms = [
+  { id: 'facebook', label: 'Facebook', icon: 'facebook', color: '#1877f2' },
+  { id: 'instagram', label: 'Instagram', icon: 'photo_camera', color: '#e4405f' },
+  { id: 'whatsapp', label: 'WhatsApp', icon: 'chat', color: '#25d366' },
+  { id: 'respond', label: 'Respond.io', icon: 'support_agent', color: '#6366f1' },
+  { id: 'sms', label: 'SMS', icon: 'sms', color: '#607d8b' },
+  { id: 'email', label: 'Email', icon: 'email', color: '#ea4335' },
+  { id: 'phone', label: 'Teléfono', icon: 'phone', color: '#34a853' }
+];
+
+const publicZoneFields = zone => zone ? {
+  id: zone.id,
+  zip_code: zone.zip_code,
+  zone_name: zone.zone_name,
+  city: zone.city,
+  state: zone.state,
+  country: zone.country,
+  delivery_fee: zone.delivery_fee,
+  min_order_amount: zone.min_order_amount,
+  estimated_delivery_time: zone.estimated_delivery_time
+} : null;
+
+async function runPublicZipValidation(rawInput) {
+  const originalInput = rawInput.trim().slice(0, 500);
+  const escapeLike = value => value.replace(/[\\%_]/g, '\\$&');
+  const likeInput = escapeLike(originalInput);
+  let zone = null;
+  let type = 'unknown';
+  let value = originalInput;
+  const zipMatch = originalInput.match(/\b(\d{5})\b/);
+
+  if (zipMatch) {
+    value = zipMatch[1];
+    zone = await CoverageZone.findOne({
+      where: { zip_code: value, is_active: true },
+      order: [['id', 'ASC']]
+    });
+    if (zone) type = 'zip';
+  }
+  if (!zone) {
+    zone = await CoverageZone.findOne({
+      where: { city: { [Op.iLike]: likeInput }, is_active: true },
+      order: [['id', 'ASC']]
+    });
+    if (zone) { type = 'city'; value = zone.city || originalInput; }
+  }
+  if (!zone) {
+    zone = await CoverageZone.findOne({
+      where: { city: { [Op.iLike]: `%${likeInput}%` }, is_active: true },
+      order: [['id', 'ASC']]
+    });
+    if (zone) { type = 'city'; value = zone.city || originalInput; }
+  }
+  if (!zone) {
+    zone = await CoverageZone.findOne({
+      where: { zone_name: { [Op.iLike]: `%${likeInput}%` }, is_active: true },
+      order: [['id', 'ASC']]
+    });
+    if (zone) { type = 'zone'; value = zone.zone_name || zone.city || originalInput; }
+  }
+
+  const valid = Boolean(zone);
+  const message = valid
+    ? type === 'zip'
+      ? `ZIP ${value} validado - ${zone.city || zone.zone_name || 'Zona con cobertura'}`
+      : type === 'city'
+        ? `Ciudad ${zone.city} validada - ZIP ${zone.zip_code}`
+        : `Zona ${value} validada - ${zone.city || ''}, ZIP ${zone.zip_code}`
+    : `No hay cobertura para "${originalInput}"`;
+  const { settings } = await getSettingsForUser();
+  const copyMessage = valid
+    ? settings?.coverage_message || 'Tenemos cobertura en tu zona!'
+    : settings?.no_coverage_message || 'Lo sentimos, actualmente no tenemos cobertura en tu zona.';
+
+  return {
+    valid, covered: valid, type, value, originalInput,
+    zone: publicZoneFields(zone), message, copyMessage,
+    zoneModel: zone,
+    timestamp: new Date().toISOString()
+  };
+}
+
+function normalizePublicContact(body) {
+  const contact = body.contact && typeof body.contact === 'object' ? body.contact : {};
+  return {
+    id: String(body.contact_id ?? contact.id ?? '').trim().slice(0, 100) || null,
+    name: String(body.contact_name ?? contact.name ?? contact.fullName ?? '').trim().slice(0, 255) || null,
+    phone: String(body.contact_phone ?? contact.phone ?? '').trim().slice(0, 50) || null
+  };
+}
+
+async function persistPublicValidation(result, body, req) {
+  const contact = normalizePublicContact(body);
+  const source = String(body.source ?? body.platform ?? body.channel_type ?? 'unknown')
+    .trim().slice(0, 50) || 'unknown';
+  const record = await ZipValidation.create({
+    contact_id: contact.id,
+    contact_name: contact.name,
+    contact_phone: contact.phone,
+    source,
+    input: result.originalInput,
+    value: result.value,
+    validation_type: result.type,
+    valid: result.valid,
+    zone_id: result.zoneModel?.id || null,
+    zone_snapshot: result.zone,
+    message: result.message,
+    copy_message: result.copyMessage,
+    metadata: {
+      user_agent: req.get('user-agent')?.slice(0, 300) || null,
+      origin: req.get('origin')?.slice(0, 300) || null
+    }
+  });
+  return { record, contact, source };
+}
+
+/**
+ * GET /public/validator/options
+ * Devuelve plataformas y contactos seguros para construir el selector externo.
+ */
+router.get('/public/validator/options', publicZipRateLimit, async (req, res) => {
+  try {
+    const search = String(req.query.search || '').trim().slice(0, 100);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const escapedSearch = search.replace(/[\\%_]/g, '\\$&');
+    const orderWhere = search ? {
+      [Op.or]: [
+        { customer_name: { [Op.iLike]: `%${escapedSearch}%` } },
+        { customer_phone: { [Op.iLike]: `%${escapedSearch}%` } },
+        { respond_contact_id: { [Op.iLike]: `%${escapedSearch}%` } }
+      ]
+    } : {};
+    const logWhere = search ? {
+      [Op.or]: [
+        { contact_name: { [Op.iLike]: `%${escapedSearch}%` } },
+        { contact_phone: { [Op.iLike]: `%${escapedSearch}%` } },
+        { contact_id: { [Op.iLike]: `%${escapedSearch}%` } },
+        { respond_contact_id: { [Op.iLike]: `%${escapedSearch}%` } }
+      ]
+    } : {};
+    const [orders, logs] = await Promise.all([
+      MessagingOrder.findAll({
+        where: orderWhere,
+        attributes: ['respond_contact_id', 'customer_name', 'customer_phone', 'channel_type', 'updated_at'],
+        order: [['updated_at', 'DESC']],
+        limit
+      }),
+      MessageLog.findAll({
+        where: logWhere,
+        attributes: ['respond_contact_id', 'contact_id', 'contact_name', 'contact_phone', 'channel', 'channel_type', 'updated_at'],
+        order: [['updated_at', 'DESC']],
+        limit
+      })
+    ]);
+    const contacts = new Map();
+    [...orders, ...logs].forEach(item => {
+      const id = item.respond_contact_id || item.contact_id;
+      const name = item.customer_name || item.contact_name;
+      const phone = item.customer_phone || item.contact_phone;
+      if (!id && !name && !phone) return;
+      const key = String(id || phone || name);
+      if (!contacts.has(key)) contacts.set(key, {
+        id: id ? String(id) : null,
+        name: name || null,
+        phone: phone || null,
+        source: item.channel_type || item.channel || null
+      });
+    });
+    res.json({
+      success: true,
+      platforms: publicValidatorPlatforms,
+      contacts: [...contacts.values()].slice(0, limit),
+      contact_source: 'recent local messaging records',
+      note: 'The contact list omits message content and credentials.'
+    });
+  } catch (error) {
+    console.error('Public validator options error:', error);
+    res.status(500).json({ success: false, error: 'No se pudieron obtener las opciones' });
+  }
+});
+
 /**
  * POST /public/validate-zip
- * @description API externa para validar ZIP, ciudad o nombre de zona contra
- * las zonas activas almacenadas en la base de datos.
- * @access API key (X-API-Key o Authorization: Bearer)
+ * Valida y, por defecto, guarda la consulta con contacto y origen.
  */
 router.post('/public/validate-zip', publicZipRateLimit, async (req, res) => {
   try {
-    const rawInput = req.body?.zipOrCity ?? req.body?.zip_code ?? req.body?.city ?? req.body?.query;
+    const rawInput = req.body?.zipOrCity ?? req.body?.zip_code ?? req.body?.city ??
+      req.body?.address ?? req.body?.query;
     if (typeof rawInput !== 'string' || !rawInput.trim()) {
-      return res.status(400).json({
-        success: false,
-        error: 'Envía zipOrCity, zip_code, city o query'
-      });
+      return res.status(400).json({ success: false, error: 'Envía zipOrCity, zip_code, city, address o query' });
     }
-
-    const originalInput = rawInput.trim().slice(0, 100);
-    const escapeLike = value => value.replace(/[\\%_]/g, '\\$&');
-    const likeInput = escapeLike(originalInput);
-    let zone = null;
-    let type = 'unknown';
-    let value = originalInput;
-
-    const zipMatch = originalInput.match(/\b(\d{5})\b/);
-    if (zipMatch) {
-      value = zipMatch[1];
-      zone = await CoverageZone.findOne({
-        where: { zip_code: value, is_active: true },
-        order: [['id', 'ASC']]
-      });
-      if (zone) type = 'zip';
+    const result = await runPublicZipValidation(rawInput);
+    const contact = normalizePublicContact(req.body);
+    const source = String(req.body.source ?? req.body.platform ?? req.body.channel_type ?? 'unknown')
+      .trim().slice(0, 50) || 'unknown';
+    result.contact = contact;
+    result.source = source;
+    let saved = null;
+    if (req.body.save !== false) {
+      const persisted = await persistPublicValidation(result, req.body, req);
+      saved = persisted.record;
     }
-
-    if (!zone) {
-      zone = await CoverageZone.findOne({
-        where: { city: { [Op.iLike]: likeInput }, is_active: true },
-        order: [['id', 'ASC']]
-      });
-      if (zone) {
-        type = 'city';
-        value = zone.city || originalInput;
-      }
-    }
-
-    if (!zone) {
-      zone = await CoverageZone.findOne({
-        where: { city: { [Op.iLike]: `%${likeInput}%` }, is_active: true },
-        order: [['id', 'ASC']]
-      });
-      if (zone) {
-        type = 'city';
-        value = zone.city || originalInput;
-      }
-    }
-
-    if (!zone) {
-      zone = await CoverageZone.findOne({
-        where: { zone_name: { [Op.iLike]: `%${likeInput}%` }, is_active: true },
-        order: [['id', 'ASC']]
-      });
-      if (zone) {
-        type = 'zone';
-        value = zone.zone_name || zone.city || originalInput;
-      }
-    }
-
-    const valid = Boolean(zone);
-    const publicZone = zone ? {
-      id: zone.id,
-      zip_code: zone.zip_code,
-      zone_name: zone.zone_name,
-      city: zone.city,
-      state: zone.state,
-      country: zone.country,
-      delivery_fee: zone.delivery_fee,
-      min_order_amount: zone.min_order_amount,
-      estimated_delivery_time: zone.estimated_delivery_time
-    } : null;
-
-    res.json({
+    const response = {
       success: true,
-      valid,
-      covered: valid,
-      type,
-      value,
-      originalInput,
-      zone: publicZone,
-      message: valid
-        ? type === 'zip'
-          ? `ZIP ${value} validado - ${zone.city || zone.zone_name || 'Zona con cobertura'}`
-          : type === 'city'
-            ? `Ciudad ${zone.city} validada - ZIP ${zone.zip_code}`
-            : `Zona ${value} validada - ${zone.city || ''}, ZIP ${zone.zip_code}`
-        : `No hay cobertura para "${originalInput}"`,
-      timestamp: new Date().toISOString()
-    });
+      ...result,
+      zoneModel: undefined,
+      validation_id: saved?.id || null,
+      saved: Boolean(saved)
+    };
+    delete response.zoneModel;
+    res.json(response);
   } catch (error) {
     console.error('Public ZIP validation error:', error);
     res.status(500).json({ success: false, error: 'Error al validar el código postal' });
+  }
+});
+
+router.get('/public/validator/history', publicZipRateLimit, async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const where = {};
+    if (req.query.contact_id) where.contact_id = String(req.query.contact_id).slice(0, 100);
+    if (req.query.source) where.source = String(req.query.source).slice(0, 50);
+    const { rows, count } = await ZipValidation.findAndCountAll({
+      where, order: [['created_at', 'DESC']], limit, offset
+    });
+    res.json({
+      success: true,
+      validations: rows.map(row => row.toDict()),
+      pagination: { total: count, limit, offset, has_more: offset + rows.length < count }
+    });
+  } catch (error) {
+    console.error('Public validator history error:', error);
+    res.status(500).json({ success: false, error: 'No se pudo obtener el historial' });
   }
 });
 
