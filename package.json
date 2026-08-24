@@ -15,6 +15,7 @@
     "build:mobile": "node scripts/bump-version.js && npm run build && npx cap sync",
     "build:mobile:sync": "npm run build && npx cap sync",
     "cap:sync": "npx cap sync",
+    "test": "node --test tests",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",
     "cap:add:android": "npx cap add android",
