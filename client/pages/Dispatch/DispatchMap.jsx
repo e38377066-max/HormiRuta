@@ -490,9 +490,16 @@ export default function DispatchMap() {
 
         const isCompleted = stop.status === 'completed'
         const isSkipped = stop.status === 'skipped' || stop.status === 'failed'
+        const packageStatus = stop.package_disposition && stop.package_disposition !== 'normal'
+          ? stop.package_disposition
+          : stop.favorite_address_id ? 'favorite' : null
         const num = stopIdx + 1
 
-        const iconColor = isCompleted ? '#22c55e' : isSkipped ? '#9e9e9e' : color
+        const iconColor = isCompleted
+          ? '#22c55e'
+          : isSkipped
+            ? '#ef4444'
+            : getStopStatusColor(packageStatus || 'pending')
         const iconUrl = createNumberedIcon(num, iconColor)
 
         const marker = new window.google.maps.Marker({
@@ -510,8 +517,16 @@ export default function DispatchMap() {
         const statusBadge = isCompleted
           ? `<span style="background:#22c55e;color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:bold">✓ Entregada</span>`
           : isSkipped
-            ? `<span style="background:#9e9e9e;color:white;padding:2px 8px;border-radius:4px;font-size:12px">✕ Saltada</span>`
-            : `<span style="background:${color};color:white;padding:2px 8px;border-radius:4px;font-size:12px">${driverName ? driverName + ' — ' : ''}Parada ${num}</span>`
+            ? `<span style="background:#ef4444;color:white;padding:2px 8px;border-radius:4px;font-size:12px">✕ Saltada</span>`
+            : packageStatus === 'held_by_driver'
+              ? `<span style="background:#f97316;color:white;padding:2px 8px;border-radius:4px;font-size:12px">En el chofer</span>`
+              : packageStatus === 'pending_return'
+                ? `<span style="background:#8b5cf6;color:white;padding:2px 8px;border-radius:4px;font-size:12px">Pendiente de devolución</span>`
+                : packageStatus === 'returned_to_office'
+                  ? `<span style="background:#0f766e;color:white;padding:2px 8px;border-radius:4px;font-size:12px">Devuelta a oficina</span>`
+                  : packageStatus === 'favorite'
+                    ? `<span style="background:#eab308;color:#111827;padding:2px 8px;border-radius:4px;font-size:12px">★ Favorita</span>`
+                    : `<span style="background:${color};color:white;padding:2px 8px;border-radius:4px;font-size:12px">${driverName ? driverName + ' — ' : ''}Parada ${num}</span>`
 
         const completedTime = isCompleted && stop.completed_at
           ? `<br/><span style="color:#22c55e;font-size:11px">✓ ${new Date(stop.completed_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>`
@@ -779,6 +794,21 @@ export default function DispatchMap() {
       fetchData()
     } catch (error) {
       alert(error.response?.data?.error || 'Error al eliminar ruta')
+    }
+  }
+
+  const handleReturnPendingOrders = async (route) => {
+    if (!window.confirm(`¿Regresar únicamente las órdenes pendientes de "${route.name}" al dispatching?\n\nLas entregadas, cobradas, brincadas, retornadas, retenidas y favoritas se conservarán en la ruta.`)) return
+    try {
+      const response = await api.post(`/api/dispatch/routes/${route.id}/return-orders`)
+      const released = response.data.released_count || 0
+      alert(released > 0
+        ? `✅ ${released} orden${released !== 1 ? 'es' : ''} pendiente${released !== 1 ? 's' : ''} regresada${released !== 1 ? 's' : ''} al dispatching.`
+        : 'No había órdenes pendientes para regresar.')
+      setEditingRouteId(null)
+      fetchData()
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al regresar órdenes pendientes')
     }
   }
 
@@ -1185,6 +1215,10 @@ export default function DispatchMap() {
       pending: '#9e9e9e',
       completed: '#4caf50',
       skipped: '#f44336',
+      held_by_driver: '#f97316',
+      pending_return: '#8b5cf6',
+      returned_to_office: '#0f766e',
+      favorite: '#eab308',
       in_progress: '#2196f3',
       ordered: '#2196f3',
       approved: '#ffc107',
@@ -2187,6 +2221,17 @@ export default function DispatchMap() {
                         <span className="material-icons" style={{ fontSize: 14 }}>print</span>
                       </button>
                       {isAdmin && (
+                        <>
+                        {!['draft', 'completed', 'returned'].includes(route.status) && (
+                          <button
+                            className="dbtn outline small"
+                            style={{ padding: '2px 7px', fontSize: 12, color: '#b45309', borderColor: '#f59e0b' }}
+                            title="Regresar órdenes pendientes"
+                            onClick={() => handleReturnPendingOrders(route)}
+                          >
+                            <span className="material-icons" style={{ fontSize: 14 }}>undo</span>
+                          </button>
+                        )}
                         <button
                           className="dbtn outline small"
                           style={{ padding: '2px 7px', fontSize: 12 }}
@@ -2197,6 +2242,7 @@ export default function DispatchMap() {
                         >
                           <span className="material-icons" style={{ fontSize: 14 }}>{isEditing ? 'close' : 'edit'}</span>
                         </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -2251,6 +2297,7 @@ export default function DispatchMap() {
                                 <button
                                   className="dr-edit-stop-remove"
                                   title="Quitar parada"
+                                   disabled={route.status !== 'draft'}
                                   onClick={() => handleRemoveStop(route.id, s.id)}
                                 >
                                   <span className="material-icons">remove_circle_outline</span>
@@ -2261,6 +2308,7 @@ export default function DispatchMap() {
                           <div className="dr-edit-actions">
                             <button
                               className="dbtn outline small full"
+                               disabled={route.status !== 'draft'}
                               onClick={() => {
                                 if (showAddStopsPanel === route.id) {
                                   setShowAddStopsPanel(null)
@@ -2366,7 +2414,7 @@ export default function DispatchMap() {
                                   <button
                                     className="dbtn green small full"
                                     style={{ marginTop: 8 }}
-                                    disabled={isAddingOrders}
+                                   disabled={isAddingOrders || route.status !== 'draft'}
                                     onClick={() => { handleAddOrdersToRoute(route.id); setShowAddStopsPanel(null); setEditSearchQuery('') }}
                                   >
                                     <span className="material-icons">save</span>
@@ -2377,10 +2425,10 @@ export default function DispatchMap() {
                               )
                             })()}
 
-                            <button className="dbtn red small full" onClick={() => handleDeleteRoute(route.id)}>
+                             {route.status === 'draft' && <button className="dbtn red small full" onClick={() => handleDeleteRoute(route.id)}>
                               <span className="material-icons">delete_forever</span>
                               Eliminar ruta
-                            </button>
+                             </button>}
                           </div>
                         </>
                       )}
@@ -2392,9 +2440,11 @@ export default function DispatchMap() {
                       <div className="dr-orders-scroll">
                         {(route.route_stops?.length > 0 ? route.route_stops : route.orders).map((s, i) => {
                           const name = s.customer_name || s.name || t('common.noName')
-                            const statusKey = s.package_disposition === 'held_by_driver'
-                              ? 'held_by_driver'
-                              : (s.status || s.order_status || 'pending')
+                            const statusKey = s.package_disposition && s.package_disposition !== 'normal'
+                              ? s.package_disposition
+                              : s.favorite_address_id
+                                ? 'favorite'
+                                : (s.status || s.order_status || 'pending')
                           const dotColor = getStopStatusColor(statusKey)
                             const statusLabel = statusKey === 'held_by_driver'
                               ? 'En el chofer'

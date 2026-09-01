@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { sequelize, Route, Stop, RouteHistory, ValidatedAddress } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { optimizeRouteOrder, calculateEtas } from '../services/optimization.js';
+import { Op } from 'sequelize';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ const routeHasActivity = (route, stops = []) => (
   Number(route.route_total_collected || 0) > 0 ||
   stops.some(stop =>
     stop.status !== 'pending' ||
-    stop.package_disposition !== 'normal' ||
+    (stop.package_disposition && stop.package_disposition !== 'normal') ||
     Number(stop.amount_collected || 0) > 0 ||
     Boolean(stop.photo_url) ||
     Boolean(stop.signature_url) ||
@@ -201,7 +202,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
       await Stop.update(
         { route_id: null, order: 0 },
         {
-          where: { id: { [sequelize.Sequelize.Op.in]: favoriteStops.map(stop => stop.id) } },
+          where: { id: { [Op.in]: favoriteStops.map(stop => stop.id) } },
           transaction
         }
       );
@@ -210,7 +211,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
       where: {
         route_id: route.id,
         ...(favoriteStops.length > 0
-          ? { id: { [sequelize.Sequelize.Op.notIn]: favoriteStops.map(stop => stop.id) } }
+          ? { id: { [Op.notIn]: favoriteStops.map(stop => stop.id) } }
           : {})
       },
       transaction

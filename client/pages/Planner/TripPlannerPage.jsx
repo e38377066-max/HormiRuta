@@ -1031,6 +1031,38 @@ export default function TripPlannerPage() {
     closeModal()
   }
 
+  const restoreDeferredStop = (index) => {
+    const stop = stops[index]
+    if (!stop?.skippedOnce) return
+    const updatedStops = stops
+      .map((s, i) => i === index ? { ...s, skippedOnce: false } : s)
+      .sort((a, b) => {
+        if (a.skippedOnce === b.skippedOnce) return 0
+        return a.skippedOnce ? 1 : -1
+      })
+      .map((s, i) => ({ ...s, id: i + 1 }))
+    setStops(updatedStops)
+    updateMapMarkers(updatedStops)
+  }
+
+  const restoreSkippedStop = async (index) => {
+    const stop = stops[index]
+    if (!stop?.dbId || !currentRouteId || stop.completed || !stop.skipped) return
+    try {
+      await api.put(`/api/dispatch/stops/${stop.dbId}/restore`)
+      const updatedStops = stops.map((s, i) =>
+        i === index
+          ? { ...s, skipped: false, skippedOnce: false, completed: false, package_disposition: 'normal' }
+          : s
+      )
+      setStops(updatedStops)
+      updateMapMarkers(updatedStops)
+      await reoptimizeAfterCompletion(updatedStops)
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo restaurar la parada')
+    }
+  }
+
   const confirmSkipDefinitive = async (disposition) => {
     const data = skipDispositionModal
     if (!data) return
@@ -1527,10 +1559,15 @@ export default function TripPlannerPage() {
 
   const startRoute = () => {
     setNavigationMode(true)
-    setSelectedStopIndex(null)
     setAutoFollow(false)
     localStorage.setItem('navMode', 'true')
-    localStorage.removeItem('selectedStop')
+    const selected = selectedStopIndex !== null ? stops[selectedStopIndex] : null
+    if (selected && !selected.completed && !selected.skipped) {
+      localStorage.setItem('selectedStop', String(selectedStopIndex))
+    } else {
+      setSelectedStopIndex(null)
+      localStorage.removeItem('selectedStop')
+    }
     keepScreenAwake()
 
     if (mapInstanceRef.current) {
@@ -1956,6 +1993,24 @@ export default function TripPlannerPage() {
                       >
                         <span className="material-icons" style={{ fontSize: 16 }}>arrow_downward</span>
                       </button>
+                      {navigationMode && activeTab === 'delivered' && stop.skipped && !stop.completed && (
+                        <button
+                          className="stop-move-btn"
+                          title="Volver a la ruta"
+                          onClick={e => { e.stopPropagation(); restoreSkippedStop(index) }}
+                        >
+                          <span className="material-icons" style={{ fontSize: 16 }}>restore</span>
+                        </button>
+                      )}
+                      {navigationMode && activeTab === 'pending' && stop.skippedOnce && (
+                        <button
+                          className="stop-move-btn"
+                          title="Restaurar posición"
+                          onClick={e => { e.stopPropagation(); restoreDeferredStop(index) }}
+                        >
+                          <span className="material-icons" style={{ fontSize: 16 }}>undo</span>
+                        </button>
+                      )}
                       {!currentRouteId && (
                         <button 
                           className="header-btn" 

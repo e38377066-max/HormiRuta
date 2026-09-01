@@ -104,7 +104,7 @@ export default function DriverAccountingPage() {
       const res = await api.get('/api/dispatch/my-accounting', { params })
       setMonths(res.data.months || [])
       setDeliveries(res.data.deliveries || [])
-      setTotals(res.data.totals || { stops: 0, collected: 0, commission: 0, to_deliver: 0 })
+       setTotals(res.data.totals || { stops: 0, collected: 0, commission: 0, to_deliver: 0, pending_routes: 0 })
       setAvailableMonths(res.data.available_months || [])
     } catch (e) {
       console.error('Error loading accounting:', e)
@@ -174,7 +174,7 @@ export default function DriverAccountingPage() {
         <div className="dac-hero">
           <div className="dac-hero-label">{t('accounting.pendingCash')}</div>
           <div className="dac-hero-amount">{fmt(totals.to_deliver)}</div>
-          <div className="dac-hero-sub">{totals.stops_pending || 0} {t('accounting.pendingDelivery')}</div>
+           <div className="dac-hero-sub">{totals.pending_routes ?? totals.stops_pending ?? 0} {t('accounting.pendingDelivery')}</div>
           {Number(totals.electronic_collected) > 0 && (
             <div className="dac-hero-note">
               <span className="material-icons" style={{ fontSize: 14 }}>account_balance</span>

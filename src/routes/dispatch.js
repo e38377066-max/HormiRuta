@@ -61,7 +61,7 @@ const routeHasActivity = (route, stops = []) => (
   Number(route.route_total_collected || 0) > 0 ||
   stops.some(stop =>
     stop.status !== 'pending' ||
-    stop.package_disposition !== 'normal' ||
+    (stop.package_disposition && stop.package_disposition !== 'normal') ||
     Number(stop.amount_collected || 0) > 0 ||
     Boolean(stop.photo_url) ||
     Boolean(stop.signature_url) ||
@@ -2596,6 +2596,83 @@ router.put('/returns/:id/release', requireAdmin, async (req, res) => {
 });
 
 /**
+ * PUT /stops/:id/restore
+ * @description Restaura una parada brincada que no fue completada ni cobrada.
+ * La orden asociada vuelve a quedar asignada a la ruta; nunca se restaura una
+ * entrega con evidencia, pago o disposición de retorno/retención.
+ */
+router.put('/stops/:id/restore', requireAuth, async (req, res) => {
+  try {
+    const stop = await Stop.findByPk(req.params.id);
+    if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+    if (stop.status !== 'skipped') {
+      return res.status(400).json({ error: 'Solo se pueden restaurar paradas brincadas.' });
+    }
+    if (stopIsFinanciallyTouched(stop) || stop.photo_url || stop.signature_url) {
+      return res.status(409).json({ error: 'Una parada con cobro o evidencia no puede restaurarse.' });
+    }
+    if (['held_by_driver', 'pending_return', 'returned_to_office'].includes(stop.package_disposition)) {
+      return res.status(409).json({ error: 'Esta parada está retenida o en proceso de retorno; usa su flujo correspondiente.' });
+    }
+
+    const route = await Route.findByPk(stop.route_id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+    if (route.status === 'completed' || route.status === 'returned') {
+      return res.status(409).json({ error: 'La ruta ya fue cerrada y no acepta restauraciones.' });
+    }
+    if (route.assigned_driver_id !== req.userId) {
+      const user = await User.findByPk(req.userId);
+      if (!user || user.role !== 'admin') return res.status(403).json({ error: 'No tienes permisos para esta ruta.' });
+    }
+
+    const availableOrders = await ValidatedAddress.findAll({
+      where: {
+        user_id: route.user_id,
+        route_id: null,
+        dispatch_status: { [Op.ne]: 'archived' }
+      }
+    });
+    const orderMatch = matchStopOrder(stop, availableOrders);
+    if (orderMatch && (
+      orderMatch.order_status === 'delivered' ||
+      Number(orderMatch.amount_collected || 0) > 0 ||
+      ['paid', 'partial', 'partially_paid'].includes(orderMatch.payment_status)
+    )) {
+      return res.status(409).json({ error: 'La orden asociada ya fue entregada o cobrada.' });
+    }
+
+    if (orderMatch) {
+      orderMatch.route_id = route.id;
+      orderMatch.dispatch_status = 'assigned';
+      orderMatch.assigned_driver_id = route.assigned_driver_id;
+      orderMatch.driver_name = null;
+      if (orderMatch.order_status !== 'delivered') orderMatch.order_status = 'on_delivery';
+      await orderMatch.save();
+    }
+
+    stop.status = 'pending';
+    stop.package_disposition = 'normal';
+    stop.held_by_driver_id = null;
+    stop.skip_reason = null;
+    stop.skipped_at = null;
+    stop.returned_at = null;
+    stop.completed_at = null;
+    await stop.save();
+
+    emitToAll(route.assigned_driver_id, 'stop:updated', {
+      stopId: stop.id,
+      routeId: route.id,
+      status: 'pending'
+    });
+    emitToAdmins('route:updated', { route_id: route.id });
+    res.json({ success: true, stop: stop.toDict ? stop.toDict() : stop, order_id: orderMatch?.id || null });
+  } catch (error) {
+    console.error('Error restoring skipped stop:', error);
+    res.status(500).json({ error: 'Error al restaurar la parada' });
+  }
+});
+
+/**
  * GET /pickup/pending
  * @description Rutas asignadas pendientes de confirmación de entrega al chofer por la oficina.
  */
@@ -2896,25 +2973,41 @@ router.get('/pickup/history', requireAdmin, async (req, res) => {
         if (match) map.set(stop.id, match);
         return map;
       }, new Map());
+      const matchedOrderIds = new Set([...orderByStop.values()].map(order => order.id));
+      const historyStops = routeStops.map(stop => {
+        const order = orderByStop.get(stop.id);
+        return {
+          id: stop.id,
+          source: order ? 'order' : 'favorite',
+          customer_name: stop.customer_name || order?.customer_name || 'Cliente',
+          address: stop.address || order?.validated_address || order?.original_address || '—',
+          status: stop.status,
+          package_disposition: stop.package_disposition,
+          amount_collected: stop.amount_collected,
+          completed_at: stop.completed_at
+        };
+      });
+      for (const order of orders) {
+        if (!matchedOrderIds.has(order.id)) {
+          historyStops.push({
+            id: `order:${order.id}`,
+            source: 'order',
+            customer_name: order.customer_name || 'Cliente',
+            address: order.validated_address || order.original_address || '—',
+            status: 'pending',
+            package_disposition: order.package_disposition || 'normal',
+            amount_collected: order.amount_collected || 0,
+            completed_at: null
+          });
+        }
+      }
       return {
         id: r.id,
         name: r.name || `Ruta #${r.id}`,
         driver_name: driver?.username || driver?.email || 'Sin chofer',
         driver_id: r.assigned_driver_id,
         stops_count: Math.max(routeStops.length, orders.length),
-        stops: routeStops.map(stop => {
-          const order = orderByStop.get(stop.id);
-          return {
-            id: stop.id,
-            source: order ? 'order' : 'favorite',
-            customer_name: stop.customer_name || order?.customer_name || 'Cliente',
-            address: stop.address || order?.validated_address || order?.original_address || '—',
-            status: stop.status,
-            package_disposition: stop.package_disposition,
-            amount_collected: stop.amount_collected,
-            completed_at: stop.completed_at
-          };
-        }),
+        stops: historyStops,
         status: r.status,
         pickup_admin_confirmed_at: r.pickup_admin_confirmed_at,
         pickup_admin_confirmed_by_name: confirmedBy?.username || confirmedBy?.email || 'Admin',

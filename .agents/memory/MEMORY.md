@@ -6,3 +6,5 @@
 - [Mobile build synchronization](mobile-build-sync.md) — la app nativa usa una copia de dist y Capacitor 8 requiere Node 22 para sincronizarla.
 - [Apple Maps y CarPlay](apple-carplay-navigation.md) — CarPlay funciona con destino por coordenadas y sin saddr, waypoints ni parámetros to; Apple Maps usa la ubicación actual.
 - [Post-merge hook](post-merge-hook.md) — las mezclas requieren un script configurado, no interactivo, para instalar dependencias y reconstruir el frontend.
+- [Pending cash accounting](accounting-pending-balance.md) — el contador junto al efectivo pendiente representa rutas con saldo positivo, no el total de paradas.
+- [Route lifecycle protection](route-lifecycle-protection.md) — solo los borradores sin actividad se eliminan; órdenes pendientes regresan por un flujo explícito.

@@ -744,7 +744,7 @@
   "accounting": {
     "title": "My Accounting",
     "pendingCash": "Pending Cash to Deliver",
-    "pendingDelivery": "pending delivery",
+    "pendingDelivery": "routes pending delivery",
     "electronicAlreadySent": "via Zelle/Transfer already sent to company",
     "grossCollected": "Gross collected",
     "netAmount": "Net (− commission)",
