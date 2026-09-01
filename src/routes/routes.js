@@ -141,7 +141,16 @@ router.put('/:id', requireAuth, async (req, res) => {
     
     const { name, status } = req.body;
     if (name !== undefined) route.name = name;
-    if (status !== undefined) route.status = status;
+    if (status !== undefined && status !== route.status) {
+      // Evita que una ruta activa/completada se convierta en borrador y luego
+      // pueda esquivar la protección del endpoint de eliminación.
+      if (status === 'draft' && route.status !== 'draft') {
+        return res.status(409).json({
+          error: 'No se puede regresar a borrador una ruta que ya tiene actividad.'
+        });
+      }
+      route.status = status;
+    }
     
     await route.save();
     

@@ -2191,6 +2191,12 @@ export default function DispatchMap() {
                 const driverColor = driverName ? getDriverColor(driverColorIdx) : '#999'
                 const isEditing = editingRouteId === route.id
                 const stops = routeStops[route.id] || []
+                const canEditRoute = route.status === 'draft' || (
+                  route.status === 'assigned' &&
+                  !route.pickup_admin_confirmed_at &&
+                  !route.pickup_driver_confirmed_at &&
+                  !route.started_at
+                )
                 return (
                 <div key={route.id} className="dispatch-route-card" style={{ borderLeftColor: driverColor }}>
                   <div className="dr-header">
@@ -2297,7 +2303,7 @@ export default function DispatchMap() {
                                 <button
                                   className="dr-edit-stop-remove"
                                   title="Quitar parada"
-                                   disabled={route.status !== 'draft'}
+                                   disabled={!canEditRoute}
                                   onClick={() => handleRemoveStop(route.id, s.id)}
                                 >
                                   <span className="material-icons">remove_circle_outline</span>
@@ -2308,7 +2314,7 @@ export default function DispatchMap() {
                           <div className="dr-edit-actions">
                             <button
                               className="dbtn outline small full"
-                               disabled={route.status !== 'draft'}
+                               disabled={!canEditRoute}
                               onClick={() => {
                                 if (showAddStopsPanel === route.id) {
                                   setShowAddStopsPanel(null)
@@ -2414,7 +2420,7 @@ export default function DispatchMap() {
                                   <button
                                     className="dbtn green small full"
                                     style={{ marginTop: 8 }}
-                                   disabled={isAddingOrders || route.status !== 'draft'}
+                                   disabled={isAddingOrders || !canEditRoute}
                                     onClick={() => { handleAddOrdersToRoute(route.id); setShowAddStopsPanel(null); setEditSearchQuery('') }}
                                   >
                                     <span className="material-icons">save</span>

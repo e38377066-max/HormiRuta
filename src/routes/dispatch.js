@@ -69,6 +69,26 @@ const routeHasActivity = (route, stops = []) => (
   )
 );
 
+const routeHasDeliveryActivity = (route, stops = []) => (
+  ['completed', 'returned'].includes(route.status) ||
+  Boolean(route.started_at) ||
+  Boolean(route.completed_at) ||
+  Boolean(route.pickup_admin_confirmed_at) ||
+  Boolean(route.pickup_driver_confirmed_at) ||
+  Boolean(route.payment_delivered) ||
+  Boolean(route.admin_confirmed) ||
+  Number(route.admin_amount_received || 0) > 0 ||
+  Number(route.route_total_collected || 0) > 0 ||
+  stops.some(stop =>
+    stop.status !== 'pending' ||
+    (stop.package_disposition && stop.package_disposition !== 'normal') ||
+    Number(stop.amount_collected || 0) > 0 ||
+    Boolean(stop.photo_url) ||
+    Boolean(stop.signature_url) ||
+    Boolean(stop.completed_at)
+  )
+);
+
 const stopIsFinanciallyTouched = (stop) => (
   Number(stop.amount_collected || 0) > 0 ||
   ['paid', 'partial', 'partially_paid'].includes(stop.payment_status)
@@ -1477,7 +1497,8 @@ router.delete('/routes/:id/stops/:stopId', requireAdmin, async (req, res) => {
     const stop = await Stop.findOne({ where: { id: req.params.stopId, route_id: req.params.id } });
     if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
 
-    if (routeHasActivity(route, [stop]) || stopIsFinanciallyTouched(stop)) {
+    const routeStops = await Stop.findAll({ where: { route_id: route.id } });
+    if (routeHasDeliveryActivity(route, routeStops) || stopIsFinanciallyTouched(stop)) {
       return res.status(409).json({
         error: 'No se puede quitar una parada con actividad, evidencia o cobro registrado.'
       });
@@ -1521,11 +1542,12 @@ router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
     const { order_ids, favorite_stops } = req.body;
     const route = await Route.findByPk(req.params.id);
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
-    if (routeHasActivity(route)) {
-      return res.status(409).json({ error: 'Solo se pueden editar rutas borrador sin actividad.' });
+    const routeStops = await Stop.findAll({ where: { route_id: route.id } });
+    if (routeHasDeliveryActivity(route, routeStops)) {
+      return res.status(409).json({ error: 'No se puede editar una ruta después de recibirla o iniciar entregas.' });
     }
 
-    const existingStops = await Stop.count({ where: { route_id: route.id } });
+    const existingStops = routeStops.length;
     let stopOrder = existingStops;
 
     if (Array.isArray(order_ids) && order_ids.length > 0) {
