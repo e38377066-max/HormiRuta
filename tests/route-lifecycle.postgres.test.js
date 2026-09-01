@@ -1,0 +1,422 @@
+import assert from 'node:assert/strict';
+import { after, before, describe, it } from 'node:test';
+import { randomUUID } from 'node:crypto';
+
+// This suite is intentionally opt-in. Use an isolated PostgreSQL database by
+// setting DATABASE_URL_TEST (or DATABASE_URL outside production).
+const databaseUrl = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
+const shouldRun = Boolean(databaseUrl) && process.env.NODE_ENV !== 'production';
+
+if (shouldRun) {
+  process.env.DATABASE_URL = databaseUrl;
+}
+
+let router;
+let routesRouter;
+let sequelize;
+let User;
+let Route;
+let Stop;
+let ValidatedAddress;
+let DeliveryHistory;
+let FavoriteAddress;
+let Op;
+let admin;
+const created = {
+  routeIds: [],
+  stopIds: [],
+  orderIds: [],
+  favoriteIds: []
+};
+let marker;
+
+function response() {
+  return {
+    statusCode: 200,
+    body: undefined,
+    finished: false,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      this.finished = true;
+      return this;
+    },
+    send(body) {
+      this.body = body;
+      this.finished = true;
+      return this;
+    }
+  };
+}
+
+function findRoute(routerToSearch, method, path) {
+  const layer = routerToSearch.stack.find(item =>
+    item.route?.path === path && item.route.methods[method.toLowerCase()]
+  );
+  assert.ok(layer, `route not found: ${method} ${path}`);
+  return layer.route.stack.map(item => item.handle);
+}
+
+async function callRoute(routerToSearch, method, path, {
+  userId = admin.id,
+  params = {},
+  body = {},
+  query = {}
+} = {}) {
+  const req = {
+    params,
+    body,
+    query,
+    headers: {},
+    session: { userId }
+  };
+  const res = response();
+
+  for (const handler of findRoute(routerToSearch, method, path)) {
+    await new Promise((resolve, reject) => {
+      let nextCalled = false;
+      const next = (error) => {
+        nextCalled = true;
+        if (error) reject(error);
+        else resolve();
+      };
+
+      Promise.resolve(handler(req, res, next)).then(() => {
+        if (!nextCalled) resolve();
+      }, reject);
+    });
+    if (res.finished) break;
+  }
+  return res;
+}
+
+async function createRoute(attributes = {}) {
+  const route = await Route.create({
+    user_id: admin.id,
+    name: `${marker}-route-${created.routeIds.length}`,
+    ...attributes
+  });
+  created.routeIds.push(route.id);
+  return route;
+}
+
+async function createStop(routeId, order, attributes = {}) {
+  const stop = await Stop.create({
+    route_id: routeId,
+    address: `${marker} address ${created.stopIds.length}`,
+    lat: 32.8 + created.stopIds.length / 10000,
+    lng: -96.8 - created.stopIds.length / 10000,
+    order: created.stopIds.length,
+    customer_name: 'Lifecycle test customer',
+    ...attributes
+  });
+  created.stopIds.push(stop.id);
+  if (order) {
+    order.address_lat = stop.lat;
+    order.address_lng = stop.lng;
+    order.validated_address = stop.address;
+    await order.save();
+  }
+  return stop;
+}
+
+async function createOrder(routeId, attributes = {}) {
+  const order = await ValidatedAddress.create({
+    user_id: admin.id,
+    original_address: `${marker} original ${created.orderIds.length}`,
+    validated_address: `${marker} order ${created.orderIds.length}`,
+    address_lat: 33 + created.orderIds.length / 10000,
+    address_lng: -97 - created.orderIds.length / 10000,
+    customer_name: 'Lifecycle test customer',
+    route_id: routeId,
+    dispatch_status: 'assigned',
+    order_status: 'approved',
+    payment_status: 'pending',
+    package_disposition: 'normal',
+    ...attributes
+  });
+  created.orderIds.push(order.id);
+  return order;
+}
+
+async function createMatchedPair(routeId, orderAttributes = {}, stopAttributes = {}) {
+  const pairIndex = created.orderIds.length;
+  const order = await createOrder(routeId, {
+    validated_address: `${marker} matched pair ${pairIndex}`,
+    address_lat: 40 + pairIndex,
+    address_lng: -100 - pairIndex,
+    ...orderAttributes
+  });
+  const stop = await Stop.create({
+    route_id: routeId,
+    address: order.validated_address,
+    lat: order.address_lat,
+    lng: order.address_lng,
+    order: created.stopIds.length,
+    customer_name: order.customer_name,
+    ...stopAttributes
+  });
+  created.stopIds.push(stop.id);
+  return { order, stop };
+}
+
+describe('route lifecycle delivery-history protections with PostgreSQL', { skip: !shouldRun }, () => {
+  before(async () => {
+    ({ sequelize, User, Route, Stop, ValidatedAddress, DeliveryHistory, FavoriteAddress } =
+      await import('../src/models/index.js'));
+    ({ Op } = await import('sequelize'));
+    ({ default: router } = await import('../src/routes/dispatch.js'));
+    ({ default: routesRouter } = await import('../src/routes/routes.js'));
+
+    await sequelize.authenticate();
+    // Sync only the tables used by this suite; never alter unrelated tables.
+    for (const model of [User, FavoriteAddress, Route, Stop, ValidatedAddress, DeliveryHistory]) {
+      await model.sync();
+    }
+
+    marker = `route-lifecycle-${randomUUID()}`;
+    admin = await User.create({
+      username: `${marker}-admin`,
+      email: `${marker}@example.test`,
+      role: 'admin'
+    });
+  });
+
+  after(async () => {
+    if (sequelize && admin) {
+      await Stop.destroy({ where: { id: { [Op.in]: created.stopIds } } });
+      await ValidatedAddress.destroy({ where: { id: { [Op.in]: created.orderIds } } });
+      await Route.destroy({ where: { id: { [Op.in]: created.routeIds } } });
+      await FavoriteAddress.destroy({ where: { id: { [Op.in]: created.favoriteIds } } });
+      await DeliveryHistory.destroy({
+        where: { original_order_id: { [Op.in]: created.orderIds } }
+      });
+      await User.destroy({ where: { id: admin.id } });
+      await sequelize.close();
+    }
+  });
+
+  it('deletes an untouched draft but rejects assignment, pickup, progress, evidence, and payment activity', async () => {
+    const draft = await createRoute({ status: 'draft' });
+    const ordinaryStop = await createStop(draft.id);
+    const draftOrder = await createOrder(draft.id, {
+      validated_address: ordinaryStop.address,
+      address_lat: ordinaryStop.lat,
+      address_lng: ordinaryStop.lng
+    });
+
+    const deleted = await callRoute(routesRouter, 'DELETE', '/:id', {
+      params: { id: draft.id }
+    });
+    assert.equal(deleted.statusCode, 200);
+    assert.equal(deleted.body.success, true);
+    assert.equal(await Route.findByPk(draft.id), null);
+    assert.equal(await Stop.findByPk(ordinaryStop.id), null);
+    const releasedOrder = await ValidatedAddress.findByPk(draftOrder.id);
+    assert.equal(releasedOrder.route_id, null);
+    assert.equal(releasedOrder.dispatch_status, 'available');
+
+    const protectedCases = [
+      { name: 'assignment', route: { assigned_driver_id: admin.id } },
+      { name: 'pickup confirmation', route: { pickup_admin_confirmed_at: new Date() } },
+      { name: 'progress', stop: { status: 'arrived' } },
+      { name: 'evidence', stop: { photo_url: '/uploads/evidence/proof.jpg' } },
+      { name: 'payment', route: { payment_delivered: true } }
+    ];
+
+    for (const protectedCase of protectedCases) {
+      const route = await createRoute({ status: 'draft', ...protectedCase.route });
+      const stop = await createStop(route.id, null, protectedCase.stop);
+      const result = await callRoute(routesRouter, 'DELETE', '/:id', {
+        params: { id: route.id }
+      });
+      assert.equal(result.statusCode, 409, `${protectedCase.name} must block deletion`);
+      assert.ok(await Route.findByPk(route.id), `${protectedCase.name} route was deleted`);
+      assert.ok(await Stop.findByPk(stop.id), `${protectedCase.name} stop was deleted`);
+    }
+  });
+
+  it('returns only pending orders while preserving every handled stop category and favorites', async () => {
+    const route = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: admin.id
+    });
+    const pending = await createMatchedPair(route.id);
+    const delivered = await createMatchedPair(route.id, {
+      order_status: 'delivered',
+      delivered_at: new Date()
+    }, {
+      status: 'completed',
+      completed_at: new Date()
+    });
+    const collected = await createMatchedPair(route.id, {
+      amount_collected: 25,
+      payment_status: 'pending'
+    }, {
+      amount_collected: 25
+    });
+    const skipped = await createMatchedPair(route.id, {}, {
+      status: 'skipped',
+      completed_at: new Date()
+    });
+    const held = await createMatchedPair(route.id, {
+      package_disposition: 'held_by_driver',
+      held_by_driver_id: admin.id
+    }, {
+      package_disposition: 'held_by_driver',
+      held_by_driver_id: admin.id
+    });
+    const returned = await createMatchedPair(route.id, {
+      package_disposition: 'returned_to_office',
+      returned_at: new Date()
+    }, {
+      package_disposition: 'returned_to_office',
+      returned_at: new Date()
+    });
+    const favorite = await FavoriteAddress.create({
+      name: `${marker}-return-favorite`,
+      address: `${marker} return favorite`,
+      lat: 34,
+      lng: -98
+    });
+    created.favoriteIds.push(favorite.id);
+    const favoriteStop = await Stop.create({
+      route_id: route.id,
+      favorite_address_id: favorite.id,
+      address: favorite.address,
+      lat: favorite.lat,
+      lng: favorite.lng,
+      order: created.stopIds.length,
+      customer_name: favorite.name
+    });
+    created.stopIds.push(favoriteStop.id);
+
+    const result = await callRoute(router, 'POST', '/routes/:id/return-orders', {
+      params: { id: route.id }
+    });
+    assert.equal(result.statusCode, 200);
+    assert.deepEqual(result.body.released_order_ids, [pending.order.id]);
+    assert.deepEqual(result.body.released_stop_ids, [pending.stop.id]);
+    assert.deepEqual(result.body.preserved, {
+      delivered: 1,
+      collected: 1,
+      skipped: 1,
+      returned: 1,
+      held: 1,
+      favorites: 1
+    });
+
+    const releasedOrder = await ValidatedAddress.findByPk(pending.order.id);
+    assert.equal(releasedOrder.route_id, null);
+    assert.equal(releasedOrder.dispatch_status, 'available');
+    assert.equal(await Stop.findByPk(pending.stop.id), null);
+
+    for (const { order, stop } of [delivered, collected, skipped, held, returned]) {
+      const retainedOrder = await ValidatedAddress.findByPk(order.id);
+      const retainedStop = await Stop.findByPk(stop.id);
+      assert.equal(retainedOrder.route_id, route.id);
+      assert.equal(retainedStop.route_id, route.id);
+    }
+    assert.equal((await Stop.findByPk(favoriteStop.id)).route_id, route.id);
+    assert.equal((await Route.findByPk(route.id)).status, 'returned');
+  });
+
+  it('restores a skipped unpaid stop and rejects evidence or payment restorations', async () => {
+    const restorableRoute = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: admin.id
+    });
+    const restorableOrder = await createOrder(restorableRoute.id, {
+      route_id: null,
+      dispatch_status: 'available'
+    });
+    const restorableStop = await createStop(restorableRoute.id, restorableOrder, {
+      status: 'skipped',
+      package_disposition: 'normal',
+      completed_at: new Date(),
+      skip_reason: 'customer unavailable'
+    });
+    const restored = await callRoute(router, 'PUT', '/stops/:id/restore', {
+      params: { id: restorableStop.id }
+    });
+    assert.equal(restored.statusCode, 200);
+    const restoredOrder = await ValidatedAddress.findByPk(restorableOrder.id);
+    const restoredStop = await Stop.findByPk(restorableStop.id);
+    assert.equal(restoredOrder.route_id, restorableRoute.id);
+    assert.equal(restoredOrder.dispatch_status, 'assigned');
+    assert.equal(restoredOrder.order_status, 'on_delivery');
+    assert.equal(restoredStop.status, 'pending');
+    assert.equal(restoredStop.package_disposition, 'normal');
+    assert.equal(restoredStop.completed_at, null);
+
+    const rejectedCases = [
+      { name: 'evidence', stop: { photo_url: '/uploads/evidence/proof.jpg' } },
+      { name: 'payment', order: { amount_collected: 7, payment_status: 'paid' } }
+    ];
+    for (const rejectedCase of rejectedCases) {
+      const route = await createRoute({
+        status: 'assigned',
+        assigned_driver_id: admin.id
+      });
+      const order = await createOrder(route.id, {
+        route_id: null,
+        dispatch_status: 'available',
+        ...rejectedCase.order
+      });
+      const stop = await createStop(route.id, order, {
+        status: 'skipped',
+        package_disposition: 'normal',
+        completed_at: new Date(),
+        ...rejectedCase.stop
+      });
+      const result = await callRoute(router, 'PUT', '/stops/:id/restore', {
+        params: { id: stop.id }
+      });
+      assert.equal(result.statusCode, 409, `${rejectedCase.name} must block restore`);
+      assert.equal((await Stop.findByPk(stop.id)).status, 'skipped');
+      assert.equal((await ValidatedAddress.findByPk(order.id)).route_id, null);
+    }
+  });
+
+  it('shows an order in pickup reception and history even when its Stop is missing', async () => {
+    const pendingRoute = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: admin.id
+    });
+    const pendingOrder = await createOrder(pendingRoute.id);
+    const reception = await callRoute(router, 'GET', '/pickup/pending');
+    assert.equal(reception.statusCode, 200);
+    const pendingView = reception.body.routes.find(route => route.id === pendingRoute.id);
+    assert.ok(pendingView);
+    assert.equal(pendingView.stops_count, 1);
+    assert.equal(pendingView.stops.length, 1);
+    assert.equal(pendingView.stops[0].id, `order:${pendingOrder.id}`);
+    assert.equal(pendingView.stops[0].address, pendingOrder.validated_address);
+
+    const historyRoute = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: admin.id,
+      pickup_admin_confirmed_at: new Date(),
+      pickup_admin_confirmed_by: admin.id
+    });
+    const historyOrder = await createOrder(historyRoute.id);
+    const history = await callRoute(router, 'GET', '/pickup/history');
+    assert.equal(history.statusCode, 200);
+    const historyView = history.body.routes.find(route => route.id === historyRoute.id);
+    assert.ok(historyView);
+    assert.equal(historyView.stops_count, 1);
+    assert.deepEqual(historyView.stops[0], {
+      id: `order:${historyOrder.id}`,
+      source: 'order',
+      customer_name: historyOrder.customer_name,
+      address: historyOrder.validated_address,
+      status: 'pending',
+      package_disposition: 'normal',
+      amount_collected: 0,
+      completed_at: null
+    });
+  });
+});

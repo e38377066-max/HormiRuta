@@ -1705,7 +1705,10 @@ router.post('/routes/:id/return-orders', requireAdmin, async (req, res) => {
     // Protege órdenes pendientes que llegaron a la ruta sin una parada
     // correspondiente por datos antiguos o una edición previa.
     for (const order of orders) {
-      if (releasedOrderIds.includes(order.id)) continue;
+      // Las órdenes que sí tienen una parada conservada (por ejemplo,
+      // brincada, retenida o retornada) no son huérfanas aunque sigan
+      // pendientes en el estado de la orden.
+      if (releasedOrderIds.includes(order.id) || usedOrderIds.has(order.id)) continue;
       const pending = order.order_status !== 'delivered' &&
         !Number(order.amount_collected || 0) &&
         !['paid', 'partial', 'partially_paid'].includes(order.payment_status) &&
