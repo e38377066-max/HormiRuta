@@ -3,11 +3,32 @@
  */
 
 import { Router } from 'express';
-import { Route, Stop, RouteHistory } from '../models/index.js';
+import { sequelize, Route, Stop, RouteHistory, ValidatedAddress } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { optimizeRouteOrder, calculateEtas } from '../services/optimization.js';
 
 const router = Router();
+
+const routeHasActivity = (route, stops = []) => (
+  route.status !== 'draft' ||
+  Boolean(route.assigned_driver_id) ||
+  Boolean(route.started_at) ||
+  Boolean(route.completed_at) ||
+  Boolean(route.pickup_admin_confirmed_at) ||
+  Boolean(route.pickup_driver_confirmed_at) ||
+  Boolean(route.payment_delivered) ||
+  Boolean(route.admin_confirmed) ||
+  Number(route.admin_amount_received || 0) > 0 ||
+  Number(route.route_total_collected || 0) > 0 ||
+  stops.some(stop =>
+    stop.status !== 'pending' ||
+    stop.package_disposition !== 'normal' ||
+    Number(stop.amount_collected || 0) > 0 ||
+    Boolean(stop.photo_url) ||
+    Boolean(stop.signature_url) ||
+    Boolean(stop.completed_at)
+  )
+);
 
 /**
  * @description Obtiene todas las rutas del usuario autenticado.
@@ -139,18 +160,66 @@ router.put('/:id', requireAuth, async (req, res) => {
  * @returns {Object} 200 - Mensaje de éxito.
  */
 router.delete('/:id', requireAuth, async (req, res) => {
+  let transaction;
   try {
+    transaction = await sequelize.transaction();
     const route = await Route.findOne({
-      where: { id: req.params.id, user_id: req.userId }
+      where: { id: req.params.id, user_id: req.userId },
+      transaction,
+      lock: transaction.LOCK.UPDATE
     });
     
     if (!route) {
+      await transaction.rollback();
       return res.status(404).json({ error: 'Ruta no encontrada' });
     }
-    
-    await route.destroy();
+
+    const stops = await Stop.findAll({
+      where: { route_id: route.id },
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    if (routeHasActivity(route, stops)) {
+      await transaction.rollback();
+      return res.status(409).json({
+        error: 'No se puede borrar una ruta con actividad o historial.'
+      });
+    }
+
+    await ValidatedAddress.update(
+      {
+        route_id: null,
+        dispatch_status: 'available',
+        assigned_driver_id: null,
+        driver_name: null
+      },
+      { where: { route_id: route.id }, transaction }
+    );
+
+    const favoriteStops = stops.filter(stop => stop.favorite_address_id);
+    if (favoriteStops.length > 0) {
+      await Stop.update(
+        { route_id: null, order: 0 },
+        {
+          where: { id: { [sequelize.Sequelize.Op.in]: favoriteStops.map(stop => stop.id) } },
+          transaction
+        }
+      );
+    }
+    await Stop.destroy({
+      where: {
+        route_id: route.id,
+        ...(favoriteStops.length > 0
+          ? { id: { [sequelize.Sequelize.Op.notIn]: favoriteStops.map(stop => stop.id) } }
+          : {})
+      },
+      transaction
+    });
+    await route.destroy({ transaction });
+    await transaction.commit();
     res.json({ success: true, message: 'Ruta eliminada' });
   } catch (error) {
+    if (transaction) await transaction.rollback().catch(() => {});
     res.status(500).json({ error: 'Error al eliminar ruta' });
   }
 });

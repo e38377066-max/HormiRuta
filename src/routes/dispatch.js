@@ -42,6 +42,58 @@ const ORDER_STATUS_TO_LIFECYCLE = {
  */
 const isCashMethod = (m) => !m || m === 'cash';
 
+/**
+ * Una ruta deja de ser editable/destruible en cuanto existe evidencia de que
+ * fue entregada al chofer o empezó a procesarse. La ruta se conserva como
+ * registro de auditoría y las órdenes se liberan mediante el flujo explícito
+ * de regreso.
+ */
+const routeHasActivity = (route, stops = []) => (
+  route.status !== 'draft' ||
+  Boolean(route.assigned_driver_id) ||
+  Boolean(route.started_at) ||
+  Boolean(route.completed_at) ||
+  Boolean(route.pickup_admin_confirmed_at) ||
+  Boolean(route.pickup_driver_confirmed_at) ||
+  Boolean(route.payment_delivered) ||
+  Boolean(route.admin_confirmed) ||
+  Number(route.admin_amount_received || 0) > 0 ||
+  Number(route.route_total_collected || 0) > 0 ||
+  stops.some(stop =>
+    stop.status !== 'pending' ||
+    stop.package_disposition !== 'normal' ||
+    Number(stop.amount_collected || 0) > 0 ||
+    Boolean(stop.photo_url) ||
+    Boolean(stop.signature_url) ||
+    Boolean(stop.completed_at)
+  )
+);
+
+const stopIsFinanciallyTouched = (stop) => (
+  Number(stop.amount_collected || 0) > 0 ||
+  ['paid', 'partial', 'partially_paid'].includes(stop.payment_status)
+);
+
+/**
+ * Busca la orden que corresponde a una parada. El modelo histórico no tiene
+ * una FK directa entre Stop y ValidatedAddress, por lo que se conserva la
+ * misma estrategia de coordenadas/dirección, evitando comparar nulls como 0.
+ */
+const matchStopOrder = (stop, orders, usedIds = new Set()) => orders.find(order => {
+  if (usedIds.has(order.id)) return false;
+  const sameCoordinates =
+    Number.isFinite(Number(order.address_lat)) &&
+    Number.isFinite(Number(order.address_lng)) &&
+    Number.isFinite(Number(stop.lat)) &&
+    Number.isFinite(Number(stop.lng)) &&
+    Math.abs(Number(order.address_lat) - Number(stop.lat)) < 0.0001 &&
+    Math.abs(Number(order.address_lng) - Number(stop.lng)) < 0.0001;
+  return sameCoordinates || (
+    String(order.validated_address || '').trim() &&
+    order.validated_address === stop.address
+  );
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -1348,36 +1400,62 @@ router.post('/routes', requireAdmin, async (req, res) => {
  * @returns {Object} Resultado de la eliminación.
  */
 router.delete('/routes/:id', requireAdmin, async (req, res) => {
+  let transaction;
   try {
-    const route = await Route.findByPk(req.params.id);
-    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
-
-    await ValidatedAddress.update({ route_id: null }, { where: { route_id: route.id } });
-    const heldFavoriteStops = await Stop.findAll({
-      where: {
-        route_id: route.id,
-        favorite_address_id: { [Op.ne]: null },
-        package_disposition: 'held_by_driver'
-      }
+    transaction = await sequelize.transaction();
+    const route = await Route.findByPk(req.params.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE
     });
-    if (heldFavoriteStops.length > 0) {
+    if (!route) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Ruta no encontrada' });
+    }
+
+    const stops = await Stop.findAll({
+      where: { route_id: route.id },
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    if (routeHasActivity(route, stops)) {
+      await transaction.rollback();
+      return res.status(409).json({
+        error: 'No se puede borrar una ruta con actividad, asignación, recepción, pagos o historial. Usa “Regresar órdenes” para liberar solo lo pendiente.'
+      });
+    }
+
+    await ValidatedAddress.update(
+      {
+        route_id: null,
+        dispatch_status: 'available',
+        assigned_driver_id: null,
+        driver_name: null
+      },
+      { where: { route_id: route.id }, transaction }
+    );
+
+    // Las favoritas son reutilizables: se separan de la ruta en vez de
+    // destruirse junto con las paradas normales del borrador.
+    const favoriteStops = stops.filter(stop => stop.favorite_address_id);
+    if (favoriteStops.length > 0) {
       await Stop.update(
-        { route_id: null },
-        { where: { id: { [Op.in]: heldFavoriteStops.map(stop => stop.id) } } }
+        { route_id: null, order: 0 },
+        {
+          where: { id: { [Op.in]: favoriteStops.map(stop => stop.id) } },
+          transaction
+        }
       );
     }
     await Stop.destroy({
-      where: {
-        route_id: route.id,
-        ...(heldFavoriteStops.length > 0
-          ? { id: { [Op.notIn]: heldFavoriteStops.map(stop => stop.id) } }
-          : {})
-      }
+      where: { route_id: route.id, favorite_address_id: null },
+      transaction
     });
-    await route.destroy();
+    await route.destroy({ transaction });
+    await transaction.commit();
 
-    res.json({ success: true });
+    res.json({ success: true, message: 'Ruta eliminada y órdenes liberadas' });
   } catch (error) {
+    if (transaction) await transaction.rollback().catch(() => {});
     console.error('Error deleting route:', error);
     res.status(500).json({ error: 'Error al eliminar ruta' });
   }
@@ -1394,12 +1472,29 @@ router.delete('/routes/:id', requireAdmin, async (req, res) => {
  */
 router.delete('/routes/:id/stops/:stopId', requireAdmin, async (req, res) => {
   try {
+    const route = await Route.findByPk(req.params.id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
     const stop = await Stop.findOne({ where: { id: req.params.stopId, route_id: req.params.id } });
     if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
 
-    await ValidatedAddress.update({ route_id: null }, { where: { route_id: req.params.id, validated_address: stop.address } });
-    if (stop.favorite_address_id && stop.package_disposition === 'held_by_driver') {
+    if (routeHasActivity(route, [stop]) || stopIsFinanciallyTouched(stop)) {
+      return res.status(409).json({
+        error: 'No se puede quitar una parada con actividad, evidencia o cobro registrado.'
+      });
+    }
+
+    await ValidatedAddress.update(
+      {
+        route_id: null,
+        dispatch_status: 'available',
+        assigned_driver_id: null,
+        driver_name: null
+      },
+      { where: { route_id: req.params.id, validated_address: stop.address } }
+    );
+    if (stop.favorite_address_id) {
       stop.route_id = null;
+      stop.order = 0;
       await stop.save();
     } else {
       await stop.destroy();
@@ -1426,6 +1521,9 @@ router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
     const { order_ids, favorite_stops } = req.body;
     const route = await Route.findByPk(req.params.id);
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+    if (routeHasActivity(route)) {
+      return res.status(409).json({ error: 'Solo se pueden editar rutas borrador sin actividad.' });
+    }
 
     const existingStops = await Stop.count({ where: { route_id: route.id } });
     let stopOrder = existingStops;
@@ -1473,6 +1571,164 @@ router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error adding orders to route:', error);
     res.status(500).json({ error: 'Error al agregar paradas' });
+  }
+});
+
+/**
+ * POST /routes/:id/return-orders
+ * @description Regresa únicamente órdenes que siguen pendientes y no tienen
+ * evidencia ni dinero cobrado. Las entregadas, cobradas, brincadas, retornadas,
+ * retenidas y las favoritas se conservan en la ruta.
+ */
+router.post('/routes/:id/return-orders', requireAdmin, async (req, res) => {
+  let transaction;
+  try {
+    transaction = await sequelize.transaction();
+    const route = await Route.findByPk(req.params.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    if (!route) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Ruta no encontrada' });
+    }
+    if (route.status === 'draft') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'La ruta aún es un borrador; puedes editarla o eliminarla.' });
+    }
+    if (route.status === 'completed') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Una ruta completada no puede regresar órdenes.' });
+    }
+
+    const [stops, orders] = await Promise.all([
+      Stop.findAll({
+        where: { route_id: route.id },
+        order: [['order', 'ASC'], ['id', 'ASC']],
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      }),
+      ValidatedAddress.findAll({
+        where: { route_id: route.id },
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      })
+    ]);
+
+    const usedOrderIds = new Set();
+    const releasedOrderIds = [];
+    const releasedStopIds = [];
+    const preserved = {
+      delivered: 0,
+      collected: 0,
+      skipped: 0,
+      returned: 0,
+      held: 0,
+      favorites: 0
+    };
+
+    for (const stop of stops) {
+      const order = matchStopOrder(stop, orders, usedOrderIds);
+      if (order) usedOrderIds.add(order.id);
+
+      if (stop.favorite_address_id) {
+        preserved.favorites++;
+        continue;
+      }
+
+      const disposition = stop.package_disposition || 'normal';
+      const isPreserved =
+        stop.status === 'completed' ||
+        stop.status === 'skipped' ||
+        ['held_by_driver', 'pending_return', 'returned_to_office'].includes(disposition) ||
+        stopIsFinanciallyTouched(stop) ||
+        (order && (
+          order.order_status === 'delivered' ||
+          Number(order.amount_collected || 0) > 0 ||
+          ['paid', 'partial', 'partially_paid'].includes(order.payment_status) ||
+          ['held_by_driver', 'pending_return', 'returned_to_office'].includes(order.package_disposition)
+        ));
+
+      if (isPreserved) {
+        if (stop.status === 'completed' || order?.order_status === 'delivered') preserved.delivered++;
+        if (stopIsFinanciallyTouched(stop) || Number(order?.amount_collected || 0) > 0) preserved.collected++;
+        if (stop.status === 'skipped') preserved.skipped++;
+        if (['held_by_driver'].includes(disposition) || order?.package_disposition === 'held_by_driver') preserved.held++;
+        if (['pending_return', 'returned_to_office'].includes(disposition) || ['pending_return', 'returned_to_office'].includes(order?.package_disposition)) preserved.returned++;
+        continue;
+      }
+
+      // Una parada sin orden asociada también se elimina si está realmente
+      // pendiente: así no queda una parada huérfana dentro de la ruta.
+      const isPendingOrder = !order || (
+        order.order_status !== 'delivered' &&
+        !Number(order.amount_collected || 0) &&
+        !['paid', 'partial', 'partially_paid'].includes(order.payment_status) &&
+        !['held_by_driver', 'pending_return', 'returned_to_office'].includes(order.package_disposition)
+      );
+      if (stop.status === 'pending' && disposition === 'normal' && isPendingOrder) {
+        if (order) {
+          await order.update({
+            route_id: null,
+            dispatch_status: 'available',
+            assigned_driver_id: null,
+            driver_name: null
+          }, { transaction });
+          releasedOrderIds.push(order.id);
+        }
+        releasedStopIds.push(stop.id);
+      }
+    }
+
+    // Protege órdenes pendientes que llegaron a la ruta sin una parada
+    // correspondiente por datos antiguos o una edición previa.
+    for (const order of orders) {
+      if (releasedOrderIds.includes(order.id)) continue;
+      const pending = order.order_status !== 'delivered' &&
+        !Number(order.amount_collected || 0) &&
+        !['paid', 'partial', 'partially_paid'].includes(order.payment_status) &&
+        !['held_by_driver', 'pending_return', 'returned_to_office'].includes(order.package_disposition);
+      if (pending) {
+        await order.update({
+          route_id: null,
+          dispatch_status: 'available',
+          assigned_driver_id: null,
+          driver_name: null
+        }, { transaction });
+        releasedOrderIds.push(order.id);
+      }
+    }
+
+    if (releasedStopIds.length > 0) {
+      await Stop.destroy({
+        where: { id: { [Op.in]: releasedStopIds } },
+        transaction
+      });
+    }
+
+    route.status = releasedOrderIds.length > 0 ? 'returned' : route.status;
+    await route.save({ transaction });
+    await transaction.commit();
+
+    emitToAdmins('route:updated', { route_id: route.id });
+    if (route.assigned_driver_id) {
+      emitToDriver(route.assigned_driver_id, 'route:updated', {
+        routeId: route.id,
+        status: route.status
+      });
+    }
+    res.json({
+      success: true,
+      route: await route.toDict(),
+      released_order_ids: releasedOrderIds,
+      released_stop_ids: releasedStopIds,
+      released_count: releasedOrderIds.length,
+      preserved
+    });
+  } catch (error) {
+    if (transaction) await transaction.rollback().catch(() => {});
+    console.error('Error returning pending route orders:', error);
+    res.status(500).json({ error: 'Error al regresar órdenes pendientes' });
   }
 });
 
@@ -2119,14 +2375,26 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
       }
     }
 
-    stop.status = 'skipped';
-    stop.completed_at = new Date();
-    await stop.save();
+    if (stop.status === 'completed' || stopIsFinanciallyTouched(stop)) {
+      return res.status(409).json({
+        error: 'Una entrega completada o cobrada no puede marcarse como brincada.'
+      });
+    }
 
     const routeOrders = await ValidatedAddress.findAll({ where: { route_id: stop.route_id } });
-    const orderMatch = routeOrders.find(o =>
-      (Math.abs(o.address_lat - stop.lat) < 0.0001 && Math.abs(o.address_lng - stop.lng) < 0.0001)
-    ) || routeOrders.find(o => o.validated_address === stop.address);
+    const orderMatch = matchStopOrder(stop, routeOrders);
+    if (orderMatch && (
+      orderMatch.order_status === 'delivered' ||
+      Number(orderMatch.amount_collected || 0) > 0 ||
+      ['paid', 'partial', 'partially_paid'].includes(orderMatch.payment_status)
+    )) {
+      return res.status(409).json({
+        error: 'Una orden entregada o cobrada no puede marcarse como brincada.'
+      });
+    }
+
+    stop.status = 'skipped';
+    stop.completed_at = new Date();
 
     if (orderMatch) {
       orderMatch.route_id = null;
@@ -2148,8 +2416,8 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
       stop.held_by_driver_id = finalDisposition === 'held_by_driver'
         ? (route.assigned_driver_id || req.userId)
         : null;
-      await stop.save();
     }
+    await stop.save();
 
     emitToAll(route.assigned_driver_id, 'stop:updated', { stopId: stop.id, routeId: stop.route_id, status: 'skipped' });
     res.json({ success: true, stop: stop.toDict(), disposition: finalDisposition });
@@ -2290,8 +2558,20 @@ router.put('/returns/:id/release', requireAdmin, async (req, res) => {
       if (!['returned_to_office', 'pending_return', 'held_by_driver'].includes(stop.package_disposition)) {
         return res.status(400).json({ error: 'Esta parada no esta marcada como devolucion' });
       }
-      await stop.destroy();
-      return res.json({ success: true, order: { id: rawId, favorite_address_id: stop.favorite_address_id } });
+      const favoriteAddressId = stop.favorite_address_id;
+      // Una parada favorita es reutilizable y debe permanecer disponible para
+      // futuras rutas aunque el paquete retenido se libere al dispatching.
+      stop.route_id = null;
+      stop.status = 'pending';
+      stop.package_disposition = 'normal';
+      stop.held_by_driver_id = null;
+      stop.skip_reason = null;
+      stop.skipped_at = null;
+      stop.returned_at = null;
+      stop.completed_at = null;
+      stop.order = 0;
+      await stop.save();
+      return res.json({ success: true, order: { id: rawId, favorite_address_id: favoriteAddressId } });
     }
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
@@ -2366,15 +2646,35 @@ router.get('/pickup/pending', requireAdmin, async (req, res) => {
         if (match) map.set(stop.id, match);
         return map;
       }, new Map());
+      // Datos antiguos pueden tener una orden vinculada sin su Stop. Se
+      // muestra igualmente para que recepción nunca presente una ruta vacía
+      // ni pierda la orden al confirmar la entrega.
+      const displayedStops = routeStops.slice();
+      const displayedOrderIds = new Set(
+        [...orderByStop.values()].map(order => order.id)
+      );
+      for (const order of orders) {
+        if (displayedOrderIds.has(order.id)) continue;
+        displayedStops.push({
+          id: `order:${order.id}`,
+          customer_name: order.customer_name,
+          customer_phone: order.customer_phone,
+          address: order.validated_address || order.original_address,
+          amount: order.amount || order.order_cost || 0,
+          _displayOnlyOrder: true
+        });
+      }
+
       return {
         id: r.id,
         name: r.name || `Ruta #${r.id}`,
         driver_name: driver?.username || driver?.email || 'Sin chofer',
         driver_id: r.assigned_driver_id,
-        stops_count: routeStops.length,
+        stops_count: displayedStops.length,
         assigned_at: r.updated_at,
         status: r.status,
-        stops: routeStops.map(stop => {
+        stops: displayedStops.map(stop => {
+          if (stop._displayOnlyOrder) return stop;
           const order = orderByStop.get(stop.id);
           return {
           id: order ? `order:${order.id}` : `stop:${stop.id}`,
@@ -2585,13 +2885,36 @@ router.get('/pickup/history', requireAdmin, async (req, res) => {
       const confirmedBy = r.pickup_admin_confirmed_by
         ? await User.findByPk(r.pickup_admin_confirmed_by, { attributes: ['id', 'username', 'email'] })
         : null;
-      const stopsCount = await ValidatedAddress.count({ where: { route_id: r.id } });
+      const routeStops = await Stop.findAll({
+        where: { route_id: r.id },
+        order: [['order', 'ASC'], ['id', 'ASC']]
+      });
+      const orders = await ValidatedAddress.findAll({ where: { route_id: r.id } });
+      const orderByStop = routeStops.reduce((map, stop) => {
+        if (stop.favorite_address_id) return map;
+        const match = matchStopOrder(stop, orders);
+        if (match) map.set(stop.id, match);
+        return map;
+      }, new Map());
       return {
         id: r.id,
         name: r.name || `Ruta #${r.id}`,
         driver_name: driver?.username || driver?.email || 'Sin chofer',
         driver_id: r.assigned_driver_id,
-        stops_count: stopsCount,
+        stops_count: Math.max(routeStops.length, orders.length),
+        stops: routeStops.map(stop => {
+          const order = orderByStop.get(stop.id);
+          return {
+            id: stop.id,
+            source: order ? 'order' : 'favorite',
+            customer_name: stop.customer_name || order?.customer_name || 'Cliente',
+            address: stop.address || order?.validated_address || order?.original_address || '—',
+            status: stop.status,
+            package_disposition: stop.package_disposition,
+            amount_collected: stop.amount_collected,
+            completed_at: stop.completed_at
+          };
+        }),
         status: r.status,
         pickup_admin_confirmed_at: r.pickup_admin_confirmed_at,
         pickup_admin_confirmed_by_name: confirmedBy?.username || confirmedBy?.email || 'Admin',
@@ -2614,6 +2937,16 @@ router.post('/pickup/:routeId/admin-confirm', requireAdmin, async (req, res) => 
     const route = await Route.findByPk(req.params.routeId);
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
     if (!route.assigned_driver_id) return res.status(400).json({ error: 'La ruta no tiene chofer asignado' });
+
+    const [routeStopCount, routeOrderCount] = await Promise.all([
+      Stop.count({ where: { route_id: route.id } }),
+      ValidatedAddress.count({ where: { route_id: route.id } })
+    ]);
+    if (routeStopCount === 0 && routeOrderCount === 0) {
+      return res.status(409).json({
+        error: 'No se puede confirmar una ruta vacía. Debe contener órdenes o favoritas reales.'
+      });
+    }
 
     route.pickup_admin_confirmed_at = new Date();
     route.pickup_admin_confirmed_by = req.userId;
@@ -2697,8 +3030,14 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
         return res.status(403).json({ error: 'No tienes permisos' });
       }
     }
+    if (route.status === 'returned') {
+      return res.status(400).json({ error: 'La ruta fue cerrada después de regresar órdenes pendientes.' });
+    }
 
     const allStops = await Stop.findAll({ where: { route_id: route.id } });
+    if (allStops.length === 0) {
+      return res.status(400).json({ error: 'No se puede finalizar una ruta sin paradas.' });
+    }
     const allDone = allStops.every(s => s.status === 'completed' || s.status === 'skipped');
     if (!allDone) {
       return res.status(400).json({ error: 'Todas las paradas deben estar completadas o saltadas antes de finalizar' });
@@ -3368,7 +3707,10 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
     const driverUser = await User.findByPk(req.userId, { attributes: ['commission_per_stop'] });
     const driverCommission = Number(driverUser?.commission_per_stop || 0);
 
-    let pendingStops = 0;
+    // La cifra acompaña al efectivo pendiente, por lo que representa rutas
+    // con saldo pendiente de entregar a la oficina, no el número total de
+    // paradas que tuvo cada ruta.
+    let pendingRoutes = 0;
     totals.to_deliver = allDriverRoutes.reduce((sum, r) => {
       const cashCollected = stopCashMap[r.id] || 0;
       const stopCount = stopCountMap[r.id] || 0;
@@ -3376,10 +3718,12 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
       const grossToDeliver = cashCollected - commission;
       const received = Number(r.admin_amount_received || 0);
       const pending = Math.max(0, grossToDeliver - received);
-      if (pending > 0) pendingStops += stopCount;
+      if (pending > 0) pendingRoutes += 1;
       return sum + pending;
     }, 0);
-    totals.stops_pending = pendingStops;
+    totals.pending_routes = pendingRoutes;
+    // Compatibilidad para clientes antiguos; la UI nueva usa pending_routes.
+    totals.stops_pending = pendingRoutes;
 
     res.json({
       months,
