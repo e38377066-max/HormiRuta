@@ -576,7 +576,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
 }
 
@@ -584,12 +584,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 12px 16px;
+  padding: 9px 10px;
   background: #f5f5f5;
   border: 1px solid #ddd;
-  border-radius: 12px;
+  border-radius: 10px;
   color: #555;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -601,19 +601,19 @@
 }
 
 .btn-skip-nav .material-icons {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .btn-native-nav {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 12px 20px;
+  padding: 9px 10px;
   background: #34a853;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   color: white;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -624,7 +624,7 @@
 }
 
 .btn-native-nav .material-icons {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .btn-update-address {
@@ -632,13 +632,13 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  flex: 1 0 100%;
-  padding: 10px 14px;
+  flex: 0 1 auto;
+  padding: 9px 10px;
   background: rgba(245, 158, 11, 0.14);
   border: 1px solid rgba(245, 158, 11, 0.6);
-  border-radius: 12px;
+  border-radius: 10px;
   color: #f8b84e;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -650,7 +650,7 @@
 }
 
 .btn-update-address .material-icons {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .btn-show-deferred {
