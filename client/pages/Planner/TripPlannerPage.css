@@ -125,7 +125,33 @@
 .panel-header-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.route-header-tab {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9px;
+  color: #cbd5e1;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.route-header-tab:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.route-header-tab.active {
+  background: #5b8def;
+  color: #fff;
+  border-color: #5b8def;
 }
 
 .header-btn {
@@ -723,6 +749,13 @@
 
 .deferred-visibility-toggle .material-icons {
   font-size: 16px;
+}
+
+.panel-header-right .deferred-visibility-toggle {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
 }
 
 .nav-footer-hint {

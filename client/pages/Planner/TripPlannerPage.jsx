@@ -1929,6 +1929,37 @@ export default function TripPlannerPage() {
         
         <div className="panel-header">
           <div className="panel-header-right">
+            {navigationMode && (
+              <>
+                <button
+                  className={`route-header-tab ${activeTab === 'pending' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('pending')}
+                  type="button"
+                >
+                  Por entregar ({activePendingStops.length + (showDeferredStops ? deferredPendingStops.length : 0)})
+                </button>
+                <button
+                  className={`route-header-tab ${activeTab === 'delivered' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('delivered')}
+                  type="button"
+                >
+                  Entregas ({stops.filter(s => s.completed || s.skipped).length})
+                </button>
+                {deferredPendingStops.length > 0 && (
+                  <button
+                    className={`deferred-visibility-toggle ${showDeferredStops ? 'active' : ''}`}
+                    onClick={toggleDeferredVisibility}
+                    type="button"
+                    title={showDeferredStops ? t('planner.hideSkippedStops') : t('planner.showSkippedStops')}
+                    aria-label={showDeferredStops ? t('planner.hideSkippedStops') : t('planner.showSkippedStops')}
+                  >
+                    <span className="material-icons">
+                      {showDeferredStops ? 'visibility_off' : 'visibility'}
+                    </span>
+                  </button>
+                )}
+              </>
+            )}
             <button className="header-btn" onClick={() => setShowRouteMenu(true)}>
               <span className="material-icons">more_vert</span>
             </button>
@@ -2018,37 +2049,7 @@ export default function TripPlannerPage() {
           
           {stops.length > 0 && (
             <>
-              {navigationMode ? (
-                <div className="route-tabs">
-                  <button
-                    className={`route-tab ${activeTab === 'pending' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('pending')}
-                    type="button"
-                  >
-                    Por entregar ({activePendingStops.length + (showDeferredStops ? deferredPendingStops.length : 0)})
-                  </button>
-                  <button
-                    className={`route-tab ${activeTab === 'delivered' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('delivered')}
-                    type="button"
-                  >
-                    Entregas ({stops.filter(s => s.completed || s.skipped).length})
-                  </button>
-                  {deferredPendingStops.length > 0 && (
-                    <button
-                      className={`deferred-visibility-toggle ${showDeferredStops ? 'active' : ''}`}
-                      onClick={toggleDeferredVisibility}
-                      type="button"
-                      title={showDeferredStops ? t('planner.hideSkippedStops') : t('planner.showSkippedStops')}
-                      aria-label={showDeferredStops ? t('planner.hideSkippedStops') : t('planner.showSkippedStops')}
-                    >
-                      <span className="material-icons">
-                        {showDeferredStops ? 'visibility_off' : 'visibility'}
-                      </span>
-                    </button>
-                  )}
-                </div>
-              ) : (
+              {!navigationMode && (
                 <div className="stops-section-header">Parada</div>
               )}
               {(() => {
