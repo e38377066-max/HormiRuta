@@ -10,6 +10,7 @@ import { Op } from 'sequelize';
 import { getPickupReadyOrders, clearPickupCache, GmailScopeError } from './gmailReadService.js';
 import { ValidatedAddress, MessagingSettings, WholesaleClient } from '../models/index.js';
 import respondApiService from './respondApiService.js';
+import { isOpenAIQuotaError, notifyOpenAIQuotaExhausted } from './openaiQuotaAlertService.js';
 
 // ─── Helpers de normalización y matching ────────────────────────────────────
 
@@ -372,6 +373,18 @@ Responde SOLO con JSON valido en este formato:
       return exact;
     } catch (err) {
       const is429 = err.response?.status === 429;
+      const errorMessage = err.response?.data?.error?.message || err.message;
+      if (isOpenAIQuotaError({
+        status: err.response?.status,
+        code: err.response?.data?.error?.code,
+        message: errorMessage
+      })) {
+        void notifyOpenAIQuotaExhausted({
+          status: err.response?.status,
+          message: errorMessage,
+          source: 'Email Sync AI'
+        });
+      }
       if (is429 && attempt < MAX_RETRIES - 1) {
         const retryAfter = parseInt(err.response?.headers?.['retry-after'] || '0', 10);
         const wait = retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1);

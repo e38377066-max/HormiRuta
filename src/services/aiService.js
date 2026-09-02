@@ -11,6 +11,11 @@ import axios from 'axios';
 import FormData from 'form-data';
 import BotMemory from '../models/BotMemory.js';
 import BotKnowledge from '../models/BotKnowledge.js';
+import {
+  isOpenAIQuotaError,
+  notifyOpenAIQuotaExhausted,
+  markOpenAIQuotaRestored
+} from './openaiQuotaAlertService.js';
 
 /**
  * Estado global de quota de OpenAI — compartido entre instancias de AIService.
@@ -486,19 +491,27 @@ ${profile.summary || 'Sin resumen aún.'}${loc}${past}${prefs}${notes}`;
               if (openaiQuotaState.exhausted) {
                 openaiQuotaState.exhausted = false;
                 openaiQuotaState.restoredAt = Date.now();
+                markOpenAIQuotaRestored();
                 console.log('[AI] Créditos de OpenAI restaurados — el chatbot vuelve a funcionar con IA.');
               }
               resolve({ success: true, content: parsed.choices[0].message.content.trim() });
             } else if (parsed.error) {
-              const isQuota = parsed.error.code === 'insufficient_quota' || /exceeded.*quota/i.test(parsed.error.message || '');
+              const isQuota = isOpenAIQuotaError({
+                status: res.statusCode,
+                code: parsed.error.code,
+                message: parsed.error.message
+              });
               if (isQuota) {
                 if (!openaiQuotaState.exhausted) {
                   openaiQuotaState.exhausted = true;
                   openaiQuotaState.detectedAt = Date.now();
                   console.warn('[AI] Créditos de OpenAI agotados — recarga tu cuenta en platform.openai.com. El chatbot seguirá funcionando sin IA hasta que se recargue.');
-                } else if (!AIService._quotaWarnedAt || (Date.now() - AIService._quotaWarnedAt) > 30 * 60 * 1000) {
-                  AIService._quotaWarnedAt = Date.now();
                 }
+                void notifyOpenAIQuotaExhausted({
+                  status: res.statusCode,
+                  message: parsed.error.message,
+                  source: 'AI'
+                });
               } else {
                 console.error('[AI] OpenAI error:', parsed.error.message);
               }
