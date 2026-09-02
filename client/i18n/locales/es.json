@@ -750,7 +750,8 @@
     "tapToPlanBreak": "Toca para planear un descanso",
     "vehicleTypeForRoute": "Tipo de vehículo para ruta",
     "showSkippedStops": "Mostrar paradas saltadas",
-    "showSkippedStopsHint": "{{count}} parada(s) pendientes"
+    "showSkippedStopsHint": "{{count}} parada(s) pendientes",
+    "hideSkippedStops": "Ocultar paradas saltadas"
   },
   "accounting": {
     "title": "Mi Contabilidad",

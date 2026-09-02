@@ -1837,14 +1837,25 @@ export default function TripPlannerPage() {
     : nextPendingStop
   const navTargetIndex = navTarget ? stops.indexOf(navTarget) : -1
 
-  const showDeferredRoute = () => {
-    setShowDeferredStops(true)
+  const setDeferredVisibility = (visible) => {
+    setShowDeferredStops(visible)
     setActiveTab('pending')
-    setSelectedStopIndex(null)
-    localStorage.removeItem('selectedStop')
+    const selected = selectedStopIndex !== null ? stops[selectedStopIndex] : null
+    if (!visible && selected?.skippedOnce) {
+      setSelectedStopIndex(null)
+      localStorage.removeItem('selectedStop')
+    }
     setPanelExpanded(true)
-    updateMapMarkers(stops, true)
-    recalculateNavRoute(stops, true, true)
+    updateMapMarkers(stops, visible)
+    recalculateNavRoute(stops, true, visible)
+  }
+
+  const toggleDeferredVisibility = () => {
+    setDeferredVisibility(!showDeferredStops)
+  }
+
+  const showDeferredRoute = () => {
+    setDeferredVisibility(true)
   }
 
   return (
@@ -2026,6 +2037,22 @@ export default function TripPlannerPage() {
                 </div>
               ) : (
                 <div className="stops-section-header">Parada</div>
+              )}
+              {navigationMode && deferredPendingStops.length > 0 && (
+                <div className="deferred-toggle-row">
+                  <button
+                    className={`deferred-visibility-toggle ${showDeferredStops ? 'active' : ''}`}
+                    onClick={toggleDeferredVisibility}
+                    type="button"
+                  >
+                    <span className="material-icons">
+                      {showDeferredStops ? 'visibility_off' : 'visibility'}
+                    </span>
+                    {showDeferredStops
+                      ? t('planner.hideSkippedStops')
+                      : t('planner.showSkippedStops')}
+                  </button>
+                </div>
               )}
               {(() => {
                 let listCounter = 0

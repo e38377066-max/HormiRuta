@@ -750,7 +750,8 @@
     "tapToPlanBreak": "Tap to plan a break",
     "vehicleTypeForRoute": "Vehicle type for route",
     "showSkippedStops": "Show skipped stops",
-    "showSkippedStopsHint": "{{count}} pending stop(s)"
+    "showSkippedStopsHint": "{{count}} pending stop(s)",
+    "hideSkippedStops": "Hide skipped stops"
   },
   "accounting": {
     "title": "My Accounting",

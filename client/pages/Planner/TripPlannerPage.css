@@ -696,6 +696,40 @@
   background: rgba(91, 141, 239, 0.24);
 }
 
+.deferred-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 0;
+}
+
+.deferred-visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 9px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #f8b84e;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.deferred-visibility-toggle.active {
+  border-color: rgba(91, 141, 239, 0.7);
+  background: rgba(91, 141, 239, 0.14);
+  color: #a9c4ff;
+}
+
+.deferred-visibility-toggle:active {
+  transform: scale(0.97);
+}
+
+.deferred-visibility-toggle .material-icons {
+  font-size: 16px;
+}
+
 .nav-footer-hint {
   color: #aab;
   font-size: 13px;
