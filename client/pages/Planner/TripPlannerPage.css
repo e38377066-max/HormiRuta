@@ -653,6 +653,49 @@
   font-size: 18px;
 }
 
+.btn-show-deferred {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(91, 141, 239, 0.65);
+  border-radius: 12px;
+  background: rgba(91, 141, 239, 0.14);
+  color: #dbe7ff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.btn-show-deferred > .material-icons {
+  color: #8eb3ff;
+}
+
+.btn-show-deferred > .material-icons:last-child {
+  margin-left: auto;
+}
+
+.btn-show-deferred span:not(.material-icons) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.btn-show-deferred strong {
+  font-size: 14px;
+}
+
+.btn-show-deferred small {
+  color: #a9bee8;
+  font-size: 12px;
+}
+
+.btn-show-deferred:active {
+  transform: scale(0.98);
+  background: rgba(91, 141, 239, 0.24);
+}
+
 .nav-footer-hint {
   color: #aab;
   font-size: 13px;

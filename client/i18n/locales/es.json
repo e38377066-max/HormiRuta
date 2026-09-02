@@ -748,7 +748,9 @@
     "startFromFirst": "Iniciar desde primera parada",
     "startFromFirstDesc": "La ruta inicia desde la primera parada de la lista",
     "tapToPlanBreak": "Toca para planear un descanso",
-    "vehicleTypeForRoute": "Tipo de vehículo para ruta"
+    "vehicleTypeForRoute": "Tipo de vehículo para ruta",
+    "showSkippedStops": "Mostrar paradas saltadas",
+    "showSkippedStopsHint": "{{count}} parada(s) pendientes"
   },
   "accounting": {
     "title": "Mi Contabilidad",

@@ -748,7 +748,9 @@
     "startFromFirst": "Start from first stop",
     "startFromFirstDesc": "Route starts from the first stop on the list",
     "tapToPlanBreak": "Tap to plan a break",
-    "vehicleTypeForRoute": "Vehicle type for route"
+    "vehicleTypeForRoute": "Vehicle type for route",
+    "showSkippedStops": "Show skipped stops",
+    "showSkippedStopsHint": "{{count}} pending stop(s)"
   },
   "accounting": {
     "title": "My Accounting",

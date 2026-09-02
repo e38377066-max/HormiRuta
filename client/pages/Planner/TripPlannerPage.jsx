@@ -75,6 +75,7 @@ export default function TripPlannerPage() {
   const [routeCommission, setRouteCommission] = useState(0)
   const [panelHeight, setPanelHeight] = useState(45)
   const [panelSnap, setPanelSnap] = useState('mid')
+  const [showDeferredStops, setShowDeferredStops] = useState(false)
   const [dispatchRoutes, setDispatchRoutes] = useState([])
   const [loadingDispatch, setLoadingDispatch] = useState(false)
   const [showDispatchRoutes, setShowDispatchRoutes] = useState(true)
@@ -301,8 +302,14 @@ export default function TripPlannerPage() {
       .map(s => mapStop(s, true))
 
     const routeStops = [...normal, ...deferred].map((s, i) => ({ ...s, id: i + 1 }))
+    const savedStopIndex = Number(localStorage.getItem('selectedStop'))
 
     setStops(routeStops)
+    setShowDeferredStops(false)
+    if (Number.isInteger(savedStopIndex) && routeStops[savedStopIndex]?.skippedOnce) {
+      setSelectedStopIndex(null)
+      localStorage.removeItem('selectedStop')
+    }
     setRouteName(route.name || t('planner.assignedRoute'))
     const wasOptimized = route.is_optimized || localStorage.getItem(`isOptimized_${route.id}`) === 'true'
     setIsOptimized(!!wasOptimized)
@@ -312,9 +319,12 @@ export default function TripPlannerPage() {
     localStorage.setItem('activeRouteId', String(route.id))
     setRouteCommission(route.driver_commission_total || 0)
     setShowDispatchRoutes(false)
-    updateMapMarkers(routeStops)
-    if (routeStops.length >= 2) {
-      setTimeout(() => calculateRoute(routeStops), 500)
+    // Las paradas diferidas siempre vuelven ocultas al recargar la app. Solo
+    // se muestran después de que el chofer pulse el botón explícito.
+    updateMapMarkers(routeStops, false)
+    const activeRouteStops = routeStops.filter(stop => !stop.skippedOnce)
+    if (activeRouteStops.length >= 2) {
+      setTimeout(() => calculateRoute(activeRouteStops), 500)
     }
   }
 
@@ -1039,6 +1049,11 @@ export default function TripPlannerPage() {
   const restoreDeferredStop = (index) => {
     const stop = stops[index]
     if (!stop?.skippedOnce) return
+    if (currentRouteId && stop.dbId) {
+      const key = `skippedOnce_${currentRouteId}`
+      const existing = JSON.parse(localStorage.getItem(key) || '[]')
+      localStorage.setItem(key, JSON.stringify(existing.filter(id => id !== stop.dbId)))
+    }
     const updatedStops = stops
       .map((s, i) => i === index ? { ...s, skippedOnce: false } : s)
       .sort((a, b) => {
@@ -1236,7 +1251,11 @@ export default function TripPlannerPage() {
   }
 
   const reoptimizeAfterCompletion = async (completedStops) => {
-    const pendingStops = completedStops.filter(stop => !stop.completed && !stop.skipped)
+    const pendingStops = completedStops.filter(stop =>
+      !stop.completed &&
+      !stop.skipped &&
+      (showDeferredStops || !stop.skippedOnce)
+    )
     if (pendingStops.length === 0) {
       setTotalDistance(0)
       setTotalDuration(0)
@@ -1266,7 +1285,14 @@ export default function TripPlannerPage() {
       const result = await calculateRoute(pendingStops, origin, true)
       const reorderedPending = result?.orderedStops || sortByGpsDistance(pendingStops, origin)
       const completed = completedStops.filter(stop => stop.completed || stop.skipped)
-      const reordered = [...completed, ...reorderedPending].map((stop, index) => ({ ...stop, id: index + 1 }))
+      const hiddenDeferred = completedStops.filter(stop =>
+        !stop.completed &&
+        !stop.skipped &&
+        stop.skippedOnce &&
+        !showDeferredStops
+      )
+      const reordered = [...completed, ...reorderedPending, ...hiddenDeferred]
+        .map((stop, index) => ({ ...stop, id: index + 1 }))
       setStops(reordered)
       updateMapMarkers(reordered)
       setIsOptimized(true)
@@ -1456,18 +1482,21 @@ export default function TripPlannerPage() {
     }
   }
 
-  const updateMapMarkers = (stopsList) => {
+  const updateMapMarkers = (stopsList, includeDeferred = showDeferredStops) => {
     markersRef.current.forEach(marker => marker.setMap(null))
     markersRef.current = []
 
-    const visibleStops = stopsList.filter(s => !s.completed && !s.skipped)
-    const hasActivePending = stopsList.some(s => !s.completed && !s.skipped && !s.skippedOnce)
+    const visibleStops = stopsList.filter(s =>
+      !s.completed &&
+      !s.skipped &&
+      (includeDeferred || !s.skippedOnce)
+    )
 
     let visibleCounter = 0
     stopsList.forEach((stop, index) => {
       if (stop.latitude && stop.longitude) {
         if (stop.completed || stop.skipped) return
-        if (navigationMode && stop.skippedOnce && hasActivePending) return
+        if (stop.skippedOnce && !includeDeferred) return
         visibleCounter += 1
         const color = stop.favorite_address_id ? '#F59E0B' : '#EA4335'
         
@@ -1518,11 +1547,11 @@ export default function TripPlannerPage() {
     }
 
     if (navigationMode) {
-      recalculateNavRoute(stopsList)
+      recalculateNavRoute(stopsList, false, includeDeferred)
     }
   }
 
-  const recalculateNavRoute = async (stopsList, force = false) => {
+  const recalculateNavRoute = async (stopsList, force = false, includeDeferred = showDeferredStops) => {
     if (!directionsRendererRef.current || !window.google) {
       console.warn('[NavRoute] Map not ready yet')
       return
@@ -1531,10 +1560,9 @@ export default function TripPlannerPage() {
     if (!force && now - fullRouteLastUpdateRef.current < 25000) return
     fullRouteLastUpdateRef.current = now
 
-    const hasActive = stopsList.some(s => !s.completed && !s.skipped && !s.skippedOnce)
     const pending = stopsList.filter(s => {
       if (s.completed || s.skipped || !s.latitude || !s.longitude) return false
-      if (s.skippedOnce && hasActive) return false
+      if (s.skippedOnce && !includeDeferred) return false
       return true
     })
     if (pending.length < 1) {
@@ -1665,6 +1693,8 @@ export default function TripPlannerPage() {
   }
 
   const exitNavigation = () => {
+    setShowDeferredStops(false)
+    updateMapMarkers(stops, false)
     setNavigationMode(false)
     setSelectedStopIndex(null)
     setAutoFollow(false)
@@ -1799,12 +1829,23 @@ export default function TripPlannerPage() {
 
   const activePendingStops = stops.filter(s => !s.completed && !s.skipped && !s.skippedOnce)
   const deferredPendingStops = stops.filter(s => !s.completed && !s.skipped && s.skippedOnce)
-  const nextPendingStop = activePendingStops.length > 0 ? activePendingStops[0] : deferredPendingStops[0]
+  const visibleDeferredStops = showDeferredStops ? deferredPendingStops : []
+  const nextPendingStop = activePendingStops.length > 0 ? activePendingStops[0] : visibleDeferredStops[0]
   const nextPendingIndex = nextPendingStop ? stops.indexOf(nextPendingStop) : -1
-  const navTarget = (selectedStopIndex !== null && stops[selectedStopIndex] && !stops[selectedStopIndex].completed && !stops[selectedStopIndex].skipped)
+  const navTarget = (selectedStopIndex !== null && stops[selectedStopIndex] && !stops[selectedStopIndex].completed && !stops[selectedStopIndex].skipped && (showDeferredStops || !stops[selectedStopIndex].skippedOnce))
     ? stops[selectedStopIndex]
     : nextPendingStop
   const navTargetIndex = navTarget ? stops.indexOf(navTarget) : -1
+
+  const showDeferredRoute = () => {
+    setShowDeferredStops(true)
+    setActiveTab('pending')
+    setSelectedStopIndex(null)
+    localStorage.removeItem('selectedStop')
+    setPanelExpanded(true)
+    updateMapMarkers(stops, true)
+    recalculateNavRoute(stops, true, true)
+  }
 
   return (
     <div className="trip-planner-page">
@@ -1973,7 +2014,7 @@ export default function TripPlannerPage() {
                     onClick={() => setActiveTab('pending')}
                     type="button"
                   >
-                    Por entregar ({stops.filter(s => !s.completed && !s.skipped).length})
+                    Por entregar ({activePendingStops.length + (showDeferredStops ? deferredPendingStops.length : 0)})
                   </button>
                   <button
                     className={`route-tab ${activeTab === 'delivered' ? 'active' : ''}`}
@@ -1996,7 +2037,7 @@ export default function TripPlannerPage() {
                 if (!navigationMode) return enriched
                 return enriched.filter(({ stop }) =>
                   activeTab === 'pending'
-                    ? (!stop.completed && !stop.skipped)
+                    ? (!stop.completed && !stop.skipped && (!stop.skippedOnce || showDeferredStops))
                     : (stop.completed || stop.skipped)
                 )
               })().map(({ stop, index, displayNumber }) => (
@@ -2131,10 +2172,19 @@ export default function TripPlannerPage() {
               </div>
             </div>
           ) : navigationMode ? (
-            stops.every(s => s.completed || s.skipped) ? (
+            activePendingStops.length === 0 && deferredPendingStops.length === 0 ? (
               <button className="btn-optimize" onClick={finishRoute}>
                 <span className="material-icons">check_circle</span>
                 Finalizar ruta
+              </button>
+            ) : !showDeferredStops && activePendingStops.length === 0 && deferredPendingStops.length > 0 ? (
+              <button className="btn-show-deferred" onClick={showDeferredRoute}>
+                <span className="material-icons">layers</span>
+                <span>
+                  <strong>{t('planner.showSkippedStops')}</strong>
+                  <small>{t('planner.showSkippedStopsHint', { count: deferredPendingStops.length })}</small>
+                </span>
+                <span className="material-icons">arrow_forward</span>
               </button>
             ) : (
               <div className="nav-footer-actions">
