@@ -175,12 +175,6 @@ export default function DriverAccountingPage() {
           <div className="dac-hero-label">{t('accounting.pendingCash')}</div>
           <div className="dac-hero-amount">{fmt(totals.to_deliver)}</div>
            <div className="dac-hero-sub">{totals.pending_routes ?? totals.stops_pending ?? 0} {t('accounting.pendingDelivery')}</div>
-          {Number(totals.electronic_collected) > 0 && (
-            <div className="dac-hero-note">
-              <span className="material-icons" style={{ fontSize: 14 }}>account_balance</span>
-              {fmt(totals.electronic_collected)} {t('accounting.electronicAlreadySent')}
-            </div>
-          )}
         </div>
 
 

@@ -756,7 +756,6 @@
     "title": "Mi Contabilidad",
     "pendingCash": "Efectivo Pendiente de Entregar",
     "pendingDelivery": "rutas pendientes de entrega",
-    "electronicAlreadySent": "via Zelle/Transferencia ya enviado a empresa",
     "grossCollected": "Cobrado bruto",
     "netAmount": "Neto (− comisión)",
     "myCommission": "Mi Comisión",
