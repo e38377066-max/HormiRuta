@@ -724,7 +724,6 @@
     "errorSendingTemplate": "Error sending template",
     "errorFinishingRoute": "Error finishing route",
     "templateSent": "Template '{{name}}' sent",
-    "inDistance": "In {{distance}} — {{instruction}}",
     "amountToCollectLabel": "Amount to collect",
     "avoidHighways": "Avoid highways",
     "avoidTolls": "Avoid tolls",

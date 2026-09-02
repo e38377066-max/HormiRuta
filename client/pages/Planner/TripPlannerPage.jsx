@@ -12,7 +12,7 @@ import { Loader } from '@googlemaps/js-api-loader'
 import api from '../../api'
 import { getSocket } from '../../socket'
 import { usePlanner } from '../../layouts/PlannerLayout'
-import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, speakInstruction, stopSpeaking, openNativeNavigation } from '../../utils/capacitor'
+import { getCurrentPosition, watchPosition, vibrate, setupStatusBar, isNative, platform, takePhoto, dataUrlToFile, keepScreenAwake, allowScreenSleep, openNativeNavigation } from '../../utils/capacitor'
 import './TripPlannerPage.css'
 
 const KM_TO_MILES = 0.621371
@@ -85,8 +85,6 @@ export default function TripPlannerPage() {
   const [navSteps, setNavSteps] = useState([])
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [currentSpeed, setCurrentSpeed] = useState(null)
-  const [voiceEnabled, setVoiceEnabled] = useState(() => localStorage.getItem('voiceEnabled') !== 'false')
-  const lastSpokenStepRef = useRef(-1)
   const [showEvidenceModal, setShowEvidenceModal] = useState(null)
   const [evidencePreview, setEvidencePreview] = useState(null)
   const [evidenceFile, setEvidenceFile] = useState(null)
@@ -486,14 +484,6 @@ export default function TripPlannerPage() {
     if (navigationMode && userLocation && navSteps.length > 0) {
       const idx = findCurrentStep(userLocation, navSteps)
       setCurrentStepIndex(idx)
-      if (voiceEnabled && idx !== lastSpokenStepRef.current && navSteps[idx]) {
-        lastSpokenStepRef.current = idx
-        const step = navSteps[idx]
-        const voiceText = step.distance 
-          ? t('planner.inDistance', { distance: step.distance, instruction: step.instruction }) 
-          : step.instruction
-        speakInstruction(voiceText)
-      }
     }
   }, [userLocation, navigationMode, autoFollow])
 
@@ -844,7 +834,6 @@ export default function TripPlannerPage() {
         watchIdRef.current()
       }
       allowScreenSleep()
-      stopSpeaking()
     }
   }, [])
 
@@ -1701,11 +1690,9 @@ export default function TripPlannerPage() {
     setNavSteps([])
     setCurrentStepIndex(0)
     setCurrentSpeed(null)
-    lastSpokenStepRef.current = -1
     localStorage.setItem('navMode', 'false')
     localStorage.removeItem('selectedStop')
     allowScreenSleep()
-    stopSpeaking()
     navLastRouteRef.current = null
     if (navLineRef.current) {
       navLineRef.current.setMap(null)

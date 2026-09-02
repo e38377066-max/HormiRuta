@@ -724,7 +724,6 @@
     "errorSendingTemplate": "Error enviando plantilla",
     "errorFinishingRoute": "Error finalizando ruta",
     "templateSent": "Plantilla '{{name}}' enviada",
-    "inDistance": "En {{distance}} — {{instruction}}",
     "amountToCollectLabel": "Monto a cobrar",
     "avoidHighways": "Evitar autopistas",
     "avoidTolls": "Evitar casetas",

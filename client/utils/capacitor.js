@@ -30,7 +30,6 @@ export const setupStatusBar = async () => {
     }
   }
 }
-
 /**
  * Inicializa la barra de estado con colores específicos y configuración de overlay.
  * @async
@@ -358,64 +357,4 @@ export const openNativeNavigation = (stops, userLocation = null) => {
     url += `&origin=${userLocation.lat},${userLocation.lng}`
   }
   window.open(url, '_blank')
-}
-
-let speechSynth = null
-let currentUtterance = null
-
-/**
- * Utiliza la síntesis de voz del navegador para leer un texto instructivo.
- * Limpia el texto de etiquetas HTML y entidades especiales antes de hablar.
- * @param {string} text - El texto a leer.
- * @param {string} [lang='en-US'] - Voice language.
- */
-export const speakInstruction = (text, lang = 'en-US') => {
-  if (!text) return
-  if (!('speechSynthesis' in window)) return
-  if (!speechSynth) speechSynth = window.speechSynthesis
-
-  if (currentUtterance) {
-    // iOS requires pause() before cancel() to reliably stop speech
-    speechSynth.pause()
-    speechSynth.cancel()
-  }
-
-  const cleanText = text
-    .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, 'and')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '')
-    .replace(/&gt;/g, '')
-    .replace(/&apos;/g, "'")
-    .replace(/&quot;/g, '')
-    .replace(/&#\d+;/g, '')
-    .replace(/[<>]/g, '')
-    .replace(/&/g, 'and')
-    .replace(/\//g, ' ')
-    .trim()
-
-  currentUtterance = new SpeechSynthesisUtterance(cleanText)
-  currentUtterance.lang = lang
-  currentUtterance.rate = 1.0
-  currentUtterance.pitch = 1.0
-  currentUtterance.volume = 1.0
-
-  const voices = speechSynth.getVoices()
-  const englishVoice = voices.find(v => v.lang === 'en-US') ||
-                       voices.find(v => v.lang.startsWith('en'))
-  if (englishVoice) currentUtterance.voice = englishVoice
-
-  speechSynth.speak(currentUtterance)
-}
-
-/**
- * Stops any ongoing speech synthesis.
- */
-export const stopSpeaking = () => {
-  if (speechSynth) {
-    // iOS requires pause() before cancel() to reliably stop speech
-    speechSynth.pause()
-    speechSynth.cancel()
-    currentUtterance = null
-  }
 }
