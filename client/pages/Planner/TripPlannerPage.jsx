@@ -2034,25 +2034,22 @@ export default function TripPlannerPage() {
                   >
                     Entregas ({stops.filter(s => s.completed || s.skipped).length})
                   </button>
+                  {deferredPendingStops.length > 0 && (
+                    <button
+                      className={`deferred-visibility-toggle ${showDeferredStops ? 'active' : ''}`}
+                      onClick={toggleDeferredVisibility}
+                      type="button"
+                      title={showDeferredStops ? t('planner.hideSkippedStops') : t('planner.showSkippedStops')}
+                      aria-label={showDeferredStops ? t('planner.hideSkippedStops') : t('planner.showSkippedStops')}
+                    >
+                      <span className="material-icons">
+                        {showDeferredStops ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="stops-section-header">Parada</div>
-              )}
-              {navigationMode && deferredPendingStops.length > 0 && (
-                <div className="deferred-toggle-row">
-                  <button
-                    className={`deferred-visibility-toggle ${showDeferredStops ? 'active' : ''}`}
-                    onClick={toggleDeferredVisibility}
-                    type="button"
-                  >
-                    <span className="material-icons">
-                      {showDeferredStops ? 'visibility_off' : 'visibility'}
-                    </span>
-                    {showDeferredStops
-                      ? t('planner.hideSkippedStops')
-                      : t('planner.showSkippedStops')}
-                  </button>
-                </div>
               )}
               {(() => {
                 let listCounter = 0
