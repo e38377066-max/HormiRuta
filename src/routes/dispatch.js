@@ -94,6 +94,18 @@ const stopIsFinanciallyTouched = (stop) => (
   ['paid', 'partial', 'partially_paid'].includes(stop.payment_status)
 );
 
+const addressStreetNumber = (address) => {
+  const match = String(address || '').match(/\b(\d{1,6})\b/);
+  return match ? match[1] : null;
+};
+
+const geocodedStreetNumberMatches = (rawAddress, geocodedResult) => {
+  const requestedNumber = addressStreetNumber(rawAddress);
+  if (!requestedNumber) return true;
+  const geocodedNumber = addressStreetNumber(geocodedResult?.streetNumber);
+  return Boolean(geocodedNumber) && geocodedNumber === requestedNumber;
+};
+
 /**
  * Busca la orden que corresponde a una parada. El modelo histórico no tiene
  * una FK directa entre Stop y ValidatedAddress, por lo que se conserva la
@@ -522,6 +534,125 @@ router.get('/geocode-address', requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error geocoding address:', error);
     res.status(500).json({ error: 'Error al geocodificar' });
+  }
+});
+
+/**
+ * PUT /stops/:id/address
+ * @description Actualiza la dirección de una parada durante la ruta. La nueva
+ * dirección se valida con el mismo geocodificador usado por Dispatching y,
+ * cuando existe, sincroniza la orden asociada.
+ * @access requireAuth (Admin o Chofer asignado)
+ */
+router.put('/stops/:id/address', requireAuth, async (req, res) => {
+  let transaction;
+  try {
+    const { address, preview = false } = req.body || {};
+    const rawAddress = String(address || '').trim();
+    if (rawAddress.length < 5) {
+      return res.status(400).json({ error: 'Escribe una dirección válida.' });
+    }
+
+    const user = await User.findByPk(req.userId);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+
+    const stop = await Stop.findByPk(req.params.id);
+    if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
+    if (stop.status === 'completed' || stop.status === 'skipped') {
+      return res.status(409).json({ error: 'No se puede cambiar la dirección de una parada ya atendida.' });
+    }
+
+    const route = await Route.findByPk(stop.route_id);
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+    if (user.role !== 'admin' && route.assigned_driver_id !== user.id) {
+      return res.status(403).json({ error: 'No tienes permisos para esta ruta' });
+    }
+    if (route.status === 'completed' || route.status === 'returned') {
+      return res.status(409).json({ error: 'La ruta ya fue cerrada y no acepta cambios.' });
+    }
+
+    const geo = await geocodingService.geocodeAddress(rawAddress);
+    if (!geo.success) {
+      return res.status(422).json({
+        error: 'No se pudo validar la nueva dirección. Verifica calle, número, ciudad y estado.'
+      });
+    }
+    if (!geocodedStreetNumberMatches(rawAddress, geo)) {
+      return res.status(422).json({
+        error: 'El número de la dirección no coincide con el resultado del mapa. Revisa que esté escrito correctamente.',
+        suggested_address: geo.fullAddress || null
+      });
+    }
+    if (preview) {
+      return res.json({
+        success: true,
+        preview: true,
+        address: geo.fullAddress || rawAddress,
+        lat: geo.latitude,
+        lng: geo.longitude,
+        zip_code: geo.zip || null,
+        city: geo.city || null,
+        state: geo.stateShort || geo.state || null
+      });
+    }
+
+    transaction = await sequelize.transaction();
+    const lockedStop = await Stop.findByPk(stop.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    if (!lockedStop || lockedStop.status === 'completed' || lockedStop.status === 'skipped') {
+      await transaction.rollback();
+      return res.status(409).json({ error: 'La parada cambió mientras se actualizaba. Vuelve a intentarlo.' });
+    }
+
+    const routeOrders = await ValidatedAddress.findAll({
+      where: { route_id: route.id },
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    const order = matchStopOrder(lockedStop, routeOrders);
+    const normalizedAddress = geo.fullAddress || rawAddress;
+
+    lockedStop.address = normalizedAddress;
+    lockedStop.lat = geo.latitude;
+    lockedStop.lng = geo.longitude;
+    await lockedStop.save({ transaction });
+
+    if (order) {
+      // Conserva original_address como la dirección inicial del cliente y
+      // actualiza solamente el destino vigente de esta entrega.
+      order.validated_address = normalizedAddress;
+      order.address_lat = geo.latitude;
+      order.address_lng = geo.longitude;
+      order.zip_code = geo.zip || order.zip_code;
+      order.city = geo.city || order.city;
+      order.state = geo.stateShort || geo.state || order.state;
+      order.confidence = geo.confidence || order.confidence;
+      await order.save({ transaction });
+    }
+
+    await transaction.commit();
+    emitToAll(route.assigned_driver_id, 'stop:updated', {
+      stopId: lockedStop.id,
+      routeId: route.id,
+      status: lockedStop.status,
+      addressUpdated: true
+    });
+    emitToAdmins('route:updated', { route_id: route.id });
+
+    res.json({
+      success: true,
+      stop: lockedStop.toDict(),
+      order_id: order?.id || null,
+      address: normalizedAddress,
+      lat: geo.latitude,
+      lng: geo.longitude
+    });
+  } catch (error) {
+    if (transaction) await transaction.rollback().catch(() => {});
+    console.error('Error updating stop address:', error);
+    res.status(500).json({ error: 'Error al actualizar la dirección' });
   }
 });
 

@@ -104,6 +104,11 @@ export default function TripPlannerPage() {
   const [navChooserStop, setNavChooserStop] = useState(null)
   const [skipDispositionModal, setSkipDispositionModal] = useState(null)
   const [skipReason, setSkipReason] = useState('')
+  const [addressModal, setAddressModal] = useState(null)
+  const [addressInput, setAddressInput] = useState('')
+  const [addressPreview, setAddressPreview] = useState(null)
+  const [updatingAddress, setUpdatingAddress] = useState(false)
+  const [addressError, setAddressError] = useState('')
   const [newRouteNotif, setNewRouteNotif] = useState(null)
   const fileInputRef = useRef(null)
   const isDragging = useRef(false)
@@ -277,7 +282,7 @@ export default function TripPlannerPage() {
       held_by_driver_id: s.held_by_driver_id || null,
       skip_reason: s.skip_reason || null,
       photo_url: s.photo_url || null,
-      color: '#EA4335',
+      color: s.favorite_address_id ? '#F59E0B' : '#EA4335',
       order_cost: s.order_cost,
       deposit_amount: s.deposit_amount,
       total_to_collect: s.total_to_collect,
@@ -1063,6 +1068,78 @@ export default function TripPlannerPage() {
     }
   }
 
+  const openAddressModal = (stop, index) => {
+    if (!stop?.dbId || stop.completed || stop.skipped) return
+    setAddressError('')
+    setAddressInput('')
+    setAddressPreview(null)
+    setAddressModal({ stop, index })
+  }
+
+  const closeAddressModal = () => {
+    if (updatingAddress) return
+    setAddressModal(null)
+    setAddressInput('')
+    setAddressPreview(null)
+    setAddressError('')
+  }
+
+  const updateStopAddress = async () => {
+    if (!addressModal || updatingAddress) return
+    const nextAddress = addressInput.trim()
+    if (nextAddress.length < 5) {
+      setAddressError('Escribe una dirección válida.')
+      return
+    }
+
+    setUpdatingAddress(true)
+    setAddressError('')
+    try {
+      if (!addressPreview) {
+        const previewResponse = await api.put(`/api/dispatch/stops/${addressModal.stop.dbId}/address`, {
+          address: nextAddress,
+          preview: true
+        })
+        setAddressPreview(previewResponse.data)
+        return
+      }
+      const response = await api.put(`/api/dispatch/stops/${addressModal.stop.dbId}/address`, {
+        address: nextAddress
+      })
+      const serverStop = response.data.stop
+      const updatedStops = stops.map((stop, index) =>
+        index === addressModal.index
+          ? {
+              ...stop,
+              address: serverStop.address,
+              latitude: serverStop.lat,
+              longitude: serverStop.lng,
+              color: stop.favorite_address_id ? '#F59E0B' : '#EA4335'
+            }
+          : stop
+      )
+      const selectedDbId = addressModal.stop.dbId
+      setStops(updatedStops)
+      updateMapMarkers(updatedStops)
+      const reorderedStops = await reoptimizeAfterCompletion(updatedStops)
+      const newSelectedIndex = reorderedStops.findIndex(stop => stop.dbId === selectedDbId)
+      if (newSelectedIndex >= 0) {
+        setSelectedStopIndex(newSelectedIndex)
+        localStorage.setItem('selectedStop', String(newSelectedIndex))
+      }
+      setAddressModal(null)
+      setAddressInput('')
+      setAddressPreview(null)
+    } catch (err) {
+      setAddressError(
+        err.response?.data?.error ||
+        'No se pudo actualizar la dirección. Verifica los datos e inténtalo de nuevo.'
+      )
+    } finally {
+      setUpdatingAddress(false)
+    }
+  }
+
   const confirmSkipDefinitive = async (disposition) => {
     const data = skipDispositionModal
     if (!data) return
@@ -1163,7 +1240,7 @@ export default function TripPlannerPage() {
     if (pendingStops.length === 0) {
       setTotalDistance(0)
       setTotalDuration(0)
-      return
+      return completedStops
     }
 
     setOptimizing(true)
@@ -1183,7 +1260,7 @@ export default function TripPlannerPage() {
 
       if (!origin) {
         await calculateRoute(pendingStops)
-        return
+        return completedStops
       }
 
       const result = await calculateRoute(pendingStops, origin, true)
@@ -1193,6 +1270,7 @@ export default function TripPlannerPage() {
       setStops(reordered)
       updateMapMarkers(reordered)
       setIsOptimized(true)
+      return reordered
     } finally {
       setOptimizing(false)
     }
@@ -1287,7 +1365,7 @@ export default function TripPlannerPage() {
               note: s.note || original?.note || '',
               completed: s.status === 'completed' || false,
               skipped: s.status === 'skipped' || false,
-              color: '#EA4335',
+              color: s.favorite_address_id ? '#F59E0B' : '#EA4335',
               order_cost: s.order_cost ?? original?.order_cost,
               deposit_amount: s.deposit_amount ?? original?.deposit_amount,
               total_to_collect: s.total_to_collect ?? original?.total_to_collect,
@@ -1391,7 +1469,7 @@ export default function TripPlannerPage() {
         if (stop.completed || stop.skipped) return
         if (navigationMode && stop.skippedOnce && hasActivePending) return
         visibleCounter += 1
-        const color = '#EA4335'
+        const color = stop.favorite_address_id ? '#F59E0B' : '#EA4335'
         
         const num = String(visibleCounter)
         const fontSize = num.length > 1 ? '10' : '11'
@@ -1924,7 +2002,7 @@ export default function TripPlannerPage() {
               })().map(({ stop, index, displayNumber }) => (
                 <div
                   key={stop.id}
-                  className={`stop-row ${navigationMode ? 'stop-row-nav' : ''} ${stop.skipped ? 'stop-row-skipped' : ''} ${navigationMode && selectedStopIndex === index ? 'stop-row-selected' : ''}`}
+                  className={`stop-row ${navigationMode ? 'stop-row-nav' : ''} ${stop.skipped ? 'stop-row-skipped' : ''} ${stop.favorite_address_id ? 'stop-row-favorite' : ''} ${navigationMode && selectedStopIndex === index ? 'stop-row-selected' : ''}`}
                   onClick={() => {
                     if (navigationMode && !stop.completed && !stop.skipped) {
                       setSelectedStopIndex(prev => {
@@ -1943,7 +2021,7 @@ export default function TripPlannerPage() {
                     {navigationMode ? (
                       <span
                         className="material-icons stop-checkbox"
-                        style={{ color: stop.completed ? '#22c55e' : stop.skipped ? '#999' : '#5b8def', fontSize: 22 }}
+                        style={{ color: stop.completed ? '#22c55e' : stop.skipped ? '#999' : stop.favorite_address_id ? '#F59E0B' : '#5b8def', fontSize: 22 }}
                         onClick={e => { e.stopPropagation(); if (!stop.completed && !stop.skipped) toggleStopComplete(index) }}
                       >
                         {stop.completed ? 'check_circle' : stop.skipped ? 'cancel' : 'radio_button_unchecked'}
@@ -1952,10 +2030,11 @@ export default function TripPlannerPage() {
                       <span className="stop-number">{displayNumber != null ? String(displayNumber).padStart(2, '0') : '--'}</span>
                     )}
                     <div className="stop-info-block">
-                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''} ${stop.skipped ? 'stop-skipped-label' : ''} ${stop.skippedOnce ? 'stop-skipped-label' : ''}`}>
+                      <span className={`stop-name ${stop.completed ? 'stop-completed' : ''} ${stop.skipped ? 'stop-skipped-label' : ''} ${stop.skippedOnce ? 'stop-skipped-label' : ''} ${stop.favorite_address_id ? 'stop-favorite-name' : ''}`}>
                         <span className="stop-num-inline">{displayNumber != null ? `${displayNumber}.` : ''}</span> {stop.name || stop.address?.split(',')[0] || 'Parada'}
                         {stop.skipped && <span className="badge-saltada">Saltada</span>}
                         {stop.skippedOnce && <span className="badge-diferida">Al final</span>}
+                        {stop.favorite_address_id && <span className="badge-favorite">{t('planner.favorite')}</span>}
                       </span>
                       <span className="stop-address-detail">{stop.address || ''}{stop.apartment_number && <span style={{ color: '#1976d2', fontWeight: 600 }}> Apt {stop.apartment_number}</span>}</span>
                       {stop.phone && (
@@ -2021,7 +2100,7 @@ export default function TripPlannerPage() {
                       )}
                     </div>
                   </div>
-                  <div className={`stop-indicator ${stop.completed ? 'completed' : stop.skipped ? 'skipped' : ''}`}></div>
+                  <div className={`stop-indicator ${stop.completed ? 'completed' : stop.skipped ? 'skipped' : ''} ${stop.favorite_address_id ? 'favorite' : ''}`}></div>
                 </div>
               ))}
               {navigationMode && activeTab === 'pending' && stops.filter(s => !s.completed && !s.skipped).length === 0 && (
@@ -2067,6 +2146,13 @@ export default function TripPlannerPage() {
                     >
                       <span className="material-icons">near_me</span>
                       Navegar
+                    </button>
+                    <button
+                      className="btn-update-address"
+                      onClick={() => openAddressModal(stops[selectedStopIndex], selectedStopIndex)}
+                    >
+                      <span className="material-icons">edit_location_alt</span>
+                      {t('planner.updateAddress')}
                     </button>
                     <button
                       className="btn-skip-nav"
@@ -2608,6 +2694,73 @@ export default function TripPlannerPage() {
             <button className="btn-flat" style={{ marginTop: 12, width: '100%' }} onClick={() => setNavChooserOpen(false)}>
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {addressModal && (
+        <div className="modal-overlay" onClick={closeAddressModal}>
+          <div className="modal-card address-update-card" onClick={e => e.stopPropagation()}>
+            <div className="address-update-header">
+              <span className="material-icons">edit_location_alt</span>
+              <div>
+                <h3>{t('planner.updateAddress')}</h3>
+                <p>{t('planner.addressUpdateIntro')}</p>
+              </div>
+            </div>
+            <div className="address-current">
+              <span>{t('planner.currentAddress')}</span>
+              <strong>{addressModal.stop.address}</strong>
+            </div>
+            <label className="address-input-label" htmlFor="new-stop-address">
+              {t('planner.newAddress')}
+            </label>
+            <input
+              id="new-stop-address"
+              className="address-update-input"
+              value={addressInput}
+              onChange={e => {
+                setAddressInput(e.target.value)
+                setAddressPreview(null)
+              }}
+              placeholder="Ej. 123 Main St, Dallas, TX 75201"
+              autoFocus
+              disabled={updatingAddress}
+              onKeyDown={e => {
+                if (e.key === 'Enter') updateStopAddress()
+              }}
+            />
+            {addressPreview && (
+              <div className="address-preview">
+                <span className="material-icons">verified</span>
+                <div>
+                  <span>Ubicación encontrada</span>
+                  <strong>{addressPreview.address}</strong>
+                  <small>
+                    {addressPreview.city}, {addressPreview.state} {addressPreview.zip_code}
+                  </small>
+                </div>
+              </div>
+            )}
+            <p className="address-update-hint">{t('planner.addressUpdatedHint')}</p>
+            {addressError && <div className="address-update-error">{addressError}</div>}
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={closeAddressModal} disabled={updatingAddress}>
+                {t('common.cancel')}
+              </button>
+              <button
+                className="btn-confirm-delivery address-submit-btn"
+                onClick={updateStopAddress}
+                disabled={updatingAddress || addressInput.trim().length < 5}
+              >
+                <span className="material-icons">{updatingAddress ? 'hourglass_empty' : 'check'}</span>
+                {updatingAddress
+                  ? t('planner.validatingAddress')
+                  : addressPreview
+                    ? t('planner.updateAndReoptimize')
+                    : t('planner.validateAddress')}
+              </button>
+            </div>
           </div>
         </div>
       )}
