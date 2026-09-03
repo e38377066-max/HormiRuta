@@ -436,6 +436,54 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     assert.equal(pendingView.payment_delivered, false);
   });
 
+  it('excludes skipped stops from route payment totals and driver delivery', async () => {
+    const route = await createRoute({
+      status: 'completed',
+      assigned_driver_id: admin.id,
+      completed_at: new Date()
+    });
+    await createStop(route.id, null, {
+      status: 'completed',
+      completed_at: new Date(),
+      payment_method: 'cash',
+      amount_collected: 50,
+      payment_status: 'paid'
+    });
+    await createStop(route.id, null, {
+      status: 'skipped',
+      completed_at: new Date(),
+      payment_method: 'cash',
+      amount_collected: 90,
+      payment_status: 'pending'
+    });
+
+    const paymentStatus = await callRoute(router, 'GET', '/routes/payment-status', {
+      query: { driver_id: String(admin.id) }
+    });
+    assert.equal(paymentStatus.statusCode, 200);
+    const paymentView = paymentStatus.body.routes.find(item => item.id === route.id);
+    assert.ok(paymentView);
+    assert.equal(paymentView.stops_count, 1);
+    assert.equal(paymentView.route_gross_collected, 50);
+    assert.equal(paymentView.route_total_collected, 50);
+    assert.equal(paymentView.admin_remaining, 50);
+
+    const routeList = await callRoute(router, 'GET', '/routes');
+    assert.equal(routeList.statusCode, 200);
+    const routeView = routeList.body.routes.find(item => item.id === route.id);
+    assert.ok(routeView);
+    assert.equal(routeView.route_total_collected, 50);
+
+    const deliveredPayment = await callRoute(router, 'PUT', '/routes/:id/deliver-payment', {
+      params: { id: route.id },
+      body: { payment_method: 'cash' }
+    });
+    assert.equal(deliveredPayment.statusCode, 200);
+    assert.equal(deliveredPayment.body.total_collected, 50);
+    assert.equal(deliveredPayment.body.cash_collected, 50);
+    assert.equal((await Route.findByPk(route.id)).route_total_collected, '50.00');
+  });
+
   it('shows an order in pickup reception and history even when its Stop is missing', async () => {
     const pendingRoute = await createRoute({
       status: 'assigned',
