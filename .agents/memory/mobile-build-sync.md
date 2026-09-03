@@ -7,4 +7,4 @@ The mobile app does not consume the source files directly: its iOS and Android p
 
 **Why:** A stale native bundle made the mobile app show the old hamburger navigation and old Apple Maps behavior even though the web source had newer fixes.
 
-**How to apply:** For mobile releases, run the build and Capacitor sync from Node 22, then rebuild the native project. Do not treat `npm run build` alone as a mobile build.
+**How to apply:** For mobile releases, run the build and Capacitor sync from Node 22, then rebuild the native project. Do not treat `npm run build` alone as a mobile build. If `rsync` is unavailable, replace each native `assets` directory with a standard recursive copy from `dist/assets`.
