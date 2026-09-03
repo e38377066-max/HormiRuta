@@ -263,7 +263,14 @@ export default function TripPlannerPage() {
       JSON.parse(localStorage.getItem(skippedOnceKey) || '[]')
     )
 
-    const sorted = (route.stops || []).sort((a, b) => a.order - b.order)
+    // La ruta ya contiene una secuencia única de órdenes y favoritas. Nunca
+    // agrupamos por tipo: solo las paradas diferidas se mantienen fuera de la
+    // vista activa mediante skippedOnce.
+    const sorted = [...(route.stops || [])].sort((a, b) => {
+      const orderA = Number.isFinite(Number(a.order)) ? Number(a.order) : 0
+      const orderB = Number.isFinite(Number(b.order)) ? Number(b.order) : 0
+      return orderA - orderB
+    })
 
     const mapStop = (s, skippedOnce = false) => ({
       dbId: s.id,
@@ -1824,6 +1831,27 @@ export default function TripPlannerPage() {
     : nextPendingStop
   const navTargetIndex = navTarget ? stops.indexOf(navTarget) : -1
 
+  // El planificador siempre pinta una sola secuencia mixta. El índice original
+  // se conserva para que seleccionar, mover, actualizar o completar una parada
+  // siga actuando sobre la parada correcta aunque haya filas ocultas.
+  let plannerListCounter = 0
+  const plannerStopRows = stops
+    .map((stop, index) => ({ stop, index }))
+    .filter(({ stop }) =>
+      !navigationMode ||
+      (activeTab === 'pending'
+        ? (!stop.completed && !stop.skipped && (!stop.skippedOnce || showDeferredStops))
+        : (stop.completed || stop.skipped))
+    )
+    .map(({ stop, index }) => {
+      const isActive = !stop.completed && !stop.skipped
+      return {
+        stop,
+        index,
+        displayNumber: isActive ? ++plannerListCounter : null
+      }
+    })
+
   const setDeferredVisibility = (visible) => {
     setShowDeferredStops(visible)
     setActiveTab('pending')
@@ -2039,20 +2067,7 @@ export default function TripPlannerPage() {
               {!navigationMode && (
                 <div className="stops-section-header">Parada</div>
               )}
-              {(() => {
-                let listCounter = 0
-                const enriched = stops.map((stop, index) => {
-                  const isActive = !stop.completed && !stop.skipped
-                  const displayNumber = isActive ? ++listCounter : null
-                  return { stop, index, displayNumber }
-                })
-                if (!navigationMode) return enriched
-                return enriched.filter(({ stop }) =>
-                  activeTab === 'pending'
-                    ? (!stop.completed && !stop.skipped && (!stop.skippedOnce || showDeferredStops))
-                    : (stop.completed || stop.skipped)
-                )
-              })().map(({ stop, index, displayNumber }) => (
+              {plannerStopRows.map(({ stop, index, displayNumber }) => (
                 <div
                   key={stop.id}
                   className={`stop-row ${navigationMode ? 'stop-row-nav' : ''} ${stop.skipped ? 'stop-row-skipped' : ''} ${stop.favorite_address_id ? 'stop-row-favorite' : ''} ${navigationMode && selectedStopIndex === index ? 'stop-row-selected' : ''}`}
