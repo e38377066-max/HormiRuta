@@ -3983,7 +3983,7 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
     });
     const allRouteIds = allDriverRoutes.map(r => r.id);
     const allRouteStops = allRouteIds.length > 0
-      ? await Stop.findAll({ where: { route_id: { [Op.in]: allRouteIds } }, attributes: ['route_id', 'amount_collected', 'payment_method'] })
+      ? await Stop.findAll({ where: { route_id: { [Op.in]: allRouteIds } }, attributes: ['route_id', 'status', 'amount_collected', 'payment_method'] })
       : [];
     const stopCountMap = {};
     const stopCashMap = {};
