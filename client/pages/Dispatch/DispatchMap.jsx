@@ -2241,12 +2241,8 @@ export default function DispatchMap() {
                 const driverColor = driverName ? getDriverColor(driverColorIdx) : '#999'
                 const isEditing = editingRouteId === route.id
                 const stops = routeStops[route.id] || []
-                const canEditRoute = route.status === 'draft' || (
-                  route.status === 'assigned' &&
-                  !route.pickup_admin_confirmed_at &&
-                  !route.pickup_driver_confirmed_at &&
-                  !route.started_at
-                )
+                const canEditRoute = route.status === 'draft'
+                const canAddStopsToRoute = !['completed', 'returned'].includes(route.status)
                 return (
                 <div key={route.id} className="dispatch-route-card" style={{ borderLeftColor: driverColor }}>
                   <div className="dr-header">
@@ -2286,7 +2282,7 @@ export default function DispatchMap() {
                             <span className="material-icons" style={{ fontSize: 14 }}>undo</span>
                           </button>
                       )}
-                      {canManageRoutes && (
+                      {canManageRoutes && canAddStopsToRoute && (
                         <button
                           className="dbtn outline small"
                           style={{ padding: '2px 7px', fontSize: 12 }}
@@ -2348,21 +2344,20 @@ export default function DispatchMap() {
                               <div key={s.id} className="dr-edit-stop-row">
                                 <span className="dr-edit-stop-num">{i + 1}</span>
                                 <span className="dr-edit-stop-name">{s.customer_name || s.address || 'Parada'}</span>
-                                <button
+                                {canEditRoute && <button
                                   className="dr-edit-stop-remove"
                                   title="Quitar parada"
-                                   disabled={!canEditRoute}
                                   onClick={() => handleRemoveStop(route.id, s.id)}
                                 >
                                   <span className="material-icons">remove_circle_outline</span>
-                                </button>
+                                </button>}
                               </div>
                             ))}
                           </div>
                           <div className="dr-edit-actions">
                             <button
                               className="dbtn outline small full"
-                               disabled={!canEditRoute}
+                              disabled={!canAddStopsToRoute}
                               onClick={() => {
                                 if (showAddStopsPanel === route.id) {
                                   setShowAddStopsPanel(null)
@@ -2468,7 +2463,7 @@ export default function DispatchMap() {
                                   <button
                                     className="dbtn green small full"
                                     style={{ marginTop: 8 }}
-                                   disabled={isAddingOrders || !canEditRoute}
+                                    disabled={isAddingOrders || !canAddStopsToRoute}
                                     onClick={() => { handleAddOrdersToRoute(route.id); setShowAddStopsPanel(null); setEditSearchQuery('') }}
                                   >
                                     <span className="material-icons">save</span>

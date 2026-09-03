@@ -1659,9 +1659,9 @@ router.delete('/routes/:id/stops/:stopId', requireAdminOrReceptionist, async (re
     if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
 
     const routeStops = await Stop.findAll({ where: { route_id: route.id } });
-    if (routeHasDeliveryActivity(route, routeStops) || stopIsFinanciallyTouched(stop)) {
+    if (route.status !== 'draft' || routeHasDeliveryActivity(route, routeStops) || stopIsFinanciallyTouched(stop)) {
       return res.status(409).json({
-        error: 'No se puede quitar una parada con actividad, evidencia o cobro registrado.'
+        error: 'Las rutas asignadas o iniciadas solo permiten agregar nuevas paradas.'
       });
     }
 
@@ -1703,10 +1703,10 @@ router.post('/routes/:id/orders', requireAdminOrReceptionist, async (req, res) =
     const { order_ids, favorite_stops } = req.body;
     const route = await Route.findByPk(req.params.id);
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
-    const routeStops = await Stop.findAll({ where: { route_id: route.id } });
-    if (routeHasDeliveryActivity(route, routeStops)) {
-      return res.status(409).json({ error: 'No se puede editar una ruta después de recibirla o iniciar entregas.' });
+    if (['completed', 'returned'].includes(route.status)) {
+      return res.status(409).json({ error: 'No se pueden agregar paradas a una ruta completada o devuelta.' });
     }
+    const routeStops = await Stop.findAll({ where: { route_id: route.id } });
 
     const existingStops = routeStops.length;
     let stopOrder = existingStops;
@@ -1754,6 +1754,10 @@ router.post('/routes/:id/orders', requireAdminOrReceptionist, async (req, res) =
     route.total_distance = 0;
     route.total_duration = 0;
     await route.save();
+    emitToAdmins('route:updated', { route_id: route.id });
+    if (route.assigned_driver_id) {
+      emitToDriver(route.assigned_driver_id, 'route:updated', { route_id: route.id });
+    }
     res.json({ success: true, route: await route.toDict() });
   } catch (error) {
     console.error('Error adding orders to route:', error);
