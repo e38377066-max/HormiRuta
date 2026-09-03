@@ -381,6 +381,61 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     }
   });
 
+  it('separates driver payment delivery from administrative receipt confirmation', async () => {
+    const deliveredRoute = await createRoute({
+      status: 'completed',
+      assigned_driver_id: admin.id,
+      completed_at: new Date(),
+      payment_delivered: true,
+      admin_confirmed: false,
+      admin_amount_received: 0
+    });
+    await createStop(deliveredRoute.id, null, {
+      status: 'completed',
+      completed_at: new Date(),
+      payment_method: 'cash',
+      amount_collected: 100,
+      payment_status: 'paid'
+    });
+
+    const pendingRoute = await createRoute({
+      status: 'completed',
+      assigned_driver_id: admin.id,
+      completed_at: new Date(),
+      payment_delivered: false,
+      admin_confirmed: false,
+      admin_amount_received: 0
+    });
+    await createStop(pendingRoute.id, null, {
+      status: 'completed',
+      completed_at: new Date(),
+      payment_method: 'cash',
+      amount_collected: 60,
+      payment_status: 'paid'
+    });
+
+    const accounting = await callRoute(router, 'GET', '/my-accounting');
+    assert.equal(accounting.statusCode, 200);
+    assert.equal(accounting.body.totals.to_deliver, 60);
+    assert.equal(accounting.body.totals.pending_routes, 1);
+    assert.equal(accounting.body.totals.stops_pending, 1);
+
+    const completedRoutes = await callRoute(router, 'GET', '/my-completed-routes');
+    assert.equal(completedRoutes.statusCode, 200);
+    const deliveredView = completedRoutes.body.routes.find(route => route.id === deliveredRoute.id);
+    const pendingView = completedRoutes.body.routes.find(route => route.id === pendingRoute.id);
+    assert.ok(deliveredView);
+    assert.ok(pendingView);
+
+    assert.equal(deliveredView.to_deliver, 0);
+    assert.equal(deliveredView.admin_remaining, 100);
+    assert.equal(deliveredView.payment_delivered, true);
+    assert.equal(deliveredView.admin_confirmed, false);
+    assert.equal(pendingView.to_deliver, 60);
+    assert.equal(pendingView.admin_remaining, 60);
+    assert.equal(pendingView.payment_delivered, false);
+  });
+
   it('shows an order in pickup reception and history even when its Stop is missing', async () => {
     const pendingRoute = await createRoute({
       status: 'assigned',
