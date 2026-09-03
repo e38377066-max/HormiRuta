@@ -1433,7 +1433,7 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
 router.post('/routes', requireAdmin, async (req, res) => {
   let transaction;
   try {
-    const { name, order_ids, pre_optimized, favorite_stops } = req.body;
+    const { name, order_ids, pre_optimized, favorite_stops, ordered_stops } = req.body;
     const hasOrders = Array.isArray(order_ids) && order_ids.length > 0;
     const hasFavs = Array.isArray(favorite_stops) && favorite_stops.length > 0;
 
@@ -1476,19 +1476,46 @@ router.post('/routes', requireAdmin, async (req, res) => {
       });
     }
 
-    const totalStops = ordersMap.size + (hasFavs ? favorite_stops.length : 0);
+    const favoriteMap = new Map(
+      (hasFavs ? favorite_stops : []).map(fav => [String(fav.id), fav])
+    );
+    const totalStops = ordersMap.size + favoriteMap.size;
+    const hasOrderedSequence = Array.isArray(ordered_stops) && ordered_stops.length > 0;
+    const orderedItems = hasOrderedSequence
+      ? ordered_stops
+        .map(item => ({
+          type: item?.type,
+          id: String(item?.id)
+        }))
+        .filter(item =>
+          (item.type === 'order' && ordersMap.has(item.id)) ||
+          (item.type === 'favorite' && favoriteMap.has(item.id))
+        )
+      : [
+        ...[...ordersMap.keys()].map(id => ({ type: 'order', id })),
+        ...[...favoriteMap.keys()].map(id => ({ type: 'favorite', id }))
+      ];
+    const uniqueOrderedKeys = new Set(orderedItems.map(item => `${item.type}:${item.id}`));
+
+    if (hasOrderedSequence && (
+      orderedItems.length !== totalStops ||
+      uniqueOrderedKeys.size !== totalStops
+    )) {
+      return res.status(400).json({ error: 'La secuencia de paradas no coincide con la selección' });
+    }
+
     transaction = await sequelize.transaction();
     const route = await Route.create({
       user_id: req.userId,
       name: name || `Ruta ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'short' })} - ${totalStops} paradas`,
       status: 'draft',
-      is_optimized: !!pre_optimized
+      is_optimized: !!pre_optimized && (!hasFavs || hasOrderedSequence)
     }, { transaction });
 
     let stopOrder = 0;
-    if (hasOrders) {
-      for (let i = 0; i < order_ids.length; i++) {
-        const order = ordersMap.get(order_ids[i]);
+    for (const item of orderedItems) {
+      if (item.type === 'order') {
+        const order = ordersMap.get(item.id);
         if (!order) continue;
         await Stop.create({
           route_id: route.id,
@@ -1506,11 +1533,9 @@ router.post('/routes', requireAdmin, async (req, res) => {
         }, { transaction });
         order.route_id = route.id;
         await order.save({ transaction });
-      }
-    }
-
-    if (hasFavs) {
-      for (const fav of favorite_stops) {
+      } else {
+        const fav = favoriteMap.get(item.id);
+        if (!fav) continue;
         await Stop.create({
           route_id: route.id,
           favorite_address_id: fav.id || null,
@@ -1720,6 +1745,10 @@ router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
       }
     }
 
+    route.is_optimized = false;
+    route.total_distance = 0;
+    route.total_duration = 0;
+    await route.save();
     res.json({ success: true, route: await route.toDict() });
   } catch (error) {
     console.error('Error adding orders to route:', error);

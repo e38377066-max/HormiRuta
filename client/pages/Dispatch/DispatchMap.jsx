@@ -16,6 +16,8 @@ import RoutePrintView from './RoutePrintView'
 
 const KM_TO_MILES = 0.621371
 
+const selectionKey = (item) => `${item.type}:${item.id}`
+
 /**
  * Configuración visual de los estados de las órdenes.
  */
@@ -622,9 +624,35 @@ export default function DispatchMap() {
 
     if (!mapInstance.current || !window.google?.maps) return
 
-    const selectedData = selectedOrders
-      .map(id => orders.find(o => o.id === id))
-      .filter(o => o?.address_lat && o?.address_lng)
+    const selectedData = selectionList
+      .map(item => {
+        if (item.type === 'favorite') {
+          const favorite = favorites.find(f => f.id === item.id)
+          if (!favorite) return null
+          return {
+            ...favorite,
+            type: 'favorite',
+            selectionId: favorite.id,
+            selectionKey: selectionKey(item),
+            address_lat: favorite.lat,
+            address_lng: favorite.lng
+          }
+        }
+
+        const order = orders.find(o => o.id === item.id)
+        if (!order) return null
+        return {
+          ...order,
+          type: 'order',
+          selectionId: order.id,
+          selectionKey: selectionKey(item)
+        }
+      })
+      .filter(item =>
+        item &&
+        Number.isFinite(Number(item.address_lat)) &&
+        Number.isFinite(Number(item.address_lng))
+      )
 
     if (selectedData.length < 2) {
       setRouteInfo(null)
@@ -666,7 +694,7 @@ export default function DispatchMap() {
             totalDur += leg.duration.value
           })
 
-          const selectedIds = selectedData.map(o => o.id)
+           const selectedIds = selectedData.map(item => item.selectionKey)
           let optimizedOrder
           if (route.waypoint_order && route.waypoint_order.length > 0) {
             const firstId = selectedIds[0]
@@ -693,7 +721,7 @@ export default function DispatchMap() {
     return () => {
       if (optimizeTimerRef.current) clearTimeout(optimizeTimerRef.current)
     }
-  }, [selectionList, orders])
+   }, [selectionList, orders, favorites])
 
   const [dragIdx, setDragIdx] = useState(null)
 
@@ -757,21 +785,30 @@ export default function DispatchMap() {
     if (isCreatingRoute) return
     setIsCreatingRoute(true)
     try {
-      let orderedIds = [...selectedOrders]
-      let isPreOptimized = false
-
-      if (!manualReorder && routeInfo?.optimizedOrder && routeInfo.optimizedOrder.length === selectedOrders.length) {
-        orderedIds = routeInfo.optimizedOrder
-        isPreOptimized = true
-      }
-
-      const favStops = selectedFavorites.map(fid => favorites.find(f => f.id === fid)).filter(Boolean)
+      const selectedKeys = selectionList.map(selectionKey)
+      const hasCompleteOptimization = !manualReorder &&
+        routeInfo?.optimizedOrder?.length === selectionList.length &&
+        routeInfo.optimizedOrder.every(key => selectedKeys.includes(key))
+      const orderedKeys = hasCompleteOptimization
+        ? routeInfo.optimizedOrder
+        : selectedKeys
+      const orderedSelection = orderedKeys
+        .map(key => selectionList.find(item => selectionKey(item) === key))
+        .filter(Boolean)
+      const orderedIds = orderedSelection
+        .filter(item => item.type === 'order')
+        .map(item => item.id)
+      const favStops = orderedSelection
+        .filter(item => item.type === 'favorite')
+        .map(item => favorites.find(f => f.id === item.id))
+        .filter(Boolean)
 
       await api.post('/api/dispatch/routes', {
         name: routeName || undefined,
         order_ids: orderedIds,
-        pre_optimized: isPreOptimized,
-        favorite_stops: favStops.length ? favStops : undefined
+        pre_optimized: hasCompleteOptimization,
+        favorite_stops: favStops.length ? favStops : undefined,
+        ordered_stops: orderedSelection
       })
       setSelectionList([])
       setShowCreateRoute(false)
