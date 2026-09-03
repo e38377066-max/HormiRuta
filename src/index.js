@@ -29,7 +29,7 @@ console.log('===========================================');
 
 import { sequelize, User } from './models/index.js';
 
-import { requireAuth, getUserIdFromToken } from './middleware/auth.js';
+import { requireAuth, requireNotReceptionist, getUserIdFromToken, restrictReceptionistApiAccess } from './middleware/auth.js';
 import { openaiQuotaState } from './services/aiService.js';
 import authRoutes from './routes/auth.js';
 import routesRoutes from './routes/routes.js';
@@ -124,6 +124,9 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+// El rol recepcionista solo puede usar las APIs operativas permitidas abajo.
+// Las rutas públicas de mensajería quedan exceptuadas por el middleware.
+app.use('/api', restrictReceptionistApiAccess);
 app.use('/api/routes', routesRoutes);
 app.use('/api/stops', stopsRoutes);
 app.use('/api/history', historyRoutes);
@@ -138,7 +141,7 @@ app.use('/api/ai-learning', aiLearningRoutes);
 // Uploads contiene evidencia de entrega, reportes y archivos con PII.
 // Gating con autenticacion para que solo usuarios logueados puedan descargarlos.
 const uploadsPath = path.join(__dirname, '..', 'uploads');
-app.use('/uploads', requireAuth, express.static(uploadsPath));
+app.use('/uploads', requireAuth, requireNotReceptionist, express.static(uploadsPath));
 
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath, { 
@@ -260,6 +263,7 @@ async function startServer() {
           const user = await User.findByPk(userId);
           if (!user || user.active === false) return;
           if (user.role === 'admin') socket.join('admins');
+          if (user.role === 'receptionist') socket.join('receptionists');
           // Todo usuario autenticado se une a su propia sala de driver
           socket.join(`driver:${user.id}`);
         } catch (err) {

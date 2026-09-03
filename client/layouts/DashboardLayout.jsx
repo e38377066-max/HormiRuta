@@ -36,6 +36,7 @@ function SectionLabel({ icon, label, color }) {
 export default function DashboardLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { user, isAdmin, logout } = useAuth()
+  const isReceptionist = user?.role === 'receptionist'
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -71,26 +72,34 @@ export default function DashboardLayout() {
           {/* ── OPERACIONES ── */}
           <SectionLabel label="Operaciones" color="#6200ea" />
           <NavItem to="/dispatch"  icon="local_shipping" label="Mapa de Despacho"   color="#6200ea" onClick={close} />
-          <NavItem to="/planner"   icon="route"          label="Planear Ruta"        color="#3949ab" onClick={close} />
+          {!isReceptionist && <NavItem to="/planner" icon="route" label="Planear Ruta" color="#3949ab" onClick={close} />}
 
-          {isAdmin && (
+          {(isAdmin || isReceptionist) && (
             <>
               <div className="q-separator" />
 
               {/* ── RUTAS Y ENTREGAS ── */}
               <SectionLabel label="Rutas y Entregas" color="#2e7d32" />
-              <NavItem to="/admin/routes"        icon="history"         label="Historial de Rutas"      color="#388e3c" onClick={close} />
-              <NavItem to="/admin/wholesale"     icon="store"           label="Clientes Mayoristas"     color="#00695c" onClick={close} />
-              <NavItem to="/admin/accounting"    icon="receipt_long"    label="Contabilidad"            color="#2e7d32" onClick={close} />
               <NavItem to="/admin/returns"       icon="assignment_return" label="Recepción de Paquetes" color="#558b2f" onClick={close} />
+              {isAdmin && (
+                <>
+                  <NavItem to="/admin/routes"    icon="history"      label="Historial de Rutas"  color="#388e3c" onClick={close} />
+                  <NavItem to="/admin/wholesale" icon="store"        label="Clientes Mayoristas" color="#00695c" onClick={close} />
+                  <NavItem to="/admin/accounting" icon="receipt_long" label="Contabilidad"       color="#2e7d32" onClick={close} />
+                </>
+              )}
             </>
           )}
 
-          <div className="q-separator" />
+          {!isReceptionist && <div className="q-separator" />}
 
           {/* ── MENSAJERÍA ── */}
-          <SectionLabel label="Mensajería" color="#00897b" />
-          <NavItem to="/messaging" icon="inbox"           label="Pedidos"            color="#00897b" onClick={close} end />
+          {!isReceptionist && (
+            <>
+              <SectionLabel label="Mensajería" color="#00897b" />
+              <NavItem to="/messaging" icon="inbox" label="Pedidos" color="#00897b" onClick={close} end />
+            </>
+          )}
 
           {isAdmin && (
             <>
@@ -123,12 +132,16 @@ export default function DashboardLayout() {
             </>
           )}
 
-          <div className="q-separator" />
+          {!isReceptionist && <div className="q-separator" />}
 
           {/* ── MI CUENTA ── */}
-          <SectionLabel label="Mi Cuenta" color="#607d8b" />
-          <NavItem to="/account"  icon="person"         label="Mi Cuenta"           color="#607d8b" onClick={close} />
-          <NavItem to="/soporte"  icon="support_agent"  label="Soporte"             color="#25d366" onClick={close} />
+          {!isReceptionist && (
+            <>
+              <SectionLabel label="Mi Cuenta" color="#607d8b" />
+              <NavItem to="/account" icon="person" label="Mi Cuenta" color="#607d8b" onClick={close} />
+              <NavItem to="/soporte" icon="support_agent" label="Soporte" color="#25d366" onClick={close} />
+            </>
+          )}
 
           <button className="q-item logout" onClick={handleLogout}>
             <span className="material-icons q-item-icon">logout</span>

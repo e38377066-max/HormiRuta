@@ -12,7 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { sequelize, ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress } from '../models/index.js';
 import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
-import { requireAuth, requireAdmin, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireAdmin, requireAdminOrReceptionist, requireRole } from '../middleware/auth.js';
 import { Op, literal } from 'sequelize';
 import bcrypt from 'bcryptjs';
 import RespondioService from '../services/respondio.js';
@@ -195,7 +195,7 @@ router.get('/orders', requireAuth, async (req, res) => {
     if (user.role === 'driver') {
       where.assigned_driver_id = user.id;
       where.order_status = { [Op.in]: ['on_delivery', 'delivered'] };
-    } else if (user.role === 'admin') {
+    } else if (user.role === 'admin' || user.role === 'receptionist') {
       if (req.query.status === 'wholesale') {
         // Filtro especial: mayoristas (source = wholesale_email o nombre contiene MAY)
         where[Op.or] = [
@@ -1431,7 +1431,7 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
  * @param {Object} res - Objeto de respuesta de Express.
  * @returns {Object} Ruta creada.
  */
-router.post('/routes', requireAdmin, async (req, res) => {
+router.post('/routes', requireAdminOrReceptionist, async (req, res) => {
   let transaction;
   try {
     const { name, order_ids, pre_optimized, favorite_stops, ordered_stops } = req.body;
@@ -1651,7 +1651,7 @@ router.delete('/routes/:id', requireAdmin, async (req, res) => {
  * @param {Object} res - Objeto de respuesta de Express.
  * @returns {Object} Resultado de la eliminación de la parada.
  */
-router.delete('/routes/:id/stops/:stopId', requireAdmin, async (req, res) => {
+router.delete('/routes/:id/stops/:stopId', requireAdminOrReceptionist, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
@@ -1698,7 +1698,7 @@ router.delete('/routes/:id/stops/:stopId', requireAdmin, async (req, res) => {
  * @param {Object} res - Objeto de respuesta de Express.
  * @returns {Object} Ruta actualizada.
  */
-router.post('/routes/:id/orders', requireAdmin, async (req, res) => {
+router.post('/routes/:id/orders', requireAdminOrReceptionist, async (req, res) => {
   try {
     const { order_ids, favorite_stops } = req.body;
     const route = await Route.findByPk(req.params.id);
@@ -1965,7 +1965,7 @@ router.get('/routes', requireAuth, async (req, res) => {
     let where = {};
     if (user.role === 'driver') {
       where.assigned_driver_id = user.id;
-    } else if (user.role === 'admin') {
+    } else if (user.role === 'admin' || user.role === 'receptionist') {
     } else {
       return res.status(403).json({ error: 'No tienes permisos' });
     }
@@ -2128,7 +2128,7 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
  * @param {Object} res - Objeto de respuesta de Express.
  * @returns {Object} Ruta optimizada con totales de distancia y duración.
  */
-router.post('/routes/:id/optimize', requireAdmin, async (req, res) => {
+router.post('/routes/:id/optimize', requireAdminOrReceptionist, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.id);
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
@@ -2189,7 +2189,7 @@ router.post('/routes/:id/optimize', requireAdmin, async (req, res) => {
  * @param {Object} res - Objeto de respuesta de Express.
  * @returns {Object} Ruta asignada y órdenes actualizadas.
  */
-router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
+router.put('/routes/:id/assign', requireAdminOrReceptionist, async (req, res) => {
   try {
     const { driver_id } = req.body;
     if (!driver_id) return res.status(400).json({ error: 'Selecciona un chofer' });
@@ -2384,7 +2384,7 @@ router.put('/routes/:id/assign', requireAdmin, async (req, res) => {
   }
 });
 
-router.get('/drivers', requireAdmin, async (req, res) => {
+router.get('/drivers', requireAdminOrReceptionist, async (req, res) => {
   try {
     const drivers = await User.findAll({
       where: { role: ['driver', 'admin'], active: true },
@@ -2635,7 +2635,7 @@ router.get('/returns', requireAuth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
     if (!user) return res.status(401).json({ error: 'No autenticado' });
-    if (user.role !== 'admin' && user.role !== 'driver') {
+    if (!['admin', 'driver', 'receptionist'].includes(user.role)) {
       return res.status(403).json({ error: 'Sin permisos' });
     }
 
@@ -2704,7 +2704,7 @@ router.get('/returns', requireAuth, async (req, res) => {
  * @param {Object} res - Objeto de respuesta de Express.
  * @returns {Object} Orden actualizada.
  */
-router.put('/returns/:id/receive', requireAdmin, async (req, res) => {
+router.put('/returns/:id/receive', requireAdminOrReceptionist, async (req, res) => {
   try {
     const rawId = String(req.params.id);
     if (rawId.startsWith('stop:')) {
@@ -2744,7 +2744,7 @@ router.put('/returns/:id/receive', requireAdmin, async (req, res) => {
  * @param {Object} res - Objeto de respuesta de Express.
  * @returns {Object} Orden liberada.
  */
-router.put('/returns/:id/release', requireAdmin, async (req, res) => {
+router.put('/returns/:id/release', requireAdminOrReceptionist, async (req, res) => {
   try {
     const rawId = String(req.params.id);
     if (rawId.startsWith('stop:')) {
@@ -2871,7 +2871,7 @@ router.put('/stops/:id/restore', requireAuth, async (req, res) => {
  * GET /pickup/pending
  * @description Rutas asignadas pendientes de confirmación de entrega al chofer por la oficina.
  */
-router.get('/pickup/pending', requireAdmin, async (req, res) => {
+router.get('/pickup/pending', requireAdminOrReceptionist, async (req, res) => {
   try {
     const allRoutes = await Route.findAll({
       where: { status: 'assigned', pickup_admin_confirmed_at: null },
@@ -2972,7 +2972,7 @@ router.get('/pickup/pending', requireAdmin, async (req, res) => {
  *   confirmed: IDs de ValidatedAddress que SÍ van con el chofer.
  *   rejected:  IDs que NO se entregan → vuelven a dispatching disponible.
  */
-router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => {
+router.post('/pickup/:routeId/confirm-stops', requireAdminOrReceptionist, async (req, res) => {
   try {
     const route = await Route.findByPk(req.params.routeId);
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
@@ -3144,7 +3144,7 @@ router.post('/pickup/:routeId/confirm-stops', requireAdmin, async (req, res) => 
  * GET /pickup/history
  * @description Historial de recepciones — rutas donde la oficina ya confirmó entrega.
  */
-router.get('/pickup/history', requireAdmin, async (req, res) => {
+router.get('/pickup/history', requireAdminOrReceptionist, async (req, res) => {
   try {
     const routes = await Route.findAll({
       where: { pickup_admin_confirmed_at: { [Op.not]: null } },
@@ -3503,7 +3503,7 @@ router.get('/routes/:id/detail', requireAuth, async (req, res) => {
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
 
     // Solo admin o el chofer asignado pueden ver el detalle de la ruta
-    if (user.role !== 'admin' && route.assigned_driver_id !== user.id) {
+    if (user.role !== 'admin' && user.role !== 'receptionist' && route.assigned_driver_id !== user.id) {
       return res.status(403).json({ error: 'No tienes permisos para ver esta ruta' });
     }
 
@@ -4145,7 +4145,7 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
  * @param {Object} res - Objeto de respuesta de Express.
  * @returns {Object} Lista de direcciones favoritas.
  */
-router.get('/favorites', requireAdmin, async (req, res) => {
+router.get('/favorites', requireAdminOrReceptionist, async (req, res) => {
   try {
     const favorites = await FavoriteAddress.findAll({ order: [['created_at', 'DESC']] });
     res.json({ favorites: favorites.map(f => f.toDict()) });

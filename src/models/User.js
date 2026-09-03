@@ -76,7 +76,7 @@ const User = sequelize.define('User', {
   },
   /** Rol del usuario en el sistema */
   role: {
-    type: DataTypes.ENUM('admin', 'client', 'driver'),
+    type: DataTypes.ENUM('admin', 'client', 'driver', 'receptionist'),
     defaultValue: 'client',
     allowNull: false
   },

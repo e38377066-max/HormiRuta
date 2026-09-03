@@ -135,3 +135,57 @@ export const requireRole = (...roles) => {
  * @description Middleware especializado que requiere el rol de 'admin'.
  */
 export const requireAdmin = requireRole('admin');
+
+/**
+ * Middleware para las operaciones que un recepcionista necesita realizar
+ * dentro de despacho y recepción de paquetes.
+ */
+export const requireAdminOrReceptionist = requireRole('admin', 'receptionist');
+
+export const requireNotReceptionist = (req, res, next) => {
+  if (req.user?.role === 'receptionist') {
+    return res.status(403).json({ error: 'El rol recepcionista no tiene acceso a esta área' });
+  }
+  return next();
+};
+
+/**
+ * Restringe las APIs disponibles para el rol recepcionista. Se monta después
+ * de /api/auth para no bloquear login, logout ni /me, y antes del resto de
+ * routers para que la restricción también aplique a llamadas directas.
+ */
+const receptionistApiAccess = [
+  ['GET', /^\/dispatch\/orders$/],
+  ['GET', /^\/dispatch\/routes$/],
+  ['GET', /^\/dispatch\/drivers$/],
+  ['GET', /^\/dispatch\/favorites$/],
+  ['POST', /^\/dispatch\/routes$/],
+  ['GET', /^\/dispatch\/routes\/[^/]+\/detail$/],
+  ['POST', /^\/dispatch\/routes\/[^/]+\/orders$/],
+  ['DELETE', /^\/dispatch\/routes\/[^/]+\/stops\/[^/]+$/],
+  ['POST', /^\/dispatch\/routes\/[^/]+\/optimize$/],
+  ['PUT', /^\/dispatch\/routes\/[^/]+\/assign$/],
+  ['GET', /^\/dispatch\/pickup\/pending$/],
+  ['GET', /^\/dispatch\/pickup\/history$/],
+  ['POST', /^\/dispatch\/pickup\/[^/]+\/confirm-stops$/],
+  ['GET', /^\/dispatch\/returns$/],
+  ['PUT', /^\/dispatch\/returns\/[^/]+\/receive$/],
+  ['PUT', /^\/dispatch\/returns\/[^/]+\/release$/]
+];
+
+const isAllowedReceptionistApi = (req) =>
+  receptionistApiAccess.some(([method, path]) => method === req.method && path.test(req.path));
+
+export const restrictReceptionistApiAccess = (req, res, next) => {
+  // Estos endpoints son públicos o son webhooks de Respond.io.
+  if (req.path.startsWith('/messaging/public/') || req.path === '/messaging/webhook') {
+    return next();
+  }
+
+  return requireAuth(req, res, () => {
+    if (req.user?.role !== 'receptionist' || isAllowedReceptionistApi(req)) {
+      return next();
+    }
+    return res.status(403).json({ error: 'El rol recepcionista solo puede acceder a despacho y recepción de paquetes' });
+  });
+};

@@ -123,6 +123,9 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
     }
 
     const allowedFields = ['username', 'email', 'phone', 'role', 'active', 'subscription_type', 'commission_per_stop'];
+    if (req.body.role !== undefined && !['admin', 'client', 'driver', 'receptionist'].includes(req.body.role)) {
+      return res.status(400).json({ error: 'Rol invalido' });
+    }
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         user[field] = req.body[field];
@@ -152,7 +155,7 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
 router.put('/users/:id/role', requireAdmin, async (req, res) => {
   try {
     const { role } = req.body;
-    if (!['admin', 'client', 'driver'].includes(role)) {
+    if (!['admin', 'client', 'driver', 'receptionist'].includes(role)) {
       return res.status(400).json({ error: 'Rol invalido' });
     }
 

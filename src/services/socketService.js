@@ -25,12 +25,15 @@ export function emitToDriver(driverId, event, data) {
 }
 
 /**
- * Emite un evento a todos los admins conectados.
+ * Emite un evento a todos los administradores y recepcionistas conectados.
  * @param {string} event
  * @param {any} data
  */
 export function emitToAdmins(event, data) {
-  if (_io) _io.to('admins').emit(event, data);
+  if (_io) {
+    _io.to('admins').emit(event, data);
+    _io.to('receptionists').emit(event, data);
+  }
 }
 
 /**

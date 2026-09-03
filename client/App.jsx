@@ -60,6 +60,7 @@ function LoadingScreen() {
 function getDefaultRoute(user) {
   if (!user) return '/login'
   if (user.role === 'admin') return '/messaging'
+  if (user.role === 'receptionist') return '/dispatch'
   return '/planner'
 }
 
@@ -109,6 +110,15 @@ function PublicRoute({ children }) {
   return children
 }
 
+function ReceptionistBlockedPublicRoute({ children }) {
+  const { isAuthenticated, user, initializing } = useAuth()
+  if (initializing) return <LoadingScreen />
+  if (isAuthenticated && user?.role === 'receptionist') {
+    return <Navigate to="/dispatch" replace />
+  }
+  return children
+}
+
 /**
  * Definición de las rutas de la aplicación.
  * @returns {JSX.Element}
@@ -124,28 +134,28 @@ export default function App() {
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
-      <Route path="/soporte" element={<SupportPage />} />
+      <Route path="/soporte" element={<ReceptionistBlockedPublicRoute><SupportPage /></ReceptionistBlockedPublicRoute>} />
       
       <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to={isAuthenticated ? getDefaultRoute(user) : '/login'} replace />} />
-        <Route path="messaging" element={<OrdersPage />} />
-        <Route path="messaging/coverage" element={<CoveragePage />} />
-        <Route path="messaging/settings" element={<SettingsPage />} />
+        <Route path="messaging" element={<ProtectedRoute allowedRoles={['admin', 'client', 'driver']}><OrdersPage /></ProtectedRoute>} />
+        <Route path="messaging/coverage" element={<ProtectedRoute allowedRoles={['admin', 'client', 'driver']}><CoveragePage /></ProtectedRoute>} />
+        <Route path="messaging/settings" element={<ProtectedRoute allowedRoles={['admin', 'client', 'driver']}><SettingsPage /></ProtectedRoute>} />
         
         <Route path="admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
         <Route path="admin/users" element={<ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>} />
         <Route path="admin/routes" element={<ProtectedRoute adminOnly><RouteHistory /></ProtectedRoute>} />
         <Route path="admin/logs" element={<ProtectedRoute adminOnly><AdminLogs /></ProtectedRoute>} />
         <Route path="admin/accounting" element={<ProtectedRoute adminOnly><AccountingPage /></ProtectedRoute>} />
-        <Route path="admin/returns" element={<ProtectedRoute adminOnly><PackageReturnsPage /></ProtectedRoute>} />
+        <Route path="admin/returns" element={<ProtectedRoute allowedRoles={['admin', 'receptionist']}><PackageReturnsPage /></ProtectedRoute>} />
         <Route path="admin/wholesale" element={<ProtectedRoute adminOnly><WholesalePage /></ProtectedRoute>} />
         <Route path="admin/bot-memory" element={<ProtectedRoute adminOnly><BotMemoryPage /></ProtectedRoute>} />
         <Route path="admin/export" element={<ProtectedRoute adminOnly><ExportPage /></ProtectedRoute>} />
-        <Route path="dispatch" element={<ProtectedRoute allowedRoles={['admin', 'driver']}><DispatchMap /></ProtectedRoute>} />
-        <Route path="account" element={<AccountPage />} />
+        <Route path="dispatch" element={<ProtectedRoute allowedRoles={['admin', 'driver', 'receptionist']}><DispatchMap /></ProtectedRoute>} />
+        <Route path="account" element={<ProtectedRoute allowedRoles={['admin', 'client', 'driver']}><AccountPage /></ProtectedRoute>} />
       </Route>
       
-      <Route path="/planner" element={<ProtectedRoute><PlannerLayout /></ProtectedRoute>}>
+      <Route path="/planner" element={<ProtectedRoute allowedRoles={['admin', 'client', 'driver']}><PlannerLayout /></ProtectedRoute>}>
         <Route index element={<TripPlannerPage />} />
         <Route path="accounting" element={<DriverAccountingPage />} />
         <Route path="account" element={<AccountPage />} />

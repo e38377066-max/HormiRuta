@@ -51,7 +51,7 @@ export default function LoginPage() {
         localStorage.removeItem(REMEMBER_PASS_KEY)
       }
       const role = result.user?.role
-      navigate(role === 'admin' ? '/messaging' : '/planner')
+      navigate(role === 'admin' ? '/messaging' : role === 'receptionist' ? '/dispatch' : '/planner')
     }
   }
 

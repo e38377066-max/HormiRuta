@@ -390,6 +390,7 @@ button.section-item.danger-item:disabled {
 .role-tag.admin { background: #ede7f6; color: #673ab7; }
 .role-tag.driver { background: #e8f5e9; color: #2e7d32; }
 .role-tag.client { background: #e3f2fd; color: #1565c0; }
+.role-tag.receptionist { background: #fff3e0; color: #e65100; }
 
 .status-tag {
   display: inline-flex;

@@ -197,6 +197,9 @@ router.delete('/account', async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
+    if (user.role === 'receptionist') {
+      return res.status(403).json({ error: 'El rol recepcionista no tiene acceso a esta área' });
+    }
 
     // 2) Recolectar y borrar archivos de evidencia en disco de TODAS las paradas del usuario
     //    (antes del destroy, para no perder los paths cuando cascada borre las filas).
@@ -268,6 +271,9 @@ router.delete('/account', async (req, res) => {
  * @returns {Object} 500 - Error interno del servidor.
  */
 router.put('/update', requireAuth, async (req, res) => {
+  if (req.user?.role === 'receptionist') {
+    return res.status(403).json({ error: 'El rol recepcionista no tiene acceso a esta área' });
+  }
   try {
     const userId = req.userId || req.session?.userId;
     const user = await User.findByPk(userId);

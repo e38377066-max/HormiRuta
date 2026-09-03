@@ -119,7 +119,9 @@ function createStarIcon() {
  */
 export default function DispatchMap() {
   const { t } = useTranslation()
-  const { isAdmin, isDriver } = useAuth()
+  const { isAdmin, isDriver, user } = useAuth()
+  const isReceptionist = user?.role === 'receptionist'
+  const canManageRoutes = isAdmin || isReceptionist
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
   const markersRef = useRef([])
@@ -259,12 +261,12 @@ export default function DispatchMap() {
       setOrders(ordersRes.data.orders || [])
       setRoutes(routesRes.data.routes || [])
 
-      if (isAdmin) {
-        const [statsRes, driversRes] = await Promise.all([
-          api.get('/api/dispatch/stats'),
-          api.get('/api/dispatch/drivers')
+      if (canManageRoutes) {
+        const [driversRes, statsRes] = await Promise.all([
+          api.get('/api/dispatch/drivers'),
+          isAdmin ? api.get('/api/dispatch/stats') : Promise.resolve(null)
         ])
-        setStats(statsRes.data)
+        if (statsRes) setStats(statsRes.data)
         setDrivers(driversRes.data.drivers || [])
       }
     } catch (error) {
@@ -272,7 +274,7 @@ export default function DispatchMap() {
     } finally {
       setLoading(false)
     }
-  }, [filterStatus, isAdmin])
+  }, [filterStatus, canManageRoutes, isAdmin])
 
   /**
    * Carga la lista de órdenes que ya han sido entregadas.
@@ -335,11 +337,14 @@ export default function DispatchMap() {
   useEffect(() => {
     fetchData()
     fetchFavorites()
-    fetchPickupReady()
+    if (isAdmin) fetchPickupReady()
     const interval = setInterval(fetchData, 180000)
-    const pickupInterval = setInterval(() => fetchPickupReady(), 5 * 60 * 1000)
-    return () => { clearInterval(interval); clearInterval(pickupInterval) }
-  }, [fetchData, fetchFavorites, fetchPickupReady])
+    const pickupInterval = isAdmin ? setInterval(() => fetchPickupReady(), 5 * 60 * 1000) : null
+    return () => {
+      clearInterval(interval)
+      if (pickupInterval) clearInterval(pickupInterval)
+    }
+  }, [fetchData, fetchFavorites, fetchPickupReady, isAdmin])
 
   // Socket.IO — actualización en tiempo real para el panel de admin
   useEffect(() => {
@@ -450,7 +455,7 @@ export default function DispatchMap() {
       const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
 
       marker.addListener('click', () => {
-        if (isAdmin && showAddStopsPanel !== null) {
+        if (canManageRoutes && showAddStopsPanel !== null) {
           if (isPending) {
             alert(t('dispatch.pendingWarning'))
           } else {
@@ -460,7 +465,7 @@ export default function DispatchMap() {
           }
         } else {
           infoWindow.open(mapInstance.current, marker)
-          if (isAdmin) toggleOrderSelection(order.id)
+          if (canManageRoutes) toggleOrderSelection(order.id)
         }
       })
 
@@ -599,7 +604,7 @@ export default function DispatchMap() {
       const infoWindow = new window.google.maps.InfoWindow({ content: infoContent })
 
       marker.addListener('click', () => {
-        if (isAdmin && showAddStopsPanel !== null) {
+        if (canManageRoutes && showAddStopsPanel !== null) {
           setEditSelectedFavorites(prev =>
             prev.includes(fav.id) ? prev.filter(id => id !== fav.id) : [...prev, fav.id]
           )
@@ -1536,7 +1541,7 @@ export default function DispatchMap() {
           </div>
         )}
 
-        {isAdmin && (
+        {canManageRoutes && (
           <div className="dispatch-tabs">
             <button className={`dtab ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}>
               <span className="material-icons">list_alt</span> {t('dispatch.tabs.orders')}
@@ -1544,19 +1549,23 @@ export default function DispatchMap() {
             <button className={`dtab ${activeTab === 'routes' ? 'active' : ''}`} onClick={() => setActiveTab('routes')}>
               <span className="material-icons">route</span> {t('dispatch.tabs.routes')}
             </button>
-            <button className={`dtab ${activeTab === 'favorites' ? 'active' : ''}`} style={activeTab === 'favorites' ? { color: '#FFD600', borderBottomColor: '#FFD600' } : {}} onClick={() => { setActiveTab('favorites'); if (favorites.length === 0) fetchFavorites() }}>
-              <span className="material-icons">star</span> {t('dispatch.tabs.favorites')}
-            </button>
-            <button className={`dtab ${activeTab === 'drivers' ? 'active' : ''}`} onClick={() => { setActiveTab('drivers'); if (allUsers.length === 0) fetchAllUsers() }}>
-              <span className="material-icons">people</span> {t('dispatch.tabs.drivers')}
-            </button>
-            <button className={`dtab ${activeTab === 'delivered' ? 'active' : ''}`} onClick={() => { setActiveTab('delivered'); fetchDeliveredOrders() }}>
-              <span className="material-icons">done_all</span> {t('dispatch.tabs.delivered')}
-            </button>
+            {isAdmin && (
+              <>
+                <button className={`dtab ${activeTab === 'favorites' ? 'active' : ''}`} style={activeTab === 'favorites' ? { color: '#FFD600', borderBottomColor: '#FFD600' } : {}} onClick={() => { setActiveTab('favorites'); if (favorites.length === 0) fetchFavorites() }}>
+                  <span className="material-icons">star</span> {t('dispatch.tabs.favorites')}
+                </button>
+                <button className={`dtab ${activeTab === 'drivers' ? 'active' : ''}`} onClick={() => { setActiveTab('drivers'); if (allUsers.length === 0) fetchAllUsers() }}>
+                  <span className="material-icons">people</span> {t('dispatch.tabs.drivers')}
+                </button>
+                <button className={`dtab ${activeTab === 'delivered' ? 'active' : ''}`} onClick={() => { setActiveTab('delivered'); fetchDeliveredOrders() }}>
+                  <span className="material-icons">done_all</span> {t('dispatch.tabs.delivered')}
+                </button>
+              </>
+            )}
           </div>
         )}
 
-        {isAdmin && (
+        {canManageRoutes && (
           <div className="dispatch-filter">
             <div className="dispatch-search-box">
               <span className="material-icons">search</span>
@@ -1584,31 +1593,35 @@ export default function DispatchMap() {
                 <option value="delivered">{t('dispatch.statuses.delivered')}</option>
                 <option value="wholesale">{t('dispatch.wholesale')}</option>
               </select>
-              <button
-                className="btn-add-manual-order"
-                onClick={syncPickupReadyFromGmail}
-                disabled={syncingPickupReady}
-                title={t('dispatch.audit.syncGmail')}
-                style={{ background: '#0d47a1', marginRight: 4 }}
-              >
-                <span className="material-icons" style={{ fontSize: 18 }}>
-                  {syncingPickupReady ? 'hourglass_empty' : 'mark_email_read'}
-                </span>
-              </button>
-              <button
-                className="btn-add-manual-order"
-                onClick={diagnosePickupReady}
-                disabled={diagnosingPickup}
-                title={t('dispatch.audit.diagnose')}
-                style={{ background: '#7b1fa2', marginRight: 4 }}
-              >
-                <span className="material-icons" style={{ fontSize: 18 }}>
-                  {diagnosingPickup ? 'hourglass_empty' : 'troubleshoot'}
-                </span>
-              </button>
-              <button className="btn-add-manual-order" onClick={openManualOrderModal} title={t('dispatch.audit.addManual')}>
-                <span className="material-icons">add</span>
-              </button>
+              {isAdmin && (
+                <>
+                  <button
+                    className="btn-add-manual-order"
+                    onClick={syncPickupReadyFromGmail}
+                    disabled={syncingPickupReady}
+                    title={t('dispatch.audit.syncGmail')}
+                    style={{ background: '#0d47a1', marginRight: 4 }}
+                  >
+                    <span className="material-icons" style={{ fontSize: 18 }}>
+                      {syncingPickupReady ? 'hourglass_empty' : 'mark_email_read'}
+                    </span>
+                  </button>
+                  <button
+                    className="btn-add-manual-order"
+                    onClick={diagnosePickupReady}
+                    disabled={diagnosingPickup}
+                    title={t('dispatch.audit.diagnose')}
+                    style={{ background: '#7b1fa2', marginRight: 4 }}
+                  >
+                    <span className="material-icons" style={{ fontSize: 18 }}>
+                      {diagnosingPickup ? 'hourglass_empty' : 'troubleshoot'}
+                    </span>
+                  </button>
+                  <button className="btn-add-manual-order" onClick={openManualOrderModal} title={t('dispatch.audit.addManual')}>
+                    <span className="material-icons">add</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1758,7 +1771,7 @@ export default function DispatchMap() {
           </div>
         )}
 
-        {isAdmin && (selectedOrders.length > 0 || selectedFavorites.length > 0) && (
+        {canManageRoutes && (selectedOrders.length > 0 || selectedFavorites.length > 0) && (
           <div className="dispatch-selection-panel">
             <div className="selection-header">
               <div className="selected-count">
@@ -1825,7 +1838,7 @@ export default function DispatchMap() {
             </div>
 
             <div className="selection-bottom-actions">
-              {selectedOrders.length > 0 && (
+              {isAdmin && selectedOrders.length > 0 && (
                 <div className="status-btns-row">
                   <button className="dbtn blue" onClick={() => handleBulkStatus('ordered')} title="Ordenada">
                     <span className="material-icons">shopping_cart</span>
@@ -1911,7 +1924,7 @@ export default function DispatchMap() {
                     key={order.id}
                     className={`dispatch-order ${isSelected ? 'selected' : ''}`}
                     onClick={() => {
-                      if (isAdmin) toggleOrderSelection(order.id)
+                      if (canManageRoutes) toggleOrderSelection(order.id)
                       if (mapInstance.current && order.address_lat) {
                         mapInstance.current.panTo({ lat: order.address_lat, lng: order.address_lng })
                         mapInstance.current.setZoom(15)
@@ -2136,7 +2149,7 @@ export default function DispatchMap() {
                             key={order.id}
                             className={`dispatch-order wholesale-order ${isSelected ? 'selected' : ''}`}
                             onClick={() => {
-                              if (isAdmin) toggleOrderSelection(order.id)
+                              if (canManageRoutes) toggleOrderSelection(order.id)
                               if (mapInstance.current && order.address_lat) {
                                 mapInstance.current.panTo({ lat: order.address_lat, lng: order.address_lng })
                                 mapInstance.current.setZoom(15)
@@ -2194,7 +2207,7 @@ export default function DispatchMap() {
                       <div
                         key={fav.id}
                         className={`dispatch-order ${isFavSelected ? 'selected' : ''}`}
-                        onClick={() => { if (isAdmin) toggleFavoriteSelection(fav.id); if (mapInstance.current && fav.lat && fav.lng) { mapInstance.current.panTo({ lat: fav.lat, lng: fav.lng }); mapInstance.current.setZoom(15) } }}
+                        onClick={() => { if (canManageRoutes) toggleFavoriteSelection(fav.id); if (mapInstance.current && fav.lat && fav.lng) { mapInstance.current.panTo({ lat: fav.lat, lng: fav.lng }); mapInstance.current.setZoom(15) } }}
                       >
                         <div className="do-status-dot" style={{ backgroundColor: '#FFD600', border: 'none' }}></div>
                         <div className="do-content">
@@ -2263,9 +2276,7 @@ export default function DispatchMap() {
                       >
                         <span className="material-icons" style={{ fontSize: 14 }}>print</span>
                       </button>
-                      {isAdmin && (
-                        <>
-                        {!['draft', 'completed', 'returned'].includes(route.status) && (
+                      {isAdmin && !['draft', 'completed', 'returned'].includes(route.status) && (
                           <button
                             className="dbtn outline small"
                             style={{ padding: '2px 7px', fontSize: 12, color: '#b45309', borderColor: '#f59e0b' }}
@@ -2274,7 +2285,8 @@ export default function DispatchMap() {
                           >
                             <span className="material-icons" style={{ fontSize: 14 }}>undo</span>
                           </button>
-                        )}
+                      )}
+                      {canManageRoutes && (
                         <button
                           className="dbtn outline small"
                           style={{ padding: '2px 7px', fontSize: 12 }}
@@ -2285,7 +2297,6 @@ export default function DispatchMap() {
                         >
                           <span className="material-icons" style={{ fontSize: 14 }}>{isEditing ? 'close' : 'edit'}</span>
                         </button>
-                        </>
                       )}
                     </div>
                   </div>
@@ -2324,7 +2335,7 @@ export default function DispatchMap() {
                     </div>
                   )}
 
-                  {isEditing && isAdmin && (
+                  {isEditing && canManageRoutes && (
                     <div className="dr-edit-panel">
                       {loadingRouteStops === route.id ? (
                         <div className="loading-center" style={{ padding: 12 }}><div className="spinner"></div></div>
@@ -2511,7 +2522,7 @@ export default function DispatchMap() {
                       {route.total_duration > 0 && <span> - ~{route.total_duration} min</span>}
                     </div>
                   )}
-                  {isAdmin && route.status === 'draft' && !isEditing && (
+                  {canManageRoutes && route.status === 'draft' && !isEditing && (
                     <div className="dr-actions">
                       <button
                         className="dbtn blue full"
@@ -2526,7 +2537,7 @@ export default function DispatchMap() {
                       </button>
                     </div>
                   )}
-                  {isAdmin && route.status === 'assigned' && !isEditing && (
+                  {canManageRoutes && route.status === 'assigned' && !isEditing && (
                     <div className="dr-driver-row">
                       <div className="dr-driver">
                         <span className="material-icons">person</span> {route.orders?.[0]?.driver_name || 'Chofer asignado'}
@@ -2536,7 +2547,7 @@ export default function DispatchMap() {
                       </button>
                     </div>
                   )}
-                  {!isAdmin && route.status === 'assigned' && route.orders?.[0]?.driver_name && (
+                  {!canManageRoutes && route.status === 'assigned' && route.orders?.[0]?.driver_name && (
                     <div className="dr-driver">
                       <span className="material-icons">person</span> {route.orders[0].driver_name}
                     </div>

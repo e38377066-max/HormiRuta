@@ -891,7 +891,8 @@
       "roles": {
         "admin": "Admin",
         "driver": "Chofer",
-        "client": "Cliente"
+      "client": "Cliente",
+      "receptionist": "Recepcionista"
       },
       "active": "Activo",
       "inactive": "Inactivo",

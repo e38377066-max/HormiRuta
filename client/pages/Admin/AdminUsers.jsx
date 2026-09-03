@@ -133,7 +133,12 @@ export default function AdminUsers() {
 
   /** Obtiene la etiqueta traducida del rol */
   const getRoleLabel = (role) => {
-    const map = { admin: t('admin.users.roles.admin'), driver: t('admin.users.roles.driver'), client: t('admin.users.roles.client') }
+    const map = {
+      admin: t('admin.users.roles.admin'),
+      driver: t('admin.users.roles.driver'),
+      client: t('admin.users.roles.client'),
+      receptionist: t('admin.users.roles.receptionist')
+    }
     return map[role] || role
   }
 
@@ -312,6 +317,7 @@ export default function AdminUsers() {
                   <option value="client">{t('admin.users.roles.client')}</option>
                   <option value="driver">{t('admin.users.roles.driver')}</option>
                   <option value="admin">{t('admin.users.roles.admin')}</option>
+                  <option value="receptionist">{t('admin.users.roles.receptionist')}</option>
                 </select>
               </div>
               <div className="field-group">
