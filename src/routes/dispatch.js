@@ -1492,8 +1492,12 @@ router.post('/routes', requireAdmin, async (req, res) => {
           (item.type === 'favorite' && favoriteMap.has(item.id))
         )
       : [
-        ...[...ordersMap.keys()].map(id => ({ type: 'order', id })),
-        ...[...favoriteMap.keys()].map(id => ({ type: 'favorite', id }))
+        ...(hasOrders ? order_ids : [])
+          .map(id => ({ type: 'order', id: String(id) }))
+          .filter(item => ordersMap.has(item.id)),
+        ...(hasFavs ? favorite_stops : [])
+          .map(fav => ({ type: 'favorite', id: String(fav.id) }))
+          .filter(item => favoriteMap.has(item.id))
       ];
     const uniqueOrderedKeys = new Set(orderedItems.map(item => `${item.type}:${item.id}`));
 
