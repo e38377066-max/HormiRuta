@@ -3975,7 +3975,7 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
     // Solo cuenta el efectivo: Zelle/transferencia ya lo recibio la empresa.
     const allDriverRoutes = await Route.findAll({
       where: { assigned_driver_id: req.userId, status: 'completed' },
-      attributes: ['id', 'admin_amount_received']
+      attributes: ['id', 'admin_amount_received', 'payment_delivered']
     });
     const allRouteIds = allDriverRoutes.map(r => r.id);
     const allRouteStops = allRouteIds.length > 0
@@ -4002,6 +4002,9 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
       const commission = driverCommission * stopCount;
       const grossToDeliver = cashCollected - commission;
       const received = Number(r.admin_amount_received || 0);
+      if (r.payment_delivered) {
+        return sum;
+      }
       const pending = Math.max(0, grossToDeliver - received);
       if (pending > 0) pendingRoutes += 1;
       return sum + pending;
@@ -4085,6 +4088,7 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
       const grossToDeliver = cashCollected - commission;
       const received = Number(r.admin_amount_received || 0);
       const pendingToDeliver = Math.max(0, grossToDeliver - received);
+      const driverToDeliver = r.payment_delivered ? 0 : pendingToDeliver;
       return {
         id: r.id,
         name: r.name,
@@ -4094,7 +4098,7 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
         cash_collected: cashCollected,
         electronic_collected: electronicCollected,
         commission,
-        to_deliver: pendingToDeliver,
+        to_deliver: driverToDeliver,
         payment_delivered: r.payment_delivered || false,
         payment_delivery_method: r.payment_delivery_method || null,
         payment_delivered_at: r.payment_delivered_at || null,
