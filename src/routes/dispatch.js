@@ -1446,11 +1446,11 @@ router.post('/routes', requireAdmin, async (req, res) => {
       const dbOrders = await ValidatedAddress.findAll({
         where: { id: { [Op.in]: order_ids } }
       });
-      dbOrders.forEach(o => ordersMap.set(o.id, o));
+      dbOrders.forEach(o => ordersMap.set(String(o.id), o));
     }
 
     const missingOrderIds = hasOrders
-      ? order_ids.filter(id => !ordersMap.has(id))
+      ? order_ids.filter(id => !ordersMap.has(String(id)))
       : [];
     const invalidOrders = [...ordersMap.values()].filter(order =>
       !String(order.validated_address || '').trim() ||
@@ -2137,7 +2137,10 @@ router.post('/routes/:id/optimize', requireAdmin, async (req, res) => {
 
     const startLocation = route.start_lat && route.start_lng
       ? { lat: route.start_lat, lng: route.start_lng }
-      : null;
+      : {
+        lat: Number(stops[0].lat),
+        lng: Number(stops[0].lng)
+      };
 
     const result = await optimizeRouteOrder(stops, startLocation, route.return_to_start);
 
