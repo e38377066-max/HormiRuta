@@ -41,6 +41,7 @@ const ORDER_STATUS_TO_LIFECYCLE = {
  * @returns {boolean} True si es efectivo.
  */
 const isCashMethod = (m) => !m || m === 'cash';
+const isCompletedStop = (stop) => stop.status === 'completed';
 
 /**
  * Una ruta deja de ser editable/destruible en cuanto existe evidencia de que
@@ -1993,7 +1994,9 @@ router.get('/routes', requireAuth, async (req, res) => {
       routeDict.total_amount = routeOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
       routeDict.driver_commission_per_stop = r.assigned_driver_id ? (driverCommissionMap[r.assigned_driver_id] || 0) : 0;
       routeDict.driver_commission_total = routeDict.driver_commission_per_stop * (routeDict.stops_count || 0);
-      routeDict.route_total_collected = routeAllStops.reduce((sum, s) => sum + (Number(s.amount_collected) || 0), 0);
+       routeDict.route_total_collected = routeAllStops
+         .filter(isCompletedStop)
+         .reduce((sum, s) => sum + (Number(s.amount_collected) || 0), 0);
       routeDict.payment_delivered = r.payment_delivered || false;
       routeDict.payment_delivery_method = r.payment_delivery_method || null;
       routeDict.payment_delivered_at = r.payment_delivered_at || null;
@@ -2053,7 +2056,7 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
 
     const result = routes.map(r => {
       const driver = r.assigned_driver_id ? driverMap[r.assigned_driver_id] : null;
-      const routeStops = stopsByRoute[r.id] || [];
+       const routeStops = (stopsByRoute[r.id] || []).filter(isCompletedStop);
       const stopCount = routeStops.length;
 
       let cashCollected = 0;
@@ -3319,7 +3322,8 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'La ruta fue cerrada después de regresar órdenes pendientes.' });
     }
 
-    const allStops = await Stop.findAll({ where: { route_id: route.id } });
+     const allStops = await Stop.findAll({ where: { route_id: route.id } });
+     const completedStops = allStops.filter(isCompletedStop);
     if (allStops.length === 0) {
       return res.status(400).json({ error: 'No se puede finalizar una ruta sin paradas.' });
     }
@@ -3393,14 +3397,14 @@ router.put('/routes/:id/deliver-payment', requireAuth, async (req, res) => {
     const allStops = await Stop.findAll({ where: { route_id: route.id } });
     // El chofer solo entrega el efectivo. Lo cobrado por Zelle/transferencia
     // ya lo recibio la empresa directamente, asi que no entra en route_total_collected.
-    const cashCollected = allStops.reduce((sum, s) => sum + (isCashMethod(s.payment_method) ? Number(s.amount_collected) || 0 : 0), 0);
-    const electronicCollected = allStops.reduce((sum, s) => sum + (!isCashMethod(s.payment_method) ? Number(s.amount_collected) || 0 : 0), 0);
+     const cashCollected = completedStops.reduce((sum, s) => sum + (isCashMethod(s.payment_method) ? Number(s.amount_collected) || 0 : 0), 0);
+     const electronicCollected = completedStops.reduce((sum, s) => sum + (!isCashMethod(s.payment_method) ? Number(s.amount_collected) || 0 : 0), 0);
 
     // route_total_collected = EFECTIVO NETO a entregar (efectivo bruto menos comision).
     // Debe coincidir con lo que muestra /routes/payment-status y con el monto que
     // el admin confirma en /admin-confirm-payment.
     const deliverDriver = await User.findByPk(route.assigned_driver_id, { attributes: ['commission_per_stop'] });
-    const deliverCommission = Number(deliverDriver?.commission_per_stop || 0) * allStops.length;
+     const deliverCommission = Number(deliverDriver?.commission_per_stop || 0) * completedStops.length;
     const netCashToDeliver = Math.max(0, cashCollected - deliverCommission);
 
     route.payment_delivered = true;
@@ -3978,12 +3982,12 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
       attributes: ['id', 'admin_amount_received', 'payment_delivered']
     });
     const allRouteIds = allDriverRoutes.map(r => r.id);
-    const allRouteStops = allRouteIds.length > 0
+     const allRouteStops = allRouteIds.length > 0
       ? await Stop.findAll({ where: { route_id: { [Op.in]: allRouteIds } }, attributes: ['route_id', 'amount_collected', 'payment_method'] })
       : [];
     const stopCountMap = {};
     const stopCashMap = {};
-    allRouteStops.forEach(s => {
+     allRouteStops.filter(isCompletedStop).forEach(s => {
       stopCountMap[s.route_id] = (stopCountMap[s.route_id] || 0) + 1;
       if (isCashMethod(s.payment_method)) {
         stopCashMap[s.route_id] = (stopCashMap[s.route_id] || 0) + Number(s.amount_collected || 0);
@@ -4077,13 +4081,14 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
     });
 
     const result = routes.map(r => {
-      const routeStops = (stopMap[r.id] || [])
+       const routeStops = (stopMap[r.id] || [])
         .slice()
         .sort((a, b) => (a.order || 0) - (b.order || 0));
-      const cashCollected = routeStops.reduce((sum, s) => sum + (isCashMethod(s.payment_method) ? Number(s.amount_collected || 0) : 0), 0);
-      const electronicCollected = routeStops.reduce((sum, s) => sum + (!isCashMethod(s.payment_method) ? Number(s.amount_collected || 0) : 0), 0);
+       const accountingStops = routeStops.filter(isCompletedStop);
+       const cashCollected = accountingStops.reduce((sum, s) => sum + (isCashMethod(s.payment_method) ? Number(s.amount_collected || 0) : 0), 0);
+       const electronicCollected = accountingStops.reduce((sum, s) => sum + (!isCashMethod(s.payment_method) ? Number(s.amount_collected || 0) : 0), 0);
       const totalCollected = cashCollected + electronicCollected;
-      const commission = commissionPerStop * routeStops.length;
+       const commission = commissionPerStop * accountingStops.length;
       // Solo el efectivo se entrega; Zelle/transferencia ya lo recibio la empresa.
       const grossToDeliver = cashCollected - commission;
       const received = Number(r.admin_amount_received || 0);
