@@ -2063,7 +2063,7 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
       return res.status(503).json({ error: 'Respond.io no está configurado globalmente. Configúralo en Ajustes → Mensajería' });
     }
     respondApiService.setContext(route.user_id, settings.respond_api_token);
-    const contactPayload = await respondApiService.getContact(contactId);
+    const contactPayload = await respondApiService.getContact(`id:${contactId}`);
     const contact = unwrapRespondContact(contactPayload);
     if (!contact || respondContactId(contact) == null) {
       return res.status(404).json({ error: 'Contacto no encontrado en Respond.io' });

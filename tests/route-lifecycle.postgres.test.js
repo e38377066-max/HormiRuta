@@ -587,6 +587,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     const originalAssignConversation = respondApiService.assignConversation;
     const originalGeocodeAddress = geocodingService.geocodeAddress;
     let requestedRespondSearch = null;
+    let requestedContactIdentifier = null;
 
     respondApiService.listContacts = async (filters) => {
       requestedRespondSearch = filters.search;
@@ -598,9 +599,11 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
         }]
       };
     };
-    respondApiService.getContact = async (contactId) => (
-      contactId === dispatchingContact.id ? dispatchingContact : pickupContact
-    );
+    respondApiService.getContact = async (contactId) => {
+      requestedContactIdentifier = contactId;
+      const normalizedContactId = String(contactId).replace(/^id:/, '');
+      return normalizedContactId === dispatchingContact.id ? dispatchingContact : pickupContact;
+    };
     respondApiService.updateLifecycle = async () => ({ success: true });
     respondApiService.findUserByEmail = async () => ({ id: `${marker}-respond-driver` });
     respondApiService.assignConversation = async () => ({ success: true });
@@ -649,6 +652,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
         userId: driver.id
       });
       assert.equal(added.statusCode, 201);
+      assert.equal(requestedContactIdentifier, `id:${dispatchingContact.id}`);
 
       const createdOrder = await ValidatedAddress.findByPk(added.body.order.id);
       assert.equal(createdOrder.respond_contact_id, dispatchingContact.id);

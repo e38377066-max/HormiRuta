@@ -407,7 +407,8 @@ class RespondApiService {
    * @returns {Promise<Object>} Datos del contacto.
    */
   async getContact(identifier) {
-    return this.request('GET', `/contact/${identifier}`);
+    const formattedId = String(identifier).includes(':') ? String(identifier) : `id:${identifier}`;
+    return this.request('GET', `/contact/${formattedId}`);
   }
 
   /**
