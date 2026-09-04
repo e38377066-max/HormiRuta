@@ -1477,10 +1477,17 @@ router.put('/orders/bulk-status', requireAdmin, async (req, res) => {
       where: { id: { [Op.in]: order_ids } }
     });
 
-    await ValidatedAddress.update(
-      { order_status },
-      { where: { id: { [Op.in]: order_ids } } }
-    );
+    if (order_status === 'on_delivery') {
+      for (const order of ordersToUpdate) {
+        moveOrderToDelivery(order);
+        await order.save();
+      }
+    } else {
+      await ValidatedAddress.update(
+        { order_status },
+        { where: { id: { [Op.in]: order_ids } } }
+      );
+    }
 
     const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
     if (lifecycleName) {
@@ -2000,6 +2007,16 @@ router.post('/routes/:id/return-orders', requireAdmin, async (req, res) => {
     route.status = releasedOrderIds.length > 0 ? 'returned' : route.status;
     await route.save({ transaction });
     await transaction.commit();
+
+    const receptionRespondContext = createReceptionRespondContext();
+    if (releasedOrderIds.length > 0) {
+      const releasedOrders = await ValidatedAddress.findAll({
+        where: { id: { [Op.in]: releasedOrderIds } }
+      });
+      for (const releasedOrder of releasedOrders) {
+        await assignOrderBackToReception(releasedOrder, receptionRespondContext);
+      }
+    }
 
     emitToAdmins('route:updated', { route_id: route.id });
     if (route.assigned_driver_id) {
@@ -2886,6 +2903,7 @@ router.put('/returns/:id/release', requireAdminOrReceptionist, async (req, res) 
     order.dispatch_status = 'available';
     restorePreDeliveryStatus(order);
     await order.save();
+    await assignOrderBackToReception(order);
     res.json({ success: true, order: order.toDict() });
   } catch (error) {
     console.error('Error releasing return:', error);
@@ -3141,6 +3159,7 @@ router.post('/pickup/:routeId/confirm-stops', requireAdminOrReceptionist, async 
       : [];
 
     const confirmedCount = confirmedAddrs.length + confirmedFavoriteStops.length;
+    const receptionRespondContext = createReceptionRespondContext();
     if (confirmedCount > 0) {
       // Órdenes de la ruta omitidas de ambos arrays vuelven al dispatching (sin parada = huérfanas)
       const confirmedIds = confirmedAddrs.map(a => a.id);
@@ -3154,6 +3173,7 @@ router.post('/pickup/:routeId/confirm-stops', requireAdminOrReceptionist, async 
         rejectedOrder.assigned_driver_id = null;
         rejectedOrder.driver_name = null;
         await rejectedOrder.save();
+        await assignOrderBackToReception(rejectedOrder, receptionRespondContext);
       }
       for (let i = 0; i < confirmedAddrs.length; i++) {
         const va = confirmedAddrs[i];
@@ -3196,6 +3216,7 @@ router.post('/pickup/:routeId/confirm-stops', requireAdminOrReceptionist, async 
         rejectedOrder.assigned_driver_id = null;
         rejectedOrder.driver_name = null;
         await rejectedOrder.save();
+        await assignOrderBackToReception(rejectedOrder, receptionRespondContext);
       }
       route.assigned_driver_id = null;
       route.status = 'draft';
