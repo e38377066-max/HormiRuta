@@ -220,10 +220,10 @@ const assignOrderBackToReception = async (order, context = createReceptionRespon
 
     respondApiService.setContext(order.user_id, settings.respond_api_token);
 
+    const receptionName = settings.default_agent_name || 'Felipe Delgado';
     let assignee = context.assignees.get(order.user_id);
     if (assignee === undefined) {
       assignee = settings.default_agent_id || null;
-      const receptionName = settings.default_agent_name || 'Felipe Delgado';
 
       if (!assignee) {
         const configuredAgent = await ServiceAgent.findOne({

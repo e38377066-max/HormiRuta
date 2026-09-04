@@ -20,13 +20,17 @@ let Stop;
 let ValidatedAddress;
 let DeliveryHistory;
 let FavoriteAddress;
+let MessagingSettings;
+let ServiceAgent;
 let Op;
 let admin;
 const created = {
   routeIds: [],
   stopIds: [],
   orderIds: [],
-  favoriteIds: []
+  favoriteIds: [],
+  messagingSettingsIds: [],
+  serviceAgentIds: []
 };
 let marker;
 
@@ -165,7 +169,7 @@ async function createMatchedPair(routeId, orderAttributes = {}, stopAttributes =
 
 describe('route lifecycle delivery-history protections with PostgreSQL', { skip: !shouldRun }, () => {
   before(async () => {
-    ({ sequelize, User, Route, Stop, ValidatedAddress, DeliveryHistory, FavoriteAddress } =
+    ({ sequelize, User, Route, Stop, ValidatedAddress, DeliveryHistory, FavoriteAddress, MessagingSettings, ServiceAgent } =
       await import('../src/models/index.js'));
     ({ Op } = await import('sequelize'));
     ({ default: router } = await import('../src/routes/dispatch.js'));
@@ -174,7 +178,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     await sequelize.authenticate();
     // Sync only the tables used by this suite; alter them so newly added
     // lifecycle columns are present in an existing test database.
-    for (const model of [User, FavoriteAddress, Route, Stop, ValidatedAddress, DeliveryHistory]) {
+    for (const model of [User, FavoriteAddress, Route, Stop, ValidatedAddress, DeliveryHistory, MessagingSettings, ServiceAgent]) {
       await model.sync({ alter: { drop: false } });
     }
 
@@ -184,6 +188,22 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       email: `${marker}@example.test`,
       role: 'admin'
     });
+
+    const messagingSettings = await MessagingSettings.create({
+      user_id: admin.id,
+      respond_api_token: 'postgres-test-token',
+      default_agent_name: 'Felipe Delgado'
+    });
+    created.messagingSettingsIds.push(messagingSettings.id);
+
+    const receptionAgent = await ServiceAgent.create({
+      user_id: admin.id,
+      agent_id: `${marker}-felipe-agent`,
+      agent_name: 'Felipe Delgado',
+      service_name: 'Area 862',
+      is_active: true
+    });
+    created.serviceAgentIds.push(receptionAgent.id);
   });
 
   after(async () => {
@@ -195,6 +215,8 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       await DeliveryHistory.destroy({
         where: { original_order_id: { [Op.in]: created.orderIds } }
       });
+      await ServiceAgent.destroy({ where: { id: { [Op.in]: created.serviceAgentIds } } });
+      await MessagingSettings.destroy({ where: { id: { [Op.in]: created.messagingSettingsIds } } });
       await User.destroy({ where: { id: admin.id } });
       await sequelize.close();
     }
@@ -384,6 +406,110 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       assert.equal(result.statusCode, 409, `${rejectedCase.name} must block restore`);
       assert.equal((await Stop.findByPk(stop.id)).status, 'skipped');
       assert.equal((await ValidatedAddress.findByPk(order.id)).route_id, null);
+    }
+  });
+
+  it('returns pending orders to the configured reception agent and restores their lifecycle', async () => {
+    const { default: respondApiService } = await import('../src/services/respondApiService.js');
+    const route = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: admin.id
+    });
+    const order = await createOrder(route.id, {
+      order_status: 'on_delivery',
+      previous_order_status: 'ordered',
+      respond_contact_id: `${marker}-respond-contact`
+    });
+    const stop = await createStop(route.id, order);
+    const calls = [];
+    const originalSetContext = respondApiService.setContext;
+    const originalAssignConversation = respondApiService.assignConversation;
+    const originalUpdateLifecycle = respondApiService.updateLifecycle;
+
+    respondApiService.setContext = (...args) => calls.push({
+      method: 'setContext',
+      args
+    });
+    respondApiService.assignConversation = async (...args) => {
+      calls.push({ method: 'assignConversation', args });
+      return { success: true };
+    };
+    respondApiService.updateLifecycle = async (...args) => {
+      calls.push({ method: 'updateLifecycle', args });
+      return { success: true };
+    };
+
+    try {
+      const result = await callRoute(router, 'POST', '/routes/:id/return-orders', {
+        params: { id: route.id }
+      });
+
+      assert.equal(result.statusCode, 200);
+      assert.deepEqual(result.body.released_order_ids, [order.id]);
+      assert.deepEqual(result.body.released_stop_ids, [stop.id]);
+      assert.equal((await Route.findByPk(route.id)).status, 'returned');
+
+      const restoredOrder = await ValidatedAddress.findByPk(order.id);
+      assert.equal(restoredOrder.route_id, null);
+      assert.equal(restoredOrder.dispatch_status, 'available');
+      assert.equal(restoredOrder.assigned_driver_id, null);
+      assert.equal(restoredOrder.order_status, 'ordered');
+      assert.equal(restoredOrder.previous_order_status, null);
+      assert.equal(await Stop.findByPk(stop.id), null);
+
+      assert.deepEqual(
+        calls.filter(call => call.method === 'assignConversation').map(call => call.args),
+        [[`${order.respond_contact_id}`, `${marker}-felipe-agent`]]
+      );
+      assert.deepEqual(
+        calls.filter(call => call.method === 'updateLifecycle').map(call => call.args),
+        [[`${order.respond_contact_id}`, 'Ordered']]
+      );
+    } finally {
+      respondApiService.setContext = originalSetContext;
+      respondApiService.assignConversation = originalAssignConversation;
+      respondApiService.updateLifecycle = originalUpdateLifecycle;
+    }
+  });
+
+  it('keeps a returned order restored when Respond.io fails', async () => {
+    const { default: respondApiService } = await import('../src/services/respondApiService.js');
+    const route = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: admin.id
+    });
+    const order = await createOrder(route.id, {
+      order_status: 'on_delivery',
+      previous_order_status: 'approved',
+      respond_contact_id: `${marker}-respond-failure-contact`
+    });
+    const stop = await createStop(route.id, order);
+    const originalAssignConversation = respondApiService.assignConversation;
+    let attemptedAssignment = false;
+
+    respondApiService.assignConversation = async () => {
+      attemptedAssignment = true;
+      throw new Error('Respond.io unavailable in test');
+    };
+
+    try {
+      const result = await callRoute(router, 'POST', '/routes/:id/return-orders', {
+        params: { id: route.id }
+      });
+
+      assert.equal(result.statusCode, 200);
+      assert.equal(result.body.released_count, 1);
+      assert.equal(attemptedAssignment, true);
+      assert.equal((await Route.findByPk(route.id)).status, 'returned');
+
+      const restoredOrder = await ValidatedAddress.findByPk(order.id);
+      assert.equal(restoredOrder.route_id, null);
+      assert.equal(restoredOrder.dispatch_status, 'available');
+      assert.equal(restoredOrder.order_status, 'approved');
+      assert.equal(restoredOrder.previous_order_status, null);
+      assert.equal(await Stop.findByPk(stop.id), null);
+    } finally {
+      respondApiService.assignConversation = originalAssignConversation;
     }
   });
 
