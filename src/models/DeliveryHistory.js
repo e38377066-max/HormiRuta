@@ -21,6 +21,17 @@ const DeliveryHistory = sequelize.define('DeliveryHistory', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
+  /** Indica que el chofer incorporó directamente esta parada a su ruta */
+  added_by_driver: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  /** Chofer que incorporó directamente la parada */
+  added_by_driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
   /** Nombre del cliente al momento de la entrega */
   customer_name: {
     type: DataTypes.STRING(200),

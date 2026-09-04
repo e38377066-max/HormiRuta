@@ -43,6 +43,21 @@ const Stop = sequelize.define('Stop', {
       key: 'id'
     }
   },
+  /** Indica que el chofer incorporó esta parada directamente desde su ruta */
+  added_by_driver: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  /** Chofer que incorporó directamente la parada */
+  added_by_driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
   /** Disposición del paquete asociado a esta parada */
   package_disposition: {
     type: DataTypes.STRING(30),
@@ -256,6 +271,8 @@ Stop.prototype.toDict = function() {
     unique_id: this.unique_id,
     route_id: this.route_id,
     favorite_address_id: this.favorite_address_id,
+    added_by_driver: this.added_by_driver,
+    added_by_driver_id: this.added_by_driver_id,
     address: this.address,
     lat: this.lat,
     lng: this.lng,

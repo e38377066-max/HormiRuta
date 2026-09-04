@@ -426,6 +426,7 @@ function CompletedRouteCard({ r, onRefresh, t, getPmt, lang }) {
                       <div className="dac-stop-name">
                         <span className="dac-stop-num">{idx + 1}.</span>
                         <span className="dac-stop-text">{s.customer_name || t('common.noName')}</span>
+                        {s.added_by_driver && <span className="dac-stop-badge dac-stop-badge-driver">Agregada por chofer</span>}
                         {isSkipped && <span className="dac-stop-badge dac-stop-badge-skipped">{t('accounting.skipped')}</span>}
                         {isCompleted && <span className="dac-stop-badge dac-stop-badge-completed">{t('accounting.delivered')}</span>}
                       </div>
@@ -572,6 +573,7 @@ function MonthCard({ m, expanded, onToggle, getPmt, t, lang }) {
                   <div className="dac-mini-amounts">
                     <span className="dac-mini-chip c-green">+{fmt(d.amount_collected)}</span>
                     <span className="dac-mini-chip c-blue">{t('accounting.commission')} {fmt(d.commission_per_stop)}</span>
+                    {d.added_by_driver && <span className="dac-mini-chip dac-mini-chip-driver">Agregada por chofer</span>}
                     {d.payment_method && (
                       <span className="dac-mini-chip" style={{ color: getPmt(d.payment_method).color }}>
                         {getPmt(d.payment_method).label}
@@ -640,11 +642,14 @@ function DeliveryCard({ d, getPmt, t }) {
         </div>
       </div>
 
-      {pmt && (
+      {(pmt || d.archived || d.added_by_driver) && (
         <div className="dac-del-badges">
-          <span className="dac-badge" style={{ color: pmt.color, background: pmt.bg }}>
-            {pmt.label}
-          </span>
+          {pmt && (
+            <span className="dac-badge" style={{ color: pmt.color, background: pmt.bg }}>
+              {pmt.label}
+            </span>
+          )}
+          {d.added_by_driver && <span className="dac-badge dac-badge-driver">Agregada por chofer</span>}
           {d.archived && <span className="dac-badge dac-badge-gray">{t('accounting.archived')}</span>}
         </div>
       )}

@@ -30,6 +30,21 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
     type: DataTypes.STRING(100),
     allowNull: true
   },
+  /** Indica que el chofer incorporó directamente la orden a su ruta */
+  added_by_driver: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  /** Chofer que incorporó directamente la orden */
+  added_by_driver_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
   /** Nombre del cliente */
   customer_name: {
     type: DataTypes.STRING(200),
@@ -233,6 +248,8 @@ ValidatedAddress.prototype.toDict = function() {
     id: this.id,
     user_id: this.user_id,
     respond_contact_id: this.respond_contact_id,
+    added_by_driver: this.added_by_driver,
+    added_by_driver_id: this.added_by_driver_id,
     customer_name: this.customer_name,
     customer_phone: this.customer_phone,
     original_address: this.original_address,

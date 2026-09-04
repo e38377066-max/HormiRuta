@@ -1229,6 +1229,8 @@ router.get('/accounting', requireAdmin, async (req, res) => {
         // colisiones cuando la misma orden se reactiva y se vuelve a entregar.
         id: del.id,
         original_order_id: del.original_order_id,
+        added_by_driver: Boolean(del.added_by_driver),
+        added_by_driver_id: del.added_by_driver_id,
         customer_name: del.customer_name,
         order_cost: del.order_cost,
         deposit_amount: del.deposit_amount,
@@ -1298,6 +1300,8 @@ router.get('/deliveries-report', requireAdmin, async (req, res) => {
       deliveries: deliveries.map(d => ({
         id: d.id,
         original_order_id: d.original_order_id,
+        added_by_driver: Boolean(d.added_by_driver),
+        added_by_driver_id: d.added_by_driver_id,
         customer_name: d.customer_name,
         customer_phone: d.customer_phone,
         address: d.address,
@@ -1367,6 +1371,8 @@ router.get('/deliveries-by-route', requireAdmin, async (req, res) => {
       let deliveries = routeStops.map(s => ({
         id: `stop-${s.id}`,
         original_order_id: null,
+        added_by_driver: Boolean(s.added_by_driver),
+        added_by_driver_id: s.added_by_driver_id,
         customer_name: s.customer_name,
         customer_phone: s.phone,
         address: s.address,
@@ -1470,6 +1476,7 @@ router.post('/deliveries-report/archive-month', requireAdmin, async (req, res) =
 
     const rows = deliveries.map(d => ({
       'ID': d.original_order_id || d.id,
+      'Agregada por chofer': d.added_by_driver ? 'Sí' : 'No',
       'Cliente': d.customer_name || '',
       'Teléfono': d.customer_phone || '',
       'Dirección': d.address || '',
@@ -1487,6 +1494,7 @@ router.post('/deliveries-report/archive-month', requireAdmin, async (req, res) =
 
     const totalsRow = {
       'ID': 'TOTALES',
+      'Agregada por chofer': '',
       'Cliente': `${deliveries.length} entregas`,
       'Teléfono': '',
       'Dirección': '',
@@ -2104,6 +2112,8 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
     const order = await ValidatedAddress.create({
       user_id: lockedRoute.user_id,
       respond_contact_id: normalizedContactId,
+      added_by_driver: user.role === 'driver',
+      added_by_driver_id: user.role === 'driver' ? user.id : null,
       customer_name: respondContactName(contact),
       customer_phone: respondContactPhone(contact) || null,
       customer_email: respondContactEmail(contact) || null,
@@ -2133,6 +2143,8 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
       lat: geo.latitude,
       lng: geo.longitude,
       order: existingStops,
+      added_by_driver: user.role === 'driver',
+      added_by_driver_id: user.role === 'driver' ? user.id : null,
       customer_name: order.customer_name,
       phone: order.customer_phone || '',
       note: order.notes || '',
@@ -4366,6 +4378,8 @@ router.get('/my-accounting', requireAuth, async (req, res) => {
       }
       byMonth[my].deliveries.push({
         id: d.id,
+        added_by_driver: Boolean(d.added_by_driver),
+        added_by_driver_id: d.added_by_driver_id,
         customer_name: d.customer_name,
         customer_phone: d.customer_phone,
         address: d.address,
@@ -4549,6 +4563,8 @@ router.get('/my-completed-routes', requireAuth, async (req, res) => {
           id: s.id,
           order: s.order,
           status: s.status,
+          added_by_driver: Boolean(s.added_by_driver),
+          added_by_driver_id: s.added_by_driver_id,
           customer_name: s.customer_name,
           address: s.address,
           apartment_number: s.apartment_number,

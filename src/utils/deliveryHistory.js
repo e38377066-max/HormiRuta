@@ -26,6 +26,8 @@ export async function saveToDeliveryHistory(order) {
 
     await DeliveryHistory.create({
       original_order_id: order.id,
+      added_by_driver: Boolean(order.added_by_driver),
+      added_by_driver_id: order.added_by_driver_id || null,
       customer_name: order.customer_name,
       customer_phone: order.customer_phone,
       address: order.validated_address,

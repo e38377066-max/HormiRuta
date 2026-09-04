@@ -119,8 +119,8 @@ export default function AccountingPage() {
 
   // Anchos redimensionables — tabla Resumen (9 cols)
   const [summaryWidths, startSummaryResize] = useColumnResize([180, 70, 100, 90, 100, 110, 110, 100, 50])
-  // Anchos redimensionables — tabla Entregas (12 cols)
-  const [delWidths, startDelResize] = useColumnResize([52, 165, 112, 185, 135, 72, 72, 82, 82, 72, 82, 130])
+  // Anchos redimensionables — tabla Entregas (13 cols)
+  const [delWidths, startDelResize] = useColumnResize([52, 165, 112, 185, 135, 110, 72, 72, 82, 82, 72, 82, 130])
 
   // Ancho libre del contenedor de tabla (arrastrable desde el borde derecho)
   const [tableContainerWidth, setTableContainerWidth] = useState(() => {
@@ -433,6 +433,7 @@ export default function AccountingPage() {
       'Ciudad',
       'Estado',
       t('admin.accounting.driver'),
+      'Agregada por chofer',
       t('admin.accounting.cost'),
       t('admin.accounting.deposit'),
       t('admin.accounting.toCollect'),
@@ -444,7 +445,7 @@ export default function AccountingPage() {
     const rows = deliveries.map(d => [
       d.id, d.customer_name || '', d.customer_phone || '',
       d.address || '', d.city || '', d.state || '',
-      d.driver_name || '', d.order_cost.toFixed(2),
+      d.driver_name || '', d.added_by_driver ? 'Sí' : 'No', d.order_cost.toFixed(2),
       d.deposit_amount.toFixed(2), d.total_to_collect.toFixed(2),
       d.amount_collected.toFixed(2), d.payment_method || '',
       d.commission_per_stop.toFixed(2),
@@ -1089,6 +1090,7 @@ export default function AccountingPage() {
                                   t('admin.accounting.phone'),
                                   t('admin.accounting.address'),
                                   t('admin.accounting.driver'),
+                                  'Origen',
                                   t('admin.accounting.cost'),
                                   t('admin.accounting.deposit'),
                                   t('admin.accounting.toCollect'),
@@ -1124,6 +1126,16 @@ export default function AccountingPage() {
                                       <span>{d.driver_name}</span>
                                     </div>
                                   </td>
+                                  <td>
+                                    {d.added_by_driver ? (
+                                      <span className="driver-added-badge">
+                                        <span className="material-icons">person_add</span>
+                                        Chofer
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: '#aaa', fontSize: 12 }}>Despacho</span>
+                                    )}
+                                  </td>
                                   <td style={{ textAlign: 'right' }}>{fmt(d.order_cost)}</td>
                                   <td style={{ textAlign: 'right', color: '#888' }}>{fmt(d.deposit_amount)}</td>
                                   <td style={{ textAlign: 'right' }}>{fmt(d.total_to_collect)}</td>
@@ -1142,7 +1154,7 @@ export default function AccountingPage() {
                             </tbody>
                             <tfoot>
                               <tr className="accounting-totals">
-                                <td colSpan={5}>
+                                <td colSpan={6}>
                                   <strong>{route.stops_count} parada{route.stops_count !== 1 ? 's' : ''}</strong>
                                 </td>
                                 <td style={{ textAlign: 'right' }}><strong>{fmt(route.total_cost)}</strong></td>

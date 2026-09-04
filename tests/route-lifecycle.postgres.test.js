@@ -24,13 +24,15 @@ let MessagingSettings;
 let ServiceAgent;
 let Op;
 let admin;
+let driver;
 const created = {
   routeIds: [],
   stopIds: [],
   orderIds: [],
   favoriteIds: [],
   messagingSettingsIds: [],
-  serviceAgentIds: []
+  serviceAgentIds: [],
+  driverIds: []
 };
 let marker;
 
@@ -217,6 +219,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       });
       await ServiceAgent.destroy({ where: { id: { [Op.in]: created.serviceAgentIds } } });
       await MessagingSettings.destroy({ where: { id: { [Op.in]: created.messagingSettingsIds } } });
+      await User.destroy({ where: { id: { [Op.in]: created.driverIds } } });
       await User.destroy({ where: { id: admin.id } });
       await sequelize.close();
     }
@@ -546,9 +549,15 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
   it('lists Pickup Ready and Dispatching contacts and adds the selected contact to the driver route', async () => {
     const { default: respondApiService } = await import('../src/services/respondApiService.js');
     const { default: geocodingService } = await import('../src/services/geocodingService.js');
+    driver = await User.create({
+      username: `${marker}-driver`,
+      email: `${marker}-driver@example.test`,
+      role: 'driver'
+    });
+    created.driverIds.push(driver.id);
     const route = await createRoute({
       status: 'assigned',
-      assigned_driver_id: admin.id
+      assigned_driver_id: driver.id
     });
     const pickupContact = {
       id: `${marker}-pickup-contact`,
@@ -604,7 +613,8 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
 
     try {
       const listed = await callRoute(router, 'GET', '/routes/:id/respond-pickup-orders', {
-        params: { id: route.id }
+        params: { id: route.id },
+        userId: driver.id
       });
       assert.equal(listed.statusCode, 200);
       assert.deepEqual(listed.body.orders, [
@@ -628,7 +638,8 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
 
       const added = await callRoute(router, 'POST', '/routes/:id/respond-pickup-orders', {
         params: { id: route.id },
-        body: { contact_id: dispatchingContact.id }
+        body: { contact_id: dispatchingContact.id },
+        userId: driver.id
       });
       assert.equal(added.statusCode, 201);
 
@@ -638,10 +649,28 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       assert.equal(createdOrder.order_status, 'on_delivery');
       assert.equal(createdOrder.previous_order_status, 'pickup_ready');
       assert.equal(createdOrder.customer_name, 'Dispatching Customer');
+      assert.equal(createdOrder.added_by_driver, true);
+      assert.equal(createdOrder.added_by_driver_id, driver.id);
 
       const createdStop = await Stop.findByPk(added.body.stop.id);
       assert.equal(createdStop.route_id, route.id);
       assert.equal(createdStop.address, dispatchingContact.custom_fields.address);
+      assert.equal(createdStop.added_by_driver, true);
+      assert.equal(createdStop.added_by_driver_id, driver.id);
+
+      created.orderIds.push(createdOrder.id);
+      created.stopIds.push(createdStop.id);
+      const { saveToDeliveryHistory } = await import('../src/utils/deliveryHistory.js');
+      createdOrder.order_status = 'delivered';
+      createdOrder.delivered_at = new Date();
+      await createdOrder.save();
+      await saveToDeliveryHistory(createdOrder);
+      const history = await DeliveryHistory.findOne({
+        where: { original_order_id: createdOrder.id }
+      });
+      assert.ok(history);
+      assert.equal(history.added_by_driver, true);
+      assert.equal(history.added_by_driver_id, driver.id);
     } finally {
       respondApiService.listContacts = originalListContacts;
       respondApiService.getContact = originalGetContact;

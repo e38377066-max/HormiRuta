@@ -1668,6 +1668,23 @@ button.section-item.danger-item:disabled {
   white-space: nowrap;
 }
 
+.driver-added-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.driver-added-badge .material-icons {
+  font-size: 14px;
+}
+
 .avatar-sm {
   width: 28px;
   height: 28px;

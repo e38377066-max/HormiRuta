@@ -842,6 +842,13 @@
   color: #22c55e;
 }
 
+.dac-stop-badge-driver,
+.dac-badge-driver,
+.dac-mini-chip-driver {
+  background: rgba(245,158,11,0.16);
+  color: #d97706;
+}
+
 .dac-stop-addr {
   display: flex;
   align-items: flex-start;
