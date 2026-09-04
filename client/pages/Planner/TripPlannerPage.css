@@ -1396,6 +1396,14 @@
   font-size: 14px;
 }
 
+.pickup-order-lifecycle {
+  color: #9dbbff !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+}
+
 .pickup-order-info span {
   color: #b9b9c6;
   font-size: 12px;

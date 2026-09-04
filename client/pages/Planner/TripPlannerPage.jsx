@@ -234,7 +234,7 @@ export default function TripPlannerPage() {
       const res = await api.get(`/api/dispatch/routes/${currentRouteId}/respond-pickup-orders`)
       setPickupOrders(res.data.orders || [])
     } catch (err) {
-      setPickupOrdersError(err.response?.data?.error || 'No se pudieron cargar las órdenes de Pickup Ready')
+      setPickupOrdersError(err.response?.data?.error || 'No se pudieron cargar las órdenes Pickup Ready o Dispatching')
     } finally {
       setLoadingPickupOrders(false)
     }
@@ -2831,8 +2831,8 @@ export default function TripPlannerPage() {
           <div className="modal-card pickup-orders-card" onClick={e => e.stopPropagation()}>
             <div className="pickup-orders-header">
               <div>
-                <h3>Órdenes Pickup Ready</h3>
-                <p>Selecciona una conversación de Respond.io para agregarla a tu ruta.</p>
+                <h3>Órdenes Pickup / Dispatching</h3>
+                <p>Selecciona una conversación de Respond.io que ya recogiste para agregarla a tu ruta.</p>
               </div>
               <button
                 className="evidence-close-btn"
@@ -2846,7 +2846,7 @@ export default function TripPlannerPage() {
             {loadingPickupOrders ? (
               <div className="pickup-orders-state">
                 <span className="material-icons spin">sync</span>
-                <span>Cargando Pickup Ready…</span>
+                <span>Cargando Pickup Ready y Dispatching…</span>
               </div>
             ) : pickupOrdersError ? (
               <div className="pickup-orders-error">
@@ -2856,8 +2856,8 @@ export default function TripPlannerPage() {
             ) : pickupOrders.length === 0 ? (
               <div className="pickup-orders-state">
                 <span className="material-icons">inbox</span>
-                <strong>No hay órdenes Pickup Ready disponibles</strong>
-                <small>Las conversaciones nuevas aparecerán aquí cuando estén listas para recoger.</small>
+                <strong>No hay órdenes Pickup Ready o Dispatching disponibles</strong>
+                <small>Las conversaciones que ya recogiste aparecerán aquí mientras no estén asignadas a otra ruta.</small>
               </div>
             ) : (
               <div className="pickup-orders-list">
@@ -2874,6 +2874,7 @@ export default function TripPlannerPage() {
                       <span className="material-icons pickup-order-icon">inventory_2</span>
                       <span className="pickup-order-info">
                         <strong>{order.name || 'Cliente sin nombre'}</strong>
+                        {order.lifecycle && <span className="pickup-order-lifecycle">{order.lifecycle}</span>}
                         {order.phone && <span>{order.phone}</span>}
                         <span className={order.address ? '' : 'pickup-order-no-address'}>
                           {order.address || 'Falta la dirección en Respond.io'}

@@ -543,7 +543,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     assert.equal(reloadedStop.status, 'pending');
   });
 
-  it('lists Pickup Ready contacts and adds the selected contact to the driver route', async () => {
+  it('lists Pickup Ready and Dispatching contacts and adds the selected contact to the driver route', async () => {
     const { default: respondApiService } = await import('../src/services/respondApiService.js');
     const { default: geocodingService } = await import('../src/services/geocodingService.js');
     const route = await createRoute({
@@ -560,6 +560,16 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
         address: '123 Main St, Dallas, TX 75201'
       }
     };
+    const dispatchingContact = {
+      id: `${marker}-dispatching-contact`,
+      firstName: 'Dispatching',
+      lastName: 'Customer',
+      phone: '+12145550124',
+      lifecycle: { name: 'Dispatching' },
+      custom_fields: {
+        address: '456 Oak St, Dallas, TX 75202'
+      }
+    };
     const originalListContacts = respondApiService.listContacts;
     const originalGetContact = respondApiService.getContact;
     const originalUpdateLifecycle = respondApiService.updateLifecycle;
@@ -568,23 +578,25 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     const originalGeocodeAddress = geocodingService.geocodeAddress;
 
     respondApiService.listContacts = async () => ({
-      items: [pickupContact, {
+      items: [pickupContact, dispatchingContact, {
         id: `${marker}-not-pickup`,
         name: 'Not ready',
         lifecycle: { name: 'Ordered' }
       }]
     });
-    respondApiService.getContact = async () => pickupContact;
+    respondApiService.getContact = async (contactId) => (
+      contactId === dispatchingContact.id ? dispatchingContact : pickupContact
+    );
     respondApiService.updateLifecycle = async () => ({ success: true });
     respondApiService.findUserByEmail = async () => ({ id: `${marker}-respond-driver` });
     respondApiService.assignConversation = async () => ({ success: true });
-    geocodingService.geocodeAddress = async () => ({
+    geocodingService.geocodeAddress = async (address) => ({
       success: true,
-      fullAddress: '123 Main St, Dallas, TX 75201',
+      fullAddress: address,
       latitude: 32.7767,
       longitude: -96.797,
-      streetNumber: '123',
-      zip: '75201',
+      streetNumber: address.startsWith('456') ? '456' : '123',
+      zip: address.includes('75202') ? '75202' : '75201',
       city: 'Dallas',
       stateShort: 'TX',
       confidence: 'high'
@@ -595,31 +607,41 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
         params: { id: route.id }
       });
       assert.equal(listed.statusCode, 200);
-      assert.deepEqual(listed.body.orders, [{
-        id: pickupContact.id,
-        name: 'Pickup Customer',
-        phone: pickupContact.phone,
-        email: '',
-        address: pickupContact.custom_fields.address,
-        lifecycle: 'Pickup Ready'
-      }]);
+      assert.deepEqual(listed.body.orders, [
+        {
+          id: pickupContact.id,
+          name: 'Pickup Customer',
+          phone: pickupContact.phone,
+          email: '',
+          address: pickupContact.custom_fields.address,
+          lifecycle: 'Pickup Ready'
+        },
+        {
+          id: dispatchingContact.id,
+          name: 'Dispatching Customer',
+          phone: dispatchingContact.phone,
+          email: '',
+          address: dispatchingContact.custom_fields.address,
+          lifecycle: 'Dispatching'
+        }
+      ]);
 
       const added = await callRoute(router, 'POST', '/routes/:id/respond-pickup-orders', {
         params: { id: route.id },
-        body: { contact_id: pickupContact.id }
+        body: { contact_id: dispatchingContact.id }
       });
       assert.equal(added.statusCode, 201);
 
       const createdOrder = await ValidatedAddress.findByPk(added.body.order.id);
-      assert.equal(createdOrder.respond_contact_id, pickupContact.id);
+      assert.equal(createdOrder.respond_contact_id, dispatchingContact.id);
       assert.equal(createdOrder.route_id, route.id);
       assert.equal(createdOrder.order_status, 'on_delivery');
       assert.equal(createdOrder.previous_order_status, 'pickup_ready');
-      assert.equal(createdOrder.customer_name, 'Pickup Customer');
+      assert.equal(createdOrder.customer_name, 'Dispatching Customer');
 
       const createdStop = await Stop.findByPk(added.body.stop.id);
       assert.equal(createdStop.route_id, route.id);
-      assert.equal(createdStop.address, pickupContact.custom_fields.address);
+      assert.equal(createdStop.address, dispatchingContact.custom_fields.address);
     } finally {
       respondApiService.listContacts = originalListContacts;
       respondApiService.getContact = originalGetContact;

@@ -179,8 +179,10 @@ const respondLifecycleName = (contact) => {
   return lifecycle?.name || lifecycle?.title || lifecycle?.value || '';
 };
 
-const isPickupReadyContact = (contact) => (
-  respondLifecycleName(contact).trim().toLowerCase() === 'pickup ready'
+const isPickupEligibleContact = (contact) => (
+  ['pickup ready', 'dispatching'].includes(
+    respondLifecycleName(contact).trim().toLowerCase()
+  )
 );
 
 /**
@@ -1947,8 +1949,8 @@ router.post('/routes/:id/orders', requireAdminOrReceptionist, async (req, res) =
 
 /**
  * GET /routes/:id/respond-pickup-orders
- * @description Lista contactos que siguen en Pickup Ready en Respond.io para
- * que el chofer pueda incorporarlos a su ruta activa.
+ * @description Lista contactos que siguen en Pickup Ready o Dispatching en
+ * Respond.io para que el chofer pueda incorporarlos a su ruta activa.
  */
 router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) => {
   try {
@@ -1959,7 +1961,7 @@ router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =>
     if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
     if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
     if (user.role !== 'admin' && route.assigned_driver_id !== user.id) {
-      return res.status(403).json({ error: 'Solo el chofer asignado puede consultar Pickup Ready' });
+      return res.status(403).json({ error: 'Solo el chofer asignado puede consultar Pickup Ready o Dispatching' });
     }
     if (['completed', 'returned'].includes(route.status)) {
       return res.status(409).json({ error: 'La ruta ya fue cerrada y no acepta órdenes nuevas' });
@@ -1992,7 +1994,7 @@ router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =>
     );
 
     const pickupOrders = contacts
-      .filter(isPickupReadyContact)
+      .filter(isPickupEligibleContact)
       .map(contact => {
         const id = respondContactId(contact);
         if (id == null || existingContactIds.has(String(id))) return null;
@@ -2009,21 +2011,21 @@ router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =>
 
     res.json({ success: true, orders: pickupOrders });
   } catch (error) {
-    console.error('Error loading Respond Pickup Ready contacts:', error);
-    res.status(502).json({ error: 'No se pudieron cargar las órdenes Pickup Ready de Respond.io' });
+    console.error('Error loading Respond Pickup/Dispatching contacts:', error);
+    res.status(502).json({ error: 'No se pudieron cargar las órdenes Pickup Ready o Dispatching de Respond.io' });
   }
 });
 
 /**
  * POST /routes/:id/respond-pickup-orders
- * @description Convierte un contacto Pickup Ready seleccionado en una orden y
- * una nueva parada de la ruta activa del chofer.
+ * @description Convierte un contacto Pickup Ready o Dispatching seleccionado
+ * en una orden y una nueva parada de la ruta activa del chofer.
  */
 router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) => {
   let transaction;
   try {
     const contactId = String(req.body?.contact_id || '').trim();
-    if (!contactId) return res.status(400).json({ error: 'Selecciona una orden Pickup Ready' });
+    if (!contactId) return res.status(400).json({ error: 'Selecciona una orden Pickup Ready o Dispatching' });
 
     const [user, route] = await Promise.all([
       User.findByPk(req.userId),
@@ -2048,8 +2050,8 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
     if (!contact || respondContactId(contact) == null) {
       return res.status(404).json({ error: 'Contacto no encontrado en Respond.io' });
     }
-    if (!isPickupReadyContact(contact)) {
-      return res.status(409).json({ error: 'La conversación ya no está en Pickup Ready' });
+    if (!isPickupEligibleContact(contact)) {
+      return res.status(409).json({ error: 'La conversación ya no está en Pickup Ready ni Dispatching' });
     }
 
     const rawAddress = respondContactAddress(contact);
@@ -2157,7 +2159,7 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
         }
       }
     } catch (respondError) {
-      console.error(`[Dispatch] Orden Pickup Ready agregada, pero falló sincronización Respond.io (${order.id}):`, respondError.message);
+      console.error(`[Dispatch] Orden Pickup/Dispatching agregada, pero falló sincronización Respond.io (${order.id}):`, respondError.message);
     }
 
     emitToAdmins('route:updated', { route_id: lockedRoute.id });
@@ -2169,8 +2171,8 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
     });
   } catch (error) {
     if (transaction) await transaction.rollback().catch(() => {});
-    console.error('Error adding Respond Pickup Ready order to route:', error);
-    res.status(500).json({ error: 'No se pudo agregar la orden Pickup Ready a la ruta' });
+    console.error('Error adding Respond Pickup/Dispatching order to route:', error);
+    res.status(500).json({ error: 'No se pudo agregar la orden Pickup Ready o Dispatching a la ruta' });
   }
 });
 
