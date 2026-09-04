@@ -107,6 +107,82 @@ const geocodedStreetNumberMatches = (rawAddress, geocodedResult) => {
   return Boolean(geocodedNumber) && geocodedNumber === requestedNumber;
 };
 
+const unwrapRespondContact = (payload) => (
+  payload?.data?.id || payload?.data?.contact
+    ? (payload.data.contact || payload.data)
+    : (payload?.contact || payload)
+);
+
+const respondContactId = (contact) => (
+  contact?.id ?? contact?.contactId ?? contact?.contact_id ?? null
+);
+
+const respondContactName = (contact) => (
+  contact?.name ||
+  [contact?.firstName, contact?.lastName].filter(Boolean).join(' ') ||
+  [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') ||
+  'Cliente Respond.io'
+);
+
+const respondContactPhone = (contact) => {
+  const phone = contact?.phone ?? contact?.phoneNumber ?? contact?.phone_number;
+  if (typeof phone === 'string' || typeof phone === 'number') return String(phone);
+  return phone?.number || phone?.value || '';
+};
+
+const respondContactEmail = (contact) => {
+  const email = contact?.email;
+  if (typeof email === 'string') return email;
+  return email?.address || email?.value || '';
+};
+
+const respondCustomFields = (contact) => (
+  contact?.customFields ||
+  contact?.custom_fields ||
+  contact?.fields ||
+  {}
+);
+
+const respondFieldValue = (fields, names) => {
+  const entries = Array.isArray(fields)
+    ? fields.map(field => [field?.name || field?.key || field?.field, field?.value])
+    : Object.entries(fields || {});
+  const normalizedNames = names.map(name => name.toLowerCase());
+  const entry = entries.find(([key, value]) =>
+    key && normalizedNames.includes(String(key).toLowerCase()) && value != null && String(value).trim()
+  );
+  if (!entry) return '';
+  const value = typeof entry[1] === 'object'
+    ? (entry[1].value ?? entry[1].text ?? entry[1].name ?? '')
+    : entry[1];
+  return value == null ? '' : String(value).trim();
+};
+
+const respondContactAddress = (contact) => {
+  const fields = respondCustomFields(contact);
+  const directAddress = contact?.address || contact?.street || contact?.streetAddress;
+  const address = typeof directAddress === 'string'
+    ? directAddress.trim()
+    : directAddress?.formatted || directAddress?.value || '';
+  if (address) return address;
+
+  const street = respondFieldValue(fields, ['address', 'direccion', 'delivery_address', 'delivery address', 'street', 'calle']);
+  const city = respondFieldValue(fields, ['city', 'ciudad']);
+  const state = respondFieldValue(fields, ['state', 'estado']);
+  const zip = respondFieldValue(fields, ['zip', 'zip_code', 'zipcode', 'postal_code', 'codigo postal']);
+  return [street, city, state, zip].filter(Boolean).join(', ');
+};
+
+const respondLifecycleName = (contact) => {
+  const lifecycle = contact?.lifecycle || contact?.lifecycleStage || contact?.lifecycle_stage;
+  if (typeof lifecycle === 'string') return lifecycle;
+  return lifecycle?.name || lifecycle?.title || lifecycle?.value || '';
+};
+
+const isPickupReadyContact = (contact) => (
+  respondLifecycleName(contact).trim().toLowerCase() === 'pickup ready'
+);
+
 /**
  * Busca la orden que corresponde a una parada. El modelo histórico no tiene
  * una FK directa entre Stop y ValidatedAddress, por lo que se conserva la
@@ -1866,6 +1942,235 @@ router.post('/routes/:id/orders', requireAdminOrReceptionist, async (req, res) =
   } catch (error) {
     console.error('Error adding orders to route:', error);
     res.status(500).json({ error: 'Error al agregar paradas' });
+  }
+});
+
+/**
+ * GET /routes/:id/respond-pickup-orders
+ * @description Lista contactos que siguen en Pickup Ready en Respond.io para
+ * que el chofer pueda incorporarlos a su ruta activa.
+ */
+router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) => {
+  try {
+    const [user, route] = await Promise.all([
+      User.findByPk(req.userId),
+      Route.findByPk(req.params.id)
+    ]);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+    if (user.role !== 'admin' && route.assigned_driver_id !== user.id) {
+      return res.status(403).json({ error: 'Solo el chofer asignado puede consultar Pickup Ready' });
+    }
+    if (['completed', 'returned'].includes(route.status)) {
+      return res.status(409).json({ error: 'La ruta ya fue cerrada y no acepta órdenes nuevas' });
+    }
+
+    const settings = await MessagingSettings.findOne({ where: { user_id: route.user_id } });
+    if (!settings?.respond_api_token) {
+      return res.status(503).json({ error: 'Respond.io no está configurado para esta cuenta' });
+    }
+
+    respondApiService.setContext(route.user_id, settings.respond_api_token);
+    const result = await respondApiService.listContacts({
+      search: '',
+      filter: { $and: [] },
+      timezone: settings.timezone || 'America/Chicago'
+    }, { limit: 100 });
+    const contacts = Array.isArray(result)
+      ? result
+      : (result?.items || result?.data?.items || []);
+
+    const existingOrders = await ValidatedAddress.findAll({
+      attributes: ['respond_contact_id'],
+      where: {
+        user_id: route.user_id,
+        respond_contact_id: { [Op.ne]: null }
+      }
+    });
+    const existingContactIds = new Set(
+      existingOrders.map(order => String(order.respond_contact_id))
+    );
+
+    const pickupOrders = contacts
+      .filter(isPickupReadyContact)
+      .map(contact => {
+        const id = respondContactId(contact);
+        if (id == null || existingContactIds.has(String(id))) return null;
+        return {
+          id: String(id),
+          name: respondContactName(contact),
+          phone: respondContactPhone(contact),
+          email: respondContactEmail(contact),
+          address: respondContactAddress(contact),
+          lifecycle: respondLifecycleName(contact)
+        };
+      })
+      .filter(Boolean);
+
+    res.json({ success: true, orders: pickupOrders });
+  } catch (error) {
+    console.error('Error loading Respond Pickup Ready contacts:', error);
+    res.status(502).json({ error: 'No se pudieron cargar las órdenes Pickup Ready de Respond.io' });
+  }
+});
+
+/**
+ * POST /routes/:id/respond-pickup-orders
+ * @description Convierte un contacto Pickup Ready seleccionado en una orden y
+ * una nueva parada de la ruta activa del chofer.
+ */
+router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) => {
+  let transaction;
+  try {
+    const contactId = String(req.body?.contact_id || '').trim();
+    if (!contactId) return res.status(400).json({ error: 'Selecciona una orden Pickup Ready' });
+
+    const [user, route] = await Promise.all([
+      User.findByPk(req.userId),
+      Route.findByPk(req.params.id)
+    ]);
+    if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+    if (!route) return res.status(404).json({ error: 'Ruta no encontrada' });
+    if (user.role !== 'admin' && route.assigned_driver_id !== user.id) {
+      return res.status(403).json({ error: 'Solo el chofer asignado puede agregar órdenes a esta ruta' });
+    }
+    if (!route.assigned_driver_id || ['completed', 'returned'].includes(route.status)) {
+      return res.status(409).json({ error: 'La ruta no está activa para agregar órdenes' });
+    }
+
+    const settings = await MessagingSettings.findOne({ where: { user_id: route.user_id } });
+    if (!settings?.respond_api_token) {
+      return res.status(503).json({ error: 'Respond.io no está configurado para esta cuenta' });
+    }
+    respondApiService.setContext(route.user_id, settings.respond_api_token);
+    const contactPayload = await respondApiService.getContact(contactId);
+    const contact = unwrapRespondContact(contactPayload);
+    if (!contact || respondContactId(contact) == null) {
+      return res.status(404).json({ error: 'Contacto no encontrado en Respond.io' });
+    }
+    if (!isPickupReadyContact(contact)) {
+      return res.status(409).json({ error: 'La conversación ya no está en Pickup Ready' });
+    }
+
+    const rawAddress = respondContactAddress(contact);
+    if (!rawAddress) {
+      return res.status(422).json({
+        error: 'El contacto no tiene una dirección de entrega en Respond.io'
+      });
+    }
+    const geo = await geocodingService.geocodeAddress(rawAddress);
+    if (!geo.success || !geocodedStreetNumberMatches(rawAddress, geo)) {
+      return res.status(422).json({
+        error: 'No se pudo validar la dirección de entrega de este contacto',
+        suggested_address: geo.fullAddress || null
+      });
+    }
+
+    const normalizedContactId = String(respondContactId(contact));
+    transaction = await sequelize.transaction();
+    const lockedRoute = await Route.findByPk(route.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    if (!lockedRoute || lockedRoute.assigned_driver_id !== req.userId && user.role !== 'admin') {
+      await transaction.rollback();
+      return res.status(409).json({ error: 'La ruta ya no está asignada a este chofer' });
+    }
+    if (['completed', 'returned'].includes(lockedRoute.status)) {
+      await transaction.rollback();
+      return res.status(409).json({ error: 'La ruta ya fue cerrada' });
+    }
+
+    const duplicate = await ValidatedAddress.findOne({
+      where: {
+        user_id: lockedRoute.user_id,
+        respond_contact_id: normalizedContactId
+      },
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+    if (duplicate) {
+      await transaction.rollback();
+      return res.status(409).json({ error: 'Este contacto ya está registrado como orden' });
+    }
+
+    const existingStops = await Stop.count({
+      where: { route_id: lockedRoute.id },
+      transaction
+    });
+    const address = geo.fullAddress || rawAddress;
+    const order = await ValidatedAddress.create({
+      user_id: lockedRoute.user_id,
+      respond_contact_id: normalizedContactId,
+      customer_name: respondContactName(contact),
+      customer_phone: respondContactPhone(contact) || null,
+      customer_email: respondContactEmail(contact) || null,
+      original_address: rawAddress,
+      validated_address: address,
+      address_lat: geo.latitude,
+      address_lng: geo.longitude,
+      zip_code: geo.zip || null,
+      city: geo.city || null,
+      state: geo.stateShort || geo.state || null,
+      confidence: geo.confidence || 'high',
+      source: 'respond',
+      dispatch_status: 'assigned',
+      order_status: 'pickup_ready',
+      package_disposition: 'normal',
+      assigned_driver_id: lockedRoute.assigned_driver_id,
+      driver_name: user.username,
+      route_id: lockedRoute.id,
+      notes: respondFieldValue(respondCustomFields(contact), ['notes', 'note', 'notas']) || null
+    }, { transaction });
+    moveOrderToDelivery(order);
+    await order.save({ transaction });
+
+    const stop = await Stop.create({
+      route_id: lockedRoute.id,
+      address,
+      lat: geo.latitude,
+      lng: geo.longitude,
+      order: existingStops,
+      customer_name: order.customer_name,
+      phone: order.customer_phone || '',
+      note: order.notes || '',
+      order_cost: order.order_cost,
+      deposit_amount: order.deposit_amount,
+      total_to_collect: order.total_to_collect,
+      apartment_number: order.apartment_number
+    }, { transaction });
+
+    lockedRoute.is_optimized = false;
+    lockedRoute.total_distance = 0;
+    lockedRoute.total_duration = 0;
+    await lockedRoute.save({ transaction });
+    await transaction.commit();
+    transaction = null;
+
+    try {
+      await respondApiService.updateLifecycle(normalizedContactId, 'On Delivery');
+      if (user.email) {
+        const respondDriver = await respondApiService.findUserByEmail(user.email);
+        const assignee = respondDriver?.id || respondDriver?.email;
+        if (assignee) {
+          await respondApiService.assignConversation(normalizedContactId, assignee);
+        }
+      }
+    } catch (respondError) {
+      console.error(`[Dispatch] Orden Pickup Ready agregada, pero falló sincronización Respond.io (${order.id}):`, respondError.message);
+    }
+
+    emitToAdmins('route:updated', { route_id: lockedRoute.id });
+    emitToDriver(lockedRoute.assigned_driver_id, 'route:updated', { route_id: lockedRoute.id });
+    res.status(201).json({
+      success: true,
+      order: order.toDict(),
+      stop: stop.toDict()
+    });
+  } catch (error) {
+    if (transaction) await transaction.rollback().catch(() => {});
+    console.error('Error adding Respond Pickup Ready order to route:', error);
+    res.status(500).json({ error: 'No se pudo agregar la orden Pickup Ready a la ruta' });
   }
 });
 

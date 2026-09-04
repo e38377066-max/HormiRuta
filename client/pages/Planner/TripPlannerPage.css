@@ -191,11 +191,43 @@
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
+.route-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .route-name {
   font-size: 22px;
   font-weight: 600;
   color: white;
   margin: 0;
+  min-width: 0;
+}
+
+.planner-add-pickup-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  border: 1px solid rgba(91, 141, 239, 0.55);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: rgba(91, 141, 239, 0.14);
+  color: #9dbbff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.planner-add-pickup-btn:hover {
+  background: rgba(91, 141, 239, 0.26);
+}
+
+.planner-add-pickup-btn .material-icons {
+  font-size: 18px;
 }
 
 .config-section {
@@ -1277,6 +1309,159 @@
   color: #999;
   padding: 8px 16px;
   cursor: pointer;
+}
+
+.pickup-orders-card {
+  width: min(92%, 500px);
+  max-height: min(78vh, 680px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.pickup-orders-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.pickup-orders-header h3 {
+  margin-bottom: 5px;
+}
+
+.pickup-orders-header p {
+  margin: 0;
+  color: #a8a8b8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pickup-orders-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.pickup-order-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.05);
+  color: white;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pickup-order-option:hover:not(:disabled) {
+  background: rgba(91,141,239,0.15);
+  border-color: rgba(91,141,239,0.6);
+}
+
+.pickup-order-option:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.pickup-order-icon {
+  flex-shrink: 0;
+  color: #73a0ff;
+  font-size: 24px;
+}
+
+.pickup-order-info {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pickup-order-info strong,
+.pickup-order-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickup-order-info strong {
+  font-size: 14px;
+}
+
+.pickup-order-info span {
+  color: #b9b9c6;
+  font-size: 12px;
+}
+
+.pickup-order-no-address {
+  color: #fbbf24 !important;
+}
+
+.pickup-order-action {
+  flex-shrink: 0;
+  color: #62d394;
+  font-size: 22px;
+}
+
+.pickup-orders-state,
+.pickup-orders-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 150px;
+  padding: 20px;
+  color: #b9b9c6;
+  text-align: center;
+}
+
+.pickup-orders-state .material-icons {
+  color: #73a0ff;
+  font-size: 34px;
+}
+
+.pickup-orders-state small {
+  max-width: 280px;
+  color: #858594;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.pickup-orders-error {
+  flex-direction: row;
+  align-items: flex-start;
+  min-height: auto;
+  border-radius: 10px;
+  background: rgba(239,68,68,0.12);
+  color: #fca5a5;
+  text-align: left;
+}
+
+.pickup-orders-error .material-icons {
+  flex-shrink: 0;
+  color: #f87171;
+}
+
+.pickup-orders-cancel {
+  margin-top: 12px;
+  align-self: flex-end;
+}
+
+.spin {
+  animation: pickup-spin 1s linear infinite;
+}
+
+@keyframes pickup-spin {
+  to { transform: rotate(360deg); }
 }
 
 .btn-primary {

@@ -415,8 +415,8 @@ class RespondApiService {
    * @param {Object} [filters={}] - Filtros de búsqueda.
    * @returns {Promise<Object>} Lista de contactos y metadatos.
    */
-  async listContacts(filters = {}) {
-    return this.request('POST', '/contact/list', filters);
+  async listContacts(filters = {}, params = null) {
+    return this.request('POST', '/contact/list', filters, params);
   }
 
   /**

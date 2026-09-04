@@ -543,6 +543,93 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     assert.equal(reloadedStop.status, 'pending');
   });
 
+  it('lists Pickup Ready contacts and adds the selected contact to the driver route', async () => {
+    const { default: respondApiService } = await import('../src/services/respondApiService.js');
+    const { default: geocodingService } = await import('../src/services/geocodingService.js');
+    const route = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: admin.id
+    });
+    const pickupContact = {
+      id: `${marker}-pickup-contact`,
+      firstName: 'Pickup',
+      lastName: 'Customer',
+      phone: '+12145550123',
+      lifecycle: { name: 'Pickup Ready' },
+      custom_fields: {
+        address: '123 Main St, Dallas, TX 75201'
+      }
+    };
+    const originalListContacts = respondApiService.listContacts;
+    const originalGetContact = respondApiService.getContact;
+    const originalUpdateLifecycle = respondApiService.updateLifecycle;
+    const originalFindUserByEmail = respondApiService.findUserByEmail;
+    const originalAssignConversation = respondApiService.assignConversation;
+    const originalGeocodeAddress = geocodingService.geocodeAddress;
+
+    respondApiService.listContacts = async () => ({
+      items: [pickupContact, {
+        id: `${marker}-not-pickup`,
+        name: 'Not ready',
+        lifecycle: { name: 'Ordered' }
+      }]
+    });
+    respondApiService.getContact = async () => pickupContact;
+    respondApiService.updateLifecycle = async () => ({ success: true });
+    respondApiService.findUserByEmail = async () => ({ id: `${marker}-respond-driver` });
+    respondApiService.assignConversation = async () => ({ success: true });
+    geocodingService.geocodeAddress = async () => ({
+      success: true,
+      fullAddress: '123 Main St, Dallas, TX 75201',
+      latitude: 32.7767,
+      longitude: -96.797,
+      streetNumber: '123',
+      zip: '75201',
+      city: 'Dallas',
+      stateShort: 'TX',
+      confidence: 'high'
+    });
+
+    try {
+      const listed = await callRoute(router, 'GET', '/routes/:id/respond-pickup-orders', {
+        params: { id: route.id }
+      });
+      assert.equal(listed.statusCode, 200);
+      assert.deepEqual(listed.body.orders, [{
+        id: pickupContact.id,
+        name: 'Pickup Customer',
+        phone: pickupContact.phone,
+        email: '',
+        address: pickupContact.custom_fields.address,
+        lifecycle: 'Pickup Ready'
+      }]);
+
+      const added = await callRoute(router, 'POST', '/routes/:id/respond-pickup-orders', {
+        params: { id: route.id },
+        body: { contact_id: pickupContact.id }
+      });
+      assert.equal(added.statusCode, 201);
+
+      const createdOrder = await ValidatedAddress.findByPk(added.body.order.id);
+      assert.equal(createdOrder.respond_contact_id, pickupContact.id);
+      assert.equal(createdOrder.route_id, route.id);
+      assert.equal(createdOrder.order_status, 'on_delivery');
+      assert.equal(createdOrder.previous_order_status, 'pickup_ready');
+      assert.equal(createdOrder.customer_name, 'Pickup Customer');
+
+      const createdStop = await Stop.findByPk(added.body.stop.id);
+      assert.equal(createdStop.route_id, route.id);
+      assert.equal(createdStop.address, pickupContact.custom_fields.address);
+    } finally {
+      respondApiService.listContacts = originalListContacts;
+      respondApiService.getContact = originalGetContact;
+      respondApiService.updateLifecycle = originalUpdateLifecycle;
+      respondApiService.findUserByEmail = originalFindUserByEmail;
+      respondApiService.assignConversation = originalAssignConversation;
+      geocodingService.geocodeAddress = originalGeocodeAddress;
+    }
+  });
+
   it('separates driver payment delivery from administrative receipt confirmation', async () => {
     const deliveredRoute = await createRoute({
       status: 'completed',

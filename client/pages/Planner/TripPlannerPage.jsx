@@ -109,6 +109,11 @@ export default function TripPlannerPage() {
   const [updatingAddress, setUpdatingAddress] = useState(false)
   const [addressError, setAddressError] = useState('')
   const [newRouteNotif, setNewRouteNotif] = useState(null)
+  const [showPickupOrdersModal, setShowPickupOrdersModal] = useState(false)
+  const [pickupOrders, setPickupOrders] = useState([])
+  const [loadingPickupOrders, setLoadingPickupOrders] = useState(false)
+  const [addingPickupOrderId, setAddingPickupOrderId] = useState(null)
+  const [pickupOrdersError, setPickupOrdersError] = useState('')
   const fileInputRef = useRef(null)
   const isDragging = useRef(false)
   const startY = useRef(0)
@@ -216,6 +221,38 @@ export default function TripPlannerPage() {
       await loadDispatchRoutes()
     } catch (err) {
       alert(err.response?.data?.error || 'Error al confirmar recogida')
+    }
+  }
+
+  const openPickupOrdersModal = async () => {
+    if (!currentRouteId) return
+    setShowPickupOrdersModal(true)
+    setLoadingPickupOrders(true)
+    setPickupOrdersError('')
+    setPickupOrders([])
+    try {
+      const res = await api.get(`/api/dispatch/routes/${currentRouteId}/respond-pickup-orders`)
+      setPickupOrders(res.data.orders || [])
+    } catch (err) {
+      setPickupOrdersError(err.response?.data?.error || 'No se pudieron cargar las órdenes de Pickup Ready')
+    } finally {
+      setLoadingPickupOrders(false)
+    }
+  }
+
+  const addPickupOrderToRoute = async (pickupOrder) => {
+    if (!currentRouteId || !pickupOrder?.id || !pickupOrder.address) return
+    setAddingPickupOrderId(pickupOrder.id)
+    try {
+      await api.post(`/api/dispatch/routes/${currentRouteId}/respond-pickup-orders`, {
+        contact_id: pickupOrder.id
+      })
+      setShowPickupOrdersModal(false)
+      await loadDispatchRoutes()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo agregar la orden a la ruta')
+    } finally {
+      setAddingPickupOrderId(null)
     }
   }
 
@@ -1830,6 +1867,8 @@ export default function TripPlannerPage() {
     ? stops[selectedStopIndex]
     : nextPendingStop
   const navTargetIndex = navTarget ? stops.indexOf(navTarget) : -1
+  const activeDispatchRoute = dispatchRoutes.find(route => String(route.id) === String(currentRouteId))
+  const canAddPickupOrder = activeDispatchRoute?.status === 'assigned'
 
   // El planificador siempre pinta una sola secuencia mixta. El índice original
   // se conserva para que seleccionar, mover, actualizar o completar una parada
@@ -2046,7 +2085,19 @@ export default function TripPlannerPage() {
           )}
 
           <div className="route-name-section" onClick={() => setShowRouteNameDialog(true)}>
-            <h2 className="route-name">{routeName}</h2>
+            <div className="route-name-row">
+              <h2 className="route-name">{routeName}</h2>
+              {canAddPickupOrder && (
+                <button
+                  className="planner-add-pickup-btn"
+                  onClick={e => { e.stopPropagation(); openPickupOrdersModal() }}
+                  type="button"
+                >
+                  <span className="material-icons">add_circle</span>
+                  <span>Agregar orden</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {isOptimized && totalDistance > 0 && (
@@ -2769,6 +2820,80 @@ export default function TripPlannerPage() {
               )}
             </div>
             <button className="btn-flat" style={{ marginTop: 12, width: '100%' }} onClick={() => setNavChooserOpen(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showPickupOrdersModal && (
+        <div className="modal-overlay" onClick={() => setShowPickupOrdersModal(false)}>
+          <div className="modal-card pickup-orders-card" onClick={e => e.stopPropagation()}>
+            <div className="pickup-orders-header">
+              <div>
+                <h3>Órdenes Pickup Ready</h3>
+                <p>Selecciona una conversación de Respond.io para agregarla a tu ruta.</p>
+              </div>
+              <button
+                className="evidence-close-btn"
+                onClick={() => setShowPickupOrdersModal(false)}
+                type="button"
+              >
+                <span className="material-icons">close</span>
+              </button>
+            </div>
+
+            {loadingPickupOrders ? (
+              <div className="pickup-orders-state">
+                <span className="material-icons spin">sync</span>
+                <span>Cargando Pickup Ready…</span>
+              </div>
+            ) : pickupOrdersError ? (
+              <div className="pickup-orders-error">
+                <span className="material-icons">error_outline</span>
+                <span>{pickupOrdersError}</span>
+              </div>
+            ) : pickupOrders.length === 0 ? (
+              <div className="pickup-orders-state">
+                <span className="material-icons">inbox</span>
+                <strong>No hay órdenes Pickup Ready disponibles</strong>
+                <small>Las conversaciones nuevas aparecerán aquí cuando estén listas para recoger.</small>
+              </div>
+            ) : (
+              <div className="pickup-orders-list">
+                {pickupOrders.map(order => {
+                  const isAdding = addingPickupOrderId === order.id
+                  return (
+                    <button
+                      key={order.id}
+                      className="pickup-order-option"
+                      disabled={!!addingPickupOrderId || !order.address}
+                      onClick={() => addPickupOrderToRoute(order)}
+                      type="button"
+                    >
+                      <span className="material-icons pickup-order-icon">inventory_2</span>
+                      <span className="pickup-order-info">
+                        <strong>{order.name || 'Cliente sin nombre'}</strong>
+                        {order.phone && <span>{order.phone}</span>}
+                        <span className={order.address ? '' : 'pickup-order-no-address'}>
+                          {order.address || 'Falta la dirección en Respond.io'}
+                        </span>
+                      </span>
+                      <span className="material-icons pickup-order-action">
+                        {isAdding ? 'sync' : order.address ? 'add_circle' : 'location_off'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <button
+              className="btn-flat pickup-orders-cancel"
+              onClick={() => setShowPickupOrdersModal(false)}
+              type="button"
+              disabled={!!addingPickupOrderId}
+            >
               Cancelar
             </button>
           </div>
