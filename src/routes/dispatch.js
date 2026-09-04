@@ -10,7 +10,7 @@ import XLSX from 'xlsx';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { sequelize, ValidatedAddress, Route, Stop, User, MessagingSettings, DeliveryHistory, FavoriteAddress } from '../models/index.js';
+import { sequelize, ValidatedAddress, Route, Stop, User, MessagingSettings, ServiceAgent, DeliveryHistory, FavoriteAddress } from '../models/index.js';
 import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
 import { requireAuth, requireAdmin, requireAdminOrReceptionist, requireRole } from '../middleware/auth.js';
 import { Op, literal } from 'sequelize';
@@ -200,6 +200,74 @@ const restorePreDeliveryStatus = (order) => {
     order.order_status = order.previous_order_status;
   }
   order.previous_order_status = null;
+};
+
+const createReceptionRespondContext = () => ({
+  settings: new Map(),
+  assignees: new Map()
+});
+
+const assignOrderBackToReception = async (order, context = createReceptionRespondContext()) => {
+  if (!order || (!order.respond_contact_id && !order.customer_phone)) return;
+
+  try {
+    let settings = context.settings.get(order.user_id);
+    if (settings === undefined) {
+      settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
+      context.settings.set(order.user_id, settings || null);
+    }
+    if (!settings?.respond_api_token) return;
+
+    respondApiService.setContext(order.user_id, settings.respond_api_token);
+
+    let assignee = context.assignees.get(order.user_id);
+    if (assignee === undefined) {
+      assignee = settings.default_agent_id || null;
+      const receptionName = settings.default_agent_name || 'Felipe Delgado';
+
+      if (!assignee) {
+        const configuredAgent = await ServiceAgent.findOne({
+          where: {
+            user_id: order.user_id,
+            agent_name: receptionName,
+            is_active: true
+          }
+        });
+        assignee = configuredAgent?.agent_id || configuredAgent?.agent_email || null;
+      }
+
+      if (!assignee) {
+        const nameParts = receptionName.trim().split(/\s+/);
+        const respondUser = await respondApiService.findUserByName(
+          nameParts[0] || 'Felipe',
+          nameParts.slice(1).join(' ') || 'Delgado'
+        );
+        assignee = respondUser?.id || respondUser?.email || null;
+      }
+
+      context.assignees.set(order.user_id, assignee || null);
+    }
+
+    if (!assignee) {
+      console.warn(`[Dispatch] No se encontró el agente de recepción para ${order.customer_name || order.id}`);
+      return;
+    }
+
+    const identifier = order.respond_contact_id || (() => {
+      const phone = String(order.customer_phone || '').replace(/\s+/g, '');
+      return phone ? `phone:${phone.startsWith('+') ? phone : '+' + phone}` : null;
+    })();
+    if (!identifier) return;
+
+    await respondApiService.assignConversation(identifier, assignee);
+    const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order.order_status];
+    if (lifecycleName) {
+      await respondApiService.updateLifecycle(identifier, lifecycleName);
+    }
+    console.log(`[Dispatch] Orden devuelta a recepción en Respond.io: ${order.customer_name || order.id} -> ${receptionName || 'Felipe Delgado'}`);
+  } catch (error) {
+    console.error(`[Dispatch] Error devolviendo orden a recepción en Respond.io (${order.customer_name || order.id}):`, error.message);
+  }
 };
 
 /**
@@ -2637,6 +2705,7 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
         orderMatch.held_by_driver_id = null;
       }
       await orderMatch.save();
+      await assignOrderBackToReception(orderMatch);
     } else if (stop.favorite_address_id) {
       stop.package_disposition = finalDisposition;
       stop.skip_reason = reason || null;
