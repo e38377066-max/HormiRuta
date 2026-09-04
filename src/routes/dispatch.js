@@ -1981,7 +1981,9 @@ router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =>
       return res.status(503).json({ error: 'Respond.io no está configurado para esta cuenta' });
     }
 
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    if (typeof res.set === 'function') {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    }
     respondApiService.setContext(route.user_id, settings.respond_api_token);
     const result = await respondApiService.listContacts({
       search,

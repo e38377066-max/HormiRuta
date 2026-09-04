@@ -585,14 +585,18 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     const originalFindUserByEmail = respondApiService.findUserByEmail;
     const originalAssignConversation = respondApiService.assignConversation;
     const originalGeocodeAddress = geocodingService.geocodeAddress;
+    let requestedRespondSearch = null;
 
-    respondApiService.listContacts = async () => ({
-      items: [pickupContact, dispatchingContact, {
-        id: `${marker}-not-pickup`,
-        name: 'Not ready',
-        lifecycle: { name: 'Ordered' }
-      }]
-    });
+    respondApiService.listContacts = async (filters) => {
+      requestedRespondSearch = filters.search;
+      return {
+        items: [pickupContact, dispatchingContact, {
+          id: `${marker}-not-pickup`,
+          name: 'Not ready',
+          lifecycle: { name: 'Ordered' }
+        }]
+      };
+    };
     respondApiService.getContact = async (contactId) => (
       contactId === dispatchingContact.id ? dispatchingContact : pickupContact
     );
@@ -614,9 +618,11 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     try {
       const listed = await callRoute(router, 'GET', '/routes/:id/respond-pickup-orders', {
         params: { id: route.id },
+        query: { search: 'Dispatching' },
         userId: driver.id
       });
       assert.equal(listed.statusCode, 200);
+      assert.equal(requestedRespondSearch, 'Dispatching');
       assert.deepEqual(listed.body.orders, [
         {
           id: pickupContact.id,
