@@ -176,6 +176,32 @@ const VALID_TRANSITIONS = {
   delivered: []
 };
 
+const RESTORABLE_ORDER_STATUSES = new Set(['pending', 'approved', 'ordered', 'pickup_ready']);
+
+const rememberPreDeliveryStatus = (order) => {
+  if (
+    order.order_status !== 'on_delivery' &&
+    order.order_status !== 'ups_shipped' &&
+    !order.previous_order_status
+  ) {
+    order.previous_order_status = order.order_status || 'approved';
+  }
+};
+
+const moveOrderToDelivery = (order) => {
+  rememberPreDeliveryStatus(order);
+  if (order.order_status !== 'ups_shipped') {
+    order.order_status = 'on_delivery';
+  }
+};
+
+const restorePreDeliveryStatus = (order) => {
+  if (RESTORABLE_ORDER_STATUSES.has(order.previous_order_status)) {
+    order.order_status = order.previous_order_status;
+  }
+  order.previous_order_status = null;
+};
+
 /**
  * GET /orders
  * @description Obtiene la lista de órdenes de despacho filtradas por rol (admin/driver) y estado.
@@ -383,6 +409,9 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permisos' });
     }
 
+    if (order_status === 'on_delivery') {
+      rememberPreDeliveryStatus(order);
+    }
     order.order_status = order_status;
     if (order_status === 'delivered') {
       order.delivered_at = new Date();
@@ -1859,12 +1888,12 @@ router.post('/routes/:id/return-orders', requireAdmin, async (req, res) => {
       );
       if (stop.status === 'pending' && disposition === 'normal' && isPendingOrder) {
         if (order) {
-          await order.update({
-            route_id: null,
-            dispatch_status: 'available',
-            assigned_driver_id: null,
-            driver_name: null
-          }, { transaction });
+          restorePreDeliveryStatus(order);
+          order.route_id = null;
+          order.dispatch_status = 'available';
+          order.assigned_driver_id = null;
+          order.driver_name = null;
+          await order.save({ transaction });
           releasedOrderIds.push(order.id);
         }
         releasedStopIds.push(stop.id);
@@ -1883,12 +1912,12 @@ router.post('/routes/:id/return-orders', requireAdmin, async (req, res) => {
         !['paid', 'partial', 'partially_paid'].includes(order.payment_status) &&
         !['held_by_driver', 'pending_return', 'returned_to_office'].includes(order.package_disposition);
       if (pending) {
-        await order.update({
-          route_id: null,
-          dispatch_status: 'available',
-          assigned_driver_id: null,
-          driver_name: null
-        }, { transaction });
+        restorePreDeliveryStatus(order);
+        order.route_id = null;
+        order.dispatch_status = 'available';
+        order.assigned_driver_id = null;
+        order.driver_name = null;
+        await order.save({ transaction });
         releasedOrderIds.push(order.id);
       }
     }
@@ -2325,7 +2354,7 @@ router.put('/routes/:id/assign', requireAdminOrReceptionist, async (req, res) =>
       const prevStatus = order.order_status;
       const willChangeToOnDelivery = prevStatus !== 'ups_shipped' && prevStatus !== 'on_delivery';
       if (prevStatus !== 'ups_shipped') {
-        order.order_status = 'on_delivery';
+        moveOrderToDelivery(order);
       }
       await order.save();
 
@@ -2597,7 +2626,7 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
 
     if (orderMatch) {
       orderMatch.route_id = null;
-      orderMatch.order_status = 'approved';
+      restorePreDeliveryStatus(orderMatch);
       orderMatch.package_disposition = finalDisposition;
       orderMatch.skip_reason = reason || null;
       orderMatch.skipped_at = new Date();
@@ -2786,6 +2815,7 @@ router.put('/returns/:id/release', requireAdminOrReceptionist, async (req, res) 
     order.skipped_at = null;
     order.returned_at = null;
     order.dispatch_status = 'available';
+    restorePreDeliveryStatus(order);
     await order.save();
     res.json({ success: true, order: order.toDict() });
   } catch (error) {
@@ -2845,7 +2875,7 @@ router.put('/stops/:id/restore', requireAuth, async (req, res) => {
       orderMatch.dispatch_status = 'assigned';
       orderMatch.assigned_driver_id = route.assigned_driver_id;
       orderMatch.driver_name = null;
-      if (orderMatch.order_status !== 'delivered') orderMatch.order_status = 'on_delivery';
+      if (orderMatch.order_status !== 'delivered') moveOrderToDelivery(orderMatch);
       await orderMatch.save();
     }
 
@@ -3021,15 +3051,7 @@ router.post('/pickup/:routeId/confirm-stops', requireAdminOrReceptionist, async 
       });
     }
 
-    // 1. Devolver paradas rechazadas al dispatching (limpiar route_id en VA)
-    if (rejectedOrderIds.length > 0) {
-      await ValidatedAddress.update(
-        { route_id: null, dispatch_status: 'available', assigned_driver_id: null, driver_name: null },
-        { where: { id: { [Op.in]: rejectedOrderIds }, route_id: route.id } }
-      );
-    }
-
-    // 2. Reconstruir las órdenes normales. Las favoritas se conservan como
+    // 1. Reconstruir las órdenes normales. Las favoritas se conservan como
     // Stop porque no tienen un ValidatedAddress equivalente.
     await Stop.destroy({
       where: { route_id: route.id, favorite_address_id: null }
@@ -3053,10 +3075,17 @@ router.post('/pickup/:routeId/confirm-stops', requireAdminOrReceptionist, async 
     if (confirmedCount > 0) {
       // Órdenes de la ruta omitidas de ambos arrays vuelven al dispatching (sin parada = huérfanas)
       const confirmedIds = confirmedAddrs.map(a => a.id);
-      await ValidatedAddress.update(
-        { route_id: null, dispatch_status: 'available', assigned_driver_id: null, driver_name: null },
-        { where: { route_id: route.id, id: { [Op.notIn]: confirmedIds } } }
-      );
+      const rejectedOrders = await ValidatedAddress.findAll({
+        where: { route_id: route.id, id: { [Op.notIn]: confirmedIds } }
+      });
+      for (const rejectedOrder of rejectedOrders) {
+        restorePreDeliveryStatus(rejectedOrder);
+        rejectedOrder.route_id = null;
+        rejectedOrder.dispatch_status = 'available';
+        rejectedOrder.assigned_driver_id = null;
+        rejectedOrder.driver_name = null;
+        await rejectedOrder.save();
+      }
       for (let i = 0; i < confirmedAddrs.length; i++) {
         const va = confirmedAddrs[i];
         if (va.address_lat && va.address_lng) {
@@ -3088,12 +3117,17 @@ router.post('/pickup/:routeId/confirm-stops', requireAdminOrReceptionist, async 
       }
     }
 
-    // 3. Si no quedó ninguna parada válida confirmada → desasignar la ruta (vuelve a draft)
+    // 2. Si no quedó ninguna parada válida confirmada → desasignar la ruta (vuelve a draft)
     if (confirmedCount === 0) {
-      await ValidatedAddress.update(
-        { route_id: null, dispatch_status: 'available', assigned_driver_id: null, driver_name: null },
-        { where: { route_id: route.id } }
-      );
+      const rejectedOrders = await ValidatedAddress.findAll({ where: { route_id: route.id } });
+      for (const rejectedOrder of rejectedOrders) {
+        restorePreDeliveryStatus(rejectedOrder);
+        rejectedOrder.route_id = null;
+        rejectedOrder.dispatch_status = 'available';
+        rejectedOrder.assigned_driver_id = null;
+        rejectedOrder.driver_name = null;
+        await rejectedOrder.save();
+      }
       route.assigned_driver_id = null;
       route.status = 'draft';
       await route.save();
@@ -3108,7 +3142,7 @@ router.post('/pickup/:routeId/confirm-stops', requireAdminOrReceptionist, async 
       });
     }
 
-    // 4. Confirmar la ruta al chofer (hay paradas confirmadas)
+    // 3. Confirmar la ruta al chofer (hay paradas confirmadas)
     route.pickup_admin_confirmed_at = new Date();
     route.pickup_admin_confirmed_by = req.userId;
     await route.save();

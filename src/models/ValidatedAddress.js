@@ -95,6 +95,11 @@ const ValidatedAddress = sequelize.define('ValidatedAddress', {
     type: DataTypes.STRING(30),
     defaultValue: 'approved'
   },
+  /** Estado de la orden antes de entrar al ciclo de entrega */
+  previous_order_status: {
+    type: DataTypes.STRING(30),
+    allowNull: true
+  },
   /** Monto del pedido */
   amount: {
     type: DataTypes.FLOAT,
@@ -242,6 +247,7 @@ ValidatedAddress.prototype.toDict = function() {
     source: this.source,
     dispatch_status: this.dispatch_status,
     order_status: this.order_status,
+    previous_order_status: this.previous_order_status,
     amount: this.amount,
     assigned_driver_id: this.assigned_driver_id,
     driver_name: this.driver_name,

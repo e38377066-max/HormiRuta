@@ -172,9 +172,10 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     ({ default: routesRouter } = await import('../src/routes/routes.js'));
 
     await sequelize.authenticate();
-    // Sync only the tables used by this suite; never alter unrelated tables.
+    // Sync only the tables used by this suite; alter them so newly added
+    // lifecycle columns are present in an existing test database.
     for (const model of [User, FavoriteAddress, Route, Stop, ValidatedAddress, DeliveryHistory]) {
-      await model.sync();
+      await model.sync({ alter: { drop: false } });
     }
 
     marker = `route-lifecycle-${randomUUID()}`;
@@ -244,7 +245,10 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       status: 'assigned',
       assigned_driver_id: admin.id
     });
-    const pending = await createMatchedPair(route.id);
+    const pending = await createMatchedPair(route.id, {
+      order_status: 'on_delivery',
+      previous_order_status: 'ordered'
+    });
     const delivered = await createMatchedPair(route.id, {
       order_status: 'delivered',
       delivered_at: new Date()
@@ -312,6 +316,8 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     const releasedOrder = await ValidatedAddress.findByPk(pending.order.id);
     assert.equal(releasedOrder.route_id, null);
     assert.equal(releasedOrder.dispatch_status, 'available');
+    assert.equal(releasedOrder.order_status, 'ordered');
+    assert.equal(releasedOrder.previous_order_status, null);
     assert.equal(await Stop.findByPk(pending.stop.id), null);
 
     for (const { order, stop } of [delivered, collected, skipped, held, returned]) {
