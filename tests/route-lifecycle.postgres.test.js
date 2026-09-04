@@ -513,6 +513,36 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     }
   });
 
+  it('reloads a pending return into the driver next route until office reception', async () => {
+    const route = await createRoute({ status: 'draft' });
+    const pendingReturn = await createOrder(null, {
+      route_id: null,
+      dispatch_status: 'available',
+      order_status: 'ordered',
+      package_disposition: 'pending_return',
+      held_by_driver_id: admin.id
+    });
+
+    const assigned = await callRoute(router, 'PUT', '/routes/:id/assign', {
+      params: { id: route.id },
+      body: { driver_id: admin.id }
+    });
+    assert.equal(assigned.statusCode, 200);
+
+    const reloadedOrder = await ValidatedAddress.findByPk(pendingReturn.id);
+    assert.equal(reloadedOrder.route_id, route.id);
+    assert.equal(reloadedOrder.package_disposition, 'normal');
+    assert.equal(reloadedOrder.held_by_driver_id, null);
+    assert.equal(reloadedOrder.order_status, 'on_delivery');
+    assert.equal(reloadedOrder.previous_order_status, 'ordered');
+
+    const reloadedStop = await Stop.findOne({
+      where: { route_id: route.id, customer_name: pendingReturn.customer_name }
+    });
+    assert.ok(reloadedStop);
+    assert.equal(reloadedStop.status, 'pending');
+  });
+
   it('separates driver payment delivery from administrative receipt confirmation', async () => {
     const deliveredRoute = await createRoute({
       status: 'completed',

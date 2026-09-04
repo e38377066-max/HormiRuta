@@ -2330,7 +2330,7 @@ router.put('/routes/:id/assign', requireAdminOrReceptionist, async (req, res) =>
       const heldOrders = await ValidatedAddress.findAll({
         where: {
           held_by_driver_id: driver_id,
-          package_disposition: 'held_by_driver',
+          package_disposition: { [Op.in]: ['held_by_driver', 'pending_return'] },
           route_id: null
         },
         lock: t.LOCK.UPDATE,
@@ -2374,7 +2374,7 @@ router.put('/routes/:id/assign', requireAdminOrReceptionist, async (req, res) =>
       const heldFavoriteStops = await Stop.findAll({
         where: {
           held_by_driver_id: driver_id,
-          package_disposition: 'held_by_driver',
+          package_disposition: { [Op.in]: ['held_by_driver', 'pending_return'] },
           favorite_address_id: { [Op.ne]: null },
           [Op.or]: [
             { route_id: null },
@@ -2716,7 +2716,7 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
       orderMatch.skip_reason = reason || null;
       orderMatch.skipped_at = new Date();
       orderMatch.returned_at = null;
-      if (finalDisposition === 'held_by_driver') {
+      if (['held_by_driver', 'pending_return'].includes(finalDisposition)) {
         orderMatch.held_by_driver_id = route.assigned_driver_id || req.userId;
       } else {
         orderMatch.held_by_driver_id = null;
@@ -2727,7 +2727,7 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
       stop.package_disposition = finalDisposition;
       stop.skip_reason = reason || null;
       stop.skipped_at = new Date();
-      stop.held_by_driver_id = finalDisposition === 'held_by_driver'
+      stop.held_by_driver_id = ['held_by_driver', 'pending_return'].includes(finalDisposition)
         ? (route.assigned_driver_id || req.userId)
         : null;
     }

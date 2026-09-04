@@ -14,3 +14,9 @@ Pending-order cleanup during a partial return must exclude every order matched t
 **Why:** A second orphan-order pass otherwise mistakes a deliberately retained pending delivery for a missing Stop and silently detaches it from the route.
 
 **How to apply:** Track matched order IDs during the Stop pass and only release pending orders that were never matched to any Stop.
+
+Packages skipped as `pending_return` remain linked to the responsible driver until office reception confirms them; assigning that driver's next route must automatically reload them, while office-received packages must not reload.
+
+**Why:** A package still outside the office has to follow the driver into the next route; clearing the driver link too early strands it in the return queue.
+
+**How to apply:** Preserve `held_by_driver_id` for both `held_by_driver` and `pending_return`, include both dispositions in automatic route reloads, and clear the link only at office reception.
