@@ -556,6 +556,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     });
     created.driverIds.push(driver.id);
     const route = await createRoute({
+      user_id: driver.id,
       status: 'assigned',
       assigned_driver_id: driver.id
     });

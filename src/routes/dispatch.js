@@ -42,6 +42,12 @@ const ORDER_STATUS_TO_LIFECYCLE = {
  */
 const isCashMethod = (m) => !m || m === 'cash';
 const isCompletedStop = (stop) => stop.status === 'completed';
+const getGlobalMessagingSettings = async () => {
+  const settings = await MessagingSettings.findAll({
+    order: [['created_at', 'ASC']]
+  });
+  return settings.find(setting => String(setting.respond_api_token || '').trim()) || settings[0] || null;
+};
 
 /**
  * Una ruta deja de ser editable/destruible en cuanto existe evidencia de que
@@ -1976,9 +1982,9 @@ router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =>
       return res.status(409).json({ error: 'La ruta ya fue cerrada y no acepta órdenes nuevas' });
     }
 
-    const settings = await MessagingSettings.findOne({ where: { user_id: route.user_id } });
+    const settings = await getGlobalMessagingSettings();
     if (!settings?.respond_api_token) {
-      return res.status(503).json({ error: 'Respond.io no está configurado para esta cuenta' });
+      return res.status(503).json({ error: 'Respond.io no está configurado globalmente. Configúralo en Ajustes → Mensajería' });
     }
 
     if (typeof res.set === 'function') {
@@ -2052,9 +2058,9 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
       return res.status(409).json({ error: 'La ruta no está activa para agregar órdenes' });
     }
 
-    const settings = await MessagingSettings.findOne({ where: { user_id: route.user_id } });
+    const settings = await getGlobalMessagingSettings();
     if (!settings?.respond_api_token) {
-      return res.status(503).json({ error: 'Respond.io no está configurado para esta cuenta' });
+      return res.status(503).json({ error: 'Respond.io no está configurado globalmente. Configúralo en Ajustes → Mensajería' });
     }
     respondApiService.setContext(route.user_id, settings.respond_api_token);
     const contactPayload = await respondApiService.getContact(contactId);
