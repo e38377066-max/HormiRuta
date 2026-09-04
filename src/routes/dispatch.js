@@ -1962,6 +1962,7 @@ router.post('/routes/:id/orders', requireAdminOrReceptionist, async (req, res) =
  */
 router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) => {
   try {
+    const search = String(req.query.search || '').trim().slice(0, 120);
     const [user, route] = await Promise.all([
       User.findByPk(req.userId),
       Route.findByPk(req.params.id)
@@ -1980,9 +1981,10 @@ router.get('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =>
       return res.status(503).json({ error: 'Respond.io no está configurado para esta cuenta' });
     }
 
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     respondApiService.setContext(route.user_id, settings.respond_api_token);
     const result = await respondApiService.listContacts({
-      search: '',
+      search,
       filter: { $and: [] },
       timezone: settings.timezone || 'America/Chicago'
     }, { limit: 100 });

@@ -114,6 +114,7 @@ export default function TripPlannerPage() {
   const [loadingPickupOrders, setLoadingPickupOrders] = useState(false)
   const [addingPickupOrderId, setAddingPickupOrderId] = useState(null)
   const [pickupOrdersError, setPickupOrdersError] = useState('')
+  const [pickupOrderSearch, setPickupOrderSearch] = useState('')
   const fileInputRef = useRef(null)
   const isDragging = useRef(false)
   const startY = useRef(0)
@@ -224,20 +225,34 @@ export default function TripPlannerPage() {
     }
   }
 
-  const openPickupOrdersModal = async () => {
+  const loadPickupOrders = async (searchTerm = '') => {
     if (!currentRouteId) return
-    setShowPickupOrdersModal(true)
     setLoadingPickupOrders(true)
     setPickupOrdersError('')
     setPickupOrders([])
     try {
-      const res = await api.get(`/api/dispatch/routes/${currentRouteId}/respond-pickup-orders`)
+      const query = searchTerm.trim()
+        ? `?search=${encodeURIComponent(searchTerm.trim())}`
+        : ''
+      const res = await api.get(`/api/dispatch/routes/${currentRouteId}/respond-pickup-orders${query}`)
       setPickupOrders(res.data.orders || [])
     } catch (err) {
-      setPickupOrdersError(err.response?.data?.error || 'No se pudieron cargar las órdenes Pickup Ready o Dispatching')
+      setPickupOrdersError(err.response?.data?.error || 'No se pudieron consultar las órdenes en Respond.io')
     } finally {
       setLoadingPickupOrders(false)
     }
+  }
+
+  const openPickupOrdersModal = async () => {
+    if (!currentRouteId) return
+    setShowPickupOrdersModal(true)
+    setPickupOrderSearch('')
+    await loadPickupOrders('')
+  }
+
+  const searchPickupOrders = async (event) => {
+    event.preventDefault()
+    await loadPickupOrders(pickupOrderSearch)
   }
 
   const addPickupOrderToRoute = async (pickupOrder) => {
@@ -2842,6 +2857,30 @@ export default function TripPlannerPage() {
                 <span className="material-icons">close</span>
               </button>
             </div>
+
+            <form className="pickup-orders-search" onSubmit={searchPickupOrders}>
+              <span className="material-icons">search</span>
+              <input
+                value={pickupOrderSearch}
+                onChange={e => setPickupOrderSearch(e.target.value)}
+                placeholder="Buscar por nombre o teléfono"
+                aria-label="Buscar órdenes en Respond.io"
+                autoFocus
+              />
+              <button type="submit" disabled={loadingPickupOrders}>
+                Buscar
+              </button>
+              <button
+                type="button"
+                className="pickup-orders-refresh"
+                onClick={() => loadPickupOrders(pickupOrderSearch)}
+                disabled={loadingPickupOrders}
+                title="Consultar Respond.io ahora"
+                aria-label="Actualizar desde Respond.io"
+              >
+                <span className="material-icons">refresh</span>
+              </button>
+            </form>
 
             {loadingPickupOrders ? (
               <div className="pickup-orders-state">
