@@ -2528,6 +2528,7 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
       const driver = r.assigned_driver_id ? driverMap[r.assigned_driver_id] : null;
       const routeStops = (stopsByRoute[r.id] || []).filter(isCompletedStop);
       const stopCount = routeStops.length;
+      const driverAddedStops = routeStops.filter(s => s.added_by_driver).length;
 
       let cashCollected = 0;
       let electronicCollected = 0;
@@ -2564,6 +2565,7 @@ router.get('/routes/payment-status', requireAdmin, async (req, res) => {
         driver_name: driver ? (driver.username || driver.email) : 'Sin chofer',
         completed_at: r.completed_at,
         stops_count: stopCount,
+        driver_added_stops: driverAddedStops,
         // route_gross_collected = efectivo bruto cobrado (antes de comision)
         route_gross_collected: cashCollected,
         cash_collected: cashCollected,

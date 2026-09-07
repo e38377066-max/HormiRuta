@@ -302,6 +302,9 @@ function CompletedRouteCard({ r, onRefresh, t, getPmt, lang }) {
   const [method, setMethod] = useState('')
   const [showPayForm, setShowPayForm] = useState(false)
   const [showStops, setShowStops] = useState(false)
+  const driverAddedStops = Array.isArray(r.stops)
+    ? r.stops.filter(stop => stop.added_by_driver).length
+    : 0
 
   /**
    * Maneja el envío del formulario para marcar el pago como entregado al administrador.
@@ -347,6 +350,12 @@ function CompletedRouteCard({ r, onRefresh, t, getPmt, lang }) {
               </span>
             )}
           </div>
+          {driverAddedStops > 0 && (
+            <div className="dac-driver-added-summary">
+              <span className="material-icons">person_add</span>
+              {driverAddedStops} parada{driverAddedStops !== 1 ? 's' : ''} agregada{driverAddedStops !== 1 ? 's' : ''} por chofer
+            </div>
+          )}
         </div>
         <div className="dac-route-badge" style={{ color: status.color, background: status.bg }}>
           <span className="material-icons" style={{ fontSize: 14 }}>{status.icon}</span>

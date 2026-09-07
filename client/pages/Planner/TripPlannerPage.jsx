@@ -335,6 +335,7 @@ export default function TripPlannerPage() {
       completed: s.status === 'completed',
       skipped: s.status === 'skipped',
       skippedOnce,
+      added_by_driver: Boolean(s.added_by_driver),
       favorite_address_id: s.favorite_address_id || null,
       package_disposition: s.package_disposition || 'normal',
       held_by_driver_id: s.held_by_driver_id || null,
@@ -2047,6 +2048,7 @@ export default function TripPlannerPage() {
               ) : (
                 dispatchRoutes.map(dr => {
                   const isCompleted = dr.status === 'completed'
+                  const driverAddedStops = (dr.route_stops || []).filter(stop => stop.added_by_driver).length
                   return (
                   <div
                     key={dr.id}
@@ -2064,6 +2066,11 @@ export default function TripPlannerPage() {
                     <div className="dispatch-route-meta">
                       <span>{dr.stops_count} {dr.stops_count === 1 ? t('planner.stop') : t('planner.stops')}</span>
                       {dr.total_distance > 0 && <span> - {(Number(dr.total_distance) * KM_TO_MILES).toFixed(1)} mi</span>}
+                      {driverAddedStops > 0 && (
+                        <span className="dispatch-route-driver-added">
+                          · {driverAddedStops} agregada{driverAddedStops !== 1 ? 's' : ''} por chofer
+                        </span>
+                      )}
                     </div>
                     {isCompleted && (
                       <button
@@ -2168,6 +2175,7 @@ export default function TripPlannerPage() {
                         <span className="stop-num-inline">{displayNumber != null ? `${displayNumber}.` : ''}</span> {stop.name || stop.address?.split(',')[0] || 'Parada'}
                         {stop.skipped && <span className="badge-saltada">Saltada</span>}
                         {stop.skippedOnce && <span className="badge-diferida">Al final</span>}
+                        {stop.added_by_driver && <span className="badge-added-by-driver">Agregada por chofer</span>}
                         {stop.favorite_address_id && <span className="badge-favorite">{t('planner.favorite')}</span>}
                       </span>
                       <span className="stop-address-detail">{stop.address || ''}{stop.apartment_number && <span style={{ color: '#1976d2', fontWeight: 600 }}> Apt {stop.apartment_number}</span>}</span>

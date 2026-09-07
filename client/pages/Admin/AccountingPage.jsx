@@ -812,6 +812,12 @@ export default function AccountingPage() {
                               ({r.stops_count} paradas)
                             </span>
                           )}
+                          {Number(r.driver_added_stops || 0) > 0 && (
+                            <span className="driver-added-summary-inline">
+                              <span className="material-icons">person_add</span>
+                              {r.driver_added_stops} del chofer
+                            </span>
+                          )}
                         </td>
                         <td>
                           <div className="del-driver-cell">
@@ -1029,6 +1035,7 @@ export default function AccountingPage() {
             <>
               {routeGroups.map(route => {
                 const isExpanded = expandedRouteIds.has(route.id)
+                const driverAddedStops = (route.deliveries || []).filter(d => d.added_by_driver).length
                 const toggleRoute = () => setExpandedRouteIds(prev => {
                   const next = new Set(prev)
                   if (next.has(route.id)) next.delete(route.id)
@@ -1058,6 +1065,12 @@ export default function AccountingPage() {
                           <span className="material-icons" style={{ fontSize: 14 }}>local_shipping</span>
                           {route.stops_count} parada{route.stops_count !== 1 ? 's' : ''}
                         </span>
+                        {driverAddedStops > 0 && (
+                          <span className="route-group-stat route-group-driver-added">
+                            <span className="material-icons" style={{ fontSize: 14 }}>person_add</span>
+                            {driverAddedStops} del chofer
+                          </span>
+                        )}
                         <span className="route-group-stat route-group-collected">
                           <span className="material-icons" style={{ fontSize: 14 }}>payments</span>
                           {fmt(route.total_collected)}

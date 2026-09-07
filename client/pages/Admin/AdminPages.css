@@ -1827,6 +1827,33 @@ button.section-item.danger-item:disabled {
   color: #4caf50 !important;
 }
 
+.route-group-driver-added {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.route-group-driver-added .material-icons {
+  color: #f59e0b !important;
+}
+
+.driver-added-summary-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #fff3e0;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.driver-added-summary-inline .material-icons {
+  font-size: 13px;
+}
+
 .route-group-chevron {
   color: #9e9e9e;
   font-size: 22px !important;
