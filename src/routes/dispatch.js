@@ -2171,17 +2171,39 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
     await transaction.commit();
     transaction = null;
 
+    const respondIdentifier = `id:${normalizedContactId}`;
+    const respondSync = {
+      lifecycle_updated: false,
+      conversation_assigned: false,
+      assignee: null,
+      error: null
+    };
     try {
-      await respondApiService.updateLifecycle(normalizedContactId, 'On Delivery');
-      if (user.email) {
-        const respondDriver = await respondApiService.findUserByEmail(user.email);
-        const assignee = respondDriver?.id || respondDriver?.email;
-        if (assignee) {
-          await respondApiService.assignConversation(normalizedContactId, assignee);
-        }
-      }
+      await respondApiService.updateLifecycle(respondIdentifier, 'On Delivery');
+      respondSync.lifecycle_updated = true;
     } catch (respondError) {
-      console.error(`[Dispatch] Orden Pickup/Dispatching agregada, pero falló sincronización Respond.io (${order.id}):`, respondError.message);
+      respondSync.error = respondError.message;
+      console.error(`[Dispatch] Orden Pickup/Dispatching agregada, pero falló lifecycle Respond.io (${order.id}):`, respondError.message);
+    }
+
+    try {
+      const routeDriver = lockedRoute.assigned_driver_id
+        ? await User.findByPk(lockedRoute.assigned_driver_id, { attributes: ['id', 'email', 'username'] })
+        : user;
+      if (!routeDriver?.email) {
+        throw new Error(`El chofer ${routeDriver?.username || routeDriver?.id || 'asignado'} no tiene email`);
+      }
+      const respondDriver = await respondApiService.findUserByEmail(routeDriver.email);
+      const assignee = respondDriver?.id || respondDriver?.email;
+      if (!assignee) {
+        throw new Error(`El chofer ${routeDriver.email} no existe como usuario en Respond.io`);
+      }
+      await respondApiService.assignConversation(respondIdentifier, assignee);
+      respondSync.conversation_assigned = true;
+      respondSync.assignee = assignee;
+    } catch (respondError) {
+      respondSync.error = respondSync.error || respondError.message;
+      console.error(`[Dispatch] Orden Pickup/Dispatching agregada, pero falló asignación Respond.io (${order.id}):`, respondError.message);
     }
 
     emitToAdmins('route:updated', { route_id: lockedRoute.id });
@@ -2189,7 +2211,8 @@ router.post('/routes/:id/respond-pickup-orders', requireAuth, async (req, res) =
     res.status(201).json({
       success: true,
       order: order.toDict(),
-      stop: stop.toDict()
+      stop: stop.toDict(),
+      respond_sync: respondSync
     });
   } catch (error) {
     if (transaction) await transaction.rollback().catch(() => {});

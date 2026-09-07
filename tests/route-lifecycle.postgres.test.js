@@ -588,6 +588,8 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     const originalGeocodeAddress = geocodingService.geocodeAddress;
     let requestedRespondSearch = null;
     let requestedContactIdentifier = null;
+    let lifecycleUpdateCall = null;
+    let assignmentCall = null;
 
     respondApiService.listContacts = async (filters) => {
       requestedRespondSearch = filters.search;
@@ -604,9 +606,15 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       const normalizedContactId = String(contactId).replace(/^id:/, '');
       return normalizedContactId === dispatchingContact.id ? dispatchingContact : pickupContact;
     };
-    respondApiService.updateLifecycle = async () => ({ success: true });
+    respondApiService.updateLifecycle = async (...args) => {
+      lifecycleUpdateCall = args;
+      return { success: true };
+    };
     respondApiService.findUserByEmail = async () => ({ id: `${marker}-respond-driver` });
-    respondApiService.assignConversation = async () => ({ success: true });
+    respondApiService.assignConversation = async (...args) => {
+      assignmentCall = args;
+      return { success: true };
+    };
     geocodingService.geocodeAddress = async (address) => ({
       success: true,
       fullAddress: address,
@@ -653,6 +661,10 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       });
       assert.equal(added.statusCode, 201);
       assert.equal(requestedContactIdentifier, `id:${dispatchingContact.id}`);
+      assert.deepEqual(lifecycleUpdateCall, [`id:${dispatchingContact.id}`, 'On Delivery']);
+      assert.deepEqual(assignmentCall, [`id:${dispatchingContact.id}`, `${marker}-respond-driver`]);
+      assert.equal(added.body.respond_sync.lifecycle_updated, true);
+      assert.equal(added.body.respond_sync.conversation_assigned, true);
 
       const createdOrder = await ValidatedAddress.findByPk(added.body.order.id);
       assert.equal(createdOrder.respond_contact_id, dispatchingContact.id);
