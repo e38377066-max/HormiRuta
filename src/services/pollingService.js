@@ -1735,8 +1735,12 @@ class PollingService {
 
       await this.syncContactNames(userId, tagFilteredContacts);
       await this.autoRegisterWholesaleClients(userId, tagFilteredContacts);
-      await this.syncClosedConversationLifecycles(userId, apiToken, tagFilteredContacts);
-      await this.cleanupDuplicateAddresses(userId);
+      // El estado abierto/cerrado de una conversación no determina si una
+      // orden debe desaparecer del dispatcher. La reconciliación completa
+      // consulta conversaciones abiertas y cerradas cada 5 minutos; no
+      // archivamos órdenes activas desde este escaneo frecuente.
+      // La limpieza de duplicados destruye registros y debe ejecutarse solo
+      // desde el endpoint administrativo explícito, nunca dentro del polling.
       await this.cleanupDeliveredOrders();
       // UPS Shipped es un flujo paralelo (envios por paqueteria), NO debe
       // vivir en dispatch. Archiva cualquier orden que se haya colado.
@@ -3068,98 +3072,18 @@ class PollingService {
 
   /**
    * Sincroniza el lifecycle de conversaciones cerradas en Respond.io con el estado de órdenes en BD.
-   * Detecta órdenes activas cuyas conversaciones en Respond.io ya fueron cerradas y las archiva.
+   * Mantiene la sincronización de estados sin inferir archivado a partir de que una
+   * conversación esté abierta o cerrada.
    * @param {number} userId - ID del usuario propietario.
    * @param {string} apiToken - Token de API de Respond.io.
    * @param {Object[]} openContacts - Lista de contactos con conversaciones abiertas actualmente.
    * @returns {Promise<void>}
    */
   async syncClosedConversationLifecycles(userId, apiToken, openContacts) {
-    try {
-      const openContactIds = new Set(openContacts.map(c => c.id.toString()));
-
-      const allOrders = await ValidatedAddress.findAll({
-        where: {
-          respond_contact_id: { [Op.ne]: null }
-        }
-      });
-
-      const closedOrders = allOrders.filter(o => !openContactIds.has(o.respond_contact_id));
-
-      if (closedOrders.length === 0) return;
-
-      const respondio = new RespondioService(apiToken);
-      let syncedCount = 0;
-      const DELAY_MS = 300;
-
-      for (const order of closedOrders) {
-        try {
-          if (syncedCount > 0) {
-            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-          }
-
-          const contactResult = await respondio.getContact(parseInt(order.respond_contact_id));
-          if (!contactResult.success || !contactResult.data) {
-            if (!order.route_id) {
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" contacto no encontrado en Respond.io, eliminando del dispatch`);
-              await order.destroy();
-              syncedCount++;
-            }
-            continue;
-          }
-
-          const contact = contactResult.data;
-          const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
-          const newStatus = this.lifecycleToOrderStatus(contactLifecycle);
-
-          if (newStatus === 'delivered' || newStatus === 'ups_shipped') {
-            console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando (terminal, route_id=${order.route_id || 'ninguna'})`);
-            await order.destroy();
-            syncedCount++;
-          } else if (newStatus) {
-            // Chat cerrado: NO desarchivar nunca. Si no tiene ruta y no es terminal,
-            // archivar siempre. La reapertura del chat cambiara el lifecycle y el
-            // AddressScan (sobre contactos abiertos) lo reactivara automaticamente.
-            if (!order.route_id && order.dispatch_status !== 'archived' && !['delivered', 'ups_shipped'].includes(order.order_status)) {
-              await order.update({ dispatch_status: 'archived' });
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, archivada del dispatch (estado ${order.order_status})`);
-              syncedCount++;
-            }
-          } else if (!newStatus && contactLifecycle) {
-            const archiveLifecycles = ['new lead'];
-            const deleteLifecycles = ['impropos', 'closed'];
-            const lcNorm = contactLifecycle.toLowerCase();
-            if (archiveLifecycles.some(ex => ex === lcNorm)) {
-              if (!order.route_id && order.dispatch_status !== 'archived') {
-                await order.update({ dispatch_status: 'archived' });
-                console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, archivada del dispatch`);
-                syncedCount++;
-              }
-            } else if (deleteLifecycles.some(ex => ex === lcNorm)) {
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" lifecycle=${contactLifecycle}, eliminando del dispatch`);
-              if (!order.route_id) {
-                await order.destroy();
-              }
-              syncedCount++;
-            }
-          } else if (!newStatus && !contactLifecycle) {
-            if (!order.route_id) {
-              console.log(`[LifecycleSync] Chat cerrado: "${order.customer_name}" sin lifecycle, eliminando del dispatch`);
-              await order.destroy();
-              syncedCount++;
-            }
-          }
-        } catch (err) {
-          console.error(`[LifecycleSync] Error consultando contacto ${order.respond_contact_id}:`, err.message);
-        }
-      }
-
-      if (syncedCount > 0) {
-        console.log(`[LifecycleSync] ${syncedCount} orden(es) sincronizada(s) de chats cerrados`);
-      }
-    } catch (error) {
-      console.error(`[LifecycleSync] Error en sync de chats cerrados:`, error.message);
-    }
+    // Se conserva el método por compatibilidad con código antiguo, pero no se
+    // debe inferir el estado de una orden por si la conversación está abierta
+    // o cerrada. Esa señal provocaba archivados y eliminaciones masivas.
+    return;
   }
 
   /**
@@ -3613,13 +3537,16 @@ class PollingService {
         for (const c of items) {
           const idStr = c.id?.toString();
           if (!idStr || seen.has(idStr)) continue;
-          const lc = c.lifecycle || c.lifecycleStage;
-          if (!lc || !targetLifecycles.has(lc)) continue;
-          c.lifecycle = lc;
-          c.lifecycleStage = lc;
+           const rawLifecycle = c.lifecycle || c.lifecycleStage;
+           const lifecycleName = String(rawLifecycle || '').trim();
+           const canonicalLifecycle = [...targetLifecycles]
+             .find(target => target.toLowerCase() === lifecycleName.toLowerCase());
+           if (!canonicalLifecycle) continue;
+           c.lifecycle = canonicalLifecycle;
+           c.lifecycleStage = canonicalLifecycle;
           seen.add(idStr);
           allContacts.push(c);
-          counts[lc]++;
+           counts[canonicalLifecycle]++;
           total++;
         }
         pages++;
@@ -3655,8 +3582,9 @@ class PollingService {
   // EXACTAMENTE incluso si la conversacion del cliente esta cerrada.
   /**
    * Reconcilia los lifecycles de Respond.io con el estado de las órdenes en la base de datos al arrancar.
-   * Detecta discrepancias entre el estado en Respond y la BD, corrige avances de lifecycle y archiva
-   * órdenes huérfanas. También se ejecuta cada 5 minutos en segundo plano para mantener la sincronía.
+   * Detecta discrepancias entre el estado en Respond y la BD y corrige los estados
+   * de órdenes que sí aparecen en el crawl completo. No archiva huérfanas por
+   * ausencia temporal o lifecycle desconocido.
    * @returns {Promise<void>}
    */
   async reconcileLifecyclesOnStartup() {
@@ -3864,50 +3792,13 @@ class PollingService {
         }
       }
 
-      // VACIADO: archiva en dispatcher cualquier orden cuyo contacto NO este
-      // en NINGUN lifecycle activo de Respond (10 lifecycles consultados).
-      // Esto incluye contactos eliminados de Respond, contactos sin lifecycle,
-      // o contactos en lifecycles desconocidos. Respond es fuente de verdad
-      // ABSOLUTA: si no esta en Respond activo, no debe estar en dispatcher.
-      //
-      // SEGURIDAD: si el crawl de paginacion no fue completo (error de API o
-      // cap de seguridad alcanzado), SALTAMOS el archivado de huerfanos. De
-      // otro modo se archivarian ordenes validas cuyos contactos quedaron
-      // fuera del crawl truncado. Mejor esperar al siguiente ciclo (5 min).
       if (allContacts.crawlComplete === false) {
-        console.warn('[StartupReconcile] Crawl incompleto: SALTANDO archivado de huerfanos para evitar falsos positivos');
-        console.log(`[StartupReconcile] Completado parcial: ${reactivated} reactivada(s), ${synced} sincronizada(s), ${mismatchKept} ignorada(s)`);
-        return;
+        console.warn('[StartupReconcile] Crawl incompleto: se conservaron las órdenes no encontradas');
       }
-      try {
-        const respondContactIds = allContacts.map(c => c.id.toString());
-        const orphanWhere = {
-          respond_contact_id: { [Op.ne]: null },
-          dispatch_status: { [Op.ne]: 'archived' }
-        };
-        if (respondContactIds.length > 0) {
-          orphanWhere.respond_contact_id = { [Op.notIn]: respondContactIds };
-        }
-        const orphans = await ValidatedAddress.findAll({ where: orphanWhere });
-        let archivedOrphans = 0;
-        for (const orphan of orphans) {
-          // Validacion estricta: solo IDs numericos (evita borrar manuales con
-          // respond_contact_id raro). Las ordenes manuales no tienen contact_id.
-          if (!/^\d+$/.test(String(orphan.respond_contact_id))) continue;
-          const updateData = { dispatch_status: 'archived' };
-          if (orphan.route_id) updateData.route_id = null;
-          await ValidatedAddress.update(updateData, { where: { id: orphan.id } });
-          archivedOrphans++;
-          const note = orphan.route_id ? ` (ruta vieja ${orphan.route_id} liberada)` : '';
-          console.log(`[StartupReconcile] Vaciada (no esta en lifecycle activo de Respond): "${orphan.customer_name}" id=${orphan.respond_contact_id}${note}`);
-        }
-        if (archivedOrphans > 0) {
-          console.log(`[StartupReconcile] ${archivedOrphans} orden(es) vaciada(s) por no existir en lifecycle activo de Respond`);
-        }
-      } catch (err) {
-        console.error('[StartupReconcile] Error vaciando huerfanos:', err.message);
-      }
-
+      // No archivamos órdenes solo porque un contacto no apareció en este
+      // listado. Respond puede omitir contactos, devolver páginas parciales o
+      // usar un lifecycle que no pertenece a este conjunto. Un archivado
+      // automático en ese caso hacía desaparecer órdenes válidas del dispatch.
       console.log(`[StartupReconcile] Completado: ${reactivated} reactivada(s), ${synced} sincronizada(s), ${mismatchKept} ignorada(s)`);
     } catch (error) {
       console.error('[StartupReconcile] Error general:', error.message);
