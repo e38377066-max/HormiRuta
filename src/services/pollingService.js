@@ -3479,7 +3479,8 @@ class PollingService {
       payment_status: 'pending',
       amount_collected: null,
       payment_method: null,
-      dispatch_status: 'available'
+      dispatch_status: 'available',
+      pickup_email_id: null
     };
   }
 

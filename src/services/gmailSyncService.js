@@ -410,6 +410,17 @@ export const ALREADY_PROCESSED_STATUSES = new Set([
 ]);
 
 /**
+ * Evita que un correo Pickup Ready antiguo vuelva a cambiar una orden cuyo
+ * ciclo ya fue asociado a otro correo. Esto permite respetar cambios manuales
+ * de lifecycle hechos después por recepción o despacho.
+ * @param {Object|null} match - Orden candidata encontrada.
+ * @returns {boolean} Verdadero si el ciclo ya tiene un correo asociado.
+ */
+export function hasProcessedPickupEmail(match) {
+  return Boolean(match?.pickup_email_id);
+}
+
+/**
  * Ejecuta el proceso de sincronización Gmail → órdenes.
  * @description Busca correos "Pickup Ready", identifica a qué orden del sistema corresponden y actualiza su estado.
  * Maneja ambigüedades, clientes mayoristas y utiliza IA como respaldo para el matching.
@@ -485,6 +496,15 @@ export async function runPickupReadySync(forceRefresh = true) {
      */
     const applyRegularMatch = async (match, viaAI = false) => {
       processedGmailOrders.add(gmailOrder.messageId);
+      // Un pedido que ya quedó asociado a un correo Pickup Ready no debe
+      // volver a subir de estado por correos antiguos si un agente lo movió
+      // manualmente a Pending/Approved/Ordered. El pickup_email_id marca el
+      // ciclo actual del pedido; los ciclos nuevos lo limpian al reactivarse.
+      if (hasProcessedPickupEmail(match)) {
+        alreadyDone.push(`${match.customer_name} (Pickup Ready ya procesado; se respeta el estado manual)`);
+        console.log(`[Email Sync] Omitido ${match.customer_name}: correo Pickup Ready ya asociado, se respeta el estado actual (${match.order_status})`);
+        return;
+      }
       if (ALREADY_PROCESSED_STATUSES.has(match.order_status)) {
         alreadyDone.push(match.customer_name);
         if (!match.pickup_email_id) {

@@ -10,5 +10,6 @@
 - [Route lifecycle protection](route-lifecycle-protection.md) — solo los borradores sin actividad se eliminan; órdenes pendientes regresan por un flujo explícito.
 - [Deferred stop visibility](deferred-stop-visibility.md) — las paradas saltadas temporalmente permanecen fuera de la ruta activa hasta que el chofer las muestra explícitamente.
 - [OpenAI quota alert](openai-quota-alert.md) — los avisos de créditos agotados usan Gmail y se deduplican por ciclo de interrupción.
+- [Gmail lifecycle guard](gmail-lifecycle-guard.md) — un correo Pickup Ready ya procesado no debe sobrescribir cambios manuales del lifecycle en el mismo ciclo.
 - [Respond.io global settings](respond-global-settings.md) — el token de Respond.io es global; las rutas no deben exigir configuración por usuario.
 - [Respond.io contact identifiers](respond-contact-identifiers.md) — los endpoints individuales requieren `id:<contactId>` aunque la lista devuelva el ID numérico.
