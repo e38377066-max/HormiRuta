@@ -32,3 +32,9 @@ Delivery completion is based on the completed stop, not merely route membership 
 **Why:** A route can contain skipped/retained stops alongside delivered stops; marking every order on route completion would incorrectly close packages that are still with the driver or awaiting reception.
 
 **How to apply:** Resolve each completed Stop to its order before finalizing delivery; leave skipped or unmatched orders in their existing lifecycle.
+
+Route pickup is a strict two-step gate: reception must confirm the packages before the driver can see the assigned route, and the driver must confirm receipt before starting or changing stops. Reassigning a route clears both confirmations.
+
+**Why:** Showing an assigned route before office handoff lets the driver bypass the reception audit and makes package custody ambiguous.
+
+**How to apply:** Keep unconfirmed assigned routes out of the driver route feed, never auto-confirm pickup based on stop progress, and enforce the gate server-side for delivery actions.

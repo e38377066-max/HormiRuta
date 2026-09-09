@@ -267,6 +267,71 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     }
   });
 
+  it('requires reception and driver pickup confirmation before exposing or starting a route', async () => {
+    const gateDriver = await User.create({
+      username: `${marker}-gate-driver`,
+      email: `${marker}-gate-driver@example.test`,
+      role: 'driver'
+    });
+    created.driverIds.push(gateDriver.id);
+
+    const route = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: gateDriver.id
+    });
+    await createStop(route.id);
+
+    const hiddenBeforeReception = await callRoute(router, 'GET', '/routes', {
+      userId: gateDriver.id
+    });
+    assert.equal(hiddenBeforeReception.statusCode, 200);
+    assert.equal(hiddenBeforeReception.body.routes.some(item => item.id === route.id), false);
+
+    const receptionConfirmation = await callRoute(router, 'POST', '/pickup/:routeId/admin-confirm', {
+      params: { routeId: route.id }
+    });
+    assert.equal(receptionConfirmation.statusCode, 200);
+
+    const visibleForDriver = await callRoute(router, 'GET', '/routes', {
+      userId: gateDriver.id
+    });
+    assert.equal(visibleForDriver.statusCode, 200);
+    assert.equal(visibleForDriver.body.routes.some(item => item.id === route.id), true);
+    assert.equal(visibleForDriver.body.routes.find(item => item.id === route.id).pickup_driver_confirmed_at, null);
+
+    const blockedBeforeDriverConfirmation = await callRoute(router, 'PUT', '/routes/:id/complete', {
+      userId: gateDriver.id,
+      params: { id: route.id }
+    });
+    assert.equal(blockedBeforeDriverConfirmation.statusCode, 409);
+    assert.match(blockedBeforeDriverConfirmation.body.error, /confirmar que recibiste/i);
+
+    const driverConfirmation = await callRoute(router, 'POST', '/pickup/:routeId/driver-confirm', {
+      userId: gateDriver.id,
+      params: { routeId: route.id }
+    });
+    assert.equal(driverConfirmation.statusCode, 200);
+
+    const readyForDriver = await callRoute(router, 'GET', '/routes', {
+      userId: gateDriver.id
+    });
+    assert.ok(readyForDriver.body.routes.find(item => item.id === route.id).pickup_driver_confirmed_at);
+
+    const reassigned = await callRoute(router, 'PUT', '/routes/:id/assign', {
+      params: { id: route.id },
+      body: { driver_id: gateDriver.id }
+    });
+    assert.equal(reassigned.statusCode, 200);
+
+    const routeAfterReassignment = await Route.findByPk(route.id);
+    assert.equal(routeAfterReassignment.pickup_admin_confirmed_at, null);
+    assert.equal(routeAfterReassignment.pickup_driver_confirmed_at, null);
+    const hiddenAfterReassignment = await callRoute(router, 'GET', '/routes', {
+      userId: gateDriver.id
+    });
+    assert.equal(hiddenAfterReassignment.body.routes.some(item => item.id === route.id), false);
+  });
+
   it('returns only pending orders while preserving every handled stop category and favorites', async () => {
     const route = await createRoute({
       status: 'assigned',

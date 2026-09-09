@@ -286,7 +286,7 @@ export default function TripPlannerPage() {
       const savedRouteId = localStorage.getItem('activeRouteId')
       if (savedRouteId) {
         const savedRoute = relevant.find(r => String(r.id) === String(savedRouteId))
-        if (savedRoute) {
+        if (savedRoute?.pickup_driver_confirmed_at) {
           const wasNavigating = localStorage.getItem('navMode') === 'true'
           if (wasNavigating) {
             pendingNavRestoreRef.current = true
@@ -1713,6 +1713,11 @@ export default function TripPlannerPage() {
   }
 
   const startRoute = () => {
+    const activeRoute = dispatchRoutes.find(route => String(route.id) === String(currentRouteId))
+    if (currentRouteId && !activeRoute?.pickup_driver_confirmed_at) {
+      alert('Debes confirmar la recepción de los paquetes antes de iniciar la ruta.')
+      return
+    }
     setNavigationMode(true)
     setAutoFollow(false)
     localStorage.setItem('navMode', 'true')
@@ -1885,6 +1890,7 @@ export default function TripPlannerPage() {
   const navTargetIndex = navTarget ? stops.indexOf(navTarget) : -1
   const activeDispatchRoute = dispatchRoutes.find(route => String(route.id) === String(currentRouteId))
   const canAddPickupOrder = activeDispatchRoute?.status === 'assigned'
+  const pickupConfirmedForActiveRoute = !currentRouteId || Boolean(activeDispatchRoute?.pickup_driver_confirmed_at)
 
   // El planificador siempre pinta una sola secuencia mixta. El índice original
   // se conserva para que seleccionar, mover, actualizar o completar una parada
@@ -2053,8 +2059,12 @@ export default function TripPlannerPage() {
                   <div
                     key={dr.id}
                     className={`dispatch-route-item${isCompleted ? ' completed-pending-pay' : ''}`}
-                    onClick={() => !isCompleted && loadDispatchRoute(dr)}
-                    style={isCompleted ? { cursor: 'default', borderLeft: '4px solid #f59e0b' } : {}}
+                    onClick={() => !isCompleted && dr.pickup_driver_confirmed_at && loadDispatchRoute(dr)}
+                    style={isCompleted
+                      ? { cursor: 'default', borderLeft: '4px solid #f59e0b' }
+                      : !dr.pickup_driver_confirmed_at
+                        ? { cursor: 'default', borderLeft: '4px solid #f59e0b' }
+                        : {}}
                   >
                     <div className="dispatch-route-top">
                       <span className="dispatch-route-name">{dr.name}</span>
@@ -2097,6 +2107,11 @@ export default function TripPlannerPage() {
                           <span className="material-icons">check_circle</span>
                           Confirmar que recogí
                         </button>
+                      </div>
+                    )}
+                    {!isCompleted && dr.pickup_admin_confirmed_at && !dr.pickup_driver_confirmed_at && (
+                      <div className="pickup-driver-confirm-text" style={{ marginTop: 6, color: '#9a6700' }}>
+                        Confirma la recepción para habilitar el inicio de la ruta.
                       </div>
                     )}
                   </div>
@@ -2321,12 +2336,12 @@ export default function TripPlannerPage() {
                 )}
               </div>
             )
-          ) : (isOptimized || stops.length === 1) ? (
+          ) : (isOptimized || stops.length === 1) && pickupConfirmedForActiveRoute ? (
             <button className="btn-start-route" onClick={startRoute}>
               <span className="material-icons">navigation</span>
               Iniciar ruta
             </button>
-          ) : stops.length >= 2 ? (
+          ) : (stops.length >= 2 && pickupConfirmedForActiveRoute) ? (
             <button
               className="btn-optimize"
               onClick={optimizeRoute}
