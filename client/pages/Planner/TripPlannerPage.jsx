@@ -3046,7 +3046,7 @@ export default function TripPlannerPage() {
               <span className="material-icons">assignment_return</span>
               <div className="skip-disp-option-text">
                 <div className="skip-disp-option-title">Devolver a oficina</div>
-                <div className="skip-disp-option-desc">Aparecera en Recepcion de Paquetes para que el dispatcher lo registre</div>
+                <div className="skip-disp-option-desc">Quedará en On Delivery y asignado a ti hasta que recepción confirme que recibió el paquete</div>
               </div>
             </button>
 

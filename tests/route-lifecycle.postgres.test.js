@@ -546,6 +546,122 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     assert.equal(reloadedStop.status, 'pending');
   });
 
+  it('keeps skipped orders on delivery with the driver until office reception', async () => {
+    const { default: respondApiService } = await import('../src/services/respondApiService.js');
+    const route = await createRoute({
+      status: 'assigned',
+      assigned_driver_id: admin.id
+    });
+    const heldOrder = await createOrder(route.id, {
+      order_status: 'ordered',
+      previous_order_status: null,
+      respond_contact_id: null
+    });
+    const officeOrder = await createOrder(route.id, {
+      order_status: 'ordered',
+      previous_order_status: null,
+      respond_contact_id: `${marker}-office-contact`
+    });
+    const heldStop = await createStop(route.id, heldOrder);
+    const officeStop = await createStop(route.id, officeOrder);
+    const calls = [];
+    const originalAssignConversation = respondApiService.assignConversation;
+    const originalUpdateLifecycle = respondApiService.updateLifecycle;
+    const originalSetContext = respondApiService.setContext;
+
+    respondApiService.setContext = (...args) => calls.push({ method: 'setContext', args });
+    respondApiService.assignConversation = async (...args) => {
+      calls.push({ method: 'assignConversation', args });
+      return { success: true };
+    };
+    respondApiService.updateLifecycle = async (...args) => {
+      calls.push({ method: 'updateLifecycle', args });
+      return { success: true };
+    };
+
+    try {
+      const heldResult = await callRoute(router, 'PUT', '/stops/:id/skip', {
+        params: { id: heldStop.id },
+        userId: admin.id,
+        body: { disposition: 'held_by_driver', reason: 'El chofer conserva el paquete' }
+      });
+      const officeResult = await callRoute(router, 'PUT', '/stops/:id/skip', {
+        params: { id: officeStop.id },
+        userId: admin.id,
+        body: { disposition: 'pending_return', reason: 'Se entrega en oficina' }
+      });
+
+      assert.equal(heldResult.statusCode, 200);
+      assert.equal(officeResult.statusCode, 200);
+
+      const heldAfterSkip = await ValidatedAddress.findByPk(heldOrder.id);
+      assert.equal(heldAfterSkip.order_status, 'on_delivery');
+      assert.equal(heldAfterSkip.previous_order_status, 'ordered');
+      assert.equal(heldAfterSkip.package_disposition, 'held_by_driver');
+      assert.equal(heldAfterSkip.route_id, null);
+      assert.equal(heldAfterSkip.assigned_driver_id, admin.id);
+      assert.equal(heldAfterSkip.dispatch_status, 'assigned');
+
+      const officeAfterSkip = await ValidatedAddress.findByPk(officeOrder.id);
+      assert.equal(officeAfterSkip.order_status, 'on_delivery');
+      assert.equal(officeAfterSkip.previous_order_status, 'ordered');
+      assert.equal(officeAfterSkip.package_disposition, 'pending_return');
+      assert.equal(officeAfterSkip.route_id, null);
+      assert.equal(officeAfterSkip.assigned_driver_id, admin.id);
+      assert.equal(officeAfterSkip.dispatch_status, 'assigned');
+
+      assert.equal((await Stop.findByPk(heldStop.id)).package_disposition, 'held_by_driver');
+      assert.equal((await Stop.findByPk(officeStop.id)).package_disposition, 'pending_return');
+
+      const received = await callRoute(router, 'PUT', '/returns/:id/receive', {
+        params: { id: officeOrder.id }
+      });
+      assert.equal(received.statusCode, 200);
+
+      const officeAfterReceive = await ValidatedAddress.findByPk(officeOrder.id);
+      assert.equal(officeAfterReceive.order_status, 'ordered');
+      assert.equal(officeAfterReceive.previous_order_status, null);
+      assert.equal(officeAfterReceive.package_disposition, 'returned_to_office');
+      assert.equal(officeAfterReceive.route_id, null);
+      assert.equal(officeAfterReceive.assigned_driver_id, null);
+      assert.equal(officeAfterReceive.dispatch_status, 'available');
+
+      assert.deepEqual(
+        calls.filter(call => call.method === 'assignConversation').map(call => call.args),
+        [[officeOrder.respond_contact_id, `${marker}-felipe-agent`]]
+      );
+      assert.deepEqual(
+        calls.filter(call => call.method === 'updateLifecycle').map(call => call.args),
+        [[officeOrder.respond_contact_id, 'Ordered']]
+      );
+
+      const nextRoute = await createRoute({ status: 'draft' });
+      const nextRouteResult = await callRoute(router, 'PUT', '/routes/:id/assign', {
+        params: { id: nextRoute.id },
+        body: { driver_id: admin.id }
+      });
+      assert.equal(nextRouteResult.statusCode, 200);
+
+      const heldAfterReload = await ValidatedAddress.findByPk(heldOrder.id);
+      assert.equal(heldAfterReload.route_id, nextRoute.id);
+      assert.equal(heldAfterReload.order_status, 'on_delivery');
+      assert.equal(heldAfterReload.previous_order_status, 'ordered');
+      assert.equal(heldAfterReload.package_disposition, 'normal');
+      assert.equal(heldAfterReload.held_by_driver_id, null);
+      assert.equal(heldAfterReload.assigned_driver_id, admin.id);
+
+      const reloadedHeldStop = await Stop.findOne({
+        where: { route_id: nextRoute.id, customer_name: heldOrder.customer_name }
+      });
+      assert.ok(reloadedHeldStop);
+      assert.equal(reloadedHeldStop.status, 'pending');
+    } finally {
+      respondApiService.setContext = originalSetContext;
+      respondApiService.assignConversation = originalAssignConversation;
+      respondApiService.updateLifecycle = originalUpdateLifecycle;
+    }
+  });
+
   it('lists Pickup Ready and Dispatching contacts and adds the selected contact to the driver route', async () => {
     const { default: respondApiService } = await import('../src/services/respondApiService.js');
     const { default: geocodingService } = await import('../src/services/geocodingService.js');

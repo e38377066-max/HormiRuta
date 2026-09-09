@@ -2708,6 +2708,8 @@ router.put('/routes/:id/assign', requireAdminOrReceptionist, async (req, res) =>
             lat: held.address_lat,
             lng: held.address_lng,
             order: stopOrder++,
+            added_by_driver: Boolean(held.added_by_driver),
+            added_by_driver_id: held.added_by_driver_id || null,
             customer_name: held.customer_name,
             phone: held.customer_phone,
             note: held.notes ? `[Recargada] ${held.notes}` : '[Paquete recargado del dia anterior]',
@@ -3065,7 +3067,17 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
 
     if (orderMatch) {
       orderMatch.route_id = null;
-      restorePreDeliveryStatus(orderMatch);
+      // El paquete sigue físicamente con el chofer en ambas opciones. No se
+      // restaura el estado anterior hasta que recepción confirme que lo
+      // recibió; de lo contrario una orden conservada volvería a aparecer
+      // prematuramente en recepción o en Pickup Ready.
+      moveOrderToDelivery(orderMatch);
+      orderMatch.dispatch_status = 'assigned';
+      orderMatch.assigned_driver_id = route.assigned_driver_id || req.userId;
+      const assignedDriver = await User.findByPk(orderMatch.assigned_driver_id, {
+        attributes: ['id', 'username']
+      });
+      orderMatch.driver_name = assignedDriver?.username || null;
       orderMatch.package_disposition = finalDisposition;
       orderMatch.skip_reason = reason || null;
       orderMatch.skipped_at = new Date();
@@ -3076,7 +3088,14 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
         orderMatch.held_by_driver_id = null;
       }
       await orderMatch.save();
-      await assignOrderBackToReception(orderMatch);
+
+      // Mantener la parada histórica consistente con la orden. La opción
+      // held_by_driver no debe entrar al flujo de recepción; pending_return
+      // sí queda visible allí, pero continúa en On Delivery hasta recibirla.
+      stop.package_disposition = finalDisposition;
+      stop.held_by_driver_id = orderMatch.held_by_driver_id;
+      stop.skip_reason = orderMatch.skip_reason;
+      stop.skipped_at = orderMatch.skipped_at;
     } else if (stop.favorite_address_id) {
       stop.package_disposition = finalDisposition;
       stop.skip_reason = reason || null;
@@ -3112,7 +3131,14 @@ router.get('/returns', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Sin permisos' });
     }
 
-    const where = { package_disposition: { [Op.in]: ['held_by_driver', 'pending_return', 'returned_to_office'] } };
+    // Un paquete que el chofer conserva no pertenece a la bandeja de
+    // recepción. Administración puede verlo para control y confirmación
+    // posterior; el rol Recepcionista solo ve los retornos que realmente
+    // deben llegar a la oficina.
+    const visibleDispositions = user.role === 'receptionist'
+      ? ['pending_return', 'returned_to_office']
+      : ['held_by_driver', 'pending_return', 'returned_to_office'];
+    const where = { package_disposition: { [Op.in]: visibleDispositions } };
     if (user.role === 'driver') {
       where.held_by_driver_id = user.id;
     }
@@ -3122,7 +3148,7 @@ router.get('/returns', requireAuth, async (req, res) => {
       order: [['skipped_at', 'DESC']]
     });
     const favoriteWhere = {
-      package_disposition: { [Op.in]: ['held_by_driver', 'pending_return', 'returned_to_office'] },
+      package_disposition: { [Op.in]: visibleDispositions },
       favorite_address_id: { [Op.ne]: null }
     };
     if (user.role === 'driver') favoriteWhere.held_by_driver_id = user.id;
@@ -3200,7 +3226,15 @@ router.put('/returns/:id/receive', requireAdminOrReceptionist, async (req, res) 
     order.package_disposition = 'returned_to_office';
     order.returned_at = new Date();
     order.held_by_driver_id = null;
+    order.route_id = null;
+    order.dispatch_status = 'available';
+    order.assigned_driver_id = null;
+    order.driver_name = null;
+    restorePreDeliveryStatus(order);
     await order.save();
+    // La devolución física es el momento en que la orden vuelve a recepción:
+    // restaurar su estado anterior y asignar el contacto a Felipe en Respond.
+    await assignOrderBackToReception(order);
     res.json({ success: true, order: order.toDict() });
   } catch (error) {
     console.error('Error receiving return:', error);
