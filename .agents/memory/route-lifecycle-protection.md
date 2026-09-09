@@ -26,3 +26,9 @@ Driver skip disposition is not an order-state transition: both â€œkeep packageâ€
 **Why:** The package remains physically with the driver after either choice; restoring `Ordered` or `Pickup Ready` at skip time makes it appear available before the office actually receives it.
 
 **How to apply:** Keep the order assigned to the driver with `route_id = null` while retained, reload it into that driver's next assigned route, and perform status restoration plus reception assignment only in the receive endpoint.
+
+Delivery completion is based on the completed stop, not merely route membership or origin. Driver-added and dispatcher-added orders both become `delivered` and `Delivered` in Respond.io only when their matching Stop is completed.
+
+**Why:** A route can contain skipped/retained stops alongside delivered stops; marking every order on route completion would incorrectly close packages that are still with the driver or awaiting reception.
+
+**How to apply:** Resolve each completed Stop to its order before finalizing delivery; leave skipped or unmatched orders in their existing lifecycle.

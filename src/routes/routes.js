@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { sequelize, Route, Stop, RouteHistory, ValidatedAddress } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { optimizeRouteOrder, calculateEtas } from '../services/optimization.js';
+import { findOrderForStop, markOrderDelivered } from '../services/deliveryCompletionService.js';
 import { Op } from 'sequelize';
 
 const router = Router();
@@ -439,6 +440,17 @@ router.post('/:id/complete', requireAuth, async (req, res) => {
     await route.save();
     
     const stops = await Stop.findAll({ where: { route_id: route.id } });
+    const orders = await ValidatedAddress.findAll({ where: { route_id: route.id } });
+    const completedOrderIds = new Set();
+    for (const stop of stops.filter(item => item.status === 'completed')) {
+      const order = await findOrderForStop(stop);
+      if (order) completedOrderIds.add(order.id);
+    }
+    for (const order of orders) {
+      if (completedOrderIds.has(order.id)) {
+        await markOrderDelivered(order);
+      }
+    }
     
     const history = await RouteHistory.create({
       user_id: req.userId,

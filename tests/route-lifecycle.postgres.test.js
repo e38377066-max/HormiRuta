@@ -13,6 +13,7 @@ if (shouldRun) {
 
 let router;
 let routesRouter;
+let stopsRouter;
 let sequelize;
 let User;
 let Route;
@@ -176,6 +177,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     ({ Op } = await import('sequelize'));
     ({ default: router } = await import('../src/routes/dispatch.js'));
     ({ default: routesRouter } = await import('../src/routes/routes.js'));
+    ({ default: stopsRouter } = await import('../src/routes/stops.js'));
 
     await sequelize.authenticate();
     // Sync only the tables used by this suite; alter them so newly added
@@ -658,6 +660,69 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     } finally {
       respondApiService.setContext = originalSetContext;
       respondApiService.assignConversation = originalAssignConversation;
+      respondApiService.updateLifecycle = originalUpdateLifecycle;
+    }
+  });
+
+  it('marks driver-added and dispatch-added orders as delivered through every delivery path', async () => {
+    const { default: respondApiService } = await import('../src/services/respondApiService.js');
+    const route = await createRoute({
+      status: 'in_progress',
+      assigned_driver_id: admin.id
+    });
+    const driverAddedOrder = await createOrder(route.id, {
+      added_by_driver: true,
+      added_by_driver_id: admin.id,
+      order_status: 'on_delivery',
+      previous_order_status: 'pickup_ready',
+      respond_contact_id: `${marker}-driver-delivered`
+    });
+    const dispatchAddedOrder = await createOrder(route.id, {
+      added_by_driver: false,
+      order_status: 'on_delivery',
+      previous_order_status: 'ordered',
+      respond_contact_id: `${marker}-dispatch-delivered`
+    });
+    const driverAddedStop = await createStop(route.id, driverAddedOrder);
+    const calls = [];
+    const originalSetContext = respondApiService.setContext;
+    const originalUpdateLifecycle = respondApiService.updateLifecycle;
+
+    respondApiService.setContext = (...args) => calls.push({ method: 'setContext', args });
+    respondApiService.updateLifecycle = async (...args) => {
+      calls.push({ method: 'updateLifecycle', args });
+      return { success: true };
+    };
+
+    try {
+      const stopCompleted = await callRoute(stopsRouter, 'POST', '/:id/complete', {
+        params: { id: driverAddedStop.id },
+        body: { delivery_notes: 'Entregado por el chofer' }
+      });
+      assert.equal(stopCompleted.statusCode, 200);
+
+      const driverDelivered = await ValidatedAddress.findByPk(driverAddedOrder.id);
+      assert.equal(driverDelivered.order_status, 'delivered');
+      assert.equal(driverDelivered.previous_order_status, null);
+
+      const orderDelivered = await callRoute(router, 'PUT', '/orders/:id/delivered', {
+        params: { id: dispatchAddedOrder.id }
+      });
+      assert.equal(orderDelivered.statusCode, 200);
+
+      const dispatchDelivered = await ValidatedAddress.findByPk(dispatchAddedOrder.id);
+      assert.equal(dispatchDelivered.order_status, 'delivered');
+      assert.equal(dispatchDelivered.previous_order_status, null);
+
+      assert.deepEqual(
+        calls.filter(call => call.method === 'updateLifecycle').map(call => call.args),
+        [
+          [driverAddedOrder.respond_contact_id, 'Delivered'],
+          [dispatchAddedOrder.respond_contact_id, 'Delivered']
+        ]
+      );
+    } finally {
+      respondApiService.setContext = originalSetContext;
       respondApiService.updateLifecycle = originalUpdateLifecycle;
     }
   });

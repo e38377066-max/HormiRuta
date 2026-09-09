@@ -20,6 +20,7 @@ import respondApiService from '../services/respondApiService.js';
 import { optimizeRouteOrder } from '../services/optimization.js';
 import geocodingService from '../services/geocodingService.js';
 import AddressExtractorService from '../services/addressExtractorService.js';
+import { findOrderForStop, markOrderDelivered } from '../services/deliveryCompletionService.js';
 import { emitToDriver, emitToAdmins, emitToAll } from '../services/socketService.js';
 
 /**
@@ -571,7 +572,7 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
     await order.save();
 
     if (order_status === 'delivered') {
-      saveToDeliveryHistory(order);
+      await markOrderDelivered(order);
     }
 
     const lifecycleName = ORDER_STATUS_TO_LIFECYCLE[order_status];
@@ -3005,16 +3006,13 @@ router.post('/stops/:id/evidence', requireAuth, upload.single('photo'), async (r
     stop.completed_at = new Date();
     await stop.save();
 
-    const routeOrders = await ValidatedAddress.findAll({ where: { route_id: stop.route_id } });
-    const matchOrder = routeOrders.find(o =>
-      (Math.abs(o.address_lat - stop.lat) < 0.0001 && Math.abs(o.address_lng - stop.lng) < 0.0001)
-    ) || routeOrders.find(o => o.validated_address === stop.address);
+    const matchOrder = await findOrderForStop(stop);
 
     if (matchOrder) {
       if (req.body.payment_method) matchOrder.payment_method = req.body.payment_method;
       if (stop.amount_collected !== null) matchOrder.amount_collected = stop.amount_collected;
       if (stop.payment_status) matchOrder.payment_status = stop.payment_status;
-      await matchOrder.save();
+      await markOrderDelivered(matchOrder);
     }
 
     emitToAll(route.assigned_driver_id, 'stop:updated', { stopId: stop.id, routeId: stop.route_id, status: stop.status });
@@ -3852,24 +3850,15 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
     await route.save();
 
     const orders = await ValidatedAddress.findAll({ where: { route_id: route.id } });
+    const completedOrders = [];
+    for (const stop of allStops.filter(item => item.status === 'completed')) {
+      const order = await findOrderForStop(stop);
+      if (order) completedOrders.push(order);
+    }
+    const completedOrderIds = new Set(completedOrders.map(order => order.id));
     for (const order of orders) {
-      order.order_status = 'delivered';
-      order.delivered_at = new Date();
-      await order.save();
-
-      saveToDeliveryHistory(order);
-
-      if (order.respond_contact_id) {
-        try {
-          const settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
-          if (settings?.respond_api_token) {
-            respondApiService.setContext(order.user_id, settings.respond_api_token);
-            await respondApiService.updateLifecycle(order.respond_contact_id, 'Delivered');
-            console.log(`[Dispatch] Ruta completada - Lifecycle: ${order.customer_name} -> Delivered`);
-          }
-        } catch (lcErr) {
-          console.error(`[Dispatch] Error lifecycle ruta completada ${order.customer_name}:`, lcErr.message);
-        }
+      if (completedOrderIds.has(order.id)) {
+        await markOrderDelivered(order);
       }
     }
 
@@ -4151,11 +4140,7 @@ router.put('/orders/:id/delivered', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permisos para esta orden' });
     }
 
-    order.order_status = 'delivered';
-    order.delivered_at = new Date();
-    await order.save();
-
-    saveToDeliveryHistory(order);
+    await markOrderDelivered(order);
 
     res.json({ success: true, order: order.toDict() });
   } catch (error) {

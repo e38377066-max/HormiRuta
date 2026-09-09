@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import { Route, Stop, sequelize } from '../models/index.js';
 import { requireAuth } from '../middleware/auth.js';
+import { findOrderForStop, markOrderDelivered } from '../services/deliveryCompletionService.js';
 
 const router = Router();
 
@@ -42,6 +43,11 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
     
     await stop.save();
+
+    if (req.body.status === 'completed') {
+      const order = await findOrderForStop(stop);
+      if (order) await markOrderDelivered(order);
+    }
     
     res.json({
       success: true,
@@ -113,6 +119,9 @@ router.post('/:id/complete', requireAuth, async (req, res) => {
     if (req.body.delivery_notes) stop.delivery_notes = req.body.delivery_notes;
     
     await stop.save();
+
+    const order = await findOrderForStop(stop);
+    if (order) await markOrderDelivered(order);
     
     res.json({
       success: true,
