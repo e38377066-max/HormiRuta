@@ -421,6 +421,25 @@ export function hasProcessedPickupEmail(match) {
 }
 
 /**
+ * Detecta un correo Pickup Ready antiguo en una orden que ya fue actualizada
+ * después de la fecha del correo. Cubre órdenes creadas antes de que existiera
+ * pickup_email_id y evita que el primer ciclo posterior las vuelva a mover.
+ * @param {Object|null} match - Orden candidata encontrada.
+ * @param {Object|null} gmailOrder - Correo Pickup Ready encontrado.
+ * @returns {boolean} Verdadero si el correo es anterior a la orden.
+ */
+export function isPickupEmailStaleForOrder(match, gmailOrder) {
+  const manualStatuses = new Set(['pending', 'approved', 'ordered']);
+  if (!manualStatuses.has(match?.order_status)) return false;
+
+  const emailTime = Date.parse(gmailOrder?.date || '');
+  const orderTime = new Date(match?.updated_at || '').getTime();
+  if (!Number.isFinite(emailTime) || !Number.isFinite(orderTime)) return false;
+
+  return emailTime <= orderTime;
+}
+
+/**
  * Ejecuta el proceso de sincronización Gmail → órdenes.
  * @description Busca correos "Pickup Ready", identifica a qué orden del sistema corresponden y actualiza su estado.
  * Maneja ambigüedades, clientes mayoristas y utiliza IA como respaldo para el matching.
@@ -503,6 +522,11 @@ export async function runPickupReadySync(forceRefresh = true) {
       if (hasProcessedPickupEmail(match)) {
         alreadyDone.push(`${match.customer_name} (Pickup Ready ya procesado; se respeta el estado manual)`);
         console.log(`[Email Sync] Omitido ${match.customer_name}: correo Pickup Ready ya asociado, se respeta el estado actual (${match.order_status})`);
+        return;
+      }
+      if (isPickupEmailStaleForOrder(match, gmailOrder)) {
+        alreadyDone.push(`${match.customer_name} (correo Pickup Ready anterior al estado actual)`);
+        console.log(`[Email Sync] Omitido ${match.customer_name}: correo Pickup Ready anterior a la última actualización de la orden (${match.order_status})`);
         return;
       }
       if (ALREADY_PROCESSED_STATUSES.has(match.order_status)) {
