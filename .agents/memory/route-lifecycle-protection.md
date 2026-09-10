@@ -21,11 +21,11 @@ Packages skipped as `pending_return` remain linked to the responsible driver unt
 
 **How to apply:** Preserve `held_by_driver_id` for both `held_by_driver` and `pending_return`, include both dispositions in automatic route reloads, and clear the link only at office reception.
 
-Driver skip disposition is not an order-state transition: both “keep package” and “deliver to office” remain `on_delivery` and assigned to the driver. Only office reception restores the exact `previous_order_status` and reassigns the Respond.io conversation to reception.
+Driver skip disposition is not an order-state transition: both “keep package” and “deliver to office” remain `on_delivery` and assigned to the driver. Only office reception clears the driver custody and moves the package to `pickup_ready`, then reassigns the Respond.io conversation to reception.
 
-**Why:** The package remains physically with the driver after either choice; restoring `Ordered` or `Pickup Ready` at skip time makes it appear available before the office actually receives it.
+**Why:** The package remains physically with the driver after either choice; changing lifecycle at skip time makes it appear available before the office actually receives it. Once the office confirms receipt, `Pickup Ready` is the correct state even when `previous_order_status` is missing or says `Ordered`.
 
-**How to apply:** Keep the order assigned to the driver with `route_id = null` while retained, reload it into that driver's next assigned route, and perform status restoration plus reception assignment only in the receive endpoint.
+**How to apply:** Keep the order assigned to the driver with `route_id = null` while retained, reload it into that driver's next assigned route, and perform the `pickup_ready` transition plus reception assignment only after the package returns to the office.
 
 Delivery completion is based on the completed stop, not merely route membership or origin. Driver-added and dispatcher-added orders both become `delivered` and `Delivered` in Respond.io only when their matching Stop is completed.
 

@@ -408,7 +408,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     const releasedOrder = await ValidatedAddress.findByPk(pending.order.id);
     assert.equal(releasedOrder.route_id, null);
     assert.equal(releasedOrder.dispatch_status, 'available');
-    assert.equal(releasedOrder.order_status, 'ordered');
+    assert.equal(releasedOrder.order_status, 'pickup_ready');
     assert.equal(releasedOrder.previous_order_status, null);
     assert.equal(await Stop.findByPk(pending.stop.id), null);
 
@@ -523,7 +523,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       assert.equal(restoredOrder.route_id, null);
       assert.equal(restoredOrder.dispatch_status, 'available');
       assert.equal(restoredOrder.assigned_driver_id, null);
-      assert.equal(restoredOrder.order_status, 'ordered');
+      assert.equal(restoredOrder.order_status, 'pickup_ready');
       assert.equal(restoredOrder.previous_order_status, null);
       assert.equal(await Stop.findByPk(stop.id), null);
 
@@ -533,7 +533,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       );
       assert.deepEqual(
         calls.filter(call => call.method === 'updateLifecycle').map(call => call.args),
-        [[`${order.respond_contact_id}`, 'Ordered']]
+        [[`${order.respond_contact_id}`, 'Pickup Ready']]
       );
     } finally {
       respondApiService.setContext = originalSetContext;
@@ -575,7 +575,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       const restoredOrder = await ValidatedAddress.findByPk(order.id);
       assert.equal(restoredOrder.route_id, null);
       assert.equal(restoredOrder.dispatch_status, 'available');
-      assert.equal(restoredOrder.order_status, 'approved');
+      assert.equal(restoredOrder.order_status, 'pickup_ready');
       assert.equal(restoredOrder.previous_order_status, null);
       assert.equal(await Stop.findByPk(stop.id), null);
     } finally {
@@ -686,7 +686,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       assert.equal(received.statusCode, 200);
 
       const officeAfterReceive = await ValidatedAddress.findByPk(officeOrder.id);
-      assert.equal(officeAfterReceive.order_status, 'ordered');
+      assert.equal(officeAfterReceive.order_status, 'pickup_ready');
       assert.equal(officeAfterReceive.previous_order_status, null);
       assert.equal(officeAfterReceive.package_disposition, 'returned_to_office');
       assert.equal(officeAfterReceive.route_id, null);
@@ -699,7 +699,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       );
       assert.deepEqual(
         calls.filter(call => call.method === 'updateLifecycle').map(call => call.args),
-        [[officeOrder.respond_contact_id, 'Ordered']]
+        [[officeOrder.respond_contact_id, 'Pickup Ready']]
       );
 
       const nextRoute = await createRoute({ status: 'draft' });

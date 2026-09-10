@@ -301,6 +301,14 @@ const restorePreDeliveryStatus = (order) => {
   order.previous_order_status = null;
 };
 
+// Cuando el paquete ya regresó físicamente a la oficina, debe quedar
+// disponible para una nueva ruta. No se debe restaurar "Ordered" ni dejar
+// "On Delivery" por datos antiguos sin previous_order_status.
+const restoreReturnedToOfficeStatus = (order) => {
+  order.order_status = 'pickup_ready';
+  order.previous_order_status = null;
+};
+
 const createReceptionRespondContext = () => ({
   settings: new Map(),
   assignees: new Map()
@@ -363,7 +371,7 @@ const assignOrderBackToReception = async (order, context = createReceptionRespon
     if (lifecycleName) {
       await respondApiService.updateLifecycle(identifier, lifecycleName);
     }
-    console.log(`[Dispatch] Orden devuelta a recepción en Respond.io: ${order.customer_name || order.id} -> ${receptionName || 'Felipe Delgado'}`);
+    console.log(`[Dispatch] Orden devuelta a recepción en Respond.io: ${order.customer_name || order.id} -> ${receptionName || 'Felipe Delgado'} (lifecycle=${lifecycleName || 'sin cambio'})`);
   } catch (error) {
     console.error(`[Dispatch] Error devolviendo orden a recepción en Respond.io (${order.customer_name || order.id}):`, error.message);
   }
@@ -2335,7 +2343,7 @@ router.post('/routes/:id/return-orders', requireAdmin, async (req, res) => {
       );
       if (stop.status === 'pending' && disposition === 'normal' && isPendingOrder) {
         if (order) {
-          restorePreDeliveryStatus(order);
+          restoreReturnedToOfficeStatus(order);
           order.route_id = null;
           order.dispatch_status = 'available';
           order.assigned_driver_id = null;
@@ -2359,7 +2367,7 @@ router.post('/routes/:id/return-orders', requireAdmin, async (req, res) => {
         !['paid', 'partial', 'partially_paid'].includes(order.payment_status) &&
         !['held_by_driver', 'pending_return', 'returned_to_office'].includes(order.package_disposition);
       if (pending) {
-        restorePreDeliveryStatus(order);
+        restoreReturnedToOfficeStatus(order);
         order.route_id = null;
         order.dispatch_status = 'available';
         order.assigned_driver_id = null;
@@ -3264,7 +3272,7 @@ router.put('/returns/:id/receive', requireAdminOrReceptionist, async (req, res) 
     order.dispatch_status = 'available';
     order.assigned_driver_id = null;
     order.driver_name = null;
-    restorePreDeliveryStatus(order);
+    restoreReturnedToOfficeStatus(order);
     await order.save();
     // La devolución física es el momento en que la orden vuelve a recepción:
     // restaurar su estado anterior y asignar el contacto a Felipe en Respond.
@@ -3317,13 +3325,18 @@ router.put('/returns/:id/release', requireAdminOrReceptionist, async (req, res) 
     if (order.route_id) {
       return res.status(400).json({ error: 'La orden ya esta asignada a una ruta' });
     }
+    const wasReturnedToOffice = order.package_disposition === 'returned_to_office';
     order.package_disposition = 'normal';
     order.held_by_driver_id = null;
     order.skip_reason = null;
     order.skipped_at = null;
     order.returned_at = null;
     order.dispatch_status = 'available';
-    restorePreDeliveryStatus(order);
+    if (wasReturnedToOffice) {
+      restoreReturnedToOfficeStatus(order);
+    } else {
+      restorePreDeliveryStatus(order);
+    }
     await order.save();
     await assignOrderBackToReception(order);
     res.json({ success: true, order: order.toDict() });
