@@ -1878,19 +1878,6 @@ class PollingService {
           }
           continue;
         }
-        if (
-          orderStatus &&
-          existing.order_status === orderStatus &&
-          existing.dispatch_status == null &&
-          !existing.route_id
-        ) {
-          await ValidatedAddress.update(
-            { dispatch_status: 'available' },
-            { where: { id: existing.id } }
-          );
-          updatedCount++;
-          continue;
-        }
         // Respond.io es fuente de verdad ABSOLUTA. Cualquier cambio en Respond
         // se refleja aqui sin excepcion. Reglas (ordenadas por especificidad):
         //  1. Reactivacion (terminal->activo): cliente vuelve a pedir. Limpia
@@ -1904,12 +1891,31 @@ class PollingService {
         const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
         const isInTerminal = terminalStatuses.includes(existing.order_status);
         const shouldReleaseToReception = orderStatus === 'pickup_ready' && Boolean(existing.route_id);
+        const shouldRestoreActiveDispatch =
+          orderStatus &&
+          reactiveStatuses.includes(orderStatus) &&
+          existing.order_status === orderStatus &&
+          (existing.dispatch_status == null || existing.dispatch_status === 'archived');
 
         if (shouldReleaseToReception) {
           updateFields.route_id = null;
           updateFields.dispatch_status = 'available';
           updateFields.assigned_driver_id = null;
           updateFields.driver_name = null;
+        }
+
+        if (shouldRestoreActiveDispatch) {
+          updateFields.dispatch_status = 'available';
+          try {
+            await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+            if (shouldReleaseToReception) {
+              await this.assignContactToReception(userId, contactIdStr, existing.customer_name);
+            }
+            updatedCount++;
+          } catch (err) {
+            console.error(`[AddressScan] Error restaurando ${contactIdStr}:`, err.message);
+          }
+          continue;
         }
 
         // listOpenConversations puede devolver un snapshot anterior al cambio
@@ -3845,7 +3851,8 @@ class PollingService {
         if (!orderStatus || (
           existing.order_status === orderStatus &&
           !(orderStatus === 'pickup_ready' && existing.route_id) &&
-          existing.dispatch_status != null
+          existing.dispatch_status != null &&
+          existing.dispatch_status !== 'archived'
         )) continue;
 
         const isInTerminal = terminalStatuses.includes(existing.order_status);
@@ -3857,7 +3864,8 @@ class PollingService {
 
         if (
           existing.order_status === orderStatus &&
-          existing.dispatch_status == null &&
+          reactiveStatuses.includes(orderStatus) &&
+          (existing.dispatch_status == null || existing.dispatch_status === 'archived') &&
           !existing.route_id &&
           !isUpsShippedTarget
         ) {
