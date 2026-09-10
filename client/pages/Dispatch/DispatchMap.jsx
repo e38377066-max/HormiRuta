@@ -216,7 +216,7 @@ export default function DispatchMap() {
   const activeDriversList = useMemo(() => {
     const seen = new Set()
     const entries = []
-    routes.filter(r => r.status !== 'completed').forEach(route => {
+    routes.filter(r => !['completed', 'returned'].includes(r.status)).forEach(route => {
       const name = route.status === 'assigned' && route.orders?.[0]?.driver_name
         ? route.orders[0].driver_name
         : (route.driver_name || null)
@@ -473,7 +473,7 @@ export default function DispatchMap() {
     })
 
     routes.filter(route => {
-      if (route.status === 'completed') return false
+      if (['completed', 'returned'].includes(route.status)) return false
       if (visibleDrivers === null) return true
       const dn = route.status === 'assigned' && route.orders?.[0]?.driver_name
         ? route.orders[0].driver_name
@@ -2228,7 +2228,7 @@ export default function DispatchMap() {
             })()
           ) : activeTab === 'routes' ? (
             (() => {
-              const activeRoutes = routes.filter(route => route.status !== 'completed')
+              const activeRoutes = routes.filter(route => !['completed', 'returned'].includes(route.status))
               return activeRoutes.length === 0 ? (
               <div className="empty-dispatch">
                 <span className="material-icons">route</span>
@@ -2912,7 +2912,7 @@ export default function DispatchMap() {
         </div>
         {/* Leyendas de rutas: Paradas + Choferes lado a lado */}
         <div className="map-route-legends">
-        {routes.some(r => r.status !== 'completed' && r.route_stops?.length > 0) && (
+        {routes.some(r => !['completed', 'returned'].includes(r.status) && r.route_stops?.length > 0) && (
           <div className="map-driver-legend map-driver-legend--inline">
             <div className="map-driver-legend-title">
               <span className="material-icons" style={{ fontSize: 14 }}>pin_drop</span>
@@ -2934,7 +2934,7 @@ export default function DispatchMap() {
         )}
         {/* Leyenda de choferes por color */}
         {(() => {
-          const activeRoutes = routes.filter(r => r.status !== 'completed' && (r.route_stops?.length >= 2 || []))
+          const activeRoutes = routes.filter(r => !['completed', 'returned'].includes(r.status) && (r.route_stops?.length >= 2 || []))
           const driverEntries = []
           const seen = new Set()
           activeRoutes.forEach(route => {
