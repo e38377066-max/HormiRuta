@@ -320,28 +320,39 @@ const assignOrderBackToReception = async (order, context = createReceptionRespon
   try {
     let settings = context.settings.get(order.user_id);
     if (settings === undefined) {
-      settings = await MessagingSettings.findOne({ where: { user_id: order.user_id } });
+      const ownerSettings = await MessagingSettings.findOne({
+        where: { user_id: order.user_id }
+      });
+      const globalSettings = await MessagingSettings.findOne({
+        order: [['created_at', 'ASC']]
+      });
+      // La configuración del propietario mantiene compatibilidad con
+      // instalaciones antiguas; si no existe, se usa la configuración global
+      // del espacio. El agente se resuelve por nombre, no por ID legado.
+      settings = ownerSettings?.respond_api_token ? ownerSettings : globalSettings;
       context.settings.set(order.user_id, settings || null);
     }
     if (!settings?.respond_api_token) return;
 
     respondApiService.setContext(order.user_id, settings.respond_api_token);
 
-    const receptionName = settings.default_agent_name || 'Felipe Delgado';
+    const configuredReceptionName = String(settings.default_agent_name || '').trim();
+    const receptionName = configuredReceptionName || 'Felipe Delgado';
     let assignee = context.assignees.get(order.user_id);
     if (assignee === undefined) {
-      assignee = settings.default_agent_id || null;
+      assignee = null;
 
-      if (!assignee) {
-        const configuredAgent = await ServiceAgent.findOne({
-          where: {
-            user_id: order.user_id,
-            agent_name: receptionName,
-            is_active: true
-          }
-        });
-        assignee = configuredAgent?.agent_id || configuredAgent?.agent_email || null;
-      }
+      // El nombre configurado es la fuente de verdad. El ID guardado puede
+      // pertenecer a un chofer antiguo (por ejemplo Diego) aunque la
+      // recepción actual sea Felipe.
+      const configuredAgent = await ServiceAgent.findOne({
+        where: {
+          user_id: order.user_id,
+          agent_name: { [Op.iLike]: receptionName },
+          is_active: true
+        }
+      });
+      assignee = configuredAgent?.agent_id || configuredAgent?.agent_email || null;
 
       if (!assignee) {
         const nameParts = receptionName.trim().split(/\s+/);
@@ -371,7 +382,7 @@ const assignOrderBackToReception = async (order, context = createReceptionRespon
     if (lifecycleName) {
       await respondApiService.updateLifecycle(identifier, lifecycleName);
     }
-    console.log(`[Dispatch] Orden devuelta a recepción en Respond.io: ${order.customer_name || order.id} -> ${receptionName || 'Felipe Delgado'} (lifecycle=${lifecycleName || 'sin cambio'})`);
+    console.log(`[Dispatch] Orden devuelta a recepción en Respond.io: ${order.customer_name || order.id} -> ${receptionName} (assignee=${assignee}, lifecycle=${lifecycleName || 'sin cambio'})`);
   } catch (error) {
     console.error(`[Dispatch] Error devolviendo orden a recepción en Respond.io (${order.customer_name || order.id}):`, error.message);
   }

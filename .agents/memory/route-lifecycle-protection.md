@@ -44,3 +44,9 @@ Lifecycle polling must revalidate a terminal order before treating an active sna
 **Why:** Respond.io list results can be stale while a delivery is being closed; processing that snapshot after the close can reopen a delivered order as `On Delivery` and put it back on the map.
 
 **How to apply:** Re-fetch the contact before terminal-to-active reactivation in both the frequent scan and full reconciliation, and ignore the stale snapshot when the live lifecycle differs.
+
+`Pickup Ready` is a reception state, not an active route state; it must clear any old route and driver assignment.
+
+**Why:** A lifecycle rollback to `Pickup Ready` can arrive after an order was assigned to a driver. Keeping `route_id` makes the order disappear from the available dispatch pool even though reception has released it.
+
+**How to apply:** When polling or reception release sees `Pickup Ready`, set the order available with no route or driver, and resolve reception assignment by configured agent name rather than a stale agent ID.

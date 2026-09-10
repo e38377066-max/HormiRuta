@@ -14,6 +14,7 @@ import geocodingService from './geocodingService.js';
 import ChatbotService from './chatbotService.js';
 import AIService from './aiService.js';
 import MessagingSettings from '../models/MessagingSettings.js';
+import ServiceAgent from '../models/ServiceAgent.js';
 import MessagingOrder from '../models/MessagingOrder.js';
 import MessageLog from '../models/MessageLog.js';
 import CoverageZone from '../models/CoverageZone.js';
@@ -21,6 +22,7 @@ import ConversationState from '../models/ConversationState.js';
 import ValidatedAddress from '../models/ValidatedAddress.js';
 import WholesaleClient from '../models/WholesaleClient.js';
 import User from '../models/User.js';
+import respondApiService from './respondApiService.js';
 import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
 
 /**
@@ -95,6 +97,60 @@ class PollingService {
     // Evita re-geocodificar y re-loggear "Nueva dirección detectada" cada 3s para el mismo texto.
     /** @type {Map<string, number>} Caché de textos con geocoding vago por contacto. */
     this.vagueGeoCache = new Map();
+  }
+
+  /**
+   * Reasigna un contacto que volvió a Pickup Ready al agente de recepción.
+   * Se usa también para reparar órdenes antiguas que conservaron una ruta
+   * después de que recepción ya las liberó.
+   */
+  async assignContactToReception(userId, contactId, customerName = '') {
+    try {
+      const ownerSettings = await MessagingSettings.findOne({
+        where: { user_id: userId }
+      });
+      const globalSettings = await MessagingSettings.findOne({
+        order: [['created_at', 'ASC']]
+      });
+      const settings = ownerSettings?.respond_api_token ? ownerSettings : globalSettings;
+      if (!settings?.respond_api_token) return false;
+
+      const receptionName = String(settings.default_agent_name || 'Felipe Delgado').trim() || 'Felipe Delgado';
+      const ownerId = settings.user_id || userId;
+      respondApiService.setContext(ownerId, settings.respond_api_token);
+
+      const configuredAgent = await ServiceAgent.findOne({
+        where: {
+          user_id: ownerId,
+          agent_name: { [Op.iLike]: receptionName },
+          is_active: true
+        }
+      });
+      let assignee = configuredAgent?.agent_id || configuredAgent?.agent_email || null;
+
+      if (!assignee) {
+        const parts = receptionName.split(/\s+/);
+        const users = await respondApiService.findUserByName(
+          parts[0] || 'Felipe',
+          parts.slice(1).join(' ') || 'Delgado'
+        );
+        assignee = users?.id || users?.email || null;
+      }
+
+      if (!assignee) {
+        console.warn(`[Polling] No se encontró agente de recepción "${receptionName}" para ${customerName || contactId}`);
+        return false;
+      }
+
+      const identifier = `id:${contactId}`;
+      await respondApiService.assignConversation(identifier, assignee);
+      await respondApiService.updateLifecycle(identifier, 'Pickup Ready');
+      console.log(`[Polling] Contacto devuelto a recepción: ${customerName || contactId} -> ${receptionName} (assignee=${assignee})`);
+      return true;
+    } catch (error) {
+      console.error(`[Polling] Error reasignando ${customerName || contactId} a recepción:`, error.message);
+      return false;
+    }
   }
 
   /**
@@ -1828,12 +1884,20 @@ class PollingService {
         //     route_id viejo y campos de entrega. Snapshot defensivo a history.
         //  2. Avance a delivered (activo->delivered): chofer completo. Snapshot
         //     a history y marca delivered (mantiene route_id).
-        //  3. Cualquier otro mismatch: actualiza order_status. Si hay ruta
-        //     activa, NO se toca route_id (chofer sigue con la parada hasta
-        //     que termine; el dispatcher refleja el estado real de Respond).
+        //  3. Cualquier otro mismatch: actualiza order_status. Pickup Ready
+        //     es la excepción: significa retorno a recepción y libera la ruta
+        //     para una nueva asignación.
         const terminalStatuses = ['delivered', 'ups_shipped'];
         const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
         const isInTerminal = terminalStatuses.includes(existing.order_status);
+        const shouldReleaseToReception = orderStatus === 'pickup_ready' && Boolean(existing.route_id);
+
+        if (shouldReleaseToReception) {
+          updateFields.route_id = null;
+          updateFields.dispatch_status = 'available';
+          updateFields.assigned_driver_id = null;
+          updateFields.driver_name = null;
+        }
 
         // listOpenConversations puede devolver un snapshot anterior al cambio
         // que acaba de hacer el flujo de entrega. Antes de reactivar una orden
@@ -1889,6 +1953,9 @@ class PollingService {
               if (updateFields.customer_name) {
                 console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
               }
+              if (shouldReleaseToReception) {
+                await this.assignContactToReception(userId, contactIdStr, existing.customer_name);
+              }
             } catch (err) {
               console.error(`[AddressScan] Error sync nombre ${contactIdStr}:`, err.message);
             }
@@ -1918,14 +1985,25 @@ class PollingService {
           continue;
         } else if (orderStatus && existing.order_status !== orderStatus && !isInTerminal) {
           // Caso 3: avance/retroceso entre activos. Aplica el cambio de Respond
-          // SIN tocar route_id (chofer sigue con la parada si la tiene; el
-          // dispatcher refleja el estado real de Respond).
+          // SIN tocar route_id salvo Pickup Ready: ese lifecycle significa
+          // que el paquete volvió a recepción y debe quedar disponible para
+          // una nueva ruta.
           updateFields.order_status = orderStatus;
           if (existing.dispatch_status === 'archived') {
             updateFields.dispatch_status = 'available';
           }
+          if (orderStatus === 'pickup_ready' && existing.route_id) {
+            updateFields.route_id = null;
+            updateFields.dispatch_status = 'available';
+            updateFields.assigned_driver_id = null;
+            updateFields.driver_name = null;
+          }
           const direction = this.statusCanAdvance(existing.order_status, orderStatus) ? 'avance' : 'retroceso';
-          const routeNote = existing.route_id ? ` (ruta=${existing.route_id} mantenida)` : '';
+          const routeNote = existing.route_id
+            ? (orderStatus === 'pickup_ready'
+              ? ` (ruta=${existing.route_id} liberada para nueva ruta)`
+              : ` (ruta=${existing.route_id} mantenida)`)
+            : '';
           console.log(`[AddressScan] Lifecycle sync (${direction}): "${existing.customer_name}" ${existing.order_status} -> ${orderStatus}${routeNote} (${contactIdStr})`);
         } else if (orderStatus && existing.dispatch_status === 'archived' && !isInTerminal) {
           updateFields.dispatch_status = 'available';
@@ -1940,6 +2018,9 @@ class PollingService {
             await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
             if (updateFields.customer_name) {
               console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
+            }
+            if (shouldReleaseToReception) {
+              await this.assignContactToReception(userId, contactIdStr, existing.customer_name);
             }
             updatedCount++;
           } catch (err) {
@@ -3748,7 +3829,10 @@ class PollingService {
 
         const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
         let orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
-        if (!orderStatus || existing.order_status === orderStatus) continue;
+        if (!orderStatus || (
+          existing.order_status === orderStatus &&
+          !(orderStatus === 'pickup_ready' && existing.route_id)
+        )) continue;
 
         const isInTerminal = terminalStatuses.includes(existing.order_status);
         const respondIsActive = reactiveStatuses.includes(orderStatus);
@@ -3757,9 +3841,9 @@ class PollingService {
         // mantiene/forza dispatch_status='archived'.
         const isUpsShippedTarget = orderStatus === 'ups_shipped';
 
-        // Respond es fuente de verdad ABSOLUTA. Solo se mantiene route_id si
-        // el cambio es entre estados activos (chofer sigue con la parada);
-        // se libera si Respond mando a UPS o reactivacion.
+         // Respond es fuente de verdad ABSOLUTA. Solo se mantiene route_id si
+         // el cambio es entre estados activos distintos de Pickup Ready;
+         // Pickup Ready libera la asignación vieja.
 
         try {
           if (isUpsShippedTarget) {
@@ -3795,6 +3879,9 @@ class PollingService {
               reactivated++;
               const reactNote = existing.route_id ? ` (ruta vieja ${existing.route_id} liberada)` : '';
               console.log(`[StartupReconcile] Reactivado: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus} (nuevo ciclo)${reactNote}`);
+              if (orderStatus === 'pickup_ready' && existing.route_id) {
+                await this.assignContactToReception(userId, contactIdStr, existing.customer_name);
+              }
             } else {
               console.log(`[StartupReconcile] Reactivacion saltada (route_id cambio): "${existing.customer_name}"`);
             }
@@ -3811,16 +3898,29 @@ class PollingService {
               console.log(`[StartupReconcile] Avance a delivered saltado (route_id cambio): "${existing.customer_name}"`);
             }
           } else if (!isInTerminal) {
-            // Activo->activo. Respond manda. NO se toca route_id (chofer sigue
-            // con la parada si la tiene).
+            // Activo->activo. Respond manda. Pickup Ready libera cualquier
+            // asignación vieja; los demás estados conservan la parada activa.
             const updateFields = { order_status: orderStatus };
             if (existing.dispatch_status === 'archived') {
               updateFields.dispatch_status = 'available';
             }
+            if (orderStatus === 'pickup_ready' && existing.route_id) {
+              updateFields.route_id = null;
+              updateFields.dispatch_status = 'available';
+              updateFields.assigned_driver_id = null;
+              updateFields.driver_name = null;
+            }
             await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
             synced++;
-            const routeNote = existing.route_id ? ` (ruta=${existing.route_id} mantenida)` : '';
+            const routeNote = existing.route_id
+              ? (orderStatus === 'pickup_ready'
+                ? ` (ruta=${existing.route_id} liberada para nueva ruta)`
+                : ` (ruta=${existing.route_id} mantenida)`)
+              : '';
             console.log(`[StartupReconcile] Sync: "${existing.customer_name}" ${existing.order_status} -> ${orderStatus}${routeNote}`);
+            if (orderStatus === 'pickup_ready' && existing.route_id) {
+              await this.assignContactToReception(userId, contactIdStr, existing.customer_name);
+            }
           } else {
             // Terminal->terminal (ej. delivered<->ups_shipped). Respond manda.
             await ValidatedAddress.update(

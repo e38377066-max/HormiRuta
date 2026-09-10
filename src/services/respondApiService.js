@@ -758,12 +758,16 @@ class RespondApiService {
    */
   async findUserByName(firstName, lastName = null) {
     const result = await this.listUsers(100);
+    const normalize = value => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const normalizedFirstName = normalize(firstName);
+    const normalizedLastName = normalize(lastName);
     return result.items?.find(user => {
       if (lastName) {
-        return user.firstName === firstName && user.lastName === lastName;
+        return normalize(user.firstName) === normalizedFirstName &&
+          normalize(user.lastName) === normalizedLastName;
       }
-      return user.firstName === firstName || 
-             `${user.firstName} ${user.lastName}`.toLowerCase().includes(firstName.toLowerCase());
+      return normalize(user.firstName) === normalizedFirstName ||
+        normalize(`${user.firstName} ${user.lastName}`).includes(normalizedFirstName);
     });
   }
 }
