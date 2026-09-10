@@ -1878,6 +1878,19 @@ class PollingService {
           }
           continue;
         }
+        if (
+          orderStatus &&
+          existing.order_status === orderStatus &&
+          existing.dispatch_status == null &&
+          !existing.route_id
+        ) {
+          await ValidatedAddress.update(
+            { dispatch_status: 'available' },
+            { where: { id: existing.id } }
+          );
+          updatedCount++;
+          continue;
+        }
         // Respond.io es fuente de verdad ABSOLUTA. Cualquier cambio en Respond
         // se refleja aqui sin excepcion. Reglas (ordenadas por especificidad):
         //  1. Reactivacion (terminal->activo): cliente vuelve a pedir. Limpia
@@ -3831,7 +3844,8 @@ class PollingService {
         let orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
         if (!orderStatus || (
           existing.order_status === orderStatus &&
-          !(orderStatus === 'pickup_ready' && existing.route_id)
+          !(orderStatus === 'pickup_ready' && existing.route_id) &&
+          existing.dispatch_status != null
         )) continue;
 
         const isInTerminal = terminalStatuses.includes(existing.order_status);
@@ -3840,6 +3854,21 @@ class PollingService {
         // UPS Shipped no debe llegar al dispatcher: actualiza estado pero
         // mantiene/forza dispatch_status='archived'.
         const isUpsShippedTarget = orderStatus === 'ups_shipped';
+
+        if (
+          existing.order_status === orderStatus &&
+          existing.dispatch_status == null &&
+          !existing.route_id &&
+          !isUpsShippedTarget
+        ) {
+          await ValidatedAddress.update(
+            { dispatch_status: 'available' },
+            { where: { id: existing.id } }
+          );
+          synced++;
+          console.log(`[StartupReconcile] Normalizada orden disponible: "${existing.customer_name}" dispatch_status NULL -> available`);
+          continue;
+        }
 
          // Respond es fuente de verdad ABSOLUTA. Solo se mantiene route_id si
          // el cambio es entre estados activos distintos de Pickup Ready;

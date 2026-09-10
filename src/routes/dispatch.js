@@ -435,9 +435,14 @@ router.get('/orders', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'No tienes permisos' });
     }
 
-    where.dispatch_status = { [Op.ne]: 'archived' };
     where[Op.and] = [
       ...(where[Op.and] || []),
+      {
+        [Op.or]: [
+          { dispatch_status: { [Op.ne]: 'archived' } },
+          { dispatch_status: { [Op.is]: null } }
+        ]
+      },
       literal("\"customer_name\" !~* '(^|[\\s\\-])REC([\\s\\-]|$)'")
     ];
 
@@ -466,7 +471,15 @@ router.get('/stats', requireAdmin, async (req, res) => {
   try {
     // Excluye archivadas en TODOS los contadores (las archivadas no se muestran
     // en la grilla principal del dispatcher, asi que tampoco deben contarse).
-    const notArchived = { dispatch_status: { [Op.ne]: 'archived' } };
+    // Las órdenes antiguas pueden tener dispatch_status NULL porque ese
+    // campo se añadió después. NULL representa el estado disponible legado,
+    // no una orden archivada.
+    const notArchived = {
+      [Op.or]: [
+        { dispatch_status: { [Op.ne]: 'archived' } },
+        { dispatch_status: { [Op.is]: null } }
+      ]
+    };
     const [total, approved, ordered, pickupReady, onDelivery, upsShipped, delivered] = await Promise.all([
       ValidatedAddress.count({ where: notArchived }),
       ValidatedAddress.count({ where: { ...notArchived, order_status: 'approved' } }),
