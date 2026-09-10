@@ -38,3 +38,9 @@ Route pickup is a strict two-step gate: reception must confirm the packages befo
 **Why:** Showing an assigned route before office handoff lets the driver bypass the reception audit and makes package custody ambiguous.
 
 **How to apply:** Keep unconfirmed assigned routes out of the driver route feed, never auto-confirm pickup based on stop progress, and enforce the gate server-side for delivery actions.
+
+Lifecycle polling must revalidate a terminal order before treating an active snapshot as a new cycle.
+
+**Why:** Respond.io list results can be stale while a delivery is being closed; processing that snapshot after the close can reopen a delivered order as `On Delivery` and put it back on the map.
+
+**How to apply:** Re-fetch the contact before terminal-to-active reactivation in both the frequent scan and full reconciliation, and ignore the stale snapshot when the live lifecycle differs.

@@ -1733,7 +1733,7 @@ class PollingService {
         }
       }
 
-      await this.syncContactNames(userId, tagFilteredContacts);
+      await this.syncContactNames(userId, tagFilteredContacts, respondio);
       await this.autoRegisterWholesaleClients(userId, tagFilteredContacts);
       // El estado abierto/cerrado de una conversación no determina si una
       // orden debe desaparecer del dispatcher. La reconciliación completa
@@ -1772,7 +1772,7 @@ class PollingService {
    * @param {Object[]} contacts - Lista de contactos de Respond.io con firstName y lastName.
    * @returns {Promise<void>}
    */
-  async syncContactNames(userId, contacts) {
+  async syncContactNames(userId, contacts, respondio = null) {
     try {
       let updatedCount = 0;
       const contactIds = contacts.map(c => c.id.toString());
@@ -1802,7 +1802,7 @@ class PollingService {
         }
 
         const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
-        const orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
+        let orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
         const excludedLifecycles = ['New Lead', 'Impropos', 'IprintPOS'];
         const isExcluded = excludedLifecycles.some(ex => ex.toLowerCase() === contactLifecycle.toLowerCase());
         if (!orderStatus && contactLifecycle && isExcluded) {
@@ -1834,6 +1834,35 @@ class PollingService {
         const terminalStatuses = ['delivered', 'ups_shipped'];
         const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
         const isInTerminal = terminalStatuses.includes(existing.order_status);
+
+        // listOpenConversations puede devolver un snapshot anterior al cambio
+        // que acaba de hacer el flujo de entrega. Antes de reactivar una orden
+        // terminal, confirma el lifecycle actual del contacto para no convertir
+        // una entrega recién cerrada en un nuevo On Delivery.
+        if (
+          respondio &&
+          orderStatus &&
+          isInTerminal &&
+          reactiveStatuses.includes(orderStatus) &&
+          existing.order_status !== orderStatus
+        ) {
+          const liveContact = await respondio.getContact(contactIdStr);
+          const liveLifecycle = liveContact.success
+            ? (liveContact.data?.lifecycle || liveContact.data?.lifecycleStage || '')
+            : '';
+          const liveOrderStatus = this.lifecycleToOrderStatus(liveLifecycle);
+
+          if (!liveOrderStatus) {
+            console.warn(`[AddressScan] Reactivacion protegida: no se pudo confirmar lifecycle actual de "${existing.customer_name}" (${contactIdStr})`);
+            continue;
+          }
+
+          if (liveOrderStatus !== orderStatus) {
+            console.log(`[AddressScan] Snapshot obsoleto ignorado: "${existing.customer_name}" list=${orderStatus} live=${liveOrderStatus} (${contactIdStr})`);
+            orderStatus = liveOrderStatus;
+          }
+        }
+
         const respondIsActive = orderStatus && reactiveStatuses.includes(orderStatus);
         const respondIsDelivered = orderStatus === 'delivered';
 
@@ -3718,7 +3747,7 @@ class PollingService {
         if (!existing) continue;
 
         const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
-        const orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
+        let orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
         if (!orderStatus || existing.order_status === orderStatus) continue;
 
         const isInTerminal = terminalStatuses.includes(existing.order_status);
@@ -3742,6 +3771,20 @@ class PollingService {
             const note = existing.route_id ? ` (ruta vieja ${existing.route_id} liberada)` : '';
             console.log(`[StartupReconcile] Archivada UPS: "${existing.customer_name}" ${existing.order_status} -> ups_shipped${note}`);
           } else if (isInTerminal && respondIsActive) {
+            // El crawl completo también puede contener un snapshot tomado
+            // mientras se cerraba la entrega. Confirma el contacto antes de
+            // tratarlo como un nuevo ciclo.
+            const liveContact = await respondio.getContact(contactIdStr);
+            const liveLifecycle = liveContact.success
+              ? (liveContact.data?.lifecycle || liveContact.data?.lifecycleStage || '')
+              : '';
+            const liveOrderStatus = this.lifecycleToOrderStatus(liveLifecycle);
+            if (!liveOrderStatus || liveOrderStatus !== orderStatus) {
+              const liveLabel = liveOrderStatus || 'desconocido';
+              console.log(`[StartupReconcile] Reactivacion protegida: snapshot obsoleto para "${existing.customer_name}" list=${orderStatus} live=${liveLabel}`);
+              mismatchKept++;
+              continue;
+            }
             // Snapshot defensivo, luego update atomico por route_id.
             await saveToDeliveryHistory(existing);
             const [updRows] = await ValidatedAddress.update(
