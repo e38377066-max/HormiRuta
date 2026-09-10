@@ -50,3 +50,9 @@ Lifecycle polling must revalidate a terminal order before treating an active sna
 **Why:** A lifecycle rollback to `Pickup Ready` can arrive after an order was assigned to a driver. Keeping `route_id` makes the order disappear from the available dispatch pool even though reception has released it.
 
 **How to apply:** When polling or reception release sees `Pickup Ready`, set the order available with no route or driver, and resolve reception assignment by configured agent name rather than a stale agent ID.
+
+Active Respond lifecycles must also restore legacy local records whose `dispatch_status` is `archived` or `NULL`.
+
+**Why:** A previous reconciliation could archive a valid active order; if the next reconciliation skipped unchanged lifecycles, Dispatching stayed empty until this state was repaired.
+
+**How to apply:** Treat `Pending`, `Approved`, `Ordered`, `Pickup Ready`, and `On Delivery` as restorable active states, while leaving `Delivered` and `UPS Shipped` terminal.
