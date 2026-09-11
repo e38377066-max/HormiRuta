@@ -2484,15 +2484,33 @@ router.get('/routes', requireAuth, async (req, res) => {
     const driverCommissionMap = {};
     drivers.forEach(d => { driverCommissionMap[d.id] = d.commission_per_stop || 0; });
 
+    const routeIds = routes.map(route => route.id);
+    const [allRouteOrders, allRouteStops] = routeIds.length > 0
+      ? await Promise.all([
+        ValidatedAddress.findAll({ where: { route_id: { [Op.in]: routeIds } } }),
+        Stop.findAll({
+          where: { route_id: { [Op.in]: routeIds } },
+          order: [['route_id', 'ASC'], ['order', 'ASC']]
+        })
+      ])
+      : [[], []];
+    const ordersByRoute = new Map();
+    const stopsByRoute = new Map();
+    for (const order of allRouteOrders) {
+      const routeOrders = ordersByRoute.get(order.route_id) || [];
+      routeOrders.push(order);
+      ordersByRoute.set(order.route_id, routeOrders);
+    }
+    for (const stop of allRouteStops) {
+      const routeStops = stopsByRoute.get(stop.route_id) || [];
+      routeStops.push(stop);
+      stopsByRoute.set(stop.route_id, routeStops);
+    }
+
     const routesWithDetails = await Promise.all(routes.map(async (r) => {
       const routeDict = await r.toDict();
-      const routeOrders = await ValidatedAddress.findAll({
-        where: { route_id: r.id }
-      });
-      const routeAllStops = await Stop.findAll({
-        where: { route_id: r.id },
-        order: [['order', 'ASC']]
-      });
+      const routeOrders = ordersByRoute.get(r.id) || [];
+      const routeAllStops = stopsByRoute.get(r.id) || [];
       routeDict.orders = routeOrders.map(o => o.toDict());
       routeDict.route_stops = routeAllStops.map(s => s.toDict());
       routeDict.total_amount = routeOrders.reduce((sum, o) => sum + (o.amount || 0), 0);

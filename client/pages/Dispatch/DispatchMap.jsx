@@ -254,20 +254,18 @@ export default function DispatchMap() {
       setLoading(true)
       const params = { available: 'true' }
       if (filterStatus) params.status = filterStatus
-      const [ordersRes, routesRes] = await Promise.all([
+      const [ordersRes, routesRes, driversRes, statsRes] = await Promise.all([
         api.get('/api/dispatch/orders', { params }),
-        api.get('/api/dispatch/routes')
+        api.get('/api/dispatch/routes'),
+        canManageRoutes ? api.get('/api/dispatch/drivers') : Promise.resolve(null),
+        canManageRoutes && isAdmin ? api.get('/api/dispatch/stats') : Promise.resolve(null)
       ])
       setOrders(ordersRes.data.orders || [])
       setRoutes(routesRes.data.routes || [])
 
       if (canManageRoutes) {
-        const [driversRes, statsRes] = await Promise.all([
-          api.get('/api/dispatch/drivers'),
-          isAdmin ? api.get('/api/dispatch/stats') : Promise.resolve(null)
-        ])
         if (statsRes) setStats(statsRes.data)
-        setDrivers(driversRes.data.drivers || [])
+        if (driversRes) setDrivers(driversRes.data.drivers || [])
       }
     } catch (error) {
       console.error('Error fetching dispatch data:', error)
