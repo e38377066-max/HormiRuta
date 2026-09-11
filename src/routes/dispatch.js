@@ -22,6 +22,7 @@ import geocodingService from '../services/geocodingService.js';
 import AddressExtractorService from '../services/addressExtractorService.js';
 import { findOrderForStop, markOrderDelivered } from '../services/deliveryCompletionService.js';
 import { emitToDriver, emitToAdmins, emitToAll } from '../services/socketService.js';
+import { shouldProtectAssignedRoute } from '../utils/routeLifecycleProtection.js';
 
 /**
  * Mapeo de estados de orden a nombres de ciclos de vida en Respond.io.
@@ -5031,6 +5032,15 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
           continue;
         }
 
+        if (shouldProtectAssignedRoute(fresh, expectedStatus)) {
+          result.skipped_route++;
+          console.warn(
+            `[LifecycleResync] Ruta protegida: "${fresh.customer_name}" conserva ` +
+            `route=${fresh.route_id}, estado=${fresh.order_status}; lifecycle externo=${expectedStatus || lifecycle || 'desconocido'}`
+          );
+          continue;
+        }
+
         // Respond es fuente de verdad ABSOLUTA. Cualquier cambio se aplica
         // aqui sin excepcion. Cuando hay ruta activa:
         //  - Excluido/UPS: archiva y libera ruta (ya no es entrega local).
@@ -5042,7 +5052,10 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
             const updateData = { dispatch_status: 'archived' };
             if (isUpsShipped) updateData.order_status = 'ups_shipped';
             if (fresh.route_id) updateData.route_id = null;
-            await ValidatedAddress.update(updateData, { where: { id: fresh.id } });
+            await ValidatedAddress.update(
+              updateData,
+              { where: { id: fresh.id, route_id: fresh.route_id } }
+            );
             result.archived++;
             const note = fresh.route_id ? ` (ruta vieja ${fresh.route_id} liberada)` : '';
             console.log(`[LifecycleResync] Archivada: "${fresh.customer_name}" (${isExcludedTag ? 'tag' : isUpsShipped ? 'ups' : 'lifecycle'})${note}`);
@@ -5056,7 +5069,7 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
             await saveToDeliveryHistory(fresh);
             await ValidatedAddress.update(
               { order_status: 'delivered', delivered_at: fresh.delivered_at || new Date() },
-              { where: { id: fresh.id } }
+              { where: { id: fresh.id, route_id: null } }
             );
             result.updated++;
             console.log(`[LifecycleResync] Marcada delivered: "${fresh.customer_name}" ${fresh.order_status} -> delivered`);
@@ -5065,7 +5078,7 @@ router.post('/lifecycle-resync', requireAdmin, async (req, res) => {
           // Activo->activo (con o sin ruta). NO se toca route_id.
           await ValidatedAddress.update(
             { order_status: expectedStatus },
-            { where: { id: fresh.id } }
+            { where: { id: fresh.id, route_id: fresh.route_id } }
           );
           result.updated++;
           const routeNote = fresh.route_id ? ` (ruta=${fresh.route_id} mantenida)` : '';

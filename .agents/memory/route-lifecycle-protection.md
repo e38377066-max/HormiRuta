@@ -45,8 +45,8 @@ Lifecycle polling must revalidate a terminal order before treating an active sna
 
 **How to apply:** Re-fetch the contact before terminal-to-active reactivation in both the frequent scan and full reconciliation, and ignore the stale snapshot when the live lifecycle differs.
 
-`Pickup Ready` is a reception state, not an active route state; it must clear any old route and driver assignment.
+An active nonterminal route assignment is authoritative over Respond.io lifecycle snapshots. External `Pickup Ready`, `Pending`, `Approved`, `Ordered`, UPS, excluded, unknown, or deleted-contact states must not alter status, archive, or clear route/driver fields; `Delivered` may advance the route.
 
-**Why:** A lifecycle rollback to `Pickup Ready` can arrive after an order was assigned to a driver. Keeping `route_id` makes the order disappear from the available dispatch pool even though reception has released it.
+**Why:** Respond.io polling can return stale or regressive snapshots while assignment is still updating contacts. Treating those snapshots as reception release removed active orders from routes seconds after assignment.
 
-**How to apply:** When polling or reception release sees `Pickup Ready`, set the order available with no route or driver, and resolve reception assignment by configured agent name rather than a stale agent ID.
+**How to apply:** Guard every individual and bulk lifecycle reconciliation path and make writes conditional on the observed `route_id`. Clear assignment only through explicit dispatch/office-return flows or when reactivating a terminal delivered/UPS order for a verified new cycle.

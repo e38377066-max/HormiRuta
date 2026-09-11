@@ -24,6 +24,7 @@ import WholesaleClient from '../models/WholesaleClient.js';
 import User from '../models/User.js';
 import respondApiService from './respondApiService.js';
 import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
+import { shouldProtectAssignedRoute } from '../utils/routeLifecycleProtection.js';
 
 /**
  * Verifica si un nombre de contacto corresponde a un cliente mayorista.
@@ -1777,6 +1778,7 @@ class PollingService {
             {
               where: {
                 respond_contact_id: { [Op.in]: tagExcludedIds },
+                route_id: { [Op.is]: null },
                 dispatch_status: { [Op.ne]: 'archived' }
               }
             }
@@ -1861,6 +1863,16 @@ class PollingService {
         let orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
         const excludedLifecycles = ['New Lead', 'Impropos', 'IprintPOS'];
         const isExcluded = excludedLifecycles.some(ex => ex.toLowerCase() === contactLifecycle.toLowerCase());
+        if (shouldProtectAssignedRoute(existing, orderStatus)) {
+          if (Object.keys(updateFields).length > 0) {
+            await ValidatedAddress.update(updateFields, { where: { id: existing.id, route_id: existing.route_id } });
+          }
+          console.warn(
+            `[AddressScan] Ruta protegida: "${existing.customer_name}" conserva ` +
+            `route=${existing.route_id}, estado=${existing.order_status}; lifecycle externo=${orderStatus || contactLifecycle || 'desconocido'} (${contactIdStr})`
+          );
+          continue;
+        }
         if (!orderStatus && contactLifecycle && isExcluded) {
           // Respond es fuente de verdad: archiva siempre, incluso con ruta.
           // Si tiene ruta vieja, la libera (Respond saco la orden del flujo de entrega).
@@ -1868,7 +1880,10 @@ class PollingService {
             if (existing.dispatch_status !== 'archived' || existing.route_id) {
               const updateData = { dispatch_status: 'archived' };
               if (existing.route_id) updateData.route_id = null;
-              await ValidatedAddress.update(updateData, { where: { id: existing.id } });
+              await ValidatedAddress.update(
+                updateData,
+                { where: { id: existing.id, route_id: existing.route_id } }
+              );
               const note = existing.route_id ? ` (ruta vieja ${existing.route_id} liberada)` : '';
               console.log(`[AddressScan] Lifecycle sync: "${existing.customer_name}" archivada (lifecycle=${contactLifecycle})${note} (${contactIdStr})`);
               updatedCount++;
@@ -1949,7 +1964,10 @@ class PollingService {
           // Aplica updateFields adicionales (ej. customer_name) por separado.
           if (Object.keys(updateFields).length > 0) {
             try {
-              await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+              await ValidatedAddress.update(
+                updateFields,
+                { where: { id: existing.id, route_id: existing.route_id } }
+              );
               if (updateFields.customer_name) {
                 console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
               }
@@ -2015,7 +2033,10 @@ class PollingService {
 
         if (Object.keys(updateFields).length > 0) {
           try {
-            await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+            await ValidatedAddress.update(
+              updateFields,
+              { where: { id: existing.id, route_id: existing.route_id } }
+            );
             if (updateFields.customer_name) {
               console.log(`[AddressScan] Nombre sync: "${existing.customer_name}" -> "${currentName}" (${contactIdStr})`);
             }
@@ -2125,7 +2146,10 @@ class PollingService {
           validated: va.validated_address,
           original: va.original_address,
           customer_name: va.customer_name,
-          source: va.source
+          source: va.source,
+          route_id: va.route_id,
+          order_status: va.order_status,
+          dispatch_status: va.dispatch_status
         });
       }
 
@@ -2151,6 +2175,7 @@ class PollingService {
 
       const processContact = async (contact) => {
         const contactIdStr = contact.id.toString();
+        const existing = addressMap.get(contactIdStr);
 
 
         try {
@@ -2164,10 +2189,10 @@ class PollingService {
             const contactDetail = await respondio.getContact(contact.id);
             if (!contactDetail.success && contactDetail.notFound && existing) {
               // Contacto eliminado en Respond.io — archivar registro para no volver a escanearlo
-              if (existing.dispatch_status !== 'archived') {
+              if (existing.dispatch_status !== 'archived' && !existing.route_id) {
                 await ValidatedAddress.update(
                   { dispatch_status: 'archived' },
-                  { where: { id: existing.id } }
+                  { where: { id: existing.id, route_id: null } }
                 );
                 console.log(`[AddressScan] Contacto ${contact.id} eliminado en Respond.io, archivando registro de "${existing.customer_name}"`);
               }
@@ -2247,8 +2272,6 @@ class PollingService {
           } catch (cfErr) {
             // skip
           }
-
-          const existing = addressMap.get(contactIdStr);
 
           if (existing) {
             try {
@@ -3538,16 +3561,15 @@ class PollingService {
 
       if (upsContactIds.length === 0) return;
 
-      // Respond es fuente de verdad ABSOLUTA: archiva incluso con ruta y libera la ruta vieja.
+      // Una orden en ruta se conserva; el flujo explícito de despacho decide
+      // cuándo deja de ser una entrega local.
       const [archivedCount] = await ValidatedAddress.update(
-        { dispatch_status: 'archived', order_status: 'ups_shipped', route_id: null },
+        { dispatch_status: 'archived', order_status: 'ups_shipped' },
         {
           where: {
             respond_contact_id: { [Op.in]: upsContactIds },
-            [Op.or]: [
-              { dispatch_status: { [Op.ne]: 'archived' } },
-              { route_id: { [Op.ne]: null } }
-            ]
+            route_id: { [Op.is]: null },
+            dispatch_status: { [Op.ne]: 'archived' }
           }
         }
       );
@@ -3580,14 +3602,12 @@ class PollingService {
       if (excludedContactIds.length === 0) return;
 
       const [archivedCount] = await ValidatedAddress.update(
-        { dispatch_status: 'archived', route_id: null },
+        { dispatch_status: 'archived' },
         {
           where: {
             respond_contact_id: { [Op.in]: excludedContactIds },
-            [Op.or]: [
-              { dispatch_status: { [Op.ne]: 'archived' } },
-              { route_id: { [Op.ne]: null } }
-            ]
+            route_id: { [Op.is]: null },
+            dispatch_status: { [Op.ne]: 'archived' }
           }
         }
       );
@@ -3733,6 +3753,7 @@ class PollingService {
             {
               where: {
                 respond_contact_id: { [Op.in]: tagExcludedIds },
+                route_id: { [Op.is]: null },
                 dispatch_status: { [Op.ne]: 'archived' }
               }
             }
@@ -3829,6 +3850,16 @@ class PollingService {
 
         const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
         let orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
+        if (shouldProtectAssignedRoute(existing, orderStatus)) {
+          if (existing.order_status !== orderStatus) {
+            console.warn(
+              `[StartupReconcile] Ruta protegida: "${existing.customer_name}" conserva ` +
+              `route=${existing.route_id}, estado=${existing.order_status}; lifecycle externo=${orderStatus || contactLifecycle || 'desconocido'}`
+            );
+            mismatchKept++;
+          }
+          continue;
+        }
         if (!orderStatus || (
           existing.order_status === orderStatus &&
           !(orderStatus === 'pickup_ready' && existing.route_id)
@@ -3850,7 +3881,10 @@ class PollingService {
             // UPS: archiva y libera ruta (ya no es entrega local).
             const updateData = { order_status: 'ups_shipped', dispatch_status: 'archived' };
             if (existing.route_id) updateData.route_id = null;
-            await ValidatedAddress.update(updateData, { where: { id: existing.id } });
+            await ValidatedAddress.update(
+              updateData,
+              { where: { id: existing.id, route_id: existing.route_id } }
+            );
             mismatchKept++;
             const note = existing.route_id ? ` (ruta vieja ${existing.route_id} liberada)` : '';
             console.log(`[StartupReconcile] Archivada UPS: "${existing.customer_name}" ${existing.order_status} -> ups_shipped${note}`);
@@ -3910,7 +3944,10 @@ class PollingService {
               updateFields.assigned_driver_id = null;
               updateFields.driver_name = null;
             }
-            await ValidatedAddress.update(updateFields, { where: { id: existing.id } });
+            await ValidatedAddress.update(
+              updateFields,
+              { where: { id: existing.id, route_id: existing.route_id } }
+            );
             synced++;
             const routeNote = existing.route_id
               ? (orderStatus === 'pickup_ready'
@@ -3925,7 +3962,7 @@ class PollingService {
             // Terminal->terminal (ej. delivered<->ups_shipped). Respond manda.
             await ValidatedAddress.update(
               { order_status: orderStatus },
-              { where: { id: existing.id } }
+              { where: { id: existing.id, route_id: existing.route_id } }
             );
             synced++;
             console.log(`[StartupReconcile] Sync (terminal): "${existing.customer_name}" ${existing.order_status} -> ${orderStatus}`);
