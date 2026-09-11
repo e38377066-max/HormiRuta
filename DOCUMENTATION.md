@@ -49,6 +49,7 @@ Documentacion detallada de la arquitectura, estructura de codigo y funcionamient
 12. [Variables de Entorno](#variables-de-entorno)
 13. [Base de Datos](#base-de-datos)
 14. [API Endpoints - Referencia Completa](#api-endpoints---referencia-completa)
+15. [Referencias Exhaustivas del Codigo](#referencias-exhaustivas-del-codigo)
 
 ---
 
@@ -1284,7 +1285,7 @@ Pagina de administracion para revisar rutas completadas y en curso:
 
 ### Tecnologia
 
-**Capacitor 6** permite compilar la app web como app nativa de Android e iOS.
+**Capacitor 8** permite compilar la app web como app nativa de Android e iOS.
 
 ### Configuracion
 
@@ -1299,7 +1300,7 @@ Pagina de administracion para revisar rutas completadas y en curso:
 
 ### Capacitor Camera Plugin
 
-**Paquete**: `@capacitor/camera` v6.1.3
+**Paquete**: `@capacitor/camera` v8
 
 Integrado para captura de fotos de evidencia en entregas:
 
@@ -1339,14 +1340,14 @@ const photo = await Camera.getPhoto({
 
 | Plugin | Version | Uso |
 |---|---|---|
-| `@capacitor/core` | ^6.2.1 | Framework base |
-| `@capacitor/android` | ^6.2.1 | Plataforma Android |
-| `@capacitor/ios` | ^6.2.1 | Plataforma iOS |
-| `@capacitor/camera` | ^6.1.3 | Captura de fotos de evidencia |
-| `@capacitor/geolocation` | ^6.1.1 | GPS y rastreo de ubicacion |
-| `@capacitor/haptics` | ^6.0.3 | Vibracion tactil |
-| `@capacitor/status-bar` | ^6.0.3 | Control de barra de estado |
-| `@capacitor/splash-screen` | ^6.0.4 | Pantalla de carga |
+| `@capacitor/core` | ^8.3 | Framework base |
+| `@capacitor/android` | ^8.3 | Plataforma Android |
+| `@capacitor/ios` | ^8.3 | Plataforma iOS |
+| `@capacitor/camera` | ^8.0 | Captura de fotos de evidencia |
+| `@capacitor/geolocation` | ^8.2 | GPS y rastreo de ubicacion |
+| `@capacitor/haptics` | ^8.0 | Vibracion tactil |
+| `@capacitor/status-bar` | ^8.0 | Control de barra de estado |
+| `@capacitor/splash-screen` | ^8.0 | Pantalla de carga |
 
 ### Proceso de Compilacion
 
@@ -1652,22 +1653,22 @@ Respuesta: { active, lastPoll?, intervalMs?, processedCount? }
 | react-dom | ^18.3 | Renderizado de React |
 | react-router-dom | ^6.30 | Enrutamiento del frontend |
 | @googlemaps/js-api-loader | ^1.16 | Carga de Google Maps en frontend |
-| @capacitor/core | ^6.2 | Framework mobile |
-| @capacitor/android | ^6.2 | Plataforma Android |
-| @capacitor/ios | ^6.2 | Plataforma iOS |
-| **@capacitor/camera** | **^6.1** | **Captura de fotos nativa** |
-| @capacitor/geolocation | ^6.1 | GPS y ubicacion |
-| @capacitor/haptics | ^6.0 | Vibracion tactil |
-| @capacitor/status-bar | ^6.0 | Control de barra de estado |
-| @capacitor/splash-screen | ^6.0 | Pantalla de carga |
+| @capacitor/core | ^8.3 | Framework mobile |
+| @capacitor/android | ^8.3 | Plataforma Android |
+| @capacitor/ios | ^8.3 | Plataforma iOS |
+| **@capacitor/camera** | **^8.0** | **Captura de fotos nativa** |
+| @capacitor/geolocation | ^8.2 | GPS y ubicacion |
+| @capacitor/haptics | ^8.0 | Vibracion tactil |
+| @capacitor/status-bar | ^8.0 | Control de barra de estado |
+| @capacitor/splash-screen | ^8.0 | Pantalla de carga |
 
 ### Desarrollo
 
 | Paquete | Version | Uso |
 |---|---|---|
-| vite | ^5.4 | Bundler y dev server |
+| vite | ^6.4 | Bundler y dev server |
 | @vitejs/plugin-react | ^4.7 | Plugin de React para Vite |
-| @capacitor/cli | ^6.2 | CLI de Capacitor |
+| @capacitor/cli | ^8.3 | CLI de Capacitor |
 
 ---
 
@@ -1698,3 +1699,27 @@ npm run cap:ios        # Abrir Xcode (solo Mac)
 9. **Subida de archivos**: Multer valida tipo MIME (solo imagenes) y limita tamaño a 10MB
 10. **Permisos de evidencia**: Solo el chofer asignado o un admin puede subir evidencia a una parada
 11. **Transiciones de estado**: Validacion estricta de que cada cambio de estado sigue el flujo permitido
+
+---
+
+## Referencias Exhaustivas del Codigo
+
+Este documento explica la arquitectura y los flujos de negocio. Las siguientes
+referencias son el inventario canonico, archivo por archivo y funcion por
+funcion, del codigo actual:
+
+- [Referencia tecnica del backend](docs/backend-code-reference.md): entrada del
+  servidor, configuracion, autenticacion, modelos, asociaciones, rutas HTTP,
+  servicios, utilidades, entradas, salidas, efectos y errores.
+- [Referencia tecnica del frontend](docs/frontend-code-reference.md): arranque,
+  rutas de pantalla, contextos, componentes, paginas, hooks, efectos, callbacks,
+  estados, cliente HTTP, sockets, utilidades nativas y estilos.
+- [Referencia de pruebas, scripts y configuracion](docs/tests-scripts-config-reference.md):
+  comandos, scripts operativos, escenarios de prueba, configuracion web y movil,
+  precondiciones, efectos y uso seguro.
+- [Contrato del validador publico de ZIP](docs/zip-validator-api.md): endpoints,
+  cuerpos, respuestas, limites, CORS, historial y ejemplos de integracion.
+
+Cada referencia termina con una lista de cobertura. Los directorios generados,
+dependencias instaladas, caches, registros y archivos binarios no forman parte
+del codigo fuente mantenido y se excluyen deliberadamente.

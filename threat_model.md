@@ -9,7 +9,7 @@ Primary users are admins/dispatchers, drivers, and regular authenticated users. 
 Assumptions for future scans:
 - Only production-reachable issues should be reported.
 - `NODE_ENV` is `production` in deployed environments.
-- Replit deployment provides TLS in transit.
+- The production gateway provides TLS in transit.
 - Mockup/sandbox-only code is out of scope unless production reachability is demonstrated.
 
 ## Assets
@@ -36,7 +36,7 @@ Assumptions for future scans:
 - **Production entry points:** `src/index.js`, `src/routes/*.js`, `src/middleware/auth.js`, `src/services/*.js`, `client/api.js`, `client/contexts/AuthContext.jsx`.
 - **Highest-risk areas:** auth/session handling, messaging settings and bot routes, dispatch/admin routes, file upload and public static file serving under `/uploads`, email/Gmail integration routes, and third-party integration services.
 - **Privilege boundaries:** public auth routes under `/api/auth/*`, health checks under `/api/health`, public static files under `/uploads`, authenticated routes across most `/api/*`, explicit admin surfaces under `/api/admin/*`, and driver-only behavior mostly enforced inside `src/routes/dispatch.js`.
-- **Usually dev-only / lower-priority areas:** `.replit`, `INSTALL.md`, `attached_assets/`, `android/`, `ios/`, and build tooling unless they materially affect production runtime or leak live credentials.
+- **Usually dev-only / lower-priority areas:** `INSTALL.md`, `attached_assets/`, `android/`, `ios/`, and build tooling unless they materially affect production runtime or leak live credentials.
 
 ## Threat Categories
 

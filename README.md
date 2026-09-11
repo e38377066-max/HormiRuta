@@ -54,11 +54,11 @@ Area 862 System es una plataforma completa de logistica que combina:
 | Tecnologia | Uso |
 |---|---|
 | React 18 | Framework UI |
-| Vite 5 | Build tool |
+| Vite 6 | Build tool |
 | React Router 6 | Navegacion |
 | Axios | Cliente HTTP |
 | Google Maps JS API | Mapas y navegacion |
-| Capacitor 6 | Compilacion movil (Android/iOS) |
+| Capacitor 8 | Compilacion movil (Android/iOS) |
 
 ### Backend
 | Tecnologia | Uso |
@@ -307,3 +307,10 @@ Ver [DOCUMENTATION.md](DOCUMENTATION.md) para la documentacion detallada que inc
 - Servicios y su funcionamiento
 - Flujo del chatbot
 - Referencia completa de API endpoints
+
+Referencias exhaustivas por area:
+
+- [Backend, modelos, rutas, servicios y utilidades](docs/backend-code-reference.md)
+- [Frontend, componentes, paginas, estados y funciones](docs/frontend-code-reference.md)
+- [Pruebas, scripts, configuracion web y aplicaciones moviles](docs/tests-scripts-config-reference.md)
+- [API publica del validador ZIP](docs/zip-validator-api.md)
