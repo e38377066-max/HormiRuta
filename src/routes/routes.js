@@ -16,8 +16,6 @@ const routeHasActivity = (route, stops = []) => (
   Boolean(route.assigned_driver_id) ||
   Boolean(route.started_at) ||
   Boolean(route.completed_at) ||
-  Boolean(route.pickup_admin_confirmed_at) ||
-  Boolean(route.pickup_driver_confirmed_at) ||
   Boolean(route.payment_delivered) ||
   Boolean(route.admin_confirmed) ||
   Number(route.admin_amount_received || 0) > 0 ||

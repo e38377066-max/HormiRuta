@@ -227,7 +227,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     }
   });
 
-  it('deletes an untouched draft but rejects assignment, pickup, progress, evidence, and payment activity', async () => {
+  it('deletes an untouched draft but rejects assignment, progress, evidence, and payment activity', async () => {
     const draft = await createRoute({ status: 'draft' });
     const ordinaryStop = await createStop(draft.id);
     const draftOrder = await createOrder(draft.id, {
@@ -249,7 +249,6 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
 
     const protectedCases = [
       { name: 'assignment', route: { assigned_driver_id: admin.id } },
-      { name: 'pickup confirmation', route: { pickup_admin_confirmed_at: new Date() } },
       { name: 'progress', stop: { status: 'arrived' } },
       { name: 'evidence', stop: { photo_url: '/uploads/evidence/proof.jpg' } },
       { name: 'payment', route: { payment_delivered: true } }
@@ -267,7 +266,7 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     }
   });
 
-  it('requires reception and driver pickup confirmation before exposing or starting a route', async () => {
+  it('shows an assigned route to the driver immediately without pickup confirmations', async () => {
     const gateDriver = await User.create({
       username: `${marker}-gate-driver`,
       email: `${marker}-gate-driver@example.test`,
@@ -281,55 +280,11 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     });
     await createStop(route.id);
 
-    const hiddenBeforeReception = await callRoute(router, 'GET', '/routes', {
+    const visibleImmediately = await callRoute(router, 'GET', '/routes', {
       userId: gateDriver.id
     });
-    assert.equal(hiddenBeforeReception.statusCode, 200);
-    assert.equal(hiddenBeforeReception.body.routes.some(item => item.id === route.id), false);
-
-    const receptionConfirmation = await callRoute(router, 'POST', '/pickup/:routeId/admin-confirm', {
-      params: { routeId: route.id }
-    });
-    assert.equal(receptionConfirmation.statusCode, 200);
-
-    const visibleForDriver = await callRoute(router, 'GET', '/routes', {
-      userId: gateDriver.id
-    });
-    assert.equal(visibleForDriver.statusCode, 200);
-    assert.equal(visibleForDriver.body.routes.some(item => item.id === route.id), true);
-    assert.equal(visibleForDriver.body.routes.find(item => item.id === route.id).pickup_driver_confirmed_at, null);
-
-    const blockedBeforeDriverConfirmation = await callRoute(router, 'PUT', '/routes/:id/complete', {
-      userId: gateDriver.id,
-      params: { id: route.id }
-    });
-    assert.equal(blockedBeforeDriverConfirmation.statusCode, 409);
-    assert.match(blockedBeforeDriverConfirmation.body.error, /confirmar que recibiste/i);
-
-    const driverConfirmation = await callRoute(router, 'POST', '/pickup/:routeId/driver-confirm', {
-      userId: gateDriver.id,
-      params: { routeId: route.id }
-    });
-    assert.equal(driverConfirmation.statusCode, 200);
-
-    const readyForDriver = await callRoute(router, 'GET', '/routes', {
-      userId: gateDriver.id
-    });
-    assert.ok(readyForDriver.body.routes.find(item => item.id === route.id).pickup_driver_confirmed_at);
-
-    const reassigned = await callRoute(router, 'PUT', '/routes/:id/assign', {
-      params: { id: route.id },
-      body: { driver_id: gateDriver.id }
-    });
-    assert.equal(reassigned.statusCode, 200);
-
-    const routeAfterReassignment = await Route.findByPk(route.id);
-    assert.equal(routeAfterReassignment.pickup_admin_confirmed_at, null);
-    assert.equal(routeAfterReassignment.pickup_driver_confirmed_at, null);
-    const hiddenAfterReassignment = await callRoute(router, 'GET', '/routes', {
-      userId: gateDriver.id
-    });
-    assert.equal(hiddenAfterReassignment.body.routes.some(item => item.id === route.id), false);
+    assert.equal(visibleImmediately.statusCode, 200);
+    assert.equal(visibleImmediately.body.routes.some(item => item.id === route.id), true);
   });
 
   it('returns only pending orders while preserving every handled stop category and favorites', async () => {
@@ -680,6 +635,13 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       assert.equal((await Stop.findByPk(heldStop.id)).package_disposition, 'held_by_driver');
       assert.equal((await Stop.findByPk(officeStop.id)).package_disposition, 'pending_return');
 
+      const releaseBeforeReception = await callRoute(router, 'PUT', '/returns/:id/release', {
+        params: { id: officeOrder.id }
+      });
+      assert.equal(releaseBeforeReception.statusCode, 409);
+      assert.match(releaseBeforeReception.body.error, /recibido en la oficina/i);
+      assert.equal((await ValidatedAddress.findByPk(officeOrder.id)).package_disposition, 'pending_return');
+
       const received = await callRoute(router, 'PUT', '/returns/:id/receive', {
         params: { id: officeOrder.id }
       });
@@ -692,6 +654,41 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
       assert.equal(officeAfterReceive.route_id, null);
       assert.equal(officeAfterReceive.assigned_driver_id, null);
       assert.equal(officeAfterReceive.dispatch_status, 'available');
+
+      const hiddenUntilRelease = await callRoute(router, 'GET', '/orders', {
+        query: { available: 'true' }
+      });
+      assert.equal(
+        hiddenUntilRelease.body.orders.some(order => order.id === officeOrder.id),
+        false
+      );
+
+      const releaseRoute = await createRoute({ status: 'draft' });
+      const blockedRouteAdd = await callRoute(router, 'POST', '/routes/:id/orders', {
+        params: { id: releaseRoute.id },
+        body: { order_ids: [officeOrder.id], favorite_stops: [] }
+      });
+      assert.equal(blockedRouteAdd.statusCode, 409);
+
+      const released = await callRoute(router, 'PUT', '/returns/:id/release', {
+        params: { id: officeOrder.id }
+      });
+      assert.equal(released.statusCode, 200);
+      assert.equal((await ValidatedAddress.findByPk(officeOrder.id)).package_disposition, 'normal');
+
+      const availableAfterRelease = await callRoute(router, 'GET', '/orders', {
+        query: { available: 'true' }
+      });
+      assert.equal(
+        availableAfterRelease.body.orders.some(order => order.id === officeOrder.id),
+        true
+      );
+
+      const addedAfterRelease = await callRoute(router, 'POST', '/routes/:id/orders', {
+        params: { id: releaseRoute.id },
+        body: { order_ids: [officeOrder.id], favorite_stops: [] }
+      });
+      assert.equal(addedAfterRelease.statusCode, 200);
 
       assert.deepEqual(
         calls.filter(call => call.method === 'assignConversation').map(call => call.args),
@@ -1053,42 +1050,4 @@ describe('route lifecycle delivery-history protections with PostgreSQL', { skip:
     assert.equal((await Route.findByPk(route.id)).route_total_collected, '50.00');
   });
 
-  it('shows an order in pickup reception and history even when its Stop is missing', async () => {
-    const pendingRoute = await createRoute({
-      status: 'assigned',
-      assigned_driver_id: admin.id
-    });
-    const pendingOrder = await createOrder(pendingRoute.id);
-    const reception = await callRoute(router, 'GET', '/pickup/pending');
-    assert.equal(reception.statusCode, 200);
-    const pendingView = reception.body.routes.find(route => route.id === pendingRoute.id);
-    assert.ok(pendingView);
-    assert.equal(pendingView.stops_count, 1);
-    assert.equal(pendingView.stops.length, 1);
-    assert.equal(pendingView.stops[0].id, `order:${pendingOrder.id}`);
-    assert.equal(pendingView.stops[0].address, pendingOrder.validated_address);
-
-    const historyRoute = await createRoute({
-      status: 'assigned',
-      assigned_driver_id: admin.id,
-      pickup_admin_confirmed_at: new Date(),
-      pickup_admin_confirmed_by: admin.id
-    });
-    const historyOrder = await createOrder(historyRoute.id);
-    const history = await callRoute(router, 'GET', '/pickup/history');
-    assert.equal(history.statusCode, 200);
-    const historyView = history.body.routes.find(route => route.id === historyRoute.id);
-    assert.ok(historyView);
-    assert.equal(historyView.stops_count, 1);
-    assert.deepEqual(historyView.stops[0], {
-      id: `order:${historyOrder.id}`,
-      source: 'order',
-      customer_name: historyOrder.customer_name,
-      address: historyOrder.validated_address,
-      status: 'pending',
-      package_disposition: 'normal',
-      amount_collected: 0,
-      completed_at: null
-    });
-  });
 });

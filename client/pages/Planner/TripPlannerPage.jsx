@@ -143,21 +143,13 @@ export default function TripPlannerPage() {
       setTimeout(() => setNewRouteNotif(null), 7000)
     }
     const handleRouteUpdated = () => loadDispatchRoutes()
-    const handlePickupAdminConfirmed = (data) => {
-      const msg = data?.message || '✅ La oficina confirmó entrega de paquetes — confirma que los recogiste'
-      setNewRouteNotif(msg)
-      loadDispatchRoutes()
-      setTimeout(() => setNewRouteNotif(null), 10000)
-    }
     socket.on('route:assigned', handleRouteAssigned)
     socket.on('route:updated', handleRouteUpdated)
     socket.on('stop:updated', handleRouteUpdated)
-    socket.on('pickup:admin_confirmed', handlePickupAdminConfirmed)
     return () => {
       socket.off('route:assigned', handleRouteAssigned)
       socket.off('route:updated', handleRouteUpdated)
       socket.off('stop:updated', handleRouteUpdated)
-      socket.off('pickup:admin_confirmed', handlePickupAdminConfirmed)
     }
   }, [])
 
@@ -210,18 +202,6 @@ export default function TripPlannerPage() {
       alert(err.response?.data?.error || t('planner.errorDeliveringPayment'))
     } finally {
       setDeliveringPay(false)
-    }
-  }
-
-  /**
-   * Chofer confirma que recogió los paquetes de una ruta.
-   */
-  const confirmPickup = async (routeId) => {
-    try {
-      await api.post(`/api/dispatch/pickup/${routeId}/driver-confirm`)
-      await loadDispatchRoutes()
-    } catch (err) {
-      alert(err.response?.data?.error || 'Error al confirmar recogida')
     }
   }
 
@@ -286,7 +266,7 @@ export default function TripPlannerPage() {
       const savedRouteId = localStorage.getItem('activeRouteId')
       if (savedRouteId) {
         const savedRoute = relevant.find(r => String(r.id) === String(savedRouteId))
-        if (savedRoute?.pickup_driver_confirmed_at) {
+        if (savedRoute) {
           const wasNavigating = localStorage.getItem('navMode') === 'true'
           if (wasNavigating) {
             pendingNavRestoreRef.current = true
@@ -1713,11 +1693,6 @@ export default function TripPlannerPage() {
   }
 
   const startRoute = () => {
-    const activeRoute = dispatchRoutes.find(route => String(route.id) === String(currentRouteId))
-    if (currentRouteId && !activeRoute?.pickup_driver_confirmed_at) {
-      alert('Debes confirmar la recepción de los paquetes antes de iniciar la ruta.')
-      return
-    }
     setNavigationMode(true)
     setAutoFollow(false)
     localStorage.setItem('navMode', 'true')
@@ -1890,7 +1865,6 @@ export default function TripPlannerPage() {
   const navTargetIndex = navTarget ? stops.indexOf(navTarget) : -1
   const activeDispatchRoute = dispatchRoutes.find(route => String(route.id) === String(currentRouteId))
   const canAddPickupOrder = activeDispatchRoute?.status === 'assigned'
-  const pickupConfirmedForActiveRoute = !currentRouteId || Boolean(activeDispatchRoute?.pickup_driver_confirmed_at)
 
   // El planificador siempre pinta una sola secuencia mixta. El índice original
   // se conserva para que seleccionar, mover, actualizar o completar una parada
@@ -2059,12 +2033,10 @@ export default function TripPlannerPage() {
                   <div
                     key={dr.id}
                     className={`dispatch-route-item${isCompleted ? ' completed-pending-pay' : ''}`}
-                    onClick={() => !isCompleted && dr.pickup_driver_confirmed_at && loadDispatchRoute(dr)}
+                    onClick={() => !isCompleted && loadDispatchRoute(dr)}
                     style={isCompleted
                       ? { cursor: 'default', borderLeft: '4px solid #f59e0b' }
-                      : !dr.pickup_driver_confirmed_at
-                        ? { cursor: 'default', borderLeft: '4px solid #f59e0b' }
-                        : {}}
+                      : {}}
                   >
                     <div className="dispatch-route-top">
                       <span className="dispatch-route-name">{dr.name}</span>
@@ -2092,27 +2064,6 @@ export default function TripPlannerPage() {
                         <span className="material-icons">local_atm</span>
                         Entregar Pago
                       </button>
-                    )}
-                    {/* Confirmación de recogida: aparece cuando la oficina confirmó pero el chofer aún no */}
-                    {!isCompleted && dr.pickup_admin_confirmed_at && !dr.pickup_driver_confirmed_at && (
-                      <div className="pickup-driver-confirm-banner" onClick={e => e.stopPropagation()}>
-                        <div className="pickup-driver-confirm-text">
-                          <span className="material-icons" style={{ fontSize: 18, color: '#6200ea' }}>inventory</span>
-                          <span>La oficina confirmó la entrega de paquetes</span>
-                        </div>
-                        <button
-                          className="pickup-driver-confirm-btn"
-                          onClick={e => { e.stopPropagation(); confirmPickup(dr.id) }}
-                        >
-                          <span className="material-icons">check_circle</span>
-                          Confirmar que recogí
-                        </button>
-                      </div>
-                    )}
-                    {!isCompleted && dr.pickup_admin_confirmed_at && !dr.pickup_driver_confirmed_at && (
-                      <div className="pickup-driver-confirm-text" style={{ marginTop: 6, color: '#9a6700' }}>
-                        Confirma la recepción para habilitar el inicio de la ruta.
-                      </div>
                     )}
                   </div>
                   )
@@ -2336,12 +2287,12 @@ export default function TripPlannerPage() {
                 )}
               </div>
             )
-          ) : (isOptimized || stops.length === 1) && pickupConfirmedForActiveRoute ? (
+          ) : (isOptimized || stops.length === 1) ? (
             <button className="btn-start-route" onClick={startRoute}>
               <span className="material-icons">navigation</span>
               Iniciar ruta
             </button>
-          ) : (stops.length >= 2 && pickupConfirmedForActiveRoute) ? (
+          ) : stops.length >= 2 ? (
             <button
               className="btn-optimize"
               onClick={optimizeRoute}

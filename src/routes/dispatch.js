@@ -61,8 +61,6 @@ const routeHasActivity = (route, stops = []) => (
   Boolean(route.assigned_driver_id) ||
   Boolean(route.started_at) ||
   Boolean(route.completed_at) ||
-  Boolean(route.pickup_admin_confirmed_at) ||
-  Boolean(route.pickup_driver_confirmed_at) ||
   Boolean(route.payment_delivered) ||
   Boolean(route.admin_confirmed) ||
   Number(route.admin_amount_received || 0) > 0 ||
@@ -81,8 +79,6 @@ const routeHasDeliveryActivity = (route, stops = []) => (
   ['completed', 'returned'].includes(route.status) ||
   Boolean(route.started_at) ||
   Boolean(route.completed_at) ||
-  Boolean(route.pickup_admin_confirmed_at) ||
-  Boolean(route.pickup_driver_confirmed_at) ||
   Boolean(route.payment_delivered) ||
   Boolean(route.admin_confirmed) ||
   Number(route.admin_amount_received || 0) > 0 ||
@@ -101,20 +97,6 @@ const stopIsFinanciallyTouched = (stop) => (
   Number(stop.amount_collected || 0) > 0 ||
   ['paid', 'partial', 'partially_paid'].includes(stop.payment_status)
 );
-
-const getPickupGateError = (route, user) => {
-  if (!route || user?.role !== 'driver') return null;
-  if (route.assigned_driver_id !== user.id) {
-    return { status: 403, error: 'No tienes permisos para esta ruta' };
-  }
-  if (!route.pickup_admin_confirmed_at) {
-    return { status: 409, error: 'Recepción aún no ha confirmado la entrega de paquetes' };
-  }
-  if (!route.pickup_driver_confirmed_at) {
-    return { status: 409, error: 'Debes confirmar que recibiste los paquetes antes de iniciar la ruta' };
-  }
-  return null;
-};
 
 const addressStreetNumber = (address) => {
   const match = String(address || '').match(/\b(\d{1,6})\b/);
@@ -430,6 +412,14 @@ router.get('/orders', requireAuth, async (req, res) => {
             address_lng: { [Op.ne]: null }
           }
         ];
+        where[Op.and] = [
+          {
+            [Op.or]: [
+              { package_disposition: 'normal' },
+              { package_disposition: { [Op.is]: null } }
+            ]
+          }
+        ];
       }
     } else {
       return res.status(403).json({ error: 'No tienes permisos' });
@@ -590,11 +580,6 @@ router.put('/orders/:id/status', requireAuth, async (req, res) => {
       }
       if (order.assigned_driver_id !== user.id) {
         return res.status(403).json({ error: 'Esta orden no te fue asignada' });
-      }
-      if (order.route_id) {
-        const route = await Route.findByPk(order.route_id);
-        const pickupGate = getPickupGateError(route, user);
-        if (pickupGate) return res.status(pickupGate.status).json({ error: pickupGate.error });
       }
     } else {
       return res.status(403).json({ error: 'No tienes permisos' });
@@ -1948,6 +1933,14 @@ router.post('/routes/:id/orders', requireAdminOrReceptionist, async (req, res) =
 
     if (Array.isArray(order_ids) && order_ids.length > 0) {
       const dbOrders = await ValidatedAddress.findAll({ where: { id: { [Op.in]: order_ids } } });
+      const blockedReturn = dbOrders.find(order =>
+        order.package_disposition && order.package_disposition !== 'normal'
+      );
+      if (blockedReturn) {
+        return res.status(409).json({
+          error: 'El paquete debe recibirse y liberarse en la oficina antes de agregarlo a una ruta.'
+        });
+      }
       for (const order of dbOrders) {
         if (order.route_id === route.id) continue;
         await Stop.create({
@@ -2474,8 +2467,7 @@ router.get('/routes', requireAuth, async (req, res) => {
     let where = {};
     if (user.role === 'driver') {
       where = {
-        assigned_driver_id: user.id,
-        pickup_admin_confirmed_at: { [Op.not]: null }
+        assigned_driver_id: user.id
       };
     } else if (user.role === 'admin' || user.role === 'receptionist') {
     } else {
@@ -2512,8 +2504,6 @@ router.get('/routes', requireAuth, async (req, res) => {
       routeDict.payment_delivered = r.payment_delivered || false;
       routeDict.payment_delivery_method = r.payment_delivery_method || null;
       routeDict.payment_delivered_at = r.payment_delivered_at || null;
-      routeDict.pickup_admin_confirmed_at = r.pickup_admin_confirmed_at || null;
-      routeDict.pickup_driver_confirmed_at = r.pickup_driver_confirmed_at || null;
       return routeDict;
     }));
 
@@ -2716,11 +2706,6 @@ router.put('/routes/:id/assign', requireAdminOrReceptionist, async (req, res) =>
 
     route.status = 'assigned';
     route.assigned_driver_id = driver_id;
-    // Cada asignación nueva debe volver a pasar por recepción, incluso si la
-    // ruta ya había sido confirmada para un chofer anterior.
-    route.pickup_admin_confirmed_at = null;
-    route.pickup_admin_confirmed_by = null;
-    route.pickup_driver_confirmed_at = null;
     await route.save();
 
     // Auto-incluir paquetes que el chofer se quedo de rutas anteriores.
@@ -3026,12 +3011,6 @@ router.post('/stops/:id/evidence', requireAuth, upload.single('photo'), async (r
         return res.status(403).json({ error: 'No tienes permisos para esta parada' });
       }
     }
-    const evidenceUser = await User.findByPk(req.userId);
-    const evidencePickupGate = getPickupGateError(route, evidenceUser);
-    if (evidencePickupGate) {
-      return res.status(evidencePickupGate.status).json({ error: evidencePickupGate.error });
-    }
-
     if (req.file) {
       stop.photo_url = `/uploads/evidence/${req.file.filename}`;
     }
@@ -3092,11 +3071,6 @@ router.put('/stops/:id/skip', requireAuth, async (req, res) => {
         return res.status(403).json({ error: 'No tienes permisos para esta parada' });
       }
     }
-    const skipPickupGate = getPickupGateError(route, skipUser);
-    if (skipPickupGate) {
-      return res.status(skipPickupGate.status).json({ error: skipPickupGate.error });
-    }
-
     if (stop.status === 'completed' || stopIsFinanciallyTouched(stop)) {
       return res.status(409).json({
         error: 'Una entrega completada o cobrada no puede marcarse como brincada.'
@@ -3310,8 +3284,8 @@ router.put('/returns/:id/release', requireAdminOrReceptionist, async (req, res) 
     if (rawId.startsWith('stop:')) {
       const stop = await Stop.findByPk(Number(rawId.slice(5)));
       if (!stop) return res.status(404).json({ error: 'Parada no encontrada' });
-      if (!['returned_to_office', 'pending_return', 'held_by_driver'].includes(stop.package_disposition)) {
-        return res.status(400).json({ error: 'Esta parada no esta marcada como devolucion' });
+      if (stop.package_disposition !== 'returned_to_office') {
+        return res.status(409).json({ error: 'Primero debes confirmar que el paquete fue recibido en la oficina' });
       }
       const favoriteAddressId = stop.favorite_address_id;
       // Una parada favorita es reutilizable y debe permanecer disponible para
@@ -3330,26 +3304,20 @@ router.put('/returns/:id/release', requireAdminOrReceptionist, async (req, res) 
     }
     const order = await ValidatedAddress.findByPk(req.params.id);
     if (!order) return res.status(404).json({ error: 'Orden no encontrada' });
-    if (!['returned_to_office', 'pending_return', 'held_by_driver'].includes(order.package_disposition)) {
-      return res.status(400).json({ error: 'Esta orden no esta marcada como devolucion' });
+    if (order.package_disposition !== 'returned_to_office') {
+      return res.status(409).json({ error: 'Primero debes confirmar que el paquete fue recibido en la oficina' });
     }
     if (order.route_id) {
       return res.status(400).json({ error: 'La orden ya esta asignada a una ruta' });
     }
-    const wasReturnedToOffice = order.package_disposition === 'returned_to_office';
     order.package_disposition = 'normal';
     order.held_by_driver_id = null;
     order.skip_reason = null;
     order.skipped_at = null;
     order.returned_at = null;
     order.dispatch_status = 'available';
-    if (wasReturnedToOffice) {
-      restoreReturnedToOfficeStatus(order);
-    } else {
-      restorePreDeliveryStatus(order);
-    }
+    restoreReturnedToOfficeStatus(order);
     await order.save();
-    await assignOrderBackToReception(order);
     res.json({ success: true, order: order.toDict() });
   } catch (error) {
     console.error('Error releasing return:', error);
@@ -3386,11 +3354,6 @@ router.put('/stops/:id/restore', requireAuth, async (req, res) => {
     if (route.assigned_driver_id !== req.userId) {
       if (!restoreUser || restoreUser.role !== 'admin') return res.status(403).json({ error: 'No tienes permisos para esta ruta.' });
     }
-    const restorePickupGate = getPickupGateError(route, restoreUser);
-    if (restorePickupGate) {
-      return res.status(restorePickupGate.status).json({ error: restorePickupGate.error });
-    }
-
     const availableOrders = await ValidatedAddress.findAll({
       where: {
         user_id: route.user_id,
@@ -3436,6 +3399,13 @@ router.put('/stops/:id/restore', requireAuth, async (req, res) => {
     console.error('Error restoring skipped stop:', error);
     res.status(500).json({ error: 'Error al restaurar la parada' });
   }
+});
+
+// El flujo de doble confirmación de entrega/recogida de rutas fue retirado.
+// Las columnas históricas permanecen en la base de datos, pero los endpoints
+// ya no forman parte de la aplicación.
+router.use('/pickup', requireAuth, (req, res) => {
+  res.status(410).json({ error: 'La recepción de rutas fue eliminada' });
 });
 
 /**
@@ -3879,11 +3849,6 @@ router.put('/routes/:id/complete', requireAuth, async (req, res) => {
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: 'No tienes permisos' });
       }
-    }
-    const completeUser = await User.findByPk(req.userId);
-    const completePickupGate = getPickupGateError(route, completeUser);
-    if (completePickupGate) {
-      return res.status(completePickupGate.status).json({ error: completePickupGate.error });
     }
     if (route.status === 'returned') {
       return res.status(400).json({ error: 'La ruta fue cerrada después de regresar órdenes pendientes.' });

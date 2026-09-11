@@ -3,7 +3,7 @@ name: Route lifecycle protection
 description: Safe deletion and return rules for dispatch routes
 ---
 
-Routes with assignment, pickup confirmation, delivery progress, evidence, payment, or completion history are immutable records for deletion purposes. Pending orders are released through an explicit return flow; favorites and handled package states are preserved.
+Routes with assignment, delivery progress, evidence, payment, or completion history are immutable records for deletion purposes. Pending orders are released through an explicit return flow; favorites and handled package states are preserved.
 
 **Why:** Destructive route deletion can erase accounting relationships, delivery evidence, retained packages, and audit history.
 
@@ -33,11 +33,11 @@ Delivery completion is based on the completed stop, not merely route membership 
 
 **How to apply:** Resolve each completed Stop to its order before finalizing delivery; leave skipped or unmatched orders in their existing lifecycle.
 
-Route pickup is a strict two-step gate: reception must confirm the packages before the driver can see the assigned route, and the driver must confirm receipt before starting or changing stops. Reassigning a route clears both confirmations.
+Assigned routes are visible to the driver immediately and do not require office or driver pickup confirmation.
 
-**Why:** Showing an assigned route before office handoff lets the driver bypass the reception audit and makes package custody ambiguous.
+**Why:** The route-reception workflow was intentionally removed; assignment itself is now the handoff that makes a route actionable.
 
-**How to apply:** Keep unconfirmed assigned routes out of the driver route feed, never auto-confirm pickup based on stop progress, and enforce the gate server-side for delivery actions.
+**How to apply:** Do not gate route visibility, navigation, evidence, stop updates, or completion on pickup confirmation fields. Keep the separate returned-package office-reception workflow unchanged.
 
 Lifecycle polling must revalidate a terminal order before treating an active snapshot as a new cycle.
 
