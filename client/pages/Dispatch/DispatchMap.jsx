@@ -129,6 +129,10 @@ export default function DispatchMap() {
   const routePolylinesRef = useRef([])
   const directionsRendererRef = useRef(null)
   const optimizeTimerRef = useRef(null)
+  const lastInitialLoadKeyRef = useRef(null)
+  const favoritesLoadedRef = useRef(false)
+  const pickupReadyInitializedRef = useRef(false)
+  const latestFetchRequestRef = useRef(0)
 
   const [orders, setOrders] = useState([])
   const [stats, setStats] = useState({})
@@ -138,6 +142,7 @@ export default function DispatchMap() {
   const [drivers, setDrivers] = useState([])
   const [routes, setRoutes] = useState([])
   const [loading, setLoading] = useState(true)
+  const [statsLoaded, setStatsLoaded] = useState(false)
   const [filterStatus, setFilterStatus] = useState('')
   const [isCreatingRoute, setIsCreatingRoute] = useState(false)
   const [isAddingOrders, setIsAddingOrders] = useState(false)
@@ -250,6 +255,7 @@ export default function DispatchMap() {
    * Carga los datos iniciales de órdenes, rutas y estadísticas desde la API.
    */
   const fetchData = useCallback(async () => {
+    const requestId = ++latestFetchRequestRef.current
     try {
       setLoading(true)
       const params = { available: 'true' }
@@ -260,17 +266,24 @@ export default function DispatchMap() {
         canManageRoutes ? api.get('/api/dispatch/drivers') : Promise.resolve(null),
         canManageRoutes && isAdmin ? api.get('/api/dispatch/stats') : Promise.resolve(null)
       ])
+      if (requestId !== latestFetchRequestRef.current) return
       setOrders(ordersRes.data.orders || [])
       setRoutes(routesRes.data.routes || [])
 
       if (canManageRoutes) {
-        if (statsRes) setStats(statsRes.data)
+        if (statsRes) {
+          setStats(statsRes.data)
+          setStatsLoaded(true)
+        }
         if (driversRes) setDrivers(driversRes.data.drivers || [])
       }
     } catch (error) {
+      if (requestId !== latestFetchRequestRef.current) return
       console.error('Error fetching dispatch data:', error)
     } finally {
-      setLoading(false)
+      if (requestId === latestFetchRequestRef.current) {
+        setLoading(false)
+      }
     }
   }, [filterStatus, canManageRoutes, isAdmin])
 
@@ -333,9 +346,21 @@ export default function DispatchMap() {
 
   // Efecto inicial para cargar todos los datos y configurar intervalos de actualización
   useEffect(() => {
-    fetchData()
-    fetchFavorites()
-    if (isAdmin) fetchPickupReady()
+    const loadKey = `${filterStatus}:${isAdmin}:${canManageRoutes}`
+    if (lastInitialLoadKeyRef.current !== loadKey) {
+      lastInitialLoadKeyRef.current = loadKey
+      fetchData()
+    }
+    if (!favoritesLoadedRef.current) {
+      favoritesLoadedRef.current = true
+      fetchFavorites()
+    }
+    if (isAdmin && !pickupReadyInitializedRef.current) {
+      pickupReadyInitializedRef.current = true
+      fetchPickupReady()
+    } else if (!isAdmin) {
+      pickupReadyInitializedRef.current = false
+    }
     const interval = setInterval(fetchData, 180000)
     const pickupInterval = isAdmin ? setInterval(() => fetchPickupReady(), 5 * 60 * 1000) : null
     return () => {
@@ -1425,6 +1450,7 @@ export default function DispatchMap() {
   }
 
   const formatDate = (d) => d ? new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
+  const statValue = (key) => statsLoaded ? (stats[key] ?? 0) : '…'
 
   return (
     <div className="dispatch-container">
@@ -1439,27 +1465,27 @@ export default function DispatchMap() {
         {isAdmin && (
           <div className="dispatch-stats">
             <div className="dstat" style={{ borderColor: '#4caf50' }}>
-              <span className="dstat-val">{stats.approved || 0}</span>
+              <span className="dstat-val">{statValue('approved')}</span>
               <span className="dstat-label">{t('dispatch.stats.approved')}</span>
             </div>
             <div className="dstat" style={{ borderColor: '#2196f3' }}>
-              <span className="dstat-val">{stats.ordered || 0}</span>
+              <span className="dstat-val">{statValue('ordered')}</span>
               <span className="dstat-label">{t('dispatch.stats.ordered')}</span>
             </div>
             <div className="dstat" style={{ borderColor: '#0d47a1' }}>
-              <span className="dstat-val">{stats.pickup_ready || 0}</span>
+              <span className="dstat-val">{statValue('pickup_ready')}</span>
               <span className="dstat-label">{t('dispatch.stats.pickupReady')}</span>
             </div>
             <div className="dstat" style={{ borderColor: '#ff9800' }}>
-              <span className="dstat-val">{stats.on_delivery || 0}</span>
+              <span className="dstat-val">{statValue('on_delivery')}</span>
               <span className="dstat-label">{t('dispatch.stats.onDelivery')}</span>
             </div>
             <div className="dstat" style={{ borderColor: '#9c27b0' }}>
-              <span className="dstat-val">{stats.ups_shipped || 0}</span>
+              <span className="dstat-val">{statValue('ups_shipped')}</span>
               <span className="dstat-label">UPS</span>
             </div>
             <div className="dstat" style={{ borderColor: '#ff6d00' }}>
-              <span className="dstat-val">{stats.delivered || 0}</span>
+              <span className="dstat-val">{statValue('delivered')}</span>
               <span className="dstat-label">{t('dispatch.stats.delivered')}</span>
             </div>
             <button
