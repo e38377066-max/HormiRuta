@@ -224,7 +224,7 @@ class PollingService {
       return { success: false, error: 'El módulo de mensajería está desactivado. Actívalo en Ajustes.' };
     }
     
-    console.log(`[Polling] Configuración válida. Token: ${settings.respond_api_token.substring(0, 10)}...`);
+    console.log('[Polling] Configuración válida. Token de Respond.io configurado.');
 
     const poller = {
       userId,
