@@ -15,3 +15,4 @@
 - [Respond.io global settings](respond-global-settings.md) — el token de Respond.io es global; las rutas no deben exigir configuración por usuario.
 - [Respond.io contact identifiers](respond-contact-identifiers.md) — los endpoints individuales requieren `id:<contactId>` aunque la lista devuelva el ID numérico.
 - [External deployment dependency registry](external-deployment-registry.md) — external production cannot resolve Replit's private npm registry URLs in package-lock.
+- [Dispatch realtime refresh](dispatch-realtime-refresh.md) — polling-created or archived orders must emit dispatch:updated; the UI keeps a short fallback poll for missed socket events.

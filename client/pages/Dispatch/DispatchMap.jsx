@@ -260,22 +260,34 @@ export default function DispatchMap() {
       setLoading(true)
       const params = { available: 'true' }
       if (filterStatus) params.status = filterStatus
-      const [ordersRes, routesRes, driversRes, statsRes] = await Promise.all([
+      const [ordersResult, routesResult, driversResult, statsResult] = await Promise.allSettled([
         api.get('/api/dispatch/orders', { params }),
         api.get('/api/dispatch/routes'),
         canManageRoutes ? api.get('/api/dispatch/drivers') : Promise.resolve(null),
         canManageRoutes && isAdmin ? api.get('/api/dispatch/stats') : Promise.resolve(null)
       ])
       if (requestId !== latestFetchRequestRef.current) return
-      setOrders(ordersRes.data.orders || [])
-      setRoutes(routesRes.data.routes || [])
+
+      if (ordersResult.status === 'fulfilled') {
+        setOrders(ordersResult.value?.data?.orders || [])
+      } else {
+        console.error('Error fetching dispatch orders:', ordersResult.reason)
+      }
+
+      if (routesResult.status === 'fulfilled') {
+        setRoutes(routesResult.value?.data?.routes || [])
+      } else {
+        console.error('Error fetching dispatch routes:', routesResult.reason)
+      }
 
       if (canManageRoutes) {
-        if (statsRes) {
-          setStats(statsRes.data)
+        if (statsResult.status === 'fulfilled' && statsResult.value) {
+          setStats(statsResult.value.data || {})
           setStatsLoaded(true)
         }
-        if (driversRes) setDrivers(driversRes.data.drivers || [])
+        if (driversResult.status === 'fulfilled' && driversResult.value) {
+          setDrivers(driversResult.value.data?.drivers || [])
+        }
       }
     } catch (error) {
       if (requestId !== latestFetchRequestRef.current) return
@@ -361,7 +373,10 @@ export default function DispatchMap() {
     } else if (!isAdmin) {
       pickupReadyInitializedRef.current = false
     }
-    const interval = setInterval(fetchData, 180000)
+    // Socket.IO actualiza al instante. Este intervalo corto solo es un respaldo
+    // para una reconexión o una actualización que ocurrió mientras el socket
+    // estaba desconectado.
+    const interval = setInterval(fetchData, 15000)
     const pickupInterval = isAdmin ? setInterval(() => fetchPickupReady(), 5 * 60 * 1000) : null
     return () => {
       clearInterval(interval)
@@ -372,12 +387,15 @@ export default function DispatchMap() {
   // Socket.IO — actualización en tiempo real para el panel de admin
   useEffect(() => {
     const socket = getSocket()
-    socket.emit('join', { role: 'admin', userId: null })
     const refresh = () => fetchData()
+    socket.on('connect', refresh)
+    socket.on('dispatch:updated', refresh)
     socket.on('route:assigned', refresh)
     socket.on('route:updated', refresh)
     socket.on('stop:updated', refresh)
     return () => {
+      socket.off('connect', refresh)
+      socket.off('dispatch:updated', refresh)
       socket.off('route:assigned', refresh)
       socket.off('route:updated', refresh)
       socket.off('stop:updated', refresh)

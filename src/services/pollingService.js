@@ -23,6 +23,7 @@ import ValidatedAddress from '../models/ValidatedAddress.js';
 import WholesaleClient from '../models/WholesaleClient.js';
 import User from '../models/User.js';
 import respondApiService from './respondApiService.js';
+import { emitToAdmins } from './socketService.js';
 import { saveToDeliveryHistory } from '../utils/deliveryHistory.js';
 import { shouldProtectAssignedRoute } from '../utils/routeLifecycleProtection.js';
 
@@ -33,6 +34,14 @@ import { shouldProtectAssignedRoute } from '../utils/routeLifecycleProtection.js
  */
 function contactIsWholesale(name) {
   return /\bMAY\b/i.test(name) || /\-MAY\b/i.test(name) || /\bMAY\-/i.test(name);
+}
+
+function notifyDispatchUpdated(payload = {}) {
+  emitToAdmins('dispatch:updated', {
+    source: 'respond-polling',
+    ...payload,
+    updated_at: new Date().toISOString()
+  });
 }
 
 /**
@@ -1785,6 +1794,7 @@ class PollingService {
           );
           if (archivedCount > 0) {
             console.log(`[AddressScan] ${archivedCount} orden(es) archivada(s) del dispatcher por tag excluido (rec / iprintpos-chats)`);
+            notifyDispatchUpdated({ reason: 'orders-archived', changed_count: archivedCount });
           }
         } catch (err) {
           console.error(`[AddressScan] Error archivando tags excluidos:`, err.message);
@@ -3403,6 +3413,7 @@ class PollingService {
       );
       if (updated > 0) {
         console.log(`[Cleanup] ${updated} orden(es) entregada(s) archivadas en base de datos (>48h) — NO eliminadas`);
+        notifyDispatchUpdated({ reason: 'orders-archived', changed_count: updated });
       }
     } catch (error) {
       console.error(`[Cleanup] Error archivando órdenes entregadas:`, error.message);
@@ -3581,6 +3592,7 @@ class PollingService {
       );
       if (archivedCount > 0) {
         console.log(`[AddressScan] ${archivedCount} orden(es) archivada(s) por estar en UPS Shipped`);
+        notifyDispatchUpdated({ reason: 'orders-archived', changed_count: archivedCount });
       }
     } catch (err) {
       console.error('[AddressScan] Error archivando UPS Shipped:', err.message);
@@ -3619,6 +3631,7 @@ class PollingService {
       );
       if (archivedCount > 0) {
         console.log(`[StartupReconcile] ${archivedCount} orden(es) archivada(s) por lifecycle excluido (New Lead/Impropos/IprintPOS)`);
+        notifyDispatchUpdated({ reason: 'orders-archived', changed_count: archivedCount });
       }
     } catch (err) {
       console.error('[StartupReconcile] Error archivando lifecycles excluidos:', err.message);
@@ -3998,6 +4011,12 @@ class PollingService {
       // usar un lifecycle que no pertenece a este conjunto. Un archivado
       // automático en ese caso hacía desaparecer órdenes válidas del dispatch.
       console.log(`[StartupReconcile] Completado: ${reactivated} reactivada(s), ${synced} sincronizada(s), ${mismatchKept} ignorada(s)`);
+      if (reactivated > 0 || synced > 0) {
+        notifyDispatchUpdated({
+          reason: 'lifecycle-reconcile',
+          changed_count: reactivated + synced
+        });
+      }
     } catch (error) {
       console.error('[StartupReconcile] Error general:', error.message);
     }
@@ -4058,6 +4077,7 @@ class PollingService {
       });
 
       let created = false;
+      let dispatchChanged = false;
 
       if (!record && contact.phone) {
         const phoneNorm = contact.phone.replace(/\D/g, '');
@@ -4069,6 +4089,7 @@ class PollingService {
           record = phoneMatch;
           if (!record.respond_contact_id) {
             await record.update({ respond_contact_id: contactIdStr });
+            dispatchChanged = true;
             console.log(`[ValidatedAddr] Vinculado registro manual de ${customerName} al contacto ${contactIdStr}`);
           } else {
             console.log(`[ValidatedAddr] Reutilizando registro existente de ${customerName} (mismo teléfono, evitando duplicado)`);
@@ -4086,6 +4107,7 @@ class PollingService {
         if (byName) {
           record = byName;
           await record.update({ respond_contact_id: contactIdStr });
+          dispatchChanged = true;
           console.log(`[ValidatedAddr] Vinculado registro manual de ${customerName} (por nombre) al contacto ${contactIdStr}`);
         }
       }
@@ -4151,17 +4173,28 @@ class PollingService {
         if (isRecByName) console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (nombre contiene -REC)`);
         if (isUpsShipped) console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (UPS Shipped)`);
         created = true;
+        dispatchChanged = true;
       } else if (isRecByName && record.dispatch_status !== 'archived') {
         await record.update({ dispatch_status: 'archived' });
+        dispatchChanged = true;
         console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (nombre contiene -REC)`);
       } else if (isUpsShipped && record.dispatch_status !== 'archived' && !record.route_id) {
         await record.update({ dispatch_status: 'archived' });
+        dispatchChanged = true;
         console.log(`[ValidatedAddr] Orden de ${customerName} archivada del dispatcher (UPS Shipped)`);
       }
 
       if (created) {
         console.log(`[ValidatedAddr] Nueva direccion para ${customerName}: "${finalAddress}" (${lat}, ${lng}) [${orderStatus || 'approved'}]`);
       } else {
+        const addressChanged =
+          record.validated_address !== finalAddress ||
+          record.original_address !== originalAddress ||
+          record.address_lat !== lat ||
+          record.address_lng !== lng ||
+          record.customer_name !== customerName ||
+          (contact.phone || record.customer_phone) !== record.customer_phone;
+        const previousStatus = record.order_status;
         const updateData = {
           validated_address: finalAddress,
           original_address: originalAddress,
@@ -4181,11 +4214,21 @@ class PollingService {
         if (orderStatus && record.order_status !== orderStatus &&
             !record.route_id && !saveTerminal.includes(record.order_status)) {
           updateData.order_status = orderStatus;
+          dispatchChanged = true;
           const direction = this.statusCanAdvance(record.order_status, orderStatus) ? 'avance' : 'retroceso';
           console.log(`[ValidatedAddr] Lifecycle sync (${direction}): ${customerName} ${record.order_status} -> ${orderStatus}`);
         }
         await record.update(updateData);
+        dispatchChanged = dispatchChanged || addressChanged || previousStatus !== record.order_status;
         console.log(`[ValidatedAddr] Actualizada para ${customerName}: "${finalAddress}" (${lat}, ${lng})${sourceOverride ? ` [${sourceOverride}]` : ''}`);
+      }
+
+      if (dispatchChanged) {
+        notifyDispatchUpdated({
+          reason: created ? 'order-created' : 'order-updated',
+          order_id: record.id,
+          customer_name: customerName
+        });
       }
 
       if (contactIsWholesale(customerName)) {
