@@ -340,18 +340,42 @@ class GeocodingService {
    * @returns {Promise<Object>} Coordenadas o dirección resuelta.
    */
   async resolveGoogleMapsLink(url) {
-    try {
-      if (!url.startsWith('http')) {
-        url = 'https://' + url;
+    if (!url.startsWith('http')) {
+      url = 'https://' + url;
+    }
+
+    let response;
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await axios.get(url, {
+          maxRedirects: 5,
+          timeout: 8000,
+          validateStatus: () => true,
+          headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        const isRetryableNetworkError = error.code === 'ECONNABORTED' ||
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ECONNRESET' ||
+          !error.response;
+        if (!isRetryableNetworkError || attempt === 1) {
+          console.error('[Geocoding] Error resolving Google Maps link:', error.message);
+          return { success: false, error: error.message };
+        }
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
+    }
 
-      const response = await axios.get(url, {
-        maxRedirects: 5,
-        timeout: 8000,
-        validateStatus: () => true,
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-      });
+    if (!response) {
+      const errorMessage = lastError?.message || 'Google Maps request failed';
+      console.error('[Geocoding] Error resolving Google Maps link:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
 
+    try {
       const finalUrl = response.request?.res?.responseUrl || response.headers?.location || url;
       const allText = finalUrl + ' ' + (typeof response.data === 'string' ? response.data : '');
 

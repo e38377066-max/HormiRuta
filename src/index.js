@@ -12,6 +12,7 @@ import logBuffer from './services/logService.js';
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
+import connectSessionSequelize from 'connect-session-sequelize';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -97,9 +98,17 @@ if (!sessionSecret && process.env.NODE_ENV === 'production') {
 }
 
 const isProduction = process.env.NODE_ENV === 'production';
+const SequelizeStore = connectSessionSequelize(session.Store);
+const sessionStore = new SequelizeStore({
+  db: sequelize,
+  tableName: 'sessions',
+  checkExpirationInterval: 15 * 60 * 1000,
+  expiration: 7 * 24 * 60 * 60 * 1000
+});
 
 app.use(session({
   secret: sessionSecret || 'dev-secret-key-for-local-development',
+  store: sessionStore,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -204,6 +213,7 @@ async function startServer() {
     console.log('Database connection established successfully.');
     
     await sequelize.sync({ alter: { drop: false } });
+    await sessionStore.sync();
     console.log('Database tables synchronized.');
 
     // Secuencial para evitar carrera: primero reconcile (puede reactivar

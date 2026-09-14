@@ -2072,6 +2072,7 @@ class PollingService {
   async scanAddressesInConversations(userId, apiToken, allContacts, respondio, messageLimit, settings) {
     try {
       const extractor = new AddressExtractorService();
+      const addressValidation = new AddressValidationService(userId);
       const counter = { updated: 0 };
       const RESCAN_INTERVAL_MS = 5 * 60 * 1000;
       const BATCH_CONCURRENCY = 10;
@@ -2960,6 +2961,11 @@ class PollingService {
               }
             }
 
+            if (!addressValidation.isLikelyAddress(result.address)) {
+              this.vagueGeoCache.set(vagueCacheKey, Date.now());
+              return;
+            }
+
             if (existing) {
               console.log(`[AddressScan] Nueva direccion detectada para ${contactName} (${contact.id}): "${result.address}" (anterior: "${existing.validated}")`);
             }
@@ -3801,13 +3807,16 @@ class PollingService {
 
       if (newContacts.length > 0) {
         console.log(`[StartupReconcile] ${newContacts.length} contacto(s) con lifecycle activo sin registro en DB — revisando campo Address...`);
-        const pickedCounter = { count: 0 };
+        const reconcileStats = { captured: 0, withoutAddress: 0, failed: 0 };
         const normalizeFieldName = (n) => (n || '').toLowerCase()
           .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
         const processNewContact = async (c) => {
           try {
             const detail = await respondio.getContact(c.id);
-            if (!detail.success || !detail.data) return;
+            if (!detail.success || !detail.data) {
+              reconcileStats.failed++;
+              return;
+            }
             const cData = detail.data;
             const cfAddress = cData.custom_fields?.find(f => {
               const fn = normalizeFieldName(f.name);
@@ -3815,7 +3824,10 @@ class PollingService {
                 fn === 'delivery address' || fn === 'delivery' ||
                 fn === 'address line 1' || fn === 'direccion de entrega';
             });
-            if (!cfAddress?.value || cfAddress.value.trim().length < 5) return;
+            if (!cfAddress?.value || cfAddress.value.trim().length < 5) {
+              reconcileStats.withoutAddress++;
+              return;
+            }
             const rawAddr = cfAddress.value.trim();
             const contactForSave = {
               id: c.id,
@@ -3829,8 +3841,9 @@ class PollingService {
             const contactName = `${contactForSave.firstName} ${contactForSave.lastName}`.trim() || `ID:${c.id}`;
             console.log(`[StartupReconcile] Dirección desde campo Address (nuevo): "${contactName}" (${c.id}): "${addressToSave}" [contact_corrected]`);
             await this.saveValidatedAddress(userId, contactForSave, addressToSave, rawAddr, cfGeocoded.zip || null, cfGeocoded, 'contact_corrected');
-            pickedCounter.count++;
+            reconcileStats.captured++;
           } catch (err) {
+            reconcileStats.failed++;
             console.error(`[StartupReconcile] Error leyendo contacto ${c.id}:`, err.message);
           }
         };
@@ -3839,7 +3852,12 @@ class PollingService {
           const slice = newContacts.slice(rb, rb + RECONCILE_BATCH);
           await Promise.allSettled(slice.map(c => processNewContact(c)));
         }
-        if (pickedCounter.count > 0) console.log(`[StartupReconcile] ${pickedCounter.count} dirección(es) nueva(s) capturada(s) desde campo Address`);
+        console.log(
+          `[StartupReconcile] Resultado contactos nuevos: ` +
+          `capturadas=${reconcileStats.captured}, ` +
+          `sin Address=${reconcileStats.withoutAddress}, ` +
+          `fallidas=${reconcileStats.failed}`
+        );
       }
       // ── FIN nueva sección ──────────────────────────────────────────────────
 
