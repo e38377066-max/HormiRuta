@@ -3693,6 +3693,8 @@ class PollingService {
            if (!canonicalLifecycle) continue;
            c.lifecycle = canonicalLifecycle;
            c.lifecycleStage = canonicalLifecycle;
+           c.conversation_status = status;
+           c.conversation_is_open = status === 'open';
           seen.add(idStr);
           allContacts.push(c);
            counts[canonicalLifecycle]++;
@@ -3800,6 +3802,44 @@ class PollingService {
       const addressMap = new Map();
       for (const va of existingAddresses) addressMap.set(va.respond_contact_id, va);
 
+      const conversationStates = await ConversationState.findAll({
+        where: { contact_id: { [Op.in]: contactIds } }
+      });
+      const conversationStateMap = new Map(
+        conversationStates.map(state => [state.contact_id, state])
+      );
+
+      // Cerrar una conversación no confirma que exista una orden. El flujo de
+      // cierre sí deja evidencia explícita: closing_complete, closing_completed_at
+      // o el tag PedidoConfirmado. Pickup Ready/On Delivery también son estados
+      // posteriores a una orden confirmada. Un route_id siempre se conserva.
+      const hasOrderConfirmation = (contact, existing = null) => {
+        if (existing?.route_id) return true;
+
+        const lifecycle = String(contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
+        if (['pickup ready', 'on delivery', 'delivered', 'ups shipped'].includes(lifecycle)) {
+          return true;
+        }
+
+        const tags = (contact.tags || []).map(tag =>
+          String(typeof tag === 'string' ? tag : (tag?.name || '')).trim().toLowerCase()
+        );
+        if (tags.includes('pedidoconfirmado')) return true;
+
+        const conversationState = conversationStateMap.get(contact.id.toString());
+        const contextData = conversationState?.context_data &&
+          typeof conversationState.context_data === 'object'
+          ? conversationState.context_data
+          : {};
+        return conversationState?.state === 'closing_complete' ||
+          Boolean(contextData.closing_completed_at);
+      };
+
+      const isClosedWithoutConfirmedOrder = (contact, existing = null) =>
+        contact.conversation_is_open === false &&
+        !existing?.route_id &&
+        !hasOrderConfirmation(contact, existing);
+
       const terminalStatuses = ['delivered', 'ups_shipped'];
       const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
       let reactivated = 0;
@@ -3814,6 +3854,7 @@ class PollingService {
       const newContacts = tagFilteredContacts.filter(c => {
         if (addressMap.has(c.id.toString())) return false;
         const lc = (c.lifecycle || c.lifecycleStage || '').toLowerCase();
+        if (isClosedWithoutConfirmedOrder(c)) return false;
         return lc === 'pending' || lc === 'approved' || lc === 'ordered' ||
                lc === 'pickup ready' || lc === 'on delivery';
       });
@@ -3881,6 +3922,31 @@ class PollingService {
 
         const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
         let orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
+
+        if (isClosedWithoutConfirmedOrder(contact, existing)) {
+          const [archivedRows] = await ValidatedAddress.update(
+            { dispatch_status: 'archived' },
+            {
+              where: {
+                id: existing.id,
+                route_id: null,
+                dispatch_status: { [Op.ne]: 'archived' }
+              }
+            }
+          );
+          if (archivedRows > 0) {
+            console.log(
+              `[StartupReconcile] Cerrada sin orden confirmada: "${existing.customer_name}" ` +
+              `archivada del dispatcher (lifecycle=${contactLifecycle || 'desconocido'})`
+            );
+            notifyDispatchUpdated({
+              reason: 'closed-order-archived',
+              order_id: existing.id
+            });
+          }
+          continue;
+        }
+
         if (shouldProtectAssignedRoute(existing, orderStatus)) {
           if (existing.order_status !== orderStatus) {
             console.warn(
