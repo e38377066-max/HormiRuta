@@ -440,9 +440,10 @@ class RespondioService {
    */
   async getContact(contactIdentifier) {
     try {
-      const identifier = typeof contactIdentifier === 'number' 
-        ? `id:${contactIdentifier}` 
-        : contactIdentifier;
+      const rawIdentifier = String(contactIdentifier ?? '').trim();
+      const identifier = rawIdentifier.includes(':')
+        ? rawIdentifier
+        : `id:${rawIdentifier}`;
 
       const response = await this.requestWithRetry('get', `/contact/${identifier}`);
       return {
