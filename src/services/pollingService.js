@@ -1935,10 +1935,7 @@ class PollingService {
           reactiveStatuses.includes(orderStatus) &&
           existing.order_status !== orderStatus
         ) {
-          const liveContact = await respondio.getContact(contactIdStr);
-          const liveLifecycle = liveContact.success
-            ? (liveContact.data?.lifecycle || liveContact.data?.lifecycleStage || '')
-            : '';
+          const liveLifecycle = await this.resolveLiveLifecycle(respondio, contactIdStr);
           const liveOrderStatus = this.lifecycleToOrderStatus(liveLifecycle);
 
           if (!liveOrderStatus) {
@@ -3558,6 +3555,57 @@ class PollingService {
     };
   }
 
+  /**
+   * Lee el lifecycle vigente de un contacto sin confiar únicamente en el
+   * snapshot de /contact/list. El detalle individual de Respond.io no siempre
+   * incluye lifecycle, por lo que se usa /contact/list como respaldo exacto
+   * por ID. Si ambas lecturas fallan, devuelve cadena vacía para conservar la
+   * protección contra reactivaciones no confirmadas.
+   * @param {RespondioService} respondio - Cliente autenticado de Respond.io.
+   * @param {string|number} contactId - ID numérico del contacto.
+   * @returns {Promise<string>} Lifecycle actual o cadena vacía.
+   */
+  async resolveLiveLifecycle(respondio, contactId) {
+    const id = String(contactId ?? '').replace(/^id:/, '').trim();
+    if (!id) return '';
+
+    const extractLifecycle = (payload) => {
+      if (!payload || typeof payload !== 'object') return '';
+      const candidates = [
+        payload.lifecycle,
+        payload.lifecycleStage,
+        payload.lifecycle_stage,
+        payload.lifecycle?.name,
+        payload.lifecycleStage?.name,
+        payload.data?.lifecycle,
+        payload.data?.lifecycleStage,
+        payload.data?.lifecycle?.name,
+        payload.data?.lifecycleStage?.name
+      ];
+      const value = candidates.find(candidate => typeof candidate === 'string' && candidate.trim());
+      return value ? value.trim() : '';
+    };
+
+    try {
+      const detail = await respondio.getContact(`id:${id}`);
+      const directLifecycle = extractLifecycle(detail?.data);
+      if (directLifecycle) return directLifecycle;
+    } catch (error) {
+      console.warn(`[Lifecycle] No se pudo leer detalle de contacto ${id}: ${error.message}`);
+    }
+
+    try {
+      const listed = await respondio.listContacts({ search: id, limit: 10 });
+      const match = (listed?.items || []).find(contact =>
+        String(contact?.id ?? '') === id
+      );
+      return extractLifecycle(match);
+    } catch (error) {
+      console.warn(`[Lifecycle] No se pudo confirmar contacto ${id} por lista: ${error.message}`);
+      return '';
+    }
+  }
+
 
   // Archiva las ordenes en dispatch cuyo contacto en Respond este en
   // lifecycle "UPS Shipped". Ese flujo es paqueteria, no entrega local.
@@ -3989,10 +4037,7 @@ class PollingService {
             // El crawl completo también puede contener un snapshot tomado
             // mientras se cerraba la entrega. Confirma el contacto antes de
             // tratarlo como un nuevo ciclo.
-            const liveContact = await respondio.getContact(contactIdStr);
-            const liveLifecycle = liveContact.success
-              ? (liveContact.data?.lifecycle || liveContact.data?.lifecycleStage || '')
-              : '';
+            const liveLifecycle = await this.resolveLiveLifecycle(respondio, contactIdStr);
             const liveOrderStatus = this.lifecycleToOrderStatus(liveLifecycle);
             if (!liveOrderStatus || liveOrderStatus !== orderStatus) {
               const liveLabel = liveOrderStatus || 'desconocido';
