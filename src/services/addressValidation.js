@@ -98,20 +98,24 @@ class AddressValidationService {
   async findZoneByCity(cityName) {
     if (!cityName || cityName.length < 3) return null;
     
-    const where = {
+    const baseWhere = {
       city: {
         [Op.iLike]: `%${cityName}%`
       },
       is_active: true
     };
-    if (this.userId) where.user_id = this.userId;
+    const userWhere = this.userId
+      ? { ...baseWhere, user_id: this.userId }
+      : baseWhere;
 
-    let zone = await CoverageZone.findOne({ where });
+    let zone = await CoverageZone.findOne({ where: userWhere });
 
+    // La aplicación opera con una configuración global de mensajería, pero
+    // una zona puede haber sido creada desde otra sesión administrativa.
+    // Si no coincide el propietario, cualquier zona activa con la ciudad es
+    // válida para el bot; no limitar el respaldo únicamente a user_id NULL.
     if (!zone && this.userId) {
-      zone = await CoverageZone.findOne({
-        where: { city: { [Op.iLike]: `%${cityName}%` }, is_active: true, user_id: null }
-      });
+      zone = await CoverageZone.findOne({ where: baseWhere });
     }
     
     return zone;
@@ -198,12 +202,14 @@ class AddressValidationService {
     const zipCode = this.extractZipCode(text);
     
     if (zipCode) {
-      const zipWhere = { zip_code: zipCode, is_active: true };
-      if (this.userId) zipWhere.user_id = this.userId;
+      const baseWhere = { zip_code: zipCode, is_active: true };
+      const zipWhere = this.userId
+        ? { ...baseWhere, user_id: this.userId }
+        : baseWhere;
       let zone = await CoverageZone.findOne({ where: zipWhere });
 
       if (!zone && this.userId) {
-        zone = await CoverageZone.findOne({ where: { zip_code: zipCode, is_active: true, user_id: null } });
+        zone = await CoverageZone.findOne({ where: baseWhere });
       }
       
       if (zone) {
@@ -319,12 +325,14 @@ class AddressValidationService {
       };
     }
 
-    const coverageWhere = { zip_code: zipCode, is_active: true };
-    if (this.userId) coverageWhere.user_id = this.userId;
+    const baseWhere = { zip_code: zipCode, is_active: true };
+    const coverageWhere = this.userId
+      ? { ...baseWhere, user_id: this.userId }
+      : baseWhere;
     let zone = await CoverageZone.findOne({ where: coverageWhere });
 
     if (!zone && this.userId) {
-      zone = await CoverageZone.findOne({ where: { zip_code: zipCode, is_active: true, user_id: null } });
+      zone = await CoverageZone.findOne({ where: baseWhere });
     }
 
     if (zone) {
