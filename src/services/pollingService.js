@@ -3695,6 +3695,55 @@ class PollingService {
     }
   }
 
+  /**
+   * Archiva del dispatcher todas las órdenes cuyo chat aparece cerrado en
+   * Respond.io. El estado de la conversación es la fuente de verdad para la
+   * visibilidad activa: una conversación cerrada no debe seguir apareciendo
+   * como pendiente aunque conserve lifecycle o datos históricos de pedido.
+   * No se borra route_id ni el historial de la orden.
+   * @param {Object[]} contacts - Contactos obtenidos de Respond.io.
+   * @returns {Promise<number>} Cantidad de órdenes archivadas.
+   */
+  async archiveClosedConversationOrders(contacts) {
+    try {
+      const closedContactIds = contacts
+        .filter(contact => contact.conversation_is_open === false)
+        .map(contact => contact.id?.toString())
+        .filter(Boolean);
+
+      if (closedContactIds.length === 0) return 0;
+
+      const [archivedCount] = await ValidatedAddress.update(
+        { dispatch_status: 'archived' },
+        {
+          where: {
+            respond_contact_id: { [Op.in]: closedContactIds },
+            [Op.or]: [
+              { dispatch_status: { [Op.ne]: 'archived' } },
+              { dispatch_status: { [Op.is]: null } }
+            ]
+          }
+        }
+      );
+
+      if (archivedCount > 0) {
+        console.log(
+          `[StartupReconcile] ${archivedCount} orden(es) archivada(s) ` +
+          `porque Respond.io confirmó conversación cerrada`
+        );
+        notifyDispatchUpdated({
+          reason: 'closed-conversations-archived',
+          changed_count: archivedCount
+        });
+      }
+
+      return archivedCount;
+    } catch (err) {
+      console.error('[StartupReconcile] Error archivando conversaciones cerradas:', err.message);
+      return 0;
+    }
+  }
+
   // Trae TODOS los contactos en cada lifecycle de Respond.io (no solo los que
   // tienen conversacion abierta). Esto resuelve el problema de columnas que no
   // coinciden con Respond porque la API de conversaciones abiertas dejaba
@@ -3812,6 +3861,11 @@ class PollingService {
 
       if (allContacts.length === 0) return;
 
+      // Respond.io ya separó los contactos por conversación abierta/cerrada.
+      // Archivar primero evita que una orden cerrada vuelva a sincronizarse
+      // como pendiente más abajo en este mismo ciclo.
+      await this.archiveClosedConversationOrders(allContacts);
+
       const excludedTags = ['rec', 'iprintpos-chats'];
       const tagFilteredContacts = allContacts.filter(contact => {
         const contactTags = contact.tags || [];
@@ -3862,43 +3916,8 @@ class PollingService {
       const addressMap = new Map();
       for (const va of existingAddresses) addressMap.set(va.respond_contact_id, va);
 
-      const conversationStates = await ConversationState.findAll({
-        where: { contact_id: { [Op.in]: contactIds } }
-      });
-      const conversationStateMap = new Map(
-        conversationStates.map(state => [state.contact_id, state])
-      );
-
-      // Cerrar una conversación no confirma que exista una orden. El flujo de
-      // cierre sí deja evidencia explícita: closing_complete, closing_completed_at
-      // o el tag PedidoConfirmado. Pickup Ready/On Delivery también son estados
-      // posteriores a una orden confirmada. Un route_id siempre se conserva.
-      const hasOrderConfirmation = (contact, existing = null) => {
-        if (existing?.route_id) return true;
-
-        const lifecycle = String(contact.lifecycle || contact.lifecycleStage || '').toLowerCase();
-        if (['pickup ready', 'on delivery', 'delivered', 'ups shipped'].includes(lifecycle)) {
-          return true;
-        }
-
-        const tags = (contact.tags || []).map(tag =>
-          String(typeof tag === 'string' ? tag : (tag?.name || '')).trim().toLowerCase()
-        );
-        if (tags.includes('pedidoconfirmado')) return true;
-
-        const conversationState = conversationStateMap.get(contact.id.toString());
-        const contextData = conversationState?.context_data &&
-          typeof conversationState.context_data === 'object'
-          ? conversationState.context_data
-          : {};
-        return conversationState?.state === 'closing_complete' ||
-          Boolean(contextData.closing_completed_at);
-      };
-
-      const isClosedWithoutConfirmedOrder = (contact, existing = null) =>
-        contact.conversation_is_open === false &&
-        !existing?.route_id &&
-        !hasOrderConfirmation(contact, existing);
+      const isClosedConversation = contact =>
+        contact.conversation_is_open === false;
 
       const terminalStatuses = ['delivered', 'ups_shipped'];
       const reactiveStatuses = ['pending', 'approved', 'ordered', 'pickup_ready', 'on_delivery'];
@@ -3914,7 +3933,7 @@ class PollingService {
       const newContacts = tagFilteredContacts.filter(c => {
         if (addressMap.has(c.id.toString())) return false;
         const lc = (c.lifecycle || c.lifecycleStage || '').toLowerCase();
-        if (isClosedWithoutConfirmedOrder(c)) return false;
+        if (isClosedConversation(c)) return false;
         return lc === 'pending' || lc === 'approved' || lc === 'ordered' ||
                lc === 'pickup ready' || lc === 'on delivery';
       });
@@ -3983,30 +4002,7 @@ class PollingService {
         const contactLifecycle = contact.lifecycle || contact.lifecycleStage || '';
         let orderStatus = this.lifecycleToOrderStatus(contactLifecycle);
 
-        if (isClosedWithoutConfirmedOrder(contact, existing)) {
-          const [archivedRows] = await ValidatedAddress.update(
-            { dispatch_status: 'archived' },
-            {
-              where: {
-                id: existing.id,
-                route_id: null,
-                [Op.or]: [
-                  { dispatch_status: { [Op.ne]: 'archived' } },
-                  { dispatch_status: { [Op.is]: null } }
-                ]
-              }
-            }
-          );
-          if (archivedRows > 0) {
-            console.log(
-              `[StartupReconcile] Cerrada sin orden confirmada: "${existing.customer_name}" ` +
-              `archivada del dispatcher (lifecycle=${contactLifecycle || 'desconocido'})`
-            );
-            notifyDispatchUpdated({
-              reason: 'closed-order-archived',
-              order_id: existing.id
-            });
-          }
+        if (isClosedConversation(contact)) {
           continue;
         }
 
