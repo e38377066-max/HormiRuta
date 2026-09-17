@@ -8,6 +8,7 @@
 - [Post-merge hook](post-merge-hook.md) — las mezclas requieren un script configurado, no interactivo, para instalar dependencias y reconstruir el frontend.
 - [Pending cash accounting](accounting-pending-balance.md) — el contador junto al efectivo pendiente representa rutas con saldo positivo, no el total de paradas.
 - [Route lifecycle protection](route-lifecycle-protection.md) — solo los borradores sin actividad se eliminan; órdenes pendientes regresan por un flujo explícito.
+- [Archived dispatch status](dispatch-archive-null-status.md) — los registros históricos con dispatch_status NULL también son activos y deben incluirse al archivarlos.
 - [Deferred stop visibility](deferred-stop-visibility.md) — las paradas saltadas temporalmente permanecen fuera de la ruta activa hasta que el chofer las muestra explícitamente.
 - [OpenAI quota alert](openai-quota-alert.md) — los avisos de créditos agotados usan Gmail y se deduplican por ciclo de interrupción.
 - [Gmail lifecycle guard](gmail-lifecycle-guard.md) — un correo Pickup Ready ya procesado no debe sobrescribir cambios manuales del lifecycle en el mismo ciclo.

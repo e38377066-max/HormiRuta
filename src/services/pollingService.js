@@ -1788,7 +1788,10 @@ class PollingService {
               where: {
                 respond_contact_id: { [Op.in]: tagExcludedIds },
                 route_id: { [Op.is]: null },
-                dispatch_status: { [Op.ne]: 'archived' }
+                [Op.or]: [
+                  { dispatch_status: { [Op.ne]: 'archived' } },
+                  { dispatch_status: { [Op.is]: null } }
+                ]
               }
             }
           );
@@ -3634,7 +3637,10 @@ class PollingService {
           where: {
             respond_contact_id: { [Op.in]: upsContactIds },
             route_id: { [Op.is]: null },
-            dispatch_status: { [Op.ne]: 'archived' }
+            [Op.or]: [
+              { dispatch_status: { [Op.ne]: 'archived' } },
+              { dispatch_status: { [Op.is]: null } }
+            ]
           }
         }
       );
@@ -3673,7 +3679,10 @@ class PollingService {
           where: {
             respond_contact_id: { [Op.in]: excludedContactIds },
             route_id: { [Op.is]: null },
-            dispatch_status: { [Op.ne]: 'archived' }
+            [Op.or]: [
+              { dispatch_status: { [Op.ne]: 'archived' } },
+              { dispatch_status: { [Op.is]: null } }
+            ]
           }
         }
       );
@@ -3823,7 +3832,10 @@ class PollingService {
               where: {
                 respond_contact_id: { [Op.in]: tagExcludedIds },
                 route_id: { [Op.is]: null },
-                dispatch_status: { [Op.ne]: 'archived' }
+                [Op.or]: [
+                  { dispatch_status: { [Op.ne]: 'archived' } },
+                  { dispatch_status: { [Op.is]: null } }
+                ]
               }
             }
           );
@@ -3978,7 +3990,10 @@ class PollingService {
               where: {
                 id: existing.id,
                 route_id: null,
-                dispatch_status: { [Op.ne]: 'archived' }
+                [Op.or]: [
+                  { dispatch_status: { [Op.ne]: 'archived' } },
+                  { dispatch_status: { [Op.is]: null } }
+                ]
               }
             }
           );
